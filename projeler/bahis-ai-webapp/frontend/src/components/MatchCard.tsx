@@ -8,6 +8,7 @@ interface Props {
   analysis?: AnalysisResult;
   analyzing: boolean;
   onAnalyze: () => void;
+  statusLabel?: string;
 }
 
 const confColor: Record<string, string> = {
@@ -64,7 +65,7 @@ function StandingBadge({ standing, label }: { standing: any; label: string }) {
   );
 }
 
-export default function MatchCard({ fixture, analysis, analyzing, onAnalyze }: Props) {
+export default function MatchCard({ fixture, analysis, analyzing, onAnalyze, statusLabel }: Props) {
   const [open, setOpen] = useState(false);
   const isLive = fixture.status === "1H" || fixture.status === "2H" || fixture.status === "HT";
   const p    = analysis?.statistical?.probabilities;
@@ -98,7 +99,10 @@ export default function MatchCard({ fixture, analysis, analyzing, onAnalyze }: P
                 CANLI {fixture.elapsed}'
               </span>
             )}
-            <span className="text-xs text-slate-500">{fixture.date.slice(11, 16)}</span>
+            <span className={`text-xs font-medium ${
+              fixture.status === "FT" || fixture.status === "AET" ? "text-slate-500" :
+              isLive ? "text-red-400" : "text-slate-400"
+            }`}>{statusLabel || fixture.date.slice(11, 16)}</span>
           </div>
         </div>
 
