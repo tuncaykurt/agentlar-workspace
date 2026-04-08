@@ -34,8 +34,13 @@ def _format(fixtures: list) -> list:
         fix    = f.get("fixture", {})
         teams  = f.get("teams",   {})
         goals  = f.get("goals",   {})
+        score  = f.get("score",   {})
         league = f.get("league",  {})
         status = fix.get("status", {})
+        venue  = fix.get("venue",  {})
+        referee = fix.get("referee", "")
+        ht_home = score.get("halftime", {}).get("home")
+        ht_away = score.get("halftime", {}).get("away")
         out.append({
             "id":          fix.get("id"),
             "date":        fix.get("date", "")[:16],
@@ -43,18 +48,30 @@ def _format(fixtures: list) -> list:
             "elapsed":     status.get("elapsed"),
             "league_id":   league.get("id"),
             "league_name": league.get("name", ""),
+            "league_logo": league.get("logo", ""),
+            "league_flag": league.get("flag", ""),
             "season":      league.get("season"),
+            "round":       league.get("round", ""),
+            "venue":       venue.get("name", ""),
+            "venue_city":  venue.get("city", ""),
+            "referee":     referee or "",
+            "halftime": {
+                "home": ht_home,
+                "away": ht_away,
+            } if ht_home is not None else None,
             "home": {
-                "id":   teams.get("home", {}).get("id"),
-                "name": teams.get("home", {}).get("name", ""),
-                "logo": teams.get("home", {}).get("logo", ""),
-                "goals": goals.get("home"),
+                "id":     teams.get("home", {}).get("id"),
+                "name":   teams.get("home", {}).get("name", ""),
+                "logo":   teams.get("home", {}).get("logo", ""),
+                "goals":  goals.get("home"),
+                "winner": teams.get("home", {}).get("winner"),
             },
             "away": {
-                "id":   teams.get("away", {}).get("id"),
-                "name": teams.get("away", {}).get("name", ""),
-                "logo": teams.get("away", {}).get("logo", ""),
-                "goals": goals.get("away"),
+                "id":     teams.get("away", {}).get("id"),
+                "name":   teams.get("away", {}).get("name", ""),
+                "logo":   teams.get("away", {}).get("logo", ""),
+                "goals":  goals.get("away"),
+                "winner": teams.get("away", {}).get("winner"),
             },
         })
     return out

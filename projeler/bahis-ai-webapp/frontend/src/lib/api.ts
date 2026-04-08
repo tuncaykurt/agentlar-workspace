@@ -12,9 +12,16 @@ export interface Fixture {
   elapsed?: number;
   league_id: number;
   league_name: string;
+  league_logo?: string;
+  league_flag?: string;
   season: number;
-  home: { id: number; name: string; logo: string; goals?: number };
-  away: { id: number; name: string; logo: string; goals?: number };
+  round?: string;
+  venue?: string;
+  venue_city?: string;
+  referee?: string;
+  halftime?: { home: number | null; away: number | null };
+  home: { id: number; name: string; logo: string; goals?: number; winner?: boolean };
+  away: { id: number; name: string; logo: string; goals?: number; winner?: boolean };
 }
 
 export interface AnalysisResult {
