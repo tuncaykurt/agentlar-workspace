@@ -106,6 +106,20 @@ def init_db():
                 );
                 CREATE INDEX IF NOT EXISTS idx_analyses_fixture ON analyses(fixture_id);
                 CREATE INDEX IF NOT EXISTS idx_analyses_date ON analyses(created_at);
+
+                CREATE TABLE IF NOT EXISTS player_injuries (
+                    id          SERIAL PRIMARY KEY,
+                    team_id     INT NOT NULL,
+                    league_id   INT NOT NULL,
+                    season      INT NOT NULL,
+                    player_id   INT,
+                    player_name TEXT,
+                    position    TEXT,
+                    injury_type TEXT,
+                    reason      TEXT,
+                    fetched_at  TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_injuries_team ON player_injuries(team_id, league_id, season);
             """)
         logger.info("DB tabloları hazır")
     except Exception as e:
@@ -292,6 +306,69 @@ def load_standings(league_id: int, season: int) -> Optional[list]:
             return row["raw"]
     except Exception as e:
         logger.error(f"Standings yükleme hatası: {e}")
+        return None
+
+
+# ── Player Injuries ──────────────────────────────────────────────────────── #
+
+def save_injuries(team_id: int, league_id: int, season: int, injuries: list):
+    conn = get_conn()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cur:
+            # Önce eski kayıtları sil (güncel veriyle değiştir)
+            cur.execute(
+                "DELETE FROM player_injuries WHERE team_id=%s AND league_id=%s AND season=%s",
+                (team_id, league_id, season)
+            )
+            for inj in injuries:
+                cur.execute("""
+                    INSERT INTO player_injuries
+                        (team_id, league_id, season, player_id, player_name, position, injury_type, reason)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                """, (
+                    team_id, league_id, season,
+                    inj.get("player_id"),
+                    inj.get("name", ""),
+                    inj.get("position", ""),
+                    inj.get("type", ""),
+                    inj.get("reason", ""),
+                ))
+    except Exception as e:
+        logger.error(f"Sakatlık kayıt hatası: {e}")
+
+
+def load_injuries(team_id: int, league_id: int, season: int) -> Optional[list]:
+    """None dönerse API'den çek. 1 günden eskiyse yenile."""
+    conn = get_conn()
+    if not conn:
+        return None
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT player_name, position, injury_type, reason, fetched_at
+                FROM player_injuries
+                WHERE team_id=%s AND league_id=%s AND season=%s
+                ORDER BY fetched_at DESC
+            """, (team_id, league_id, season))
+            rows = cur.fetchall()
+            if not rows:
+                return None
+            age = (datetime.now() - rows[0]["fetched_at"].replace(tzinfo=None)).total_seconds() / 3600
+            if age > 24:
+                return None
+            return [
+                {
+                    "name":     r["player_name"],
+                    "position": r["position"],
+                    "type":     r["injury_type"],
+                    "reason":   r["reason"],
+                }
+                for r in rows
+            ]
+    except Exception as e:
+        logger.error(f"Sakatlık yükleme hatası: {e}")
         return None
 
 

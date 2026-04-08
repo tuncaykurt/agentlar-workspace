@@ -184,17 +184,25 @@ def get_team_standing(team_id: int, league_id: int, season: int = 2024) -> dict:
     return {}
 
 def get_team_injuries(team_id: int, league_id: int, season: int = 2024) -> list:
-    """Takımın mevcut sakatlarını döndürür."""
+    """Takımın mevcut sakatlarını döndürür. Oyuncu pozisyonu dahil."""
+    from services.database import load_injuries, save_injuries
+    cached = load_injuries(team_id, league_id, season)
+    if cached is not None:
+        return cached
     data = _api("injuries", {"team": team_id, "league": league_id, "season": season}, ttl=3600)
     injuries = data.get("response", [])
     result = []
     for inj in injuries:
         player = inj.get("player", {})
         result.append({
-            "name":   player.get("name", ""),
-            "type":   inj.get("injury", {}).get("type", ""),
-            "reason": inj.get("injury", {}).get("reason", ""),
+            "player_id": player.get("id"),
+            "name":      player.get("name", ""),
+            "position":  player.get("type", ""),   # API-Football: "Attacker","Midfielder","Defender","Goalkeeper"
+            "type":      inj.get("injury", {}).get("type", ""),
+            "reason":    inj.get("injury", {}).get("reason", ""),
         })
+    if result:
+        save_injuries(team_id, league_id, season, result)
     return result
 
 # ── İstatistiksel analiz ─────────────────────────────────────────────────── #
@@ -284,9 +292,32 @@ def _motivation_factor(standing: dict, total_teams: int) -> float:
     return 1.0                        # Orta sıra
 
 def _injury_factor(injuries: list) -> float:
-    """Her sakatlık için xG'yi küçük oranda düşür (maks %20)."""
-    count = len(injuries)
-    return max(0.80, 1.0 - count * 0.04)
+    """
+    Oyuncu pozisyonuna göre ağırlıklı sakatlık faktörü (maks %25 düşüş).
+    Golcü sakatsa xG daha çok düşer; kaleci sakatsa rakip xG artar.
+    Bu fonksiyon HEM ev sahibi HEM deplasman xG'si için çağrılır.
+    """
+    POSITION_WEIGHTS = {
+        "attacker":   0.12,   # Golcü — en kritik
+        "midfielder": 0.06,   # Orta saha
+        "defender":   0.04,   # Defans
+        "goalkeeper": 0.03,   # Kaleci (rakip xG'de kullanılır)
+    }
+    total_impact = 0.0
+    for inj in injuries:
+        pos = inj.get("position", "").lower()
+        # API-Football pozisyon eşleştirme
+        if "attack" in pos or "forward" in pos or "striker" in pos:
+            total_impact += POSITION_WEIGHTS["attacker"]
+        elif "mid" in pos:
+            total_impact += POSITION_WEIGHTS["midfielder"]
+        elif "defend" in pos or "back" in pos:
+            total_impact += POSITION_WEIGHTS["defender"]
+        elif "goal" in pos or "keeper" in pos:
+            total_impact += POSITION_WEIGHTS["goalkeeper"]
+        else:
+            total_impact += 0.04   # Pozisyon bilinmiyorsa varsayılan
+    return max(0.75, 1.0 - total_impact)
 
 def statistical_analysis(home_id: int, away_id: int, league_id: int) -> dict:
     season = 2024
@@ -426,9 +457,13 @@ Bahis Oranları ({odds_data.get('bookmaker','?')}):
     # Sakatlık satırı
     inj_lines = []
     for inj_player in inj.get("home", [])[:5]:
-        inj_lines.append(f"  {home}: {inj_player.get('name','')} ({inj_player.get('type','')})")
+        pos = inj_player.get("position", "")
+        pos_label = {"attacker": "Golcü", "midfielder": "Orta saha", "defender": "Defans", "goalkeeper": "Kaleci"}.get(pos.lower(), pos)
+        inj_lines.append(f"  {home}: {inj_player.get('name','')} [{pos_label}] — {inj_player.get('type','')}")
     for inj_player in inj.get("away", [])[:5]:
-        inj_lines.append(f"  {away}: {inj_player.get('name','')} ({inj_player.get('type','')})")
+        pos = inj_player.get("position", "")
+        pos_label = {"attacker": "Golcü", "midfielder": "Orta saha", "defender": "Defans", "goalkeeper": "Kaleci"}.get(pos.lower(), pos)
+        inj_lines.append(f"  {away}: {inj_player.get('name','')} [{pos_label}] — {inj_player.get('type','')}")
     inj_section = ("\nSakatlıklar:\n" + "\n".join(inj_lines)) if inj_lines else f"\nSakatlık: Ev={home_inj_count}, Dep={away_inj_count}"
 
     return f"""
