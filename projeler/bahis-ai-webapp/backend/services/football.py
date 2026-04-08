@@ -15,21 +15,18 @@ logger = logging.getLogger(__name__)
 # ── Provider seçimi ──────────────────────────────────────────────────────── #
 _PROVIDER = os.getenv("DATA_PROVIDER", "apifootball").lower()
 
-if _PROVIDER == "sportradar":
+# SportRadar sadece canlı istatistik zenginleştirmesi için kullanılır
+# Maç listesi, geçmiş, standings → her zaman API-Football
+_SR_ENRICH = _PROVIDER == "sportradar"
+
+if _SR_ENRICH:
     from services.providers.sportradar import (
-        get_fixtures_by_date as _get_fixtures_by_date,
-        get_live_fixtures    as _get_live_fixtures,
-        get_team_matches     as _get_team_matches,
-        get_h2h              as _get_h2h,
-        get_fixture_stats    as _get_fixture_stats,
-        get_fixture_events   as _get_fixture_events,
-        get_team_standing    as _get_team_standing,
-        get_team_injuries    as _get_team_injuries,
+        get_fixture_stats    as _sr_fixture_stats,
+        get_fixture_events   as _sr_fixture_events,
         get_quota            as _get_quota,
     )
-    logger.info("Provider: SportRadar")
+    logger.info("Provider: API-Football + SportRadar (canlı istatistik)")
 else:
-    _get_fixtures_by_date = None  # aşağıda tanımlanıyor
     logger.info("Provider: API-Football")
 
 API_KEY  = os.getenv("FOOTBALL_API_KEY", "")
@@ -90,47 +87,53 @@ def _api(endpoint: str, params: dict, ttl: int = 3600) -> dict:
 # ── Veri çekme ───────────────────────────────────────────────────────────── #
 
 def get_fixtures_by_date(date: str, league_id: int = None) -> list:
-    if _PROVIDER == "sportradar":
-        return _get_fixtures_by_date(date, league_id)
     params = {"date": date}
     if league_id:
         params["league"] = league_id
     return _api("fixtures", params, ttl=1800).get("response", [])
 
 def get_live_fixtures(league_id: int = None) -> list:
-    if _PROVIDER == "sportradar":
-        return _get_live_fixtures(league_id)
     params = {"live": "all"}
     if league_id:
         params["league"] = league_id
     return _api("fixtures", params, ttl=60).get("response", [])
 
 def get_team_matches(team_id: int, league_id: int, season: int = 2024) -> list:
-    if _PROVIDER == "sportradar":
-        return _get_team_matches(team_id, league_id, season)
     data = _api("fixtures", {"team": team_id, "league": league_id, "season": season}, ttl=7200)
     matches = data.get("response", [])
     matches.sort(key=lambda m: m.get("fixture", {}).get("date", ""))
     return matches[-10:]
 
 def get_h2h(team1: int, team2: int) -> list:
-    if _PROVIDER == "sportradar":
-        return _get_h2h(team1, team2)
     return _api("fixtures/headtohead", {"h2h": f"{team1}-{team2}", "last": 8}, ttl=86400).get("response", [])
 
 def get_fixture_stats(fixture_id: int) -> list:
-    if _PROVIDER == "sportradar":
-        return _get_fixture_stats(fixture_id)
+    # SportRadar canlı istatistik zenginleştirmesi
+    if _SR_ENRICH:
+        try:
+            sr_stats = _sr_fixture_stats(fixture_id)
+            if sr_stats:
+                return sr_stats
+        except Exception:
+            pass
     return _api("fixtures/statistics", {"fixture": fixture_id}, ttl=300).get("response", [])
 
 def get_fixture_events(fixture_id: int) -> list:
-    if _PROVIDER == "sportradar":
-        return _get_fixture_events(fixture_id)
+    if _SR_ENRICH:
+        try:
+            sr_events = _sr_fixture_events(fixture_id)
+            if sr_events:
+                return sr_events
+        except Exception:
+            pass
     return _api("fixtures/events", {"fixture": fixture_id}, ttl=60).get("response", [])
 
 def get_quota() -> dict:
-    if _PROVIDER == "sportradar":
-        return _get_quota()
+    if _SR_ENRICH:
+        try:
+            return _get_quota()
+        except Exception:
+            pass
     return _api("status", {}, ttl=60).get("response", {}).get("requests", {})
 
 def get_standings(league_id: int, season: int = 2024) -> list:
@@ -142,8 +145,6 @@ def get_standings(league_id: int, season: int = 2024) -> list:
 
 def get_team_standing(team_id: int, league_id: int, season: int = 2024) -> dict:
     """Takımın lig tablosundaki sırasını ve istatistiklerini döndürür."""
-    if _PROVIDER == "sportradar":
-        return _get_team_standing(team_id, league_id, season)
     standings = get_standings(league_id, season)
     for entry in standings:
         if entry.get("team", {}).get("id") == team_id:
@@ -165,8 +166,6 @@ def get_team_standing(team_id: int, league_id: int, season: int = 2024) -> dict:
 
 def get_team_injuries(team_id: int, league_id: int, season: int = 2024) -> list:
     """Takımın mevcut sakatlarını döndürür."""
-    if _PROVIDER == "sportradar":
-        return _get_team_injuries(team_id, league_id, season)
     data = _api("injuries", {"team": team_id, "league": league_id, "season": season}, ttl=3600)
     injuries = data.get("response", [])
     result = []

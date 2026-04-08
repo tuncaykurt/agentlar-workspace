@@ -90,38 +90,66 @@ def _api(path: str, ttl: int = 3600) -> dict:
 
 def get_fixtures_by_date(date: str, league_id: int = None) -> list:
     """
-    Tarihe göre maçları çek, iç formata dönüştür.
-    SportRadar: /schedules/{date}/schedule.json
+    SportRadar'da tarih bazlı endpoint yok.
+    Desteklenen ligler için sezon schedule'larından filtrele.
+    Bu pahalı (her lig = 1 istek) — sadece belirli ligler desteklenir.
     """
-    path = f"schedules/{date}/schedule.json"
-    data = _api(path, ttl=1800)
-    sport_events = data.get("sport_events", [])
+    leagues_to_check = [league_id] if league_id else list(LEAGUE_MAP.keys())
     result = []
-    for ev in sport_events:
-        normalized = _normalize_fixture(ev)
-        if normalized is None:
+    seen_ids = set()
+
+    for lid in leagues_to_check[:5]:  # max 5 lig, trial limit koruma
+        sr_comp = LEAGUE_MAP.get(lid)
+        if not sr_comp:
             continue
-        if league_id and normalized.get("league_id") != league_id:
+        # Bu ligin aktif sezonunu bul
+        seasons = _api(f"competitions/{sr_comp}/seasons.json", ttl=86400).get("seasons", [])
+        if not seasons:
             continue
-        result.append(normalized)
+        latest = seasons[-1]  # en yeni sezon
+        season_id = latest.get("id", "")
+        schedules = _api(f"seasons/{season_id}/schedules.json", ttl=3600).get("schedules", [])
+        for item in schedules:
+            ev = item.get("sport_event", {})
+            start = ev.get("start_time", "")
+            if not start.startswith(date):
+                continue
+            status = item.get("sport_event_status", {})
+            ev["sport_event_status"] = status
+            normalized = _normalize_fixture(ev)
+            if normalized and normalized["fixture"]["id"] not in seen_ids:
+                seen_ids.add(normalized["fixture"]["id"])
+                result.append(normalized)
     return result
 
 
 def get_live_fixtures(league_id: int = None) -> list:
     """
-    Canlı maçları çek.
-    SportRadar: /schedules/live/schedule.json
+    Canlı maçları çek — season schedules'dan status=inprogress olanlar.
     """
-    data = _api("schedules/live/schedule.json", ttl=30)
-    sport_events = data.get("sport_events", [])
+    leagues_to_check = [league_id] if league_id else list(LEAGUE_MAP.keys())
     result = []
-    for ev in sport_events:
-        normalized = _normalize_fixture(ev)
-        if normalized is None:
+    seen_ids = set()
+
+    for lid in leagues_to_check[:5]:
+        sr_comp = LEAGUE_MAP.get(lid)
+        if not sr_comp:
             continue
-        if league_id and normalized.get("league_id") != league_id:
+        seasons = _api(f"competitions/{sr_comp}/seasons.json", ttl=86400).get("seasons", [])
+        if not seasons:
             continue
-        result.append(normalized)
+        season_id = seasons[-1].get("id", "")
+        schedules = _api(f"seasons/{season_id}/schedules.json", ttl=30).get("schedules", [])
+        for item in schedules:
+            ev = item.get("sport_event", {})
+            status = item.get("sport_event_status", {})
+            if status.get("status") != "inprogress":
+                continue
+            ev["sport_event_status"] = status
+            normalized = _normalize_fixture(ev)
+            if normalized and normalized["fixture"]["id"] not in seen_ids:
+                seen_ids.add(normalized["fixture"]["id"])
+                result.append(normalized)
     return result
 
 
