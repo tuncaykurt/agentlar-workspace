@@ -8,6 +8,7 @@ import { Search, Zap, Filter } from "lucide-react";
 interface Props {
   model: string;
   onAnalyses: (a: AnalysisResult[]) => void;
+  statusFilter?: string;
 }
 
 const LEAGUES = [
@@ -22,12 +23,6 @@ const LEAGUES = [
   { name: "Europa League", id: 3 },
 ];
 
-const STATUS_FILTERS = [
-  { label: "Tümü", value: "all" },
-  { label: "Yaklaşan", value: "upcoming" },
-  { label: "Canlı", value: "live" },
-  { label: "Bitti", value: "finished" },
-];
 
 const LIVE_STATUSES  = new Set(["1H", "2H", "HT", "ET", "BT", "P", "LIVE"]);
 const DONE_STATUSES  = new Set(["FT", "AET", "PEN", "AWD", "WO"]);
@@ -40,11 +35,10 @@ function statusLabel(fix: Fixture): string {
   return t && t !== "00:00" ? t : "—";
 }
 
-export default function FixtureList({ model, onAnalyses }: Props) {
+export default function FixtureList({ model, onAnalyses, statusFilter = "all" }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate]         = useState(today);
   const [leagueId, setLeagueId] = useState(0);
-  const [statusFilter, setStatusFilter] = useState("all");
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [loading, setLoading]   = useState(false);
   const [analyses, setAnalyses] = useState<Record<number, AnalysisResult>>({});
@@ -122,7 +116,6 @@ export default function FixtureList({ model, onAnalyses }: Props) {
     for (const fix of targets) await analyzeOne(fix);
   }
 
-  const liveCount     = fixtures.filter(f => LIVE_STATUSES.has(f.status)).length;
   const analyzedCount = Object.keys(analyses).length;
 
   return (
@@ -163,24 +156,6 @@ export default function FixtureList({ model, onAnalyses }: Props) {
         </div>
       </div>
 
-      {/* Durum filtresi */}
-      <div className="flex gap-1.5">
-        {STATUS_FILTERS.map(sf => (
-          <button
-            key={sf.value}
-            onClick={() => setStatusFilter(sf.value)}
-            className={"flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors " +
-              (statusFilter === sf.value
-                ? "bg-violet-600 text-white"
-                : "bg-slate-800 text-slate-400 hover:text-white")}
-          >
-            {sf.label}
-            {sf.value === "live" && liveCount > 0 && (
-              <span className="ml-1 bg-red-500 text-white text-[9px] px-1 rounded-full">{liveCount}</span>
-            )}
-          </button>
-        ))}
-      </div>
 
       {error && (
         <div className="bg-red-950/50 border border-red-800 rounded-xl p-3 text-sm text-red-300">

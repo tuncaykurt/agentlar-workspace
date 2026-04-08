@@ -3,7 +3,7 @@ import { useState } from "react";
 import FixtureList from "@/components/FixtureList";
 import CombinationsPanel from "@/components/CombinationsPanel";
 import LivePanel from "@/components/LivePanel";
-import { Calendar, Target, Radio } from "lucide-react";
+import { Calendar, Target, Radio, Clock, CheckCircle } from "lucide-react";
 import type { AnalysisResult } from "@/lib/api";
 
 const MODELS = [
@@ -15,10 +15,20 @@ const MODELS = [
   { id: "deepseek",      label: "DeepSeek" },
 ];
 
+const TABS = [
+  { id: "all",      label: "Günlük",     icon: Calendar,    status: "all" },
+  { id: "upcoming", label: "Yaklaşan",   icon: Clock,       status: "upcoming" },
+  { id: "live",     label: "Canlı",      icon: Radio,       status: "live" },
+  { id: "finished", label: "Bitti",      icon: CheckCircle, status: "finished" },
+  { id: "combos",   label: "Kupon",      icon: Target,      status: null },
+];
+
 export default function Home() {
-  const [tab, setTab]           = useState("daily");
+  const [tab, setTab]           = useState("all");
   const [analyses, setAnalyses] = useState<AnalysisResult[]>([]);
   const [model, setModel]       = useState("claude-opus");
+
+  const activeStatus = TABS.find(t => t.id === tab)?.status ?? "all";
 
   return (
     <div className="flex flex-col min-h-screen max-w-md mx-auto bg-slate-950">
@@ -43,43 +53,47 @@ export default function Home() {
             ))}
           </select>
         </div>
+      </header>
 
-        {/* Tab bar — header içinde */}
-        <div className="flex gap-1 pb-3">
-          {[
-            { id: "daily",  label: "Günlük",      icon: Calendar },
-            { id: "live",   label: "Canlı",        icon: Radio },
-            { id: "combos", label: "Kombinasyon",  icon: Target },
-          ].map(t => {
+      <main className="flex-1 px-4 pb-24">
+        {tab !== "combos"
+          ? <FixtureList model={model} onAnalyses={setAnalyses} statusFilter={activeStatus} />
+          : <CombinationsPanel analyses={analyses} />
+        }
+      </main>
+
+      {/* Alt Navigasyon */}
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md
+                      bg-slate-900/95 backdrop-blur border-t border-slate-800/60 z-50">
+        <div className="flex">
+          {TABS.map(t => {
             const Icon = t.icon;
             const active = tab === t.id;
             return (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={"flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-all " +
-                  (active
-                    ? "bg-violet-600 text-white shadow-lg shadow-violet-900/40"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60")}
+                className={"flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors relative " +
+                  (active ? "text-violet-400" : "text-slate-500 hover:text-slate-300")}
               >
-                <Icon size={14} />
-                {t.label}
+                {active && (
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-violet-500 rounded-full" />
+                )}
+                <Icon size={18} />
+                <span className="text-[10px] font-medium">{t.label}</span>
                 {t.id === "combos" && analyses.length > 0 && (
-                  <span className="bg-violet-400/30 text-violet-300 text-[9px] px-1.5 rounded-full">
+                  <span className="absolute top-1.5 right-2 bg-violet-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
                     {analyses.length}
                   </span>
+                )}
+                {t.id === "live" && (
+                  <span className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
                 )}
               </button>
             );
           })}
         </div>
-      </header>
-
-      <main className="flex-1 px-4 pb-6">
-        {tab === "daily"  && <FixtureList model={model} onAnalyses={setAnalyses} />}
-        {tab === "live"   && <LivePanel model={model} />}
-        {tab === "combos" && <CombinationsPanel analyses={analyses} />}
-      </main>
+      </nav>
     </div>
   );
 }
