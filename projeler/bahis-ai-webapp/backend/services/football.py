@@ -99,13 +99,27 @@ def get_live_fixtures(league_id: int = None) -> list:
     return _api("fixtures", params, ttl=60).get("response", [])
 
 def get_team_matches(team_id: int, league_id: int, season: int = 2024) -> list:
+    from services.database import load_team_matches, save_team_matches
+    cached = load_team_matches(team_id, league_id, season)
+    if cached is not None:
+        return cached
     data = _api("fixtures", {"team": team_id, "league": league_id, "season": season}, ttl=7200)
     matches = data.get("response", [])
     matches.sort(key=lambda m: m.get("fixture", {}).get("date", ""))
-    return matches[-10:]
+    result = matches[-10:]
+    if result:
+        save_team_matches(team_id, league_id, season, result)
+    return result
 
 def get_h2h(team1: int, team2: int) -> list:
-    return _api("fixtures/headtohead", {"h2h": f"{team1}-{team2}", "last": 8}, ttl=86400).get("response", [])
+    from services.database import load_h2h, save_h2h
+    cached = load_h2h(team1, team2)
+    if cached is not None:
+        return cached
+    result = _api("fixtures/headtohead", {"h2h": f"{team1}-{team2}", "last": 8}, ttl=86400).get("response", [])
+    if result:
+        save_h2h(team1, team2, result)
+    return result
 
 def get_fixture_stats(fixture_id: int) -> list:
     # SportRadar canlı istatistik zenginleştirmesi
@@ -137,11 +151,16 @@ def get_quota() -> dict:
     return _api("status", {}, ttl=60).get("response", {}).get("requests", {})
 
 def get_standings(league_id: int, season: int = 2024) -> list:
+    from services.database import load_standings, save_standings
+    cached = load_standings(league_id, season)
+    if cached is not None:
+        return cached
     d = _api("standings", {"league": league_id, "season": season}, ttl=3600)
     r = d.get("response", [])
-    if r:
-        return r[0].get("league", {}).get("standings", [[]])[0]
-    return []
+    result = r[0].get("league", {}).get("standings", [[]])[0] if r else []
+    if result:
+        save_standings(league_id, season, result)
+    return result
 
 def get_team_standing(team_id: int, league_id: int, season: int = 2024) -> dict:
     """Takımın lig tablosundaki sırasını ve istatistiklerini döndürür."""

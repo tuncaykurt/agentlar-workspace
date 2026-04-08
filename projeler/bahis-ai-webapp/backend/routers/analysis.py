@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from services.football import statistical_analysis, build_ai_prompt, get_fixture_stats, get_fixture_events
 from services.openrouter import analyze_match, get_available_models
 from services.odds import get_fixture_odds, calculate_ev
+from services.database import load_analysis, save_analysis
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -21,6 +22,12 @@ class AnalyzeRequest(BaseModel):
 @router.post("/match")
 def analyze(req: AnalyzeRequest):
     match_date = req.match_date or str(_date.today())
+    model_key = req.model or "default"
+
+    # 0. DB cache kontrolü — aynı maç+model 12 saat içinde analiz edildiyse döndür
+    cached = load_analysis(req.fixture_id, model_key)
+    if cached:
+        return cached
 
     # 1. İstatistiksel analiz (standings + injury dahil)
     stat = statistical_analysis(req.home_id, req.away_id, req.league_id)
@@ -34,6 +41,19 @@ def analyze(req: AnalyzeRequest):
 
     # 4. OpenRouter AI analizi
     ai = analyze_match(prompt, req.model)
+
+    # 5. DB'ye kaydet
+    save_analysis(
+        fixture_id=req.fixture_id,
+        home=req.home_name,
+        away=req.away_name,
+        league=req.league_name,
+        model=model_key,
+        statistical=stat,
+        ai_result=ai,
+        odds=odds_data,
+        ev=ev_data,
+    )
 
     return {
         "fixture_id":  req.fixture_id,

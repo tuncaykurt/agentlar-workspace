@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Query
 from services.football import get_fixtures_by_date, get_live_fixtures, LEAGUES, get_quota
+from services.database import load_fixtures, save_fixtures
 
 router = APIRouter(prefix="/fixtures", tags=["fixtures"])
 
@@ -7,12 +8,22 @@ router = APIRouter(prefix="/fixtures", tags=["fixtures"])
 def today_fixtures(league_id: int = None):
     from datetime import datetime, timezone
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    cached = load_fixtures(today, league_id)
+    if cached:
+        return {"date": today, "count": len(cached), "fixtures": _format(cached), "source": "db"}
     fixtures = get_fixtures_by_date(today, league_id)
+    if fixtures:
+        save_fixtures(today, fixtures)
     return {"date": today, "count": len(fixtures), "fixtures": _format(fixtures)}
 
 @router.get("/date/{date}")
 def fixtures_by_date(date: str, league_id: int = None):
+    cached = load_fixtures(date, league_id)
+    if cached:
+        return {"date": date, "count": len(cached), "fixtures": _format(cached), "source": "db"}
     fixtures = get_fixtures_by_date(date, league_id)
+    if fixtures:
+        save_fixtures(date, fixtures)
     return {"date": date, "count": len(fixtures), "fixtures": _format(fixtures)}
 
 @router.get("/live")

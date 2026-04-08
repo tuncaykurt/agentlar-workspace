@@ -7,6 +7,11 @@ load_dotenv()
 
 app = FastAPI(title="Bahis AI API", version="1.0.0")
 
+@app.on_event("startup")
+def startup():
+    from services.database import init_db
+    init_db()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
