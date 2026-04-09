@@ -14,6 +14,36 @@ body {
   font-family: Inter, system-ui, sans-serif;
 }
 
+/* Açık tema */
+body.light {
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --accent: #7c3aed;
+}
+
+body.light .bg-slate-950  { background-color: #f8fafc !important; }
+body.light .bg-slate-900  { background-color: #ffffff !important; }
+body.light .bg-slate-800  { background-color: #f1f5f9 !important; }
+body.light .bg-slate-800\/60 { background-color: rgba(241,245,249,0.8) !important; }
+body.light .bg-slate-800\/50 { background-color: rgba(241,245,249,0.7) !important; }
+body.light .bg-slate-800\/40 { background-color: rgba(241,245,249,0.6) !important; }
+body.light .bg-slate-800\/30 { background-color: rgba(241,245,249,0.5) !important; }
+body.light .bg-slate-700  { background-color: #e2e8f0 !important; }
+body.light .bg-slate-700\/70 { background-color: rgba(226,232,240,0.8) !important; }
+body.light .border-slate-800 { border-color: #e2e8f0 !important; }
+body.light .border-slate-800\/60 { border-color: rgba(226,232,240,0.8) !important; }
+body.light .border-slate-700 { border-color: #cbd5e1 !important; }
+body.light .border-slate-700\/40 { border-color: rgba(203,213,225,0.6) !important; }
+body.light .text-white    { color: #0f172a !important; }
+body.light .text-slate-300 { color: #334155 !important; }
+body.light .text-slate-400 { color: #475569 !important; }
+body.light .text-slate-500 { color: #64748b !important; }
+body.light .text-slate-600 { color: #94a3b8 !important; }
+body.light .bg-slate-950\/95 { background-color: rgba(248,250,252,0.97) !important; }
+body.light .bg-slate-900\/95 { background-color: rgba(255,255,255,0.97) !important; }
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);

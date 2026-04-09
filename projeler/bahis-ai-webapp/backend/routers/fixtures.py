@@ -1,15 +1,33 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
+from datetime import datetime, timezone, date as _date
 from services.football import get_fixtures_by_date, get_live_fixtures, LEAGUES, get_quota
 from services.database import load_fixtures, save_fixtures
 
 router = APIRouter(prefix="/fixtures", tags=["fixtures"])
 
+DONE_STATUSES = {"FT", "AET", "PEN", "AWD", "WO"}
+
+def _needs_refresh(cached: list, match_date: str) -> bool:
+    """
+    DB'deki veriyi yenile:
+    - Bugün veya yarının maçıysa (sonuçlar güncelleniyor olabilir)
+    - Cached'deki maçlardan herhangi biri hâlâ NS/1H/2H/HT durumundaysa
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if match_date < today:
+        return False  # Geçmiş tarih — sonuçlar kesinleşmiş, yenileme
+    # Bugün veya gelecek — NS/live maç varsa API'den çek (sonuç güncellemesi)
+    for f in cached:
+        status = f.get("fixture", {}).get("status", {}).get("short", "")
+        if status not in DONE_STATUSES:
+            return True  # Henüz bitmemiş maç var — güncelle
+    return False  # Hepsi bitti — DB yeterli
+
 @router.get("/today")
 def today_fixtures(league_id: int = None):
-    from datetime import datetime, timezone
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     cached = load_fixtures(today, league_id)
-    if cached:
+    if cached and not _needs_refresh(cached, today):
         return {"date": today, "count": len(cached), "fixtures": _format(cached), "source": "db"}
     fixtures = get_fixtures_by_date(today, league_id)
     if fixtures:
@@ -19,7 +37,7 @@ def today_fixtures(league_id: int = None):
 @router.get("/date/{date}")
 def fixtures_by_date(date: str, league_id: int = None):
     cached = load_fixtures(date, league_id)
-    if cached:
+    if cached and not _needs_refresh(cached, date):
         return {"date": date, "count": len(cached), "fixtures": _format(cached), "source": "db"}
     fixtures = get_fixtures_by_date(date, league_id)
     if fixtures:

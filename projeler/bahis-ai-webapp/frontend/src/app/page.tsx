@@ -1,8 +1,9 @@
 "use client";
-import { useState } from "react";
+"use client";
+import { useState, useEffect } from "react";
 import FixtureList from "@/components/FixtureList";
 import CombinationsPanel from "@/components/CombinationsPanel";
-import { Calendar, Target, Radio, Clock, CheckCircle, Info, X } from "lucide-react";
+import { Calendar, Target, Radio, Clock, CheckCircle, Info, X, Sun, Moon } from "lucide-react";
 import type { AnalysisResult } from "@/lib/api";
 
 const MODELS = [
@@ -62,6 +63,19 @@ export default function Home() {
   const [analyses, setAnalyses] = useState<AnalysisResult[]>([]);
   const [model, setModel]       = useState("claude-opus");
   const [showInfo, setShowInfo] = useState(false);
+  const [light, setLight]       = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("bahis_ai_theme");
+    if (saved === "light") { setLight(true); document.body.classList.add("light"); }
+  }, []);
+
+  function toggleTheme() {
+    const next = !light;
+    setLight(next);
+    if (next) { document.body.classList.add("light"); localStorage.setItem("bahis_ai_theme", "light"); }
+    else       { document.body.classList.remove("light"); localStorage.setItem("bahis_ai_theme", "dark"); }
+  }
 
   const activeStatus = TABS.find(t => t.id === tab)?.status ?? "all";
 
@@ -88,6 +102,13 @@ export default function Home() {
                 <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-400 hover:text-violet-300 transition-colors"
+              title={light ? "Koyu tema" : "Açık tema"}
+            >
+              {light ? <Moon size={15} /> : <Sun size={15} />}
+            </button>
             <button
               onClick={() => setShowInfo(true)}
               className="p-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-400 hover:text-violet-300 transition-colors"
