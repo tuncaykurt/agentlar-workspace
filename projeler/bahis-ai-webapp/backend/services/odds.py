@@ -112,8 +112,8 @@ def get_fixture_odds(home_name: str, away_name: str, league_id: int, date: str) 
             home_lower = home_name.lower()
             away_lower = away_name.lower()
             for ev in events:
-                h = ev.get("home_team", "").lower()
-                a = ev.get("away_team", "").lower()
+                h = (ev.get("home_team") or "").lower()
+                a = (ev.get("away_team") or "").lower()
                 if _name_match(home_lower, h) and _name_match(away_lower, a):
                     markets = ev.get("markets", {})
                     m1x2 = markets.get("1x2", {})

@@ -273,7 +273,7 @@ def _motivation_factor(standing: dict, total_teams: int) -> float:
     if not standing:
         return 1.0
     rank = standing.get("rank", 0)
-    desc = standing.get("description", "").lower()
+    desc = (standing.get("description") or "").lower()
     total = standing.get("total_teams", total_teams) or 20
 
     # Açıklamaya göre hızlı karar
