@@ -82,7 +82,7 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
   }
 
   const filtered = fixtures.filter(fix => {
-    if (statusFilter === "all")       return !DONE_STATUSES.has(fix.status); // Günlük: bitmişleri gösterme
+    if (statusFilter === "all")       return !DONE_STATUSES.has(fix.status) && !LIVE_STATUSES.has(fix.status); // Günlük: bitmişleri ve canlıları gösterme
     if (statusFilter === "upcoming")  return isUpcomingWithinWindow(fix);
     if (statusFilter === "live")      return LIVE_STATUSES.has(fix.status);
     if (statusFilter === "finished")  return DONE_STATUSES.has(fix.status);
