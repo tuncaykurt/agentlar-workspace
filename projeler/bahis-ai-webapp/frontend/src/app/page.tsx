@@ -19,7 +19,7 @@ const TABS = [
   { id: "all",      label: "Günlük",     icon: Calendar,    status: "all" },
   { id: "upcoming", label: "Yaklaşan",   icon: Clock,       status: "upcoming" },
   { id: "live",     label: "Canlı",      icon: Radio,       status: "live" },
-  { id: "finished", label: "Bitti",      icon: CheckCircle, status: "finished" },
+  { id: "finished", label: "Sonuçlar",   icon: CheckCircle, status: "finished" },
   { id: "combos",   label: "Kupon",      icon: Target,      status: null },
 ];
 

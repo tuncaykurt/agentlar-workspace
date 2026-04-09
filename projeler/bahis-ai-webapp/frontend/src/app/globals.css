@@ -1,55 +1,83 @@
 @import "tailwindcss";
 
-:root {
-  --background: #0f172a;
-  --foreground: #f1f5f9;
-  --card: #1e293b;
-  --border: #334155;
-  --accent: #7c3aed;
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
   font-family: Inter, system-ui, sans-serif;
 }
 
-/* Açık tema */
+/* ── Koyu tema (varsayılan) ─────────────────────────────────── */
+body {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+/* ── Açık tema ──────────────────────────────────────────────── */
 body.light {
-  --background: #f1f5f9;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --border: #e2e8f0;
-  --accent: #7c3aed;
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
 }
 
-body.light .bg-slate-950  { background-color: #f8fafc !important; }
-body.light .bg-slate-900  { background-color: #ffffff !important; }
-body.light .bg-slate-800  { background-color: #f1f5f9 !important; }
-body.light .bg-slate-800\/60 { background-color: rgba(241,245,249,0.8) !important; }
-body.light .bg-slate-800\/50 { background-color: rgba(241,245,249,0.7) !important; }
-body.light .bg-slate-800\/40 { background-color: rgba(241,245,249,0.6) !important; }
-body.light .bg-slate-800\/30 { background-color: rgba(241,245,249,0.5) !important; }
-body.light .bg-slate-700  { background-color: #e2e8f0 !important; }
-body.light .bg-slate-700\/70 { background-color: rgba(226,232,240,0.8) !important; }
-body.light .border-slate-800 { border-color: #e2e8f0 !important; }
-body.light .border-slate-800\/60 { border-color: rgba(226,232,240,0.8) !important; }
-body.light .border-slate-700 { border-color: #cbd5e1 !important; }
-body.light .border-slate-700\/40 { border-color: rgba(203,213,225,0.6) !important; }
-body.light .text-white    { color: #0f172a !important; }
-body.light .text-slate-300 { color: #334155 !important; }
-body.light .text-slate-400 { color: #475569 !important; }
-body.light .text-slate-500 { color: #64748b !important; }
-body.light .text-slate-600 { color: #94a3b8 !important; }
-body.light .bg-slate-950\/95 { background-color: rgba(248,250,252,0.97) !important; }
-body.light .bg-slate-900\/95 { background-color: rgba(255,255,255,0.97) !important; }
+/* Arka planlar */
+body.light [class*="bg-slate-950"] { background-color: #f1f5f9 !important; }
+body.light [class*="bg-slate-900"] { background-color: #ffffff !important; }
+body.light [class*="bg-slate-800"] { background-color: #e8eef5 !important; }
+body.light [class*="bg-slate-700"] { background-color: #dde5ef !important; }
 
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
+/* Yazılar */
+body.light [class*="text-white"]    { color: #0f172a !important; }
+body.light [class*="text-slate-300"]{ color: #1e293b !important; }
+body.light [class*="text-slate-400"]{ color: #334155 !important; }
+body.light [class*="text-slate-500"]{ color: #475569 !important; }
+body.light [class*="text-slate-600"]{ color: #64748b !important; }
+
+/* Kenarlıklar */
+body.light [class*="border-slate-800"]{ border-color: #cbd5e1 !important; }
+body.light [class*="border-slate-700"]{ border-color: #94a3b8 !important; }
+
+/* Input / Select */
+body.light input, body.light select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
 }
+body.light input::placeholder { color: #64748b !important; }
+
+/* Violet butonlar — değiştirme */
+body.light .bg-violet-600 { background-color: #7c3aed !important; color: #ffffff !important; }
+body.light [class*="bg-violet-600"] { background-color: #7c3aed !important; }
+body.light [class*="bg-violet-900"] { background-color: #ede9fe !important; }
+body.light [class*="bg-violet-950"] { background-color: #ede9fe !important; }
+body.light [class*="text-violet-300"]{ color: #6d28d9 !important; }
+body.light [class*="text-violet-400"]{ color: #7c3aed !important; }
+body.light [class*="border-violet-700"]{ border-color: #a78bfa !important; }
+
+/* Nav */
+body.light nav { background-color: rgba(255,255,255,0.97) !important; border-color: #e2e8f0 !important; }
+body.light [class*="text-slate-500"][class*="hover"] { color: #334155 !important; }
+
+/* Analiz renkleri — açık temada okunabilir koy tona çevir */
+body.light [class*="text-green-400"]   { color: #15803d !important; } /* green-700 */
+body.light [class*="text-blue-400"]    { color: #1d4ed8 !important; } /* blue-700 */
+body.light [class*="text-amber-400"]   { color: #b45309 !important; } /* amber-700 */
+body.light [class*="text-red-400"]     { color: #b91c1c !important; } /* red-700 */
+body.light [class*="text-red-300"]     { color: #b91c1c !important; }
+body.light [class*="text-violet-400"]  { color: #6d28d9 !important; }
+body.light [class*="text-orange-300"]  { color: #c2410c !important; }
+body.light [class*="text-orange-400"]  { color: #c2410c !important; }
+
+/* Güven / rozet arka planları */
+body.light [class*="bg-green-950"]  { background-color: #dcfce7 !important; } /* green-100 */
+body.light [class*="bg-yellow-950"] { background-color: #fefce8 !important; } /* yellow-50  */
+body.light [class*="bg-red-950"]    { background-color: #fee2e2 !important; } /* red-100   */
+body.light [class*="bg-amber-950"]  { background-color: #fef3c7 !important; } /* amber-100 */
+body.light [class*="bg-orange-950"] { background-color: #ffedd5 !important; } /* orange-100 */
+
+/* Kenarlıklar */
+body.light [class*="border-green-800"]  { border-color: #16a34a !important; }
+body.light [class*="border-yellow-800"] { border-color: #ca8a04 !important; }
+body.light [class*="border-red-800"]    { border-color: #dc2626 !important; }
+body.light [class*="border-red-900"]    { border-color: #ef4444 !important; }
+body.light [class*="border-amber-700"]  { border-color: #b45309 !important; }
+body.light [class*="border-orange-800"] { border-color: #ea580c !important; }
 
 @supports (padding: env(safe-area-inset-bottom)) {
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
