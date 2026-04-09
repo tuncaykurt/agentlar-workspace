@@ -305,7 +305,7 @@ def _injury_factor(injuries: list) -> float:
     }
     total_impact = 0.0
     for inj in injuries:
-        pos = inj.get("position", "").lower()
+        pos = (inj.get("position") or "").lower()
         # API-Football pozisyon eşleştirme
         if "attack" in pos or "forward" in pos or "striker" in pos:
             total_impact += POSITION_WEIGHTS["attacker"]
