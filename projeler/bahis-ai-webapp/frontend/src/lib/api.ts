@@ -2,7 +2,7 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
-  timeout: 60000,
+  timeout: 180000, // 3 dakika — ilk analizde DB cache yok, 7+ API çağrısı + AI süresi
 });
 
 export interface Fixture {

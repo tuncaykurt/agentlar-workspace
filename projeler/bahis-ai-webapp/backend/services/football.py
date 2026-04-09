@@ -320,10 +320,26 @@ def _injury_factor(injuries: list) -> float:
     return max(0.75, 1.0 - total_impact)
 
 def statistical_analysis(home_id: int, away_id: int, league_id: int) -> dict:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     season = 2024
-    home_m = get_team_matches(home_id, league_id, season)
-    away_m = get_team_matches(away_id, league_id, season)
-    h2h_m  = get_h2h(home_id, away_id)
+
+    # Tüm bağımsız API çağrılarını paralel yap
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        f_home_m  = ex.submit(get_team_matches,  home_id, league_id, season)
+        f_away_m  = ex.submit(get_team_matches,  away_id, league_id, season)
+        f_h2h     = ex.submit(get_h2h,           home_id, away_id)
+        f_home_st = ex.submit(get_team_standing, home_id, league_id, season)
+        f_away_st = ex.submit(get_team_standing, away_id, league_id, season)
+        f_home_inj = ex.submit(get_team_injuries, home_id, league_id, season)
+        f_away_inj = ex.submit(get_team_injuries, away_id, league_id, season)
+
+    home_m = f_home_m.result()
+    away_m = f_away_m.result()
+    h2h_m  = f_h2h.result()
+    home_st = f_home_st.result()
+    away_st = f_away_st.result()
+    home_inj = f_home_inj.result()
+    away_inj = f_away_inj.result()
 
     ha = _team_avgs(home_m, home_id)
     aa = _team_avgs(away_m, away_id)
@@ -331,15 +347,11 @@ def statistical_analysis(home_id: int, away_id: int, league_id: int) -> dict:
     af = _form(away_m, away_id)
 
     # ── Standings ──────────────────────────────────────────────────────────── #
-    home_st = get_team_standing(home_id, league_id, season)
-    away_st = get_team_standing(away_id, league_id, season)
     total_teams = home_st.get("total_teams") or away_st.get("total_teams") or 20
     home_motiv = _motivation_factor(home_st, total_teams)
     away_motiv = _motivation_factor(away_st, total_teams)
 
-    # ── Injuries ───────────────────────────────────────────────────────────── #
-    home_inj = get_team_injuries(home_id, league_id, season)
-    away_inj = get_team_injuries(away_id, league_id, season)
+    # ── Injuries (zaten paralel çekildi) ──────────────────────────────────── #
     home_inj_factor = _injury_factor(home_inj)
     away_inj_factor = _injury_factor(away_inj)
 
