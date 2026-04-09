@@ -1,12 +1,13 @@
 "use client";
 import { useState } from "react";
 import type { Fixture, AnalysisResult } from "@/lib/api";
-import { ChevronDown, ChevronUp, Brain, AlertTriangle, Activity, MapPin, User, Trophy } from "lucide-react";
+import { ChevronDown, ChevronUp, Brain, AlertTriangle, Activity, MapPin, User, Trophy, XCircle } from "lucide-react";
 
 interface Props {
   fixture: Fixture;
   analysis?: AnalysisResult;
   analyzing: boolean;
+  analyzeError?: string;
   onAnalyze: () => void;
   statusLabel?: string;
 }
@@ -17,13 +18,19 @@ const confColor: Record<string, string> = {
   low:    "text-red-400 bg-red-950/60 border-red-800/50",
 };
 
-// xG sayısını sade Türkçeye çevir
-function xgLabel(val: number): string {
-  if (val >= 2.5) return `${val} gol (çok yüksek)`;
-  if (val >= 1.8) return `${val} gol (yüksek)`;
-  if (val >= 1.2) return `${val} gol (orta)`;
-  if (val >= 0.7) return `${val} gol (düşük)`;
-  return `${val} gol (çok düşük)`;
+const POS_LABELS: Record<string, string> = {
+  attacker: "Golcü", forward: "Golcü", striker: "Golcü",
+  midfielder: "Orta saha", mid: "Orta saha",
+  defender: "Defans", back: "Defans",
+  goalkeeper: "Kaleci", keeper: "Kaleci",
+};
+
+function posLabel(pos: string): string {
+  const p = pos.toLowerCase();
+  for (const [key, val] of Object.entries(POS_LABELS)) {
+    if (p.includes(key)) return val;
+  }
+  return pos || "?";
 }
 
 function ProbBar({ label, value, highlight, odds, ev }: {
@@ -59,10 +66,10 @@ function ProbBar({ label, value, highlight, odds, ev }: {
   );
 }
 
-export default function MatchCard({ fixture, analysis, analyzing, onAnalyze, statusLabel }: Props) {
+export default function MatchCard({ fixture, analysis, analyzing, analyzeError, onAnalyze, statusLabel }: Props) {
   const [open, setOpen] = useState(false);
   const isLive    = new Set(["1H","2H","HT","ET","BT","P","LIVE"]).has(fixture.status);
-  const isFinished = new Set(["FT","AET","PEN"]).has(fixture.status);
+  const isFinished = new Set(["FT","AET","PEN","AWD","WO"]).has(fixture.status);
   const p       = analysis?.statistical?.probabilities;
   const xg      = analysis?.statistical?.expected_goals;
   const conf    = analysis?.statistical?.confidence ?? 0;
@@ -198,17 +205,26 @@ export default function MatchCard({ fixture, analysis, analyzing, onAnalyze, sta
           </div>
         )}
 
+        {/* Analiz butonu — analiz yapılmamış ve bitmemiş maçlarda göster */}
         {!analysis && !isFinished && (
-          <button
-            onClick={onAnalyze}
-            disabled={analyzing}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl
-                       bg-violet-600/20 hover:bg-violet-600/30 border border-violet-700/40
-                       text-violet-300 text-sm font-medium transition-all disabled:opacity-50"
-          >
-            <Brain size={15} className={analyzing ? "animate-pulse" : ""} />
-            {analyzing ? "Analiz Ediliyor..." : "AI ile Analiz Et"}
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={onAnalyze}
+              disabled={analyzing}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl
+                         bg-violet-600/20 hover:bg-violet-600/30 border border-violet-700/40
+                         text-violet-300 text-sm font-medium transition-all disabled:opacity-50"
+            >
+              <Brain size={15} className={analyzing ? "animate-pulse" : ""} />
+              {analyzing ? "Analiz Ediliyor..." : "AI ile Analiz Et"}
+            </button>
+            {analyzeError && (
+              <div className="flex items-center gap-1.5 bg-red-950/40 border border-red-800/40 rounded-lg px-3 py-2">
+                <XCircle size={12} className="text-red-400 shrink-0" />
+                <p className="text-[11px] text-red-300">Hata: {analyzeError}</p>
+              </div>
+            )}
+          </div>
         )}
 
         {analysis && (
@@ -356,11 +372,16 @@ export default function MatchCard({ fixture, analysis, analyzing, onAnalyze, sta
                       {[
                         { list: injuries.home?.slice(0,4), name: fixture.home.name },
                         { list: injuries.away?.slice(0,4), name: fixture.away.name },
-                      ].map(({ list, name }) => list?.length > 0 && (
+                      ].map(({ list, name }) => (list as any[])?.length > 0 && (
                         <div key={name}>
                           <p className="text-[10px] text-slate-400 font-medium mb-1">{name}</p>
-                          {list.map((inj: any, i: number) => (
-                            <p key={i} className="text-[10px] text-red-300/70">• {inj.name}</p>
+                          {(list as any[]).map((inj: any, i: number) => (
+                            <p key={i} className="text-[10px] text-red-300/70">
+                              • {inj.name}
+                              {inj.position && (
+                                <span className="text-red-400/50 ml-1">[{posLabel(inj.position)}]</span>
+                              )}
+                            </p>
                           ))}
                         </div>
                       ))}

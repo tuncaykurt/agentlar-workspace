@@ -2,8 +2,7 @@
 import { useState } from "react";
 import FixtureList from "@/components/FixtureList";
 import CombinationsPanel from "@/components/CombinationsPanel";
-import LivePanel from "@/components/LivePanel";
-import { Calendar, Target, Radio, Clock, CheckCircle } from "lucide-react";
+import { Calendar, Target, Radio, Clock, CheckCircle, Info, X } from "lucide-react";
 import type { AnalysisResult } from "@/lib/api";
 
 const MODELS = [
@@ -23,10 +22,46 @@ const TABS = [
   { id: "combos",   label: "Kupon",      icon: Target,      status: null },
 ];
 
+const METRICS_INFO = [
+  {
+    title: "Form Skoru",
+    desc: "Son 6 maçtaki performans. Galibiyet=1.0, Beraberlik=0.4, Mağlubiyet=0.0. Son maçlar daha ağırlıklı sayılır. Maksimum 1.0.",
+  },
+  {
+    title: "Tahmini Gol (xG)",
+    desc: "Her takımın bu maçta kaç gol atabileceğinin tahmini. Takımın sezon ortalaması, rakibin yendiği gol ortalaması, form ve düzeltme faktörleri birleştirilerek hesaplanır.",
+  },
+  {
+    title: "Poisson Olasılıkları",
+    desc: "Tahmini gol sayıları kullanılarak olası tüm skor kombinasyonlarının olasılığı hesaplanır. Buradan maç sonucu, üst/alt, karşılıklı gol gibi bahis olasılıkları üretilir.",
+  },
+  {
+    title: "Motivasyon Faktörü",
+    desc: "Puan tablosundaki konuma göre takımın motivasyon çarpanı. Şampiyonluk yarışı veya düşme hattındaki takımlar ×1.08–1.12, orta sıra takımlar ×1.00 alır.",
+  },
+  {
+    title: "Sakatlık Faktörü",
+    desc: "Pozisyona göre ağırlıklı: Golcü sakatlığı -%12, Orta saha -%6, Defans -%4, Kaleci -%3. Maksimum %25 düşüş uygulanır.",
+  },
+  {
+    title: "H2H (Kafa Kafaya)",
+    desc: "Son 8 karşılaşmanın sonuçları ve gol ortalamaları analiz edilir. Güven skorunun %20'sini oluşturur.",
+  },
+  {
+    title: "Güven Skoru",
+    desc: "Ev sahibi maç verisi (%40) + Deplasman maç verisi (%40) + H2H verisi (%20) kombinasyonu. Düşük veri = düşük güven = tahminler daha az güvenilir.",
+  },
+  {
+    title: "EV (Beklenen Değer)",
+    desc: "EV = Bizim olasılığımız × Bahis oranı − 1. EV > %5 ise bahis teorik olarak değerli sayılır (VALUE etiketi). Oranlar bookmaker'dan çekilir.",
+  },
+];
+
 export default function Home() {
   const [tab, setTab]           = useState("all");
   const [analyses, setAnalyses] = useState<AnalysisResult[]>([]);
   const [model, setModel]       = useState("claude-opus");
+  const [showInfo, setShowInfo] = useState(false);
 
   const activeStatus = TABS.find(t => t.id === tab)?.status ?? "all";
 
@@ -42,16 +77,25 @@ export default function Home() {
               <p className="text-[10px] text-slate-400 mt-0.5">Analiz Platformu</p>
             </div>
           </div>
-          <select
-            value={model}
-            onChange={e => setModel(e.target.value)}
-            className="text-xs bg-slate-800/80 border border-slate-700/60 rounded-lg px-2.5 py-1.5
-                       text-slate-300 focus:outline-none focus:border-violet-500 max-w-[130px]"
-          >
-            {MODELS.map(m => (
-              <option key={m.id} value={m.id}>{m.label}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1.5">
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              className="text-xs bg-slate-800/80 border border-slate-700/60 rounded-lg px-2.5 py-1.5
+                         text-slate-300 focus:outline-none focus:border-violet-500 max-w-[120px]"
+            >
+              {MODELS.map(m => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setShowInfo(true)}
+              className="p-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-400 hover:text-violet-300 transition-colors"
+              title="Analiz metrikleri hakkında"
+            >
+              <Info size={15} />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -94,6 +138,37 @@ export default function Home() {
           })}
         </div>
       </nav>
+
+      {/* Metrik Bilgi Modalı */}
+      {showInfo && (
+        <div className="fixed inset-0 z-[100] bg-black/70 flex items-end justify-center max-w-md mx-auto"
+             onClick={() => setShowInfo(false)}>
+          <div className="w-full bg-slate-900 border-t border-slate-700 rounded-t-2xl max-h-[80vh] overflow-y-auto"
+               onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-slate-900 px-4 py-3 flex items-center justify-between border-b border-slate-800">
+              <h2 className="font-bold text-white text-sm">Analizde Kullanılan Metrikler</h2>
+              <button onClick={() => setShowInfo(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {METRICS_INFO.map(m => (
+                <div key={m.title} className="bg-slate-800/50 rounded-xl p-3">
+                  <p className="text-xs font-bold text-violet-300 mb-1">{m.title}</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">{m.desc}</p>
+                </div>
+              ))}
+              <div className="bg-violet-950/40 border border-violet-800/30 rounded-xl p-3">
+                <p className="text-xs text-violet-300 leading-relaxed">
+                  <span className="font-bold">AI Yorumu:</span> Tüm metrikler seçtiğiniz yapay zeka modeline gönderilir.
+                  AI, sayısal verileri yorumlayarak sade Türkçe bahis önerileri üretir.
+                  AI önerileri yatırım tavsiyesi değildir.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

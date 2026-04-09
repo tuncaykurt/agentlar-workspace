@@ -23,16 +23,28 @@ const LEAGUES = [
   { name: "Europa League", id: 3 },
 ];
 
-
 const LIVE_STATUSES  = new Set(["1H", "2H", "HT", "ET", "BT", "P", "LIVE"]);
 const DONE_STATUSES  = new Set(["FT", "AET", "PEN", "AWD", "WO"]);
+
+function toTurkeyTime(dateStr: string): string {
+  if (!dateStr) return "—";
+  try {
+    // Backend "YYYY-MM-DDTHH:MM" formatında UTC döndürür — Z ekleyerek parse et
+    const utc = new Date(dateStr.length === 16 ? dateStr + ":00Z" : dateStr);
+    const trMs = utc.getTime() + 3 * 60 * 60 * 1000;
+    const tr = new Date(trMs);
+    const h = String(tr.getUTCHours()).padStart(2, "0");
+    const m = String(tr.getUTCMinutes()).padStart(2, "0");
+    return `${h}:${m}`;
+  } catch {
+    return "—";
+  }
+}
 
 function statusLabel(fix: Fixture): string {
   if (LIVE_STATUSES.has(fix.status)) return fix.status === "HT" ? "HT" : `${fix.elapsed || 0}'`;
   if (DONE_STATUSES.has(fix.status)) return "Bitti";
-  // Yaklaşan — saat göster
-  const t = fix.date?.slice(11, 16);
-  return t && t !== "00:00" ? t : "—";
+  return toTurkeyTime(fix.date);
 }
 
 export default function FixtureList({ model, onAnalyses, statusFilter = "all" }: Props) {
@@ -43,6 +55,7 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
   const [loading, setLoading]   = useState(false);
   const [analyses, setAnalyses] = useState<Record<number, AnalysisResult>>({});
   const [analyzing, setAnalyzing] = useState<Record<number, boolean>>({});
+  const [analyzeErrors, setAnalyzeErrors] = useState<Record<number, string>>({});
   const [error, setError]       = useState("");
   const analysesRef = useRef(analyses);
   analysesRef.current = analyses;
@@ -61,6 +74,7 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
     setError("");
     setFixtures([]);
     setAnalyses({});
+    setAnalyzeErrors({});
     try {
       const res = await getFixturesByDate(date, leagueId || undefined);
       setFixtures(res.fixtures);
@@ -72,7 +86,7 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
           f => !LIVE_STATUSES.has(f.status) && !DONE_STATUSES.has(f.status)
         ).slice(0, 3);
         for (const fix of upcoming) {
-          analyzeOne(fix, res.fixtures);
+          analyzeOne(fix);
         }
       }
     } catch {
@@ -82,8 +96,9 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
     }
   }
 
-  async function analyzeOne(fix: Fixture, currentFixtures?: Fixture[]) {
+  async function analyzeOne(fix: Fixture) {
     setAnalyzing(p => ({ ...p, [fix.id]: true }));
+    setAnalyzeErrors(p => { const n = {...p}; delete n[fix.id]; return n; });
     try {
       const res = await analyzeMatch({
         fixture_id:  fix.id,
@@ -96,14 +111,14 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
         match_date:  date,
         model,
       });
-      // Functional update — stale closure sorunu olmaz
       setAnalyses(prev => {
         const updated = { ...prev, [fix.id]: res };
         onAnalyses(Object.values(updated));
         return updated;
       });
-    } catch (e) {
-      console.error("Analiz hatası:", e);
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || "Analiz başarısız";
+      setAnalyzeErrors(p => ({ ...p, [fix.id]: msg }));
     } finally {
       setAnalyzing(p => ({ ...p, [fix.id]: false }));
     }
@@ -156,7 +171,6 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
         </div>
       </div>
 
-
       {error && (
         <div className="bg-red-950/50 border border-red-800 rounded-xl p-3 text-sm text-red-300">
           {error}
@@ -188,6 +202,7 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
             fixture={fix}
             analysis={analyses[fix.id]}
             analyzing={analyzing[fix.id] || false}
+            analyzeError={analyzeErrors[fix.id]}
             onAnalyze={() => analyzeOne(fix)}
             statusLabel={statusLabel(fix)}
           />
