@@ -50,6 +50,10 @@ export interface AnalysisResult {
       home_injury_factor: number;
       away_injury_factor: number;
     };
+    averages?: {
+      home: { scored: number; conceded: number; total: number };
+      away: { scored: number; conceded: number; total: number };
+    };
     confidence: number;
   };
   odds?: {
