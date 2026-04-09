@@ -47,10 +47,19 @@ function statusLabel(fix: Fixture): string {
   return toTurkeyTime(fix.date);
 }
 
+const TIME_WINDOWS = [
+  { label: "1 saat",   hours: 1 },
+  { label: "2 saat",   hours: 2 },
+  { label: "4 saat",   hours: 4 },
+  { label: "6 saat",   hours: 6 },
+  { label: "Bugün",    hours: 24 },
+];
+
 export default function FixtureList({ model, onAnalyses, statusFilter = "all" }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate]         = useState(today);
   const [leagueId, setLeagueId] = useState(0);
+  const [timeWindow, setTimeWindow] = useState(2); // saat — yaklaşan filtresi
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [loading, setLoading]   = useState(false);
   const [analyses, setAnalyses] = useState<Record<number, AnalysisResult>>({});
@@ -62,8 +71,18 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
 
   useEffect(() => { loadFixtures(); }, []);
 
+  function isUpcomingWithinWindow(fix: Fixture): boolean {
+    if (LIVE_STATUSES.has(fix.status) || DONE_STATUSES.has(fix.status)) return false;
+    try {
+      const matchUtc = new Date(fix.date.length === 16 ? fix.date + ":00Z" : fix.date);
+      const now = new Date();
+      const diffHours = (matchUtc.getTime() - now.getTime()) / 3600000;
+      return diffHours >= 0 && diffHours <= timeWindow;
+    } catch { return false; }
+  }
+
   const filtered = fixtures.filter(fix => {
-    if (statusFilter === "upcoming")  return !LIVE_STATUSES.has(fix.status) && !DONE_STATUSES.has(fix.status);
+    if (statusFilter === "upcoming")  return isUpcomingWithinWindow(fix);
     if (statusFilter === "live")      return LIVE_STATUSES.has(fix.status);
     if (statusFilter === "finished")  return DONE_STATUSES.has(fix.status);
     return true;
@@ -135,24 +154,46 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
 
   return (
     <div className="py-4 space-y-3">
-      {/* Tarih + Arama */}
-      <div className="flex gap-2">
-        <input
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5
-                     text-sm text-white focus:outline-none focus:border-violet-500"
-        />
-        <button
-          onClick={loadFixtures}
-          disabled={loading}
-          className="px-4 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50
-                     rounded-xl text-sm font-semibold transition-colors flex items-center gap-1"
-        >
-          {loading ? <span className="animate-spin">⟳</span> : <Search size={16} />}
-        </button>
-      </div>
+      {/* Yaklaşan tabı → zaman penceresi filtresi */}
+      {statusFilter === "upcoming" ? (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">Önümüzdeki kaç saatteki maçları göster:</p>
+          <div className="flex gap-2 flex-wrap">
+            {TIME_WINDOWS.map(tw => (
+              <button
+                key={tw.hours}
+                onClick={() => setTimeWindow(tw.hours)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                  timeWindow === tw.hours
+                    ? "bg-violet-600 text-white"
+                    : "bg-slate-800 border border-slate-700 text-slate-400 hover:text-white"
+                }`}
+              >
+                {tw.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Diğer tablar → tarih + arama */
+        <div className="flex gap-2">
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5
+                       text-sm text-white focus:outline-none focus:border-violet-500"
+          />
+          <button
+            onClick={loadFixtures}
+            disabled={loading}
+            className="px-4 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50
+                       rounded-xl text-sm font-semibold transition-colors flex items-center gap-1"
+          >
+            {loading ? <span className="animate-spin">⟳</span> : <Search size={16} />}
+          </button>
+        </div>
+      )}
 
       {/* Lig dropdown */}
       <div className="flex gap-2">
