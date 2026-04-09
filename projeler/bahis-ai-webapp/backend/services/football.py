@@ -467,14 +467,15 @@ Bahis Oranları ({odds_data.get('bookmaker','?')}):
             ev_section = "\nBeklenen Değer (EV):\n" + "\n".join(ev_lines)
 
     # Sakatlık satırı
+    _pos_map = {"attacker": "Golcü", "midfielder": "Orta saha", "defender": "Defans", "goalkeeper": "Kaleci"}
     inj_lines = []
     for inj_player in inj.get("home", [])[:5]:
-        pos = inj_player.get("position", "")
-        pos_label = {"attacker": "Golcü", "midfielder": "Orta saha", "defender": "Defans", "goalkeeper": "Kaleci"}.get(pos.lower(), pos)
+        pos = (inj_player.get("position") or "").lower()
+        pos_label = _pos_map.get(pos, pos) or "?"
         inj_lines.append(f"  {home}: {inj_player.get('name','')} [{pos_label}] — {inj_player.get('type','')}")
     for inj_player in inj.get("away", [])[:5]:
-        pos = inj_player.get("position", "")
-        pos_label = {"attacker": "Golcü", "midfielder": "Orta saha", "defender": "Defans", "goalkeeper": "Kaleci"}.get(pos.lower(), pos)
+        pos = (inj_player.get("position") or "").lower()
+        pos_label = _pos_map.get(pos, pos) or "?"
         inj_lines.append(f"  {away}: {inj_player.get('name','')} [{pos_label}] — {inj_player.get('type','')}")
     inj_section = ("\nSakatlıklar:\n" + "\n".join(inj_lines)) if inj_lines else f"\nSakatlık: Ev={home_inj_count}, Dep={away_inj_count}"
 
