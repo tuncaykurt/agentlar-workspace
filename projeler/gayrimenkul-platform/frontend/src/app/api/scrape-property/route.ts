@@ -162,6 +162,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Geçerli bir URL giriniz' }, { status: 400 })
     }
 
+    if (url.includes('sahibinden.com')) {
+      return NextResponse.json(
+        { error: 'Sahibinden.com Cloudflare koruması nedeniyle otomatik çekilemiyor. Lütfen bilgileri manuel girin veya CB.com.tr / Hepsiemlak / Emlakjet linkini kullanın.' },
+        { status: 422 }
+      )
+    }
+
     const platform = detectPlatform(url)
 
     // JS gerektiren platformlar → Browserless kullan
