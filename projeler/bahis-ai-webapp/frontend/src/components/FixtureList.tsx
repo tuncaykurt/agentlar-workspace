@@ -8,6 +8,7 @@ import { Search, Zap, Filter } from "lucide-react";
 interface Props {
   model: string;
   onAnalyses: (a: AnalysisResult[]) => void;
+  onFixtures?: (map: Record<number, string>) => void;
   statusFilter?: string;
 }
 
@@ -55,7 +56,7 @@ const TIME_WINDOWS = [
   { label: "Bugün",    hours: 24 },
 ];
 
-export default function FixtureList({ model, onAnalyses, statusFilter = "all" }: Props) {
+export default function FixtureList({ model, onAnalyses, onFixtures, statusFilter = "all" }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate]         = useState(today);
   const [leagueId, setLeagueId] = useState(0);
@@ -98,6 +99,11 @@ export default function FixtureList({ model, onAnalyses, statusFilter = "all" }:
     try {
       const res = await getFixturesByDate(date, leagueId || undefined);
       setFixtures(res.fixtures);
+      if (onFixtures) {
+        const map: Record<number, string> = {};
+        res.fixtures.forEach(f => { map[f.id] = f.date; });
+        onFixtures(map);
+      }
       if (res.fixtures.length === 0) {
         setError("Bu tarihte maç bulunamadı.");
       } else {

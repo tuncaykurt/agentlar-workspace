@@ -61,6 +61,7 @@ const METRICS_INFO = [
 export default function Home() {
   const [tab, setTab]           = useState("all");
   const [analyses, setAnalyses] = useState<AnalysisResult[]>([]);
+  const [fixtureMap, setFixtureMap] = useState<Record<number, string>>({});
   const [model, setModel]       = useState("claude-opus");
   const [showInfo, setShowInfo] = useState(false);
   const [light, setLight]       = useState(false);
@@ -122,8 +123,8 @@ export default function Home() {
 
       <main className="flex-1 px-4 pb-24">
         {tab !== "combos"
-          ? <FixtureList model={model} onAnalyses={setAnalyses} statusFilter={activeStatus} />
-          : <CombinationsPanel analyses={analyses} />
+          ? <FixtureList model={model} onAnalyses={setAnalyses} onFixtures={m => setFixtureMap(p => ({...p, ...m}))} statusFilter={activeStatus} />
+          : <CombinationsPanel analyses={analyses} fixtureMap={fixtureMap} />
         }
       </main>
 

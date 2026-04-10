@@ -176,12 +176,14 @@ export default function MatchCard({ fixture, analysis, analyzing, analyzeError, 
             {isLive && (
               <span className="flex items-center gap-1 text-xs font-semibold text-red-400 bg-red-950/50 px-2 py-0.5 rounded-full border border-red-800/50">
                 <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
-                CANLI {fixture.elapsed}'
+                CANLI {fixture.status === "HT" ? "HT" : `${fixture.elapsed}'`}
               </span>
             )}
-            <span className={`text-xs font-medium ${
-              isFinished ? "text-slate-500" : isLive ? "text-red-400" : "text-violet-300"
-            }`}>{statusLabel || fixture.date.slice(11,16)}</span>
+            {!isLive && (
+              <span className={`text-xs font-medium ${
+                isFinished ? "text-slate-500" : "text-violet-300"
+              }`}>{statusLabel || fixture.date.slice(11,16)}</span>
+            )}
             {open ? <ChevronUp size={14} className="text-slate-500" /> : <ChevronDown size={14} className="text-slate-500" />}
           </div>
         </div>

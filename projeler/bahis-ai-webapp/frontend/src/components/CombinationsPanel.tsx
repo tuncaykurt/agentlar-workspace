@@ -9,6 +9,7 @@ import {
 
 interface Props {
   analyses: AnalysisResult[];
+  fixtureMap?: Record<number, string>; // fixture_id → UTC date string
 }
 
 interface Combo {
@@ -33,6 +34,7 @@ interface SavedSelection {
   reason: string;
   fixture_id?: number;
   match_date?: string;
+  match_datetime?: string; // "10.4 21:30" formatında TR saati
   result?: {
     home_goals: number;
     away_goals: number;
@@ -100,13 +102,27 @@ function formatDate(iso: string): string {
   } catch { return ""; }
 }
 
+// UTC maç saatini Türkiye saatine (+3) çevirip "10.4 21:30" formatında döndürür
+function formatMatchDateTime(utcStr: string): string {
+  if (!utcStr) return "";
+  try {
+    const utc = new Date(utcStr.length === 16 ? utcStr + ":00Z" : utcStr);
+    const tr = new Date(utc.getTime() + 3 * 60 * 60 * 1000);
+    const day   = tr.getUTCDate();
+    const month = tr.getUTCMonth() + 1;
+    const h     = String(tr.getUTCHours()).padStart(2, "0");
+    const m     = String(tr.getUTCMinutes()).padStart(2, "0");
+    return `${day}.${month} ${h}:${m}`;
+  } catch { return ""; }
+}
+
 const confBg: Record<string, string> = {
   high: "border-green-700/50 bg-green-950/30",
   medium: "border-yellow-700/50 bg-yellow-950/30",
   low: "border-slate-700 bg-slate-800/50",
 };
 
-export default function CombinationsPanel({ analyses }: Props) {
+export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) {
   const [comboSize, setComboSize]         = useState(3);
   const [minProb, setMinProb]             = useState(0.60);
   const [topN, setTopN]                   = useState(5);
@@ -145,15 +161,17 @@ export default function CombinationsPanel({ analyses }: Props) {
     const today = new Date().toISOString().slice(0, 10);
 
     const enriched: SavedSelection[] = combo.selections.map(sel => {
-      // fixture_id bul — match adı "Home vs Away" formatında
       const analysis = analyses.find(a => {
         const name = `${a.home} vs ${a.away}`;
         return name === sel.match || sel.match.includes(a.home) || sel.match.includes(a.away);
       });
+      const fid = analysis?.fixture_id;
+      const rawDate = fid ? fixtureMap[fid] : undefined;
       return {
         ...sel,
-        fixture_id: analysis?.fixture_id,
-        match_date: today,
+        fixture_id:     fid,
+        match_date:     today,
+        match_datetime: rawDate ? formatMatchDateTime(rawDate) : undefined,
       };
     });
 
@@ -454,7 +472,12 @@ export default function CombinationsPanel({ analyses }: Props) {
                       return (
                         <div key={j} className={`border rounded-xl p-3 ${selBorder}`}>
                           <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-[10px] text-slate-500 flex-1 mr-2">{sel.match}</span>
+                            <div className="flex-1 mr-2">
+                              <span className="text-[10px] text-slate-500">{sel.match}</span>
+                              {sel.match_datetime && (
+                                <span className="ml-1.5 text-[9px] text-violet-400 font-semibold">{sel.match_datetime}</span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1.5 shrink-0">
                               {/* Skor */}
                               {sel.result && (
