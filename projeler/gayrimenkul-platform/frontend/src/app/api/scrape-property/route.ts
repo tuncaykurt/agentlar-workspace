@@ -77,17 +77,25 @@ function extractPhotos(html: string, baseUrl: string): string[] {
   const photos: string[] = []
   const origin = new URL(baseUrl).origin
 
-  // <img src="..."> taglarından çek
-  const imgMatches = Array.from(html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi))
+  function addPhoto(src: string) {
+    if (!src || src.startsWith('data:') || src.length < 10) return
+    if (src.includes('icon') || src.includes('logo') || src.includes('avatar')) return
+    if (!src.match(/\.(jpg|jpeg|png|webp)/i)) return
+    const fullUrl = src.startsWith('http') ? src : `${origin}${src.startsWith('/') ? '' : '/'}${src}`
+    if (!photos.includes(fullUrl) && photos.length < 20) photos.push(fullUrl)
+  }
+
+  // src, data-src, data-lazy-src, data-original attribute'larından çek (lazy load desteği)
+  const imgMatches = Array.from(html.matchAll(/<img[^>]+>/gi))
   for (const m of imgMatches) {
-    const src = m[1]
-    if (!src || src.startsWith('data:') || src.length < 10) continue
-    // Küçük ikonları filtrele (genelde ilan fotoları büyük URL'ler içerir)
-    if (src.includes('icon') || src.includes('logo') || src.includes('avatar')) continue
-    if (src.match(/\.(jpg|jpeg|png|webp)/i)) {
-      const fullUrl = src.startsWith('http') ? src : `${origin}${src.startsWith('/') ? '' : '/'}${src}`
-      if (!photos.includes(fullUrl)) photos.push(fullUrl)
-    }
+    const tag = m[0]
+    const srcMatch = tag.match(/\bsrc=["']([^"']+)["']/i)
+    const dataSrcMatch = tag.match(/\bdata-src=["']([^"']+)["']/i)
+      || tag.match(/\bdata-lazy-src=["']([^"']+)["']/i)
+      || tag.match(/\bdata-original=["']([^"']+)["']/i)
+      || tag.match(/\bdata-url=["']([^"']+)["']/i)
+    if (dataSrcMatch) addPhoto(dataSrcMatch[1])
+    else if (srcMatch) addPhoto(srcMatch[1])
   }
 
   // JSON içindeki fotoğraf URL'lerini bul (birçok portal JS'de tutar)
