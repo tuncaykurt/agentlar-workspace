@@ -31,6 +31,27 @@ function detectPlatform(url: string) {
   return 'other'
 }
 
+// Browserless (headless Chrome) ile sayfa çek
+async function fetchViaBrowserless(url: string): Promise<string> {
+  const browserlessUrl = process.env.BROWSERLESS_URL
+  const browserlessToken = process.env.BROWSERLESS_TOKEN
+  if (!browserlessUrl) throw new Error('BROWSERLESS_URL tanımlanmamış')
+
+  const res = await fetch(`${browserlessUrl}/content?token=${browserlessToken}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url,
+      waitFor: 2000,
+      rejectResourceTypes: ['image', 'font', 'stylesheet'],
+    }),
+    signal: AbortSignal.timeout(45000),
+  })
+
+  if (!res.ok) throw new Error(`Browserless hata: ${res.status}`)
+  return await res.text()
+}
+
 // n8n scraping webhook'unu çağır
 async function fetchViaN8n(url: string, platform: string): Promise<string> {
   const n8nBase = process.env.N8N_BASE_URL
@@ -43,12 +64,11 @@ async function fetchViaN8n(url: string, platform: string): Promise<string> {
       'X-N8N-Secret': process.env.N8N_WEBHOOK_SECRET || '',
     },
     body: JSON.stringify({ url, platform }),
-    signal: AbortSignal.timeout(30000), // 30 sn timeout
+    signal: AbortSignal.timeout(30000),
   })
 
   if (!res.ok) throw new Error(`n8n hata: ${res.status}`)
   const data = await res.json()
-  // n8n'den ham HTML veya metin döner
   return data.content || data.html || data.text || ''
 }
 
@@ -144,20 +164,39 @@ export async function POST(req: NextRequest) {
 
     const platform = detectPlatform(url)
 
-    // 1. n8n üzerinden sayfayı çek
+    // JS gerektiren platformlar → Browserless kullan
+    const jsHeavyPlatforms = ['sahibinden', 'hepsiemlak', 'emlakjet', 'zingat']
+    const needsBrowser = jsHeavyPlatforms.includes(platform)
+
+    // 1. Sayfayı çek
     let rawContent: string
-    try {
-      rawContent = await fetchViaN8n(url, platform)
-    } catch {
-      // n8n ulaşılamıyor → doğrudan fetch dene (CB.com.tr gibi basit siteler için)
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept-Language': 'tr-TR,tr;q=0.9',
-        },
-        signal: AbortSignal.timeout(15000),
-      })
-      rawContent = await res.text()
+    if (needsBrowser && process.env.BROWSERLESS_URL) {
+      // Browserless ile headless Chrome
+      try {
+        rawContent = await fetchViaBrowserless(url)
+      } catch {
+        // Browserless başarısız → doğrudan fetch dene
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+          signal: AbortSignal.timeout(15000),
+        })
+        rawContent = await res.text()
+      }
+    } else {
+      // CB.com.tr gibi basit siteler → doğrudan fetch
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept-Language': 'tr-TR,tr;q=0.9',
+          },
+          signal: AbortSignal.timeout(15000),
+        })
+        rawContent = await res.text()
+      } catch {
+        // n8n'e dene
+        rawContent = await fetchViaN8n(url, platform)
+      }
     }
 
     if (!rawContent || rawContent.length < 100) {
