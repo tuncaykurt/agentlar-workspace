@@ -98,7 +98,12 @@ function comboOverall(sels: SavedSelection[]): "won" | "lost" | "pending" {
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso);
-    return `${d.getDate()}.${d.getMonth()+1} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    const day   = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year  = d.getFullYear();
+    const h     = String(d.getHours()).padStart(2, "0");
+    const m     = String(d.getMinutes()).padStart(2, "0");
+    return `${day}.${month}.${year} ${h}:${m}`;
   } catch { return ""; }
 }
 
@@ -475,8 +480,8 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
                           <div className="flex items-start justify-between mb-0.5">
                             <div className="flex-1 mr-2">
                               <span className="text-[10px] text-slate-500 leading-tight">{sel.match}</span>
-                              {sel.match_datetime && (
-                                <div className="flex items-center gap-1 mt-0.5">
+                              {sel.match_datetime && typeof sel.match_datetime === "object" && sel.match_datetime.date && (
+                                <div className="flex items-center gap-1.5 mt-0.5">
                                   <span className="text-[9px] text-slate-500">{sel.match_datetime.date}</span>
                                   <span className="text-[9px] text-slate-600">·</span>
                                   <span className="text-[10px] font-bold text-violet-400">{sel.match_datetime.time}</span>
