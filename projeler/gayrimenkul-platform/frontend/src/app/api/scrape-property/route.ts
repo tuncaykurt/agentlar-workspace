@@ -52,13 +52,27 @@ async function fetchViaN8n(url: string, platform: string): Promise<string> {
   return data.content || data.html || data.text || ''
 }
 
+// HTML'den script/style/nav taglarını temizle, sadece metin içeriği al
+function cleanHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<header[\s\S]*?<\/header>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 // Claude ile parse et
 async function parseWithClaude(rawContent: string, url: string) {
+  const cleaned = cleanHtml(rawContent)
   const prompt = `Aşağıdaki gayrimenkul ilan sayfasından bilgileri çıkar ve SADECE JSON olarak döndür.
 URL: ${url}
 
 İçerik:
-${rawContent.slice(0, 8000)}
+${cleaned.slice(0, 12000)}
 
 Çıkarılacak alanlar (bulamazsan null):
 {
