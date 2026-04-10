@@ -34,7 +34,7 @@ interface SavedSelection {
   reason: string;
   fixture_id?: number;
   match_date?: string;
-  match_datetime?: string; // "10.4 21:30" formatında TR saati
+  match_datetime?: { date: string; time: string }; // TR saati
   result?: {
     home_goals: number;
     away_goals: number;
@@ -102,18 +102,19 @@ function formatDate(iso: string): string {
   } catch { return ""; }
 }
 
-// UTC maç saatini Türkiye saatine (+3) çevirip "10.4 21:30" formatında döndürür
-function formatMatchDateTime(utcStr: string): string {
-  if (!utcStr) return "";
+// UTC maç saatini Türkiye saatine (+3) çevirip { date, time } döndürür
+function formatMatchDateTime(utcStr: string): { date: string; time: string } | null {
+  if (!utcStr) return null;
   try {
     const utc = new Date(utcStr.length === 16 ? utcStr + ":00Z" : utcStr);
     const tr = new Date(utc.getTime() + 3 * 60 * 60 * 1000);
-    const day   = tr.getUTCDate();
-    const month = tr.getUTCMonth() + 1;
+    const day   = String(tr.getUTCDate()).padStart(2, "0");
+    const month = String(tr.getUTCMonth() + 1).padStart(2, "0");
+    const year  = tr.getUTCFullYear();
     const h     = String(tr.getUTCHours()).padStart(2, "0");
     const m     = String(tr.getUTCMinutes()).padStart(2, "0");
-    return `${day}.${month} ${h}:${m}`;
-  } catch { return ""; }
+    return { date: `${day}.${month}.${year}`, time: `${h}:${m}` };
+  } catch { return null; }
 }
 
 const confBg: Record<string, string> = {
@@ -171,7 +172,7 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
         ...sel,
         fixture_id:     fid,
         match_date:     today,
-        match_datetime: rawDate ? formatMatchDateTime(rawDate) : undefined,
+        match_datetime: rawDate ? formatMatchDateTime(rawDate) ?? undefined : undefined,
       };
     });
 
@@ -471,11 +472,15 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
 
                       return (
                         <div key={j} className={`border rounded-xl p-3 ${selBorder}`}>
-                          <div className="flex items-center justify-between mb-0.5">
+                          <div className="flex items-start justify-between mb-0.5">
                             <div className="flex-1 mr-2">
-                              <span className="text-[10px] text-slate-500">{sel.match}</span>
+                              <span className="text-[10px] text-slate-500 leading-tight">{sel.match}</span>
                               {sel.match_datetime && (
-                                <span className="ml-1.5 text-[9px] text-violet-400 font-semibold">{sel.match_datetime}</span>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <span className="text-[9px] text-slate-500">{sel.match_datetime.date}</span>
+                                  <span className="text-[9px] text-slate-600">·</span>
+                                  <span className="text-[10px] font-bold text-violet-400">{sel.match_datetime.time}</span>
+                                </div>
                               )}
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
