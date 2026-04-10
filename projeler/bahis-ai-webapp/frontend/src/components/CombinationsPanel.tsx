@@ -515,7 +515,7 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
                         <div key={j} className={`border rounded-xl p-3 ${selBorder}`}>
                           {/* Satır 1: maç adı + olasılık + ikon */}
                           <div className="flex items-start justify-between gap-2 mb-1">
-                            <span className="text-[10px] text-slate-500 leading-tight flex-1">{sel.match}</span>
+                            <span className="text-xs text-slate-300 leading-tight flex-1 font-medium">{sel.match}</span>
                             <div className="flex items-center gap-1.5 shrink-0">
                               {/* Skor — bitti */}
                               {sel.result && (
