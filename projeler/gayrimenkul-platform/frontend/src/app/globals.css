@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --sidebar-bg: #1e293b;
+  --sidebar-text: #94a3b8;
+  --sidebar-active: #3b82f6;
+  --card-bg: #ffffff;
+  --border: #e2e8f0;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150;
+  }
+
+  .sidebar-link:hover {
+    @apply bg-slate-700 text-white;
+  }
+
+  .sidebar-link.active {
+    @apply bg-blue-600 text-white;
+  }
+
+  .card {
+    @apply bg-white rounded-xl border border-slate-200 shadow-sm p-6;
+  }
+
+  .stat-card {
+    @apply bg-white rounded-xl border border-slate-200 shadow-sm p-5;
+  }
+
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors;
+  }
+}
