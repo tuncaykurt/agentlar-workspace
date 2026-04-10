@@ -89,9 +89,20 @@ export default function NewPropertyPage() {
         throw new Error(data.error || 'Scraping başarısız')
       }
 
+      // null/undefined değerleri filtrele, sadece dolu alanları uygula
+      const filtered = Object.fromEntries(
+        Object.entries(data).filter(([, v]) => v !== null && v !== undefined && v !== '')
+      )
       setForm({
         ...emptyForm,
-        ...data,
+        ...filtered,
+        price: filtered.price != null ? String(filtered.price) : '',
+        m2_gross: filtered.m2_gross != null ? String(filtered.m2_gross) : '',
+        m2_net: filtered.m2_net != null ? String(filtered.m2_net) : '',
+        bathroom_count: filtered.bathroom_count != null ? String(filtered.bathroom_count) : '',
+        floor: filtered.floor != null ? String(filtered.floor) : '',
+        total_floors: filtered.total_floors != null ? String(filtered.total_floors) : '',
+        age: filtered.age != null ? String(filtered.age) : '',
         source_url: url.trim(),
         source: detectPlatform(url.trim()),
         features: Array.isArray(data.features) ? data.features : [],
