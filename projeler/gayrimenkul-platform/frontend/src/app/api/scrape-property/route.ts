@@ -1,7 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+// OpenRouter üzerinden Claude API çağrısı
+async function callOpenRouter(prompt: string): Promise<string> {
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://gayrimenkul.yapayzekaotomasyon.cloud',
+      'X-Title': 'Gayrimenkul Platform',
+    },
+    body: JSON.stringify({
+      model: 'anthropic/claude-haiku-4-5',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  })
+  if (!res.ok) throw new Error(`OpenRouter hata: ${res.status}`)
+  const data = await res.json()
+  return data.choices?.[0]?.message?.content || ''
+}
 
 // Desteklenen platformları tespit et
 function detectPlatform(url: string) {
@@ -36,13 +54,7 @@ async function fetchViaN8n(url: string, platform: string): Promise<string> {
 
 // Claude ile parse et
 async function parseWithClaude(rawContent: string, url: string) {
-  const message = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001', // Hızlı ve ucuz parse için Haiku
-    max_tokens: 1024,
-    messages: [
-      {
-        role: 'user',
-        content: `Aşağıdaki gayrimenkul ilan sayfasından bilgileri çıkar ve SADECE JSON olarak döndür.
+  const prompt = `Aşağıdaki gayrimenkul ilan sayfasından bilgileri çıkar ve SADECE JSON olarak döndür.
 URL: ${url}
 
 İçerik:
@@ -70,12 +82,9 @@ ${rawContent.slice(0, 8000)}
   "description": "Açıklama metni (max 500 karakter)"
 }
 
-Sadece JSON döndür, başka metin ekleme.`,
-      },
-    ],
-  })
+Sadece JSON döndür, başka metin ekleme.`
 
-  const text = message.content[0].type === 'text' ? message.content[0].text : ''
+  const text = await callOpenRouter(prompt)
 
   // JSON parse
   const jsonMatch = text.match(/\{[\s\S]*\}/)
