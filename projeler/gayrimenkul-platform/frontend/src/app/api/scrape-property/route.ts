@@ -125,6 +125,20 @@ export async function POST(req: NextRequest) {
     // 2. Claude ile parse et
     const parsed = await parseWithClaude(rawContent, url)
 
+    // Başlık boşsa <title> tag'inden çek
+    if (!parsed.title) {
+      const titleMatch = rawContent.match(/<title[^>]*>([^<]+)<\/title>/i)
+      if (titleMatch) {
+        parsed.title = titleMatch[1]
+          .replace(/\s*[-|]\s*sahibinden\.com.*/i, '')
+          .replace(/\s*[-|]\s*hepsiemlak\.com.*/i, '')
+          .replace(/\s*[-|]\s*emlakjet\.com.*/i, '')
+          .replace(/\s*[-|]\s*zingat\.com.*/i, '')
+          .replace(/\s*[-|]\s*cb\.com\.tr.*/i, '')
+          .trim()
+      }
+    }
+
     return NextResponse.json(parsed)
   } catch (err: unknown) {
     console.error('Scraping error:', err)
