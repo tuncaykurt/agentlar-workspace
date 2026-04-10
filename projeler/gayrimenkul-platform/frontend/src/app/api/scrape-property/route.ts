@@ -78,7 +78,7 @@ function extractPhotos(html: string, baseUrl: string): string[] {
   const origin = new URL(baseUrl).origin
 
   // <img src="..."> taglarından çek
-  const imgMatches = html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)
+  const imgMatches = Array.from(html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi))
   for (const m of imgMatches) {
     const src = m[1]
     if (!src || src.startsWith('data:') || src.length < 10) continue
@@ -91,7 +91,7 @@ function extractPhotos(html: string, baseUrl: string): string[] {
   }
 
   // JSON içindeki fotoğraf URL'lerini bul (birçok portal JS'de tutar)
-  const jsonImgMatches = html.matchAll(/"(https?:[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/gi)
+  const jsonImgMatches = Array.from(html.matchAll(/"(https?:[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/gi))
   for (const m of jsonImgMatches) {
     const url = m[1].replace(/\\u002F/g, '/').replace(/\\\//g, '/')
     if (!photos.includes(url) && photos.length < 20) photos.push(url)
