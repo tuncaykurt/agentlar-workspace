@@ -42,10 +42,10 @@ body.light input, body.light select {
 body.light input::placeholder { color: #64748b !important; }
 
 /* Violet butonlar — değiştirme */
-body.light .bg-violet-600 { background-color: #7c3aed !important; color: #ffffff !important; }
-body.light [class*="bg-violet-600"] { background-color: #7c3aed !important; }
-body.light [class*="bg-violet-900"] { background-color: #ede9fe !important; }
-body.light [class*="bg-violet-950"] { background-color: #ede9fe !important; }
+body.light .bg-violet-600                { background-color: #7c3aed !important; color: #ffffff !important; }
+body.light [class*="bg-violet-600/"]     { background-color: #ede9fe !important; } /* /20 /30 gibi yarı saydam → açık lavanta */
+body.light [class*="bg-violet-900"]      { background-color: #ede9fe !important; }
+body.light [class*="bg-violet-950"]      { background-color: #ede9fe !important; }
 body.light [class*="text-violet-300"]{ color: #6d28d9 !important; }
 body.light [class*="text-violet-400"]{ color: #7c3aed !important; }
 body.light [class*="border-violet-700"]{ border-color: #a78bfa !important; }
