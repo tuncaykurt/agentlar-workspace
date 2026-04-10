@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 import type { Property, PropertyStatus } from '@/lib/types'
 import {
   ArrowLeft, MapPin, Home, Eye, Edit2, Trash2,
-  DollarSign, Building2, Calendar, CheckCircle,
+  DollarSign, Building2, Calendar, CheckCircle, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 
 const statusColors: Record<PropertyStatus, string> = {
@@ -35,6 +35,7 @@ export default function PropertyDetailPage() {
   const [property, setProperty] = useState<Property | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
+  const [activePhoto, setActivePhoto] = useState(0)
 
   useEffect(() => {
     async function load() {
@@ -106,13 +107,60 @@ export default function PropertyDetailPage() {
         </div>
       </div>
 
-      {/* Fotoğraflar */}
-      {property.photos && property.photos.length > 0 && (
-        <div className="card p-0 overflow-hidden mb-4">
-          <img src={property.photos[0]} alt={property.title}
-            className="w-full h-64 object-cover" />
-        </div>
-      )}
+      {/* Fotoğraf Galerisi */}
+      {property.photos && property.photos.length > 0 && (() => {
+        const photos = property.photos as string[]
+        return (
+          <div className="card p-0 overflow-hidden mb-4">
+            {/* Ana Foto */}
+            <div className="relative">
+              <img
+                src={photos[activePhoto]}
+                alt={`${property.title} - ${activePhoto + 1}`}
+                className="w-full h-72 object-cover"
+                onError={e => { (e.target as HTMLImageElement).src = '' }}
+              />
+              {/* Ok butonları */}
+              {photos.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setActivePhoto(i => (i - 1 + photos.length) % photos.length)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 transition-colors"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    onClick={() => setActivePhoto(i => (i + 1) % photos.length)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 transition-colors"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                  <div className="absolute bottom-2 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full">
+                    {activePhoto + 1} / {photos.length}
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Thumbnail'lar */}
+            {photos.length > 1 && (
+              <div className="flex gap-1.5 p-2 overflow-x-auto bg-slate-50">
+                {photos.map((src, i) => (
+                  <button key={i} onClick={() => setActivePhoto(i)}
+                    className={`flex-shrink-0 rounded overflow-hidden border-2 transition-all ${
+                      i === activePhoto ? 'border-blue-500' : 'border-transparent opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={src} alt={`thumb-${i}`}
+                      className="w-16 h-12 object-cover"
+                      onError={e => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Durum Değiştir */}
       <div className="card mb-4">
