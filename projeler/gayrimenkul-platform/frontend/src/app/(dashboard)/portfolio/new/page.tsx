@@ -41,6 +41,7 @@ interface FormData {
   age: string
   heating_type: string
   features: string[]
+  photos: string[]
   source_url: string
   source: ListingSource
 }
@@ -50,7 +51,7 @@ const emptyForm: FormData = {
   property_type: 'apartment', city: '', district: '', neighborhood: '',
   address: '', m2_gross: '', m2_net: '', room_count: '',
   bathroom_count: '', floor: '', total_floors: '', age: '',
-  heating_type: '', features: [], source_url: '', source: 'manual',
+  heating_type: '', features: [], photos: [], source_url: '', source: 'manual',
 }
 
 function detectPlatform(url: string): ListingSource {
@@ -106,6 +107,7 @@ export default function NewPropertyPage() {
         source_url: url.trim(),
         source: detectPlatform(url.trim()),
         features: Array.isArray(data.features) ? data.features : [],
+        photos: Array.isArray(data.photos) ? data.photos : [],
       })
       setScrapingStatus('success')
     } catch (err: unknown) {
@@ -157,6 +159,7 @@ export default function NewPropertyPage() {
       age: form.age ? Number(form.age) : null,
       heating_type: form.heating_type.trim() || null,
       features: form.features,
+      photos: form.photos.length > 0 ? form.photos : null,
       source: form.source,
       source_url: form.source_url || null,
       assigned_consultant_id: consultant?.id || null,
@@ -224,8 +227,24 @@ export default function NewPropertyPage() {
         </div>
 
         {scrapingStatus === 'success' && (
-          <div className="mt-3 flex items-center gap-2 text-green-700 text-sm bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-            <CheckCircle size={15} /> Mülk bilgileri başarıyla çekildi! Aşağıdaki alanları gözden geçirin.
+          <div className="mt-3">
+            <div className="flex items-center gap-2 text-green-700 text-sm bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+              <CheckCircle size={15} />
+              Mülk bilgileri başarıyla çekildi!
+              {form.photos.length > 0
+                ? ` ${form.photos.length} fotoğraf bulundu.`
+                : ' Fotoğraf bulunamadı — manuel ekleyebilirsiniz.'}
+            </div>
+            {form.photos.length > 0 && (
+              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                {form.photos.slice(0, 6).map((src, i) => (
+                  <img key={i} src={src} alt={`foto-${i + 1}`}
+                    className="h-20 w-28 object-cover rounded-lg flex-shrink-0 border border-slate-200"
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
         {scrapingStatus === 'error' && (
