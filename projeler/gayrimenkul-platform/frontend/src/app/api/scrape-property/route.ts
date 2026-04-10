@@ -52,6 +52,34 @@ async function fetchViaN8n(url: string, platform: string): Promise<string> {
   return data.content || data.html || data.text || ''
 }
 
+// HTML'den fotoğraf URL'lerini çıkar
+function extractPhotos(html: string, baseUrl: string): string[] {
+  const photos: string[] = []
+  const origin = new URL(baseUrl).origin
+
+  // <img src="..."> taglarından çek
+  const imgMatches = html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)
+  for (const m of imgMatches) {
+    const src = m[1]
+    if (!src || src.startsWith('data:') || src.length < 10) continue
+    // Küçük ikonları filtrele (genelde ilan fotoları büyük URL'ler içerir)
+    if (src.includes('icon') || src.includes('logo') || src.includes('avatar')) continue
+    if (src.match(/\.(jpg|jpeg|png|webp)/i)) {
+      const fullUrl = src.startsWith('http') ? src : `${origin}${src.startsWith('/') ? '' : '/'}${src}`
+      if (!photos.includes(fullUrl)) photos.push(fullUrl)
+    }
+  }
+
+  // JSON içindeki fotoğraf URL'lerini bul (birçok portal JS'de tutar)
+  const jsonImgMatches = html.matchAll(/"(https?:[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/gi)
+  for (const m of jsonImgMatches) {
+    const url = m[1].replace(/\\u002F/g, '/').replace(/\\\//g, '/')
+    if (!photos.includes(url) && photos.length < 20) photos.push(url)
+  }
+
+  return photos.slice(0, 15) // max 15 fotoğraf
+}
+
 // HTML'den script/style/nav taglarını temizle, sadece metin içeriği al
 function cleanHtml(html: string): string {
   return html
@@ -136,8 +164,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Sayfa içeriği alınamadı' }, { status: 502 })
     }
 
-    // 2. Claude ile parse et
+    // 2. Fotoğrafları çek (HTML temizlenmeden önce)
+    const photos = extractPhotos(rawContent, url)
+
+    // 3. Claude ile parse et
     const parsed = await parseWithClaude(rawContent, url)
+
+    // Fotoğrafları ekle
+    if (photos.length > 0 && (!parsed.photos || parsed.photos.length === 0)) {
+      parsed.photos = photos
+    }
 
     // Başlık boşsa <title> tag'inden çek
     if (!parsed.title) {
