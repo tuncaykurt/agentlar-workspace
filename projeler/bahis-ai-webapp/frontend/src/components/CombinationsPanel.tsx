@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { buildCombinations, getFixturesByDate } from "@/lib/api";
+import { buildCombinations, getFixturesByDate, getLiveFixtures } from "@/lib/api";
 import type { AnalysisResult } from "@/lib/api";
 import {
   Target, Zap, ChevronDown, ChevronUp, Bookmark, BookmarkCheck,
@@ -12,34 +12,37 @@ interface Props {
   fixtureMap?: Record<number, string>; // fixture_id → UTC date string
 }
 
+interface ComboSelection {
+  match: string;
+  label: string;
+  probability: number;
+  confidence: string;
+  reason: string;
+  fixture_id?: number; // backend'den geliyor
+}
+
 interface Combo {
-  selections: Array<{
-    match: string;
-    label: string;
-    probability: number;
-    confidence: string;
-    reason: string;
-  }>;
+  selections: ComboSelection[];
   size: number;
   total_prob: number;
   ev_score: number;
   min_single: number;
 }
 
-interface SavedSelection {
-  match: string;
-  label: string;
-  probability: number;
-  confidence: string;
-  reason: string;
-  fixture_id?: number;
+interface SavedSelection extends ComboSelection {
   match_date?: string;
-  match_datetime?: { date: string; time: string }; // TR saati
+  match_datetime?: { date: string; time: string };
   result?: {
     home_goals: number;
     away_goals: number;
     status: string;
     won: boolean | null;
+  };
+  live_score?: {
+    home_goals: number;
+    away_goals: number;
+    elapsed: number;
+    status: string;
   };
 }
 
@@ -59,6 +62,7 @@ interface SavedCoupon {
 const STORAGE_KEY = "bahis_ai_saved_coupons";
 const METRIC_TAGS = ["Form analizi", "Puan tablosu", "H2H geçmiş", "Sakatlık faktörü", "Motivasyon", "Poisson hesabı"];
 const DONE_STATUSES = new Set(["FT", "AET", "PEN", "AWD", "WO"]);
+const LIVE_STATUSES = new Set(["1H", "2H", "HT", "ET", "BT", "P", "LIVE"]);
 
 function loadSaved(): SavedCoupon[] {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
@@ -68,34 +72,32 @@ function saveCoupons(coupons: SavedCoupon[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(coupons));
 }
 
-/* ── Kazanç hesapla ─────────────────────────────────────────── */
 function checkWin(label: string, homeGoals: number, awayGoals: number): boolean | null {
   const total = homeGoals + awayGoals;
   const l = label.toLowerCase();
-  if (l.includes("ev kazanır"))        return homeGoals > awayGoals;
-  if (l.includes("dep kazanır"))       return awayGoals > homeGoals;
-  if (l.includes("beraberlik") && !l.includes("çifte")) return homeGoals === awayGoals;
-  if (l.includes("çifte şans 1x"))     return homeGoals >= awayGoals;
-  if (l.includes("çifte şans x2"))     return awayGoals >= homeGoals;
-  if (l.includes("karşılıklı gol"))    return homeGoals > 0 && awayGoals > 0;
-  if (l.includes("üst 3.5"))           return total > 3.5;
-  if (l.includes("alt 3.5"))           return total < 3.5;
-  if (l.includes("üst 2.5"))           return total > 2.5;
-  if (l.includes("alt 2.5"))           return total < 2.5;
-  if (l.includes("üst 1.5"))           return total > 1.5;
-  if (l.includes("alt 1.5"))           return total < 1.5;
+  if (l.includes("ev sahibi kazanır") || l.includes("ev kazanır")) return homeGoals > awayGoals;
+  if (l.includes("dep") && l.includes("kazanır"))                  return awayGoals > homeGoals;
+  if (l.includes("beraberlik") && !l.includes("çifte"))            return homeGoals === awayGoals;
+  if (l.includes("çifte şans 1x"))   return homeGoals >= awayGoals;
+  if (l.includes("çifte şans x2"))   return awayGoals >= homeGoals;
+  if (l.includes("karşılıklı gol olmaz")) return !(homeGoals > 0 && awayGoals > 0);
+  if (l.includes("karşılıklı gol"))  return homeGoals > 0 && awayGoals > 0;
+  if (l.includes("üst 3.5"))         return total > 3.5;
+  if (l.includes("alt 3.5"))         return total < 3.5;
+  if (l.includes("üst 2.5"))         return total > 2.5;
+  if (l.includes("alt 2.5"))         return total < 2.5;
+  if (l.includes("üst 1.5"))         return total > 1.5;
+  if (l.includes("alt 1.5"))         return total < 1.5;
   return null;
 }
 
 function comboOverall(sels: SavedSelection[]): "won" | "lost" | "pending" {
-  const finished = sels.filter(s => s.result);
-  if (finished.length === 0) return "pending";
-  if (finished.some(s => s.result!.won === false)) return "lost";
-  if (finished.length === sels.length && finished.every(s => s.result!.won === true)) return "won";
+  if (sels.some(s => s.result?.won === false)) return "lost";
+  if (sels.every(s => s.result?.won === true)) return "won";
   return "pending";
 }
 
-function formatDate(iso: string): string {
+function formatSavedAt(iso: string): string {
   try {
     const d = new Date(iso);
     const day   = String(d.getDate()).padStart(2, "0");
@@ -107,12 +109,11 @@ function formatDate(iso: string): string {
   } catch { return ""; }
 }
 
-// UTC maç saatini Türkiye saatine (+3) çevirip { date, time } döndürür
 function formatMatchDateTime(utcStr: string): { date: string; time: string } | null {
   if (!utcStr) return null;
   try {
     const utc = new Date(utcStr.length === 16 ? utcStr + ":00Z" : utcStr);
-    const tr = new Date(utc.getTime() + 3 * 60 * 60 * 1000);
+    const tr  = new Date(utc.getTime() + 3 * 60 * 60 * 1000);
     const day   = String(tr.getUTCDate()).padStart(2, "0");
     const month = String(tr.getUTCMonth() + 1).padStart(2, "0");
     const year  = tr.getUTCFullYear();
@@ -123,23 +124,23 @@ function formatMatchDateTime(utcStr: string): { date: string; time: string } | n
 }
 
 const confBg: Record<string, string> = {
-  high: "border-green-700/50 bg-green-950/30",
+  high:   "border-green-700/50 bg-green-950/30",
   medium: "border-yellow-700/50 bg-yellow-950/30",
-  low: "border-slate-700 bg-slate-800/50",
+  low:    "border-slate-700 bg-slate-800/50",
 };
 
 export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) {
-  const [comboSize, setComboSize]         = useState(3);
-  const [minProb, setMinProb]             = useState(0.60);
-  const [topN, setTopN]                   = useState(5);
-  const [combos, setCombos]               = useState<Combo[]>([]);
-  const [loading, setLoading]             = useState(false);
-  const [error, setError]                 = useState("");
-  const [openIdx, setOpenIdx]             = useState<number | null>(0);
-  const [savedCoupons, setSavedCoupons]   = useState<SavedCoupon[]>([]);
-  const [savedOpenIdx, setSavedOpenIdx]   = useState<number | null>(null);
-  const [showSaved, setShowSaved]         = useState(false);
-  const [refreshing, setRefreshing]       = useState(false);
+  const [comboSize, setComboSize]       = useState(3);
+  const [minProb, setMinProb]           = useState(0.60);
+  const [topN, setTopN]                 = useState(5);
+  const [combos, setCombos]             = useState<Combo[]>([]);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState("");
+  const [openIdx, setOpenIdx]           = useState<number | null>(0);
+  const [savedCoupons, setSavedCoupons] = useState<SavedCoupon[]>([]);
+  const [savedOpenIdx, setSavedOpenIdx] = useState<number | null>(null);
+  const [showSaved, setShowSaved]       = useState(false);
+  const [refreshing, setRefreshing]     = useState(false);
 
   useEffect(() => { setSavedCoupons(loadSaved()); }, []);
 
@@ -167,15 +168,11 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
     const today = new Date().toISOString().slice(0, 10);
 
     const enriched: SavedSelection[] = combo.selections.map(sel => {
-      const analysis = analyses.find(a => {
-        const name = `${a.home} vs ${a.away}`;
-        return name === sel.match || sel.match.includes(a.home) || sel.match.includes(a.away);
-      });
-      const fid = analysis?.fixture_id;
-      const rawDate = fid ? fixtureMap[fid] : undefined;
+      // fixture_id backend'den geliyor — doğrudan kullan
+      const fid = sel.fixture_id;
+      const rawDate = fid != null ? fixtureMap[fid] : undefined;
       return {
         ...sel,
-        fixture_id:     fid,
         match_date:     today,
         match_datetime: rawDate ? formatMatchDateTime(rawDate) ?? undefined : undefined,
       };
@@ -198,52 +195,91 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
     saveCoupons(updated);
   }
 
-  /* ── Sonuçları API'den güncelle ──────────────────────────── */
+  /* ── Sonuçları & canlı skorları güncelle ──────────────────── */
   async function refreshResults() {
     setRefreshing(true);
     try {
-      // Benzersiz tarihleri topla
+      // fixture_id → skor/durum map
+      const scoreMap = new Map<number, {
+        home_goals: number; away_goals: number; status: string; elapsed?: number;
+      }>();
+
+      // Benzersiz tarihleri topla → her tarih için fixture çek
       const dates = new Set<string>();
       savedCoupons.forEach(c =>
         c.combo.selections.forEach(s => { if (s.match_date) dates.add(s.match_date); })
       );
-
-      // Her tarih için fixture'ları çek
-      const fixtureMap = new Map<number, { home_goals: number; away_goals: number; status: string }>();
       for (const date of dates) {
         try {
           const data = await getFixturesByDate(date);
           data.fixtures.forEach(f => {
-            if (DONE_STATUSES.has(f.status)) {
-              fixtureMap.set(f.id, {
+            if (DONE_STATUSES.has(f.status) || LIVE_STATUSES.has(f.status)) {
+              scoreMap.set(f.id, {
                 home_goals: f.home.goals ?? 0,
                 away_goals: f.away.goals ?? 0,
-                status: f.status,
+                status:     f.status,
+                elapsed:    f.elapsed,
               });
             }
           });
         } catch {}
       }
 
-      // Kuponu güncelle
+      // Canlı maçları da çek (today fixture'larında olmayabilir)
+      try {
+        const live = await getLiveFixtures();
+        live.fixtures.forEach(f => {
+          scoreMap.set(f.id, {
+            home_goals: f.home.goals ?? 0,
+            away_goals: f.away.goals ?? 0,
+            status:     f.status,
+            elapsed:    f.elapsed,
+          });
+        });
+      } catch {}
+
       const updated = savedCoupons.map(coupon => {
         const newSels: SavedSelection[] = coupon.combo.selections.map(sel => {
-          if (!sel.fixture_id || sel.result) return sel; // zaten sonuçlandı
-          const res = fixtureMap.get(sel.fixture_id);
-          if (!res) return sel;
-          return {
-            ...sel,
-            result: {
-              home_goals: res.home_goals,
-              away_goals: res.away_goals,
-              status: res.status,
-              won: checkWin(sel.label, res.home_goals, res.away_goals),
-            },
-          };
+          if (!sel.fixture_id) return sel;
+          // Zaten kesin sonuç varsa güncelleme
+          if (sel.result) return sel;
+
+          const score = scoreMap.get(sel.fixture_id);
+          if (!score) return sel;
+
+          if (DONE_STATUSES.has(score.status)) {
+            // Maç bitti — kesin sonuç
+            return {
+              ...sel,
+              live_score: undefined,
+              result: {
+                home_goals: score.home_goals,
+                away_goals: score.away_goals,
+                status:     score.status,
+                won: checkWin(sel.label, score.home_goals, score.away_goals),
+              },
+            };
+          }
+
+          if (LIVE_STATUSES.has(score.status)) {
+            // Canlı — geçici skor göster, result yok
+            return {
+              ...sel,
+              live_score: {
+                home_goals: score.home_goals,
+                away_goals: score.away_goals,
+                elapsed:    score.elapsed ?? 0,
+                status:     score.status,
+              },
+            };
+          }
+
+          return sel;
         });
+
         return {
           ...coupon,
-          combo: { ...coupon.combo, selections: newSels },
+          combo:   { ...coupon.combo, selections: newSels },
           overall: comboOverall(newSels),
         };
       });
@@ -405,7 +441,6 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
       {/* Kayıtlı Kuponlar */}
       {savedCoupons.length > 0 && (
         <div className="space-y-3">
-          {/* Başlık + Güncelle butonu */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSaved(s => !s)}
@@ -448,12 +483,11 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
                   <div className="text-left">
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="text-white font-bold text-sm">{saved.combo.size}'lü Kupon</p>
-                      {/* Genel durum rozeti */}
-                      {overall === "won"  && <span className="text-[10px] font-bold text-green-400 bg-green-950/50 border border-green-700/40 px-1.5 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 size={9} />TUTTU</span>}
-                      {overall === "lost" && <span className="text-[10px] font-bold text-red-400 bg-red-950/50 border border-red-700/40 px-1.5 py-0.5 rounded-full flex items-center gap-1"><XCircle size={9} />TUTMADI</span>}
+                      {overall === "won"     && <span className="text-[10px] font-bold text-green-400 bg-green-950/50 border border-green-700/40 px-1.5 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 size={9} />TUTTU</span>}
+                      {overall === "lost"    && <span className="text-[10px] font-bold text-red-400 bg-red-950/50 border border-red-700/40 px-1.5 py-0.5 rounded-full flex items-center gap-1"><XCircle size={9} />TUTMADI</span>}
                       {overall === "pending" && <span className="text-[10px] font-bold text-slate-500 bg-slate-800/50 border border-slate-700/40 px-1.5 py-0.5 rounded-full flex items-center gap-1"><Clock size={9} />BEKLEMEDE</span>}
                     </div>
-                    <p className="text-xs text-slate-500">Kaydedildi: {formatDate(saved.savedAt)}</p>
+                    <p className="text-xs text-slate-500">Kaydedildi: {formatSavedAt(saved.savedAt)}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
@@ -469,44 +503,55 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
                 {savedOpenIdx === i && (
                   <div className="px-4 pb-4 space-y-2 border-t border-slate-800 pt-3">
                     {saved.combo.selections.map((sel, j) => {
-                      const won = sel.result?.won;
+                      const won  = sel.result?.won;
+                      const isLive = !!sel.live_score;
                       const selBorder =
-                        won === true  ? "border-green-700/60 bg-green-950/20" :
-                        won === false ? "border-red-700/60 bg-red-950/20"     :
+                        isLive          ? "border-red-700/50 bg-red-950/10" :
+                        won === true    ? "border-green-700/60 bg-green-950/20" :
+                        won === false   ? "border-red-700/60 bg-red-950/20"   :
                         "border-slate-700/50 bg-slate-800/40";
 
                       return (
                         <div key={j} className={`border rounded-xl p-3 ${selBorder}`}>
-                          <div className="flex items-start justify-between mb-0.5">
-                            <div className="flex-1 mr-2">
-                              <span className="text-[10px] text-slate-500 leading-tight">{sel.match}</span>
-                              {sel.match_datetime && typeof sel.match_datetime === "object" && sel.match_datetime.date && (
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  <span className="text-[9px] text-slate-500">{sel.match_datetime.date}</span>
-                                  <span className="text-[9px] text-slate-600">·</span>
-                                  <span className="text-[10px] font-bold text-violet-400">{sel.match_datetime.time}</span>
-                                </div>
-                              )}
-                            </div>
+                          {/* Satır 1: maç adı + olasılık + ikon */}
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <span className="text-[10px] text-slate-500 leading-tight flex-1">{sel.match}</span>
                             <div className="flex items-center gap-1.5 shrink-0">
-                              {/* Skor */}
+                              {/* Skor — bitti */}
                               {sel.result && (
                                 <span className="text-xs font-bold text-white bg-slate-700/60 px-1.5 py-0.5 rounded">
-                                  {sel.result.home_goals} – {sel.result.away_goals}
+                                  {sel.result.home_goals}–{sel.result.away_goals}
                                 </span>
                               )}
-                              {/* Kazandı/Kaybetti ikonu */}
+                              {/* Canlı skor */}
+                              {isLive && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold text-red-400 bg-red-950/40 border border-red-800/40 px-1.5 py-0.5 rounded">
+                                  <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
+                                  {sel.live_score!.home_goals}–{sel.live_score!.away_goals}
+                                  <span className="text-[9px] text-red-500">{sel.live_score!.elapsed}'</span>
+                                </span>
+                              )}
                               {won === true  && <CheckCircle2 size={14} className="text-green-400" />}
                               {won === false && <XCircle size={14} className="text-red-400" />}
-                              {won === null  && sel.result && <span className="text-[9px] text-slate-500">?</span>}
                               <span className="text-xs font-bold text-amber-400">%{Math.round(sel.probability * 100)}</span>
                             </div>
                           </div>
+
+                          {/* Satır 2: tahmin + tarih/saat */}
                           <div className="flex items-center justify-between">
                             <p className="text-sm font-semibold text-white">{sel.label}</p>
-                            {!sel.result && (
-                              <span className="text-[9px] text-slate-600 ml-2">Oynanmadı</span>
-                            )}
+                            <div className="text-right">
+                              {sel.match_datetime && typeof sel.match_datetime === "object" ? (
+                                <div className="text-right">
+                                  <p className="text-[9px] text-slate-500">{sel.match_datetime.date}</p>
+                                  <p className="text-[10px] font-bold text-violet-400">{sel.match_datetime.time}</p>
+                                </div>
+                              ) : (
+                                !sel.result && !isLive && (
+                                  <span className="text-[9px] text-slate-600">Tarih yok</span>
+                                )
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
