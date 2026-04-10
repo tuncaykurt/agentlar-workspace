@@ -236,10 +236,10 @@ export default function NewPropertyPage() {
                 : ' Fotoğraf bulunamadı — manuel ekleyebilirsiniz.'}
             </div>
             {form.photos.length > 0 && (
-              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                {form.photos.slice(0, 6).map((src, i) => (
+              <div className="mt-2 grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                {form.photos.map((src, i) => (
                   <img key={i} src={src} alt={`foto-${i + 1}`}
-                    className="h-20 w-28 object-cover rounded-lg flex-shrink-0 border border-slate-200"
+                    className="w-full h-20 object-cover rounded-lg border border-slate-200"
                     onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 ))}
