@@ -56,6 +56,8 @@ export interface Client {
   salutation?: string
   phone?: string
   email?: string
+  tc_no?: string
+  address?: string
   client_type: ClientType
   assigned_consultant_id?: string
   lead_status: LeadStatus

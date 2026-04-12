@@ -327,6 +327,14 @@ INSERT INTO settings (key, value, description) VALUES
 ON CONFLICT (key) DO NOTHING;
     `,
   },
+
+  {
+    id: '007_client_tc_address',
+    sql: `
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS tc_no TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS address TEXT;
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import type { Client, Property, Consultant, DocumentType } from '@/lib/types'
-import { ArrowLeft, Search, Printer, Save, X } from 'lucide-react'
+import { ArrowLeft, Search, Printer, Save, X, ChevronDown } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +17,82 @@ const DOC_TYPES: { value: DocumentType; label: string; desc: string; color: stri
   { value: 'rental_contract', label: 'Kira Sözleşmesi',   desc: 'Gayrimenkul kira sözleşmesi',      color: 'purple' },
   { value: 'offer_letter',    label: 'Teklif Mektubu',    desc: 'Alım teklifi mektubu',             color: 'orange' },
 ]
+
+// ─── Client Search ────────────────────────────────────────────────────────────
+
+// ─── Client Extra Fields ──────────────────────────────────────────────────────
+
+function ClientExtraFields({
+  client,
+  extraData,
+  onChange,
+  onSaveToContact,
+}: {
+  client: Client
+  extraData: { tc_no: string; address: string; email: string }
+  onChange: (d: { tc_no: string; address: string; email: string }) => void
+  onSaveToContact: () => void
+}) {
+  const missing = !client.tc_no || !client.address || !client.email
+  const [open, setOpen] = useState(missing)
+  const inp = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+
+  return (
+    <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 bg-slate-50 hover:bg-slate-100"
+      >
+        <span>{missing ? '⚠️ Eksik bilgiler var — tıkla' : 'Belge için ek bilgiler'}</span>
+        <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="p-3 space-y-2 bg-white">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">TC / Vergi No</label>
+              <input
+                type="text"
+                value={extraData.tc_no}
+                onChange={e => onChange({ ...extraData, tc_no: e.target.value })}
+                className={inp}
+                placeholder="11 haneli TC"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">E-posta</label>
+              <input
+                type="email"
+                value={extraData.email}
+                onChange={e => onChange({ ...extraData, email: e.target.value })}
+                className={inp}
+                placeholder="ornek@mail.com"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Adres</label>
+              <input
+                type="text"
+                value={extraData.address}
+                onChange={e => onChange({ ...extraData, address: e.target.value })}
+                className={inp}
+                placeholder="Mahalle, sokak, şehir"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onSaveToContact}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            💾 Rehbere kaydet
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── Client Search ────────────────────────────────────────────────────────────
 
@@ -42,7 +118,7 @@ function ClientSearch({
     const supabase = createClient()
     const { data } = await supabase
       .from('clients')
-      .select('id, full_name, salutation, phone, email, client_type')
+      .select('id, full_name, salutation, phone, email, tc_no, address, client_type')
       .or(`full_name.ilike.%${term}%,phone.ilike.%${term}%`)
       .eq('is_active', true)
       .limit(8)
@@ -242,13 +318,13 @@ function generatePrintHTML(params: {
     @media print { .no-print { display: none !important; } body { padding: 20px; } }
   `
 
-  // Reusable party block
-  const partyRows = (label: string, c: Client | null) => `
+  // Reusable party block — uses template_data for extra fields if available
+  const partyRows = (label: string, c: Client | null, prefix: 'main' | 'second') => `
     <tr><td>${label}:</td><td>${clientName(c)}</td></tr>
     <tr><td>Telefon:</td><td>${c?.phone || '_______________'}</td></tr>
-    <tr><td>E-posta:</td><td>${c?.email || '_______________'}</td></tr>
-    <tr><td>TC / Vergi No:</td><td>_______________</td></tr>
-    <tr><td>Adres:</td><td>_______________</td></tr>
+    <tr><td>E-posta:</td><td>${templateData[`${prefix}_email`] || c?.email || '_______________'}</td></tr>
+    <tr><td>TC / Vergi No:</td><td>${templateData[`${prefix}_tc_no`] || c?.tc_no || '_______________'}</td></tr>
+    <tr><td>Adres:</td><td>${templateData[`${prefix}_address`] || c?.address || '_______________'}</td></tr>
   `
 
   const propRows = property ? `
@@ -269,7 +345,7 @@ function generatePrintHTML(params: {
       body: `
         <h2>1. Taraflar</h2>
         <table>
-          ${partyRows('Mülk Sahibi', mainClient)}
+          ${partyRows('Mülk Sahibi', mainClient, 'main')}
           <tr><td colspan="2" style="padding-top:10px;font-weight:bold;">Yetkili Danışman / Ofis</td></tr>
           <tr><td>Danışman:</td><td>${consultant?.full_name || '_______________'}</td></tr>
           <tr><td>Ofis:</td><td>${officeName}</td></tr>
@@ -299,9 +375,9 @@ function generatePrintHTML(params: {
       title: 'GAYRİMENKUL SATIŞ SÖZLEŞMESİ',
       body: `
         <h2>1. Satıcı Bilgileri</h2>
-        <table>${partyRows('Satıcı', mainClient)}</table>
+        <table>${partyRows('Satıcı', mainClient, 'main')}</table>
         <h2>2. Alıcı Bilgileri</h2>
-        <table>${partyRows('Alıcı', secondClient)}</table>
+        <table>${partyRows('Alıcı', secondClient, 'second')}</table>
         <h2>3. Taşınmaz Bilgileri</h2>
         <table>${propRows}</table>
         <h2>4. Satış Şartları</h2>
@@ -310,11 +386,19 @@ function generatePrintHTML(params: {
           <tr><td>Kapora Tutarı:</td><td>${money(templateData.kapora as string)}</td></tr>
           <tr><td>Kapora Tarihi:</td><td>${fmtDate(templateData.kapora_tarihi as string)}</td></tr>
           <tr><td>Teslim Tarihi:</td><td>${fmtDate(templateData.teslim_tarihi as string)}</td></tr>
-          <tr><td>Danışman / Ofis:</td><td>${consultant?.full_name || '_______________'} / ${officeName}</td></tr>
+          ${templateData.ada_parsel ? `<tr><td>Ada / Parsel:</td><td>${templateData.ada_parsel}</td></tr>` : ''}
         </table>
-        <h2>5. Özel Şartlar</h2>
+        <h2>5. Hizmet Bedeli (Komisyon)</h2>
+        <p>ALICI ve SATICI, ${officeName}'e aşağıdaki komisyon ücretini ödemeyi kabul ve taahhüt eder:</p>
+        <table>
+          <tr><td>Alıcıdan:</td><td>%${templateData.komisyon_alici || '2'} + KDV</td></tr>
+          <tr><td>Satıcıdan:</td><td>%${templateData.komisyon_satici || '2'} + KDV</td></tr>
+          ${templateData.hizmet_bedeli && templateData.hizmet_bedeli !== '0' ? `<tr><td>Toplam Hizmet Bedeli:</td><td>${money(templateData.hizmet_bedeli as string)}</td></tr>` : ''}
+        </table>
+        ${templateData.ceza_miktari && templateData.ceza_miktari !== '0' ? `<h2>6. Cayma Cezası</h2><p>Sözleşmeden cayılması halinde cayma bedeli ${money(templateData.ceza_miktari as string)} olarak belirlenmiştir.</p>` : ''}
+        <h2>${templateData.ceza_miktari && templateData.ceza_miktari !== '0' ? '7' : '6'}. Özel Şartlar</h2>
         <p>${templateData.ozel_sartlar || 'Yoktur.'}</p>
-        <h2>6. Genel Hükümler</h2>
+        <h2>Genel Hükümler</h2>
         <p>İş bu sözleşme taraflarca serbestçe imzalanmıştır. Uyuşmazlıklarda taşınmazın bulunduğu yerin mahkemeleri yetkilidir.</p>
       `,
       sigs: `
@@ -327,9 +411,9 @@ function generatePrintHTML(params: {
       title: 'GAYRİMENKUL KİRA SÖZLEŞMESİ',
       body: `
         <h2>1. Kiraya Veren</h2>
-        <table>${partyRows('Kiraya Veren', mainClient)}</table>
+        <table>${partyRows('Kiraya Veren', mainClient, 'main')}</table>
         <h2>2. Kiracı</h2>
-        <table>${partyRows('Kiracı', secondClient)}</table>
+        <table>${partyRows('Kiracı', secondClient, 'second')}</table>
         <h2>3. Kiralanan Taşınmaz</h2>
         <table>${propRows}</table>
         <h2>4. Kira Şartları</h2>
@@ -357,9 +441,9 @@ function generatePrintHTML(params: {
       title: 'GAYRİMENKUL ALIM TEKLİF MEKTUBU',
       body: `
         <h2>1. Teklif Eden</h2>
-        <table>${partyRows('Alıcı', mainClient)}</table>
+        <table>${partyRows('Alıcı', mainClient, 'main')}</table>
         <h2>2. Satıcı / Mülk Bilgileri</h2>
-        <table>${partyRows('Satıcı', secondClient)}</table>
+        <table>${partyRows('Satıcı', secondClient, 'second')}</table>
         <table>${propRows}</table>
         <h2>3. Teklif Detayları</h2>
         <table>
@@ -417,6 +501,11 @@ export default function NewDocumentPage() {
   const [secondClient, setSecondClient] = useState<Client | null>(null)
   const [property, setProperty] = useState<Property | null>(null)
 
+  type ExtraFields = { tc_no: string; address: string; email: string }
+  const emptyExtra = (): ExtraFields => ({ tc_no: '', address: '', email: '' })
+  const [mainExtra, setMainExtra] = useState<ExtraFields>(emptyExtra())
+  const [secondExtra, setSecondExtra] = useState<ExtraFields>(emptyExtra())
+
   // Authorization fields
   const [yetkiTuru, setYetkiTuru] = useState('Satış')
   const [komisyonOrani, setKomisyonOrani] = useState('3')
@@ -440,6 +529,13 @@ export default function NewDocumentPage() {
   // Offer fields
   const [teklifBedeli, setTeklifBedeli] = useState('')
   const [gecerlilikTarihi, setGecerlilikTarihi] = useState('')
+
+  // Sales commission fields
+  const [komisyonAlici, setKomisyonAlici] = useState('2')
+  const [komisyonSatici, setKomisyonSatici] = useState('2')
+  const [hizmetBedeli, setHizmetBedeli] = useState('')
+  const [cezaMiktari, setCezaMiktari] = useState('')
+  const [adaParsel, setAdaParsel] = useState('')
 
   const [ozelSartlar, setOzelSartlar] = useState('')
   const [notes, setNotes] = useState('')
@@ -471,10 +567,40 @@ export default function NewDocumentPage() {
     setTitle(`${typeLabel}${cn ? ' — ' + cn : ''} (${now})`)
   }, [docType, mainClient])
 
+  // Pre-fill extra fields when client is selected
+  useEffect(() => {
+    if (mainClient) {
+      setMainExtra({ tc_no: mainClient.tc_no || '', address: mainClient.address || '', email: mainClient.email || '' })
+    } else {
+      setMainExtra(emptyExtra())
+    }
+  }, [mainClient])
+
+  useEffect(() => {
+    if (secondClient) {
+      setSecondExtra({ tc_no: secondClient.tc_no || '', address: secondClient.address || '', email: secondClient.email || '' })
+    } else {
+      setSecondExtra(emptyExtra())
+    }
+  }, [secondClient])
+
+  async function saveExtraToClient(clientId: string, extra: ExtraFields) {
+    const supabase = createClient()
+    const update: Record<string, string> = {}
+    if (extra.tc_no) update.tc_no = extra.tc_no
+    if (extra.address) update.address = extra.address
+    if (extra.email) update.email = extra.email
+    if (Object.keys(update).length > 0) {
+      await supabase.from('clients').update(update).eq('id', clientId)
+    }
+  }
+
   function getTemplateData(): TemplateData {
-    const base: TemplateData = { ozel_sartlar: ozelSartlar }
+    const mainInfo = { main_tc_no: mainExtra.tc_no, main_address: mainExtra.address, main_email: mainExtra.email }
+    const secondInfo = { second_tc_no: secondExtra.tc_no, second_address: secondExtra.address, second_email: secondExtra.email }
+    const base: TemplateData = { ozel_sartlar: ozelSartlar, ...mainInfo, ...secondInfo }
     if (docType === 'authorization') return { ...base, yetki_turu: yetkiTuru, komisyon_orani: komisyonOrani, komisyon_turu: komisyonTuru, baslangic_tarihi: baslangicTarihi, yetki_suresi_gun: yetkiSuresiGun }
-    if (docType === 'sales_contract') return { ...base, satis_bedeli: satisBedeli, kapora, kapora_tarihi: kaporaTarihi, teslim_tarihi: teslimTarihi }
+    if (docType === 'sales_contract') return { ...base, satis_bedeli: satisBedeli, kapora, kapora_tarihi: kaporaTarihi, teslim_tarihi: teslimTarihi, komisyon_alici: komisyonAlici, komisyon_satici: komisyonSatici, hizmet_bedeli: hizmetBedeli, ceza_miktari: cezaMiktari, ada_parsel: adaParsel }
     if (docType === 'rental_contract') return { ...base, aylik_kira: aylikKira, depozito, kira_baslangic: kiraBaslangic, kira_suresi_ay: kiraSuresiAy, odeme_gunu: odemeGunu }
     return { ...base, teklif_bedeli: teklifBedeli, gecerlilik_tarihi: gecerlilikTarihi }
   }
@@ -501,7 +627,12 @@ export default function NewDocumentPage() {
       signature_status: 'draft',
     })
     setSaving(false)
-    if (!error) router.push('/documents')
+    if (!error) {
+      // Silently save filled extra fields to contacts
+      if (mainClient) await saveExtraToClient(mainClient.id, mainExtra)
+      if (secondClient) await saveExtraToClient(secondClient.id, secondExtra)
+      router.push('/documents')
+    }
   }
 
   function handlePrint() {
@@ -598,9 +729,29 @@ export default function NewDocumentPage() {
         {/* Taraflar */}
         <div className="card space-y-4">
           <h2 className="text-sm font-semibold text-slate-700">Taraflar</h2>
-          <ClientSearch label={mainClientLabel} value={mainClient} onChange={setMainClient} />
+          <div>
+            <ClientSearch label={mainClientLabel} value={mainClient} onChange={setMainClient} />
+            {mainClient && (
+              <ClientExtraFields
+                client={mainClient}
+                extraData={mainExtra}
+                onChange={setMainExtra}
+                onSaveToContact={() => saveExtraToClient(mainClient.id, mainExtra)}
+              />
+            )}
+          </div>
           {showSecondClient && (
-            <ClientSearch label={secondClientLabel} value={secondClient} onChange={setSecondClient} />
+            <div>
+              <ClientSearch label={secondClientLabel} value={secondClient} onChange={setSecondClient} />
+              {secondClient && (
+                <ClientExtraFields
+                  client={secondClient}
+                  extraData={secondExtra}
+                  onChange={setSecondExtra}
+                  onSaveToContact={() => saveExtraToClient(secondClient.id, secondExtra)}
+                />
+              )}
+            </div>
           )}
           <PropertySearch value={property} onChange={setProperty} />
         </div>
@@ -668,6 +819,31 @@ export default function NewDocumentPage() {
                 <div>
                   <label className={lbl}>Teslim Tarihi</label>
                   <input type="date" value={teslimTarihi} onChange={e => setTeslimTarihi(e.target.value)} className={inp} />
+                </div>
+              </div>
+              <div>
+                <label className={lbl}>Ada / Parsel / Pafta</label>
+                <input type="text" value={adaParsel} onChange={e => setAdaParsel(e.target.value)} className={inp} placeholder="Ada: 103, Parsel: 58, Pafta: ..." />
+              </div>
+              <p className="text-xs font-semibold text-slate-600 pt-1">Hizmet Bedeli (Komisyon)</p>
+              <div className={row2}>
+                <div>
+                  <label className={lbl}>Alıcıdan (%)</label>
+                  <input type="number" value={komisyonAlici} onChange={e => setKomisyonAlici(e.target.value)} className={inp} step="0.5" min="0" max="10" />
+                </div>
+                <div>
+                  <label className={lbl}>Satıcıdan (%)</label>
+                  <input type="number" value={komisyonSatici} onChange={e => setKomisyonSatici(e.target.value)} className={inp} step="0.5" min="0" max="10" />
+                </div>
+              </div>
+              <div className={row2}>
+                <div>
+                  <label className={lbl}>Hizmet Bedeli Tutarı (₺) <span className="text-slate-400 font-normal">— varsa</span></label>
+                  <input type="number" value={hizmetBedeli} onChange={e => setHizmetBedeli(e.target.value)} className={inp} placeholder="0" />
+                </div>
+                <div>
+                  <label className={lbl}>Ceza Miktarı (₺) <span className="text-slate-400 font-normal">— vazgeçme durumu</span></label>
+                  <input type="number" value={cezaMiktari} onChange={e => setCezaMiktari(e.target.value)} className={inp} placeholder="0" />
                 </div>
               </div>
             </>
