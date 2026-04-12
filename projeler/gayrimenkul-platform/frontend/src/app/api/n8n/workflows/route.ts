@@ -409,7 +409,7 @@ function buildAiBotWorkflow(
     nodes: [webhookNode, filterNode, aiAgentNode, openRouterNode, memoryNode, sendNode],
     connections: {
       Webhook: { main: [[{ node: 'Kendi Mesajı mı?', type: 'main', index: 0 }]] },
-      'Kendi Mesajı mı?': { main: [[{ node: 'AI Agent', type: 'main', index: 0 }], []] },
+      'Kendi Mesajı mı?': { main: [[{ node: 'AI Agent', type: 'main', index: 0 }]] },
       'AI Agent': { main: [[{ node: 'Send text', type: 'main', index: 0 }]] },
       'OpenRouter Chat Model': { ai_languageModel: [[{ node: 'AI Agent', type: 'ai_languageModel', index: 0 }]] },
       'Simple Memory': { ai_memory: [[{ node: 'AI Agent', type: 'ai_memory', index: 0 }]] },
@@ -647,19 +647,25 @@ export async function POST(req: NextRequest) {
       // Tag assignment failure is non-fatal
     }
 
+    // Auto-activate the workflow so it starts running immediately
+    try {
+      await n8nFetch(cfg, 'POST', `/workflows/${created.id}/activate`)
+    } catch {
+      // Non-fatal — workflow created, user can activate manually
+    }
+
     // For AI Bot: auto-configure Evolution API to forward inbound messages to this webhook
-    if (isAiBot && resolvedKey) {
+    if (isAiBot) {
       const n8nBase = cfg.n8n_url?.replace(/\/$/, '')
       const evolutionBase = cfg.evolution_api_url?.replace(/\/$/, '')
       const webhookUrl = `${n8nBase}/webhook/wa_aibot-${consultant.id}`
-      try {
-        await setEvolutionWebhook(evolutionBase!, waInstance, resolvedKey, webhookUrl)
-      } catch (e) {
-        // Non-fatal: workflow created but webhook not configured — return warning
-        return NextResponse.json({
-          workflow: created,
-          warning: `Workflow oluşturuldu ancak Evolution webhook ayarlanamadı: ${e instanceof Error ? e.message : 'Bilinmeyen hata'}. Evolution Manager'dan manuel olarak ayarlayın.`,
-        })
+      const keyForWebhook = resolvedKey || cfg.evolution_api_key
+      if (evolutionBase && keyForWebhook) {
+        try {
+          await setEvolutionWebhook(evolutionBase, waInstance, keyForWebhook, webhookUrl)
+        } catch {
+          // Non-fatal — webhook can be synced with the refresh button
+        }
       }
     }
 

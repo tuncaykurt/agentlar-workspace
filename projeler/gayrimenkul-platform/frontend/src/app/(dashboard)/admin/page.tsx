@@ -1015,14 +1015,17 @@ function AutomationsTab() {
 
   async function handleToggle(wf: WFlow) {
     setToggling(wf.id)
+    setError('')
     try {
-      await fetch(`/api/n8n/workflows/${wf.id}`, {
+      const res = await fetch(`/api/n8n/workflows/${wf.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !wf.active }),
       })
-      loadWorkflows()
-    } catch { /* ignore */ }
+      const data = await res.json()
+      if (!res.ok) setError(data.error || 'Durum değiştirilemedi')
+      else loadWorkflows()
+    } catch { setError('Bağlantı hatası') }
     setToggling(null)
   }
 
