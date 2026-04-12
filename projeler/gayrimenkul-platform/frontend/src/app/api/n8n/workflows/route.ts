@@ -40,6 +40,39 @@ async function n8nFetch(cfg: Record<string, string>, method: string, path: strin
   return res.json()
 }
 
+// Ensure an SMTP credential exists in n8n, return its id
+async function ensureSmtpCredential(
+  cfg: Record<string, string>,
+  smtpHost: string,
+  smtpPort: string,
+  smtpUser: string,
+  smtpPass: string,
+): Promise<string> {
+  const credName = `SMTP ${smtpUser}`
+  // List existing credentials and find by name
+  try {
+    const data = await n8nFetch(cfg, 'GET', '/credentials?limit=100')
+    const creds: { id: string; name: string }[] = data.data || []
+    const existing = creds.find(c => c.name === credName)
+    if (existing) return existing.id
+  } catch { /* if listing fails, try to create */ }
+
+  // Create new SMTP credential
+  const created = await n8nFetch(cfg, 'POST', '/credentials', {
+    name: credName,
+    type: 'smtp',
+    data: {
+      host: smtpHost,
+      port: parseInt(smtpPort) || 587,
+      user: smtpUser,
+      password: smtpPass,
+      secure: false,
+      allowUnauthorizedCerts: false,
+    },
+  })
+  return created.id
+}
+
 // Ensure a tag exists for the consultant, return its id
 async function ensureTag(cfg: Record<string, string>, tagName: string): Promise<string> {
   const data = await n8nFetch(cfg, 'GET', '/tags?limit=100')
@@ -131,13 +164,11 @@ function buildEmailWorkflow(
   workflowName: string,
   consultantId: string,
   smtpUser: string,
-  smtpPass: string,
-  smtpHost: string,
-  smtpPort: string,
   fromName: string,
   message: string,
   subject: string,
-  tagId: string,
+  credentialId: string,
+  credentialName: string,
 ) {
   const webhookPath = `${templateId}-${consultantId}`
 
@@ -172,35 +203,15 @@ function buildEmailWorkflow(
     },
     credentials: {
       smtp: {
-        id: '',   // will be replaced after credential creation
-        name: `SMTP ${smtpUser}`,
-      },
-    },
-  }
-
-  // Embed SMTP config directly in node parameters (no saved credential needed)
-  // n8n emailSend node supports inline SMTP via parameters when typeVersion >= 2.1
-  const emailNodeInline = {
-    id: emailNode.id,
-    name: emailNode.name,
-    type: emailNode.type,
-    typeVersion: 2.1,
-    position: emailNode.position as [number, number],
-    parameters: {
-      fromEmail: `${fromName} <${smtpUser}>`,
-      toEmail: '={{ $json.body.email }}',
-      subject,
-      emailType: 'text',
-      text: message,
-      options: {
-        allowUnauthorizedCerts: false,
+        id: credentialId,
+        name: credentialName,
       },
     },
   }
 
   return {
     name: workflowName,
-    nodes: [triggerNode, emailNodeInline],
+    nodes: [triggerNode, emailNode],
     connections: {
       Webhook: {
         main: [[{ node: 'Email Gönder', type: 'main', index: 0 }]],
@@ -293,18 +304,20 @@ export async function POST(req: NextRequest) {
 
     let workflow
     if (isEmail) {
+      const smtpHost = cfg.smtp_host || 'smtp.gmail.com'
+      const smtpPort = cfg.smtp_port || '587'
+      const credId = await ensureSmtpCredential(cfg, smtpHost, smtpPort, cfg.smtp_user, cfg.smtp_pass)
+      const credName = `SMTP ${cfg.smtp_user}`
       workflow = buildEmailWorkflow(
         templateId,
         name,
         consultant.id,
         cfg.smtp_user,
-        cfg.smtp_pass,
-        cfg.smtp_host || 'smtp.gmail.com',
-        cfg.smtp_port || '587',
         cfg.smtp_from_name || 'Ambiance Gayrimenkul',
         message || 'Merhaba, size ulaşmak istedik.',
         subject || 'Ambiance Gayrimenkul',
-        tagId,
+        credId,
+        credName,
       )
     } else {
       workflow = buildWaWorkflow(
