@@ -230,14 +230,15 @@ async function ensureTag(cfg: Record<string, string>, tagName: string): Promise<
   return created.id
 }
 
-// Workflow template generator — WhatsApp (outbound, Evolution API node)
+// Workflow template generator — WhatsApp (outbound, HTTP Request to Evolution API)
 function buildWaWorkflow(
   templateId: string,
   workflowName: string,
   consultantId: string,
   waInstance: string,
   message: string,
-  evolutionCred: { id: string; name: string } | null,
+  evolutionUrl: string,
+  evolutionKey: string,
 ) {
   const webhookPath = `${templateId}-${consultantId}`
   const isCampaign = templateId === 'wa_campaign'
@@ -266,22 +267,29 @@ function buildWaWorkflow(
         },
       }
 
-  const sendNode: Record<string, unknown> = {
+  const sendNode = {
     id: crypto.randomUUID(),
     name: 'Mesaj Gönder',
-    type: 'n8n-nodes-evolution-api-english.evolutionApi',
-    typeVersion: 1,
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
     position: [480, 300] as [number, number],
     parameters: {
-      resource: 'messages-api',
-      instanceName: waInstance,
-      remoteJid: '={{ $json.phone + "@s.whatsapp.net" }}',
-      messageText: message,
-      options_message: {},
+      method: 'POST',
+      url: `=${evolutionUrl.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(waInstance)}`,
+      sendHeaders: true,
+      headerParameters: {
+        parameters: [{ name: 'apikey', value: evolutionKey }],
+      },
+      sendBody: true,
+      contentType: 'json',
+      bodyParameters: {
+        parameters: [
+          { name: 'number', value: '={{ $json.phone + "@s.whatsapp.net" }}' },
+          { name: 'text', value: message },
+        ],
+      },
+      options: {},
     },
-  }
-  if (evolutionCred) {
-    sendNode.credentials = { evolutionApi: { id: evolutionCred.id, name: evolutionCred.name } }
   }
 
   const triggerName = isCampaign ? 'Manuel Tetik' : 'Webhook'
@@ -305,7 +313,8 @@ function buildAiBotWorkflow(
   waInstance: string,
   systemPrompt: string,
   userPromptTemplate: string,
-  evolutionCred: { id: string; name: string } | null,
+  evolutionUrl: string,
+  evolutionKey: string,
   openRouterCred: { id: string; name: string } | null,
 ) {
   const webhookNode = {
@@ -386,22 +395,30 @@ function buildAiBotWorkflow(
     },
   }
 
-  const sendNode: Record<string, unknown> = {
+  // Use HTTP Request instead of Evolution API node — no credential needed, key is inline
+  const sendNode = {
     id: crypto.randomUUID(),
     name: 'Send text',
-    type: 'n8n-nodes-evolution-api-english.evolutionApi',
-    typeVersion: 1,
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
     position: [256, -48] as [number, number],
     parameters: {
-      resource: 'messages-api',
-      instanceName: waInstance,
-      remoteJid: "={{ $('Webhook').item.json.body.data.key.remoteJid }}",
-      messageText: '={{ $json.output }}',
-      options_message: {},
+      method: 'POST',
+      url: `=${evolutionUrl.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(waInstance)}`,
+      sendHeaders: true,
+      headerParameters: {
+        parameters: [{ name: 'apikey', value: evolutionKey }],
+      },
+      sendBody: true,
+      contentType: 'json',
+      bodyParameters: {
+        parameters: [
+          { name: 'number', value: "={{ $('Webhook').item.json.body.data.key.remoteJid }}" },
+          { name: 'text', value: '={{ $json.output }}' },
+        ],
+      },
+      options: {},
     },
-  }
-  if (evolutionCred) {
-    sendNode.credentials = { evolutionApi: { id: evolutionCred.id, name: evolutionCred.name } }
   }
 
   return {
@@ -581,14 +598,12 @@ export async function POST(req: NextRequest) {
 
     const waInstance = consultant.wa_instance || consultant.full_name
 
-    // Auto-resolve per-instance Evolution key (fetches from Evolution API if not stored)
+    // Resolve per-instance Evolution key (fetches from Evolution API if not stored, falls back to global)
+    const evolutionUrl = cfg.evolution_api_url?.replace(/\/$/, '') || ''
     const resolvedKey = !isEmail
       ? await resolveEvolutionInstanceKey(cfg, consultant.id, waInstance, consultant.evolution_instance_key || null)
       : null
-
-    const evolutionCred = resolvedKey
-      ? await ensureEvolutionCredential(cfg, waInstance, resolvedKey)
-      : await findCredentialByType(cfg, 'evolutionApi', 'evolution')
+    const evolutionKey = resolvedKey || cfg.evolution_api_key || ''
 
     let workflow
     if (isAiBot) {
@@ -599,7 +614,8 @@ export async function POST(req: NextRequest) {
         waInstance,
         systemPrompt || '',
         message || DEFAULT_USER_PROMPT,
-        evolutionCred,
+        evolutionUrl,
+        evolutionKey,
         openRouterCred,
       )
     } else if (isEmail) {
@@ -634,7 +650,8 @@ export async function POST(req: NextRequest) {
         consultant.id,
         waInstance,
         message || 'Merhaba, size ulaşmak istedik.',
-        evolutionCred,
+        evolutionUrl,
+        evolutionKey,
       )
     }
 
@@ -646,19 +663,6 @@ export async function POST(req: NextRequest) {
     } catch {
       // Tag assignment failure is non-fatal
     }
-
-    // Re-PUT the workflow so n8n re-validates credentials (fixes "credential not confirmed" warning)
-    // Without this, nodes with API-created credentials show a warning and can't be activated
-    try {
-      const full = await n8nFetch(cfg, 'GET', `/workflows/${created.id}`)
-      await n8nFetch(cfg, 'PUT', `/workflows/${created.id}`, {
-        name: full.name,
-        nodes: full.nodes,
-        connections: full.connections,
-        settings: full.settings ?? {},
-        staticData: full.staticData ?? null,
-      })
-    } catch { /* non-fatal */ }
 
     // Auto-activate the workflow so it starts running immediately
     try {
