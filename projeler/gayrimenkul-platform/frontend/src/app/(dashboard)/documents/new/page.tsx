@@ -837,6 +837,7 @@ export default function NewDocumentPage() {
   const [hizmetBedeli, setHizmetBedeli] = useState('')             // auto: alici + satici
   const [tapudaOdenecek, setTapudaOdenecek] = useState('')         // auto: satis - kapora
   const [cezaMiktari, setCezaMiktari] = useState('')
+  const cezaUserEdited = useRef(false)
   // Ada/Parsel/Pafta ayrı alanlar
   const [ada, setAda] = useState('')
   const [parsel, setParsel] = useState('')
@@ -923,6 +924,17 @@ export default function NewDocumentPage() {
       setHizmetBedeliSatici(satici > 0 ? String(satici) : '')
     }
   }, [satisBedeli, komisyonAlici, komisyonSatici])
+
+  // Ceza miktarı: satış bedelinin %10'u (kullanıcı manuel değiştirmediyse)
+  useEffect(() => {
+    if (cezaUserEdited.current) return
+    const satis = parseFloat(satisBedeli) || 0
+    if (satis > 0) {
+      setCezaMiktari(String(Math.round(satis * 0.10)))
+    } else {
+      setCezaMiktari('')
+    }
+  }, [satisBedeli])
 
   // Toplam hizmet bedeli = kapora (alınan kapora bizim hizmet bedelimiz)
   useEffect(() => {
@@ -1348,7 +1360,7 @@ export default function NewDocumentPage() {
                   </div>
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Ceza Miktarı (₺) — vazgeçme</label>
-                    <MoneyInput value={cezaMiktari} onChange={setCezaMiktari} className={inp} placeholder="0" />
+                    <MoneyInput value={cezaMiktari} onChange={v => { cezaUserEdited.current = true; setCezaMiktari(v) }} className={inp} placeholder="0" />
                   </div>
                 </div>
               </div>
