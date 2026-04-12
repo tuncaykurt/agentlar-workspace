@@ -345,6 +345,18 @@ function generatePrintHTML(params: {
   const clientName = (c: Client | null) =>
     c ? `${c.salutation ? c.salutation + ' ' : ''}${c.full_name}` : '_______________'
 
+  // CB Ambiance logo — sabit SVG, settings gerekmez
+  const CB_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 68" width="220" height="62">
+    <rect x="1" y="1" width="62" height="62" rx="5" fill="#1B3A6B"/>
+    <rect x="5" y="5" width="54" height="54" rx="3" fill="none" stroke="white" stroke-width="1.5"/>
+    <text x="6" y="50" font-family="Georgia,Times New Roman,serif" font-weight="bold" font-size="38" fill="white" letter-spacing="-3">CB</text>
+    <polygon points="52,8 54.5,15 62,15 56,19 58.5,26 52,22 45.5,26 48,19 42,15 49.5,15" fill="white"/>
+    <text x="58" y="56" font-family="Arial,sans-serif" font-size="5.5" fill="white">SM</text>
+    <text x="73" y="24" font-family="Arial,sans-serif" font-weight="bold" font-size="15.5" fill="#1B3A6B" letter-spacing="1">COLDWELL BANKER</text>
+    <line x1="73" y1="29" x2="238" y2="29" stroke="#1B3A6B" stroke-width="1.5"/>
+    <text x="73" y="52" font-family="Arial,sans-serif" font-weight="bold" font-size="19" fill="#1B3A6B" letter-spacing="4">AMBIANCE</text>
+  </svg>`
+
   const styles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Times New Roman', Times, serif; max-width: 820px; margin: 0 auto; padding: 48px 40px; color: #111; font-size: 13px; line-height: 1.8; }
@@ -434,8 +446,7 @@ function generatePrintHTML(params: {
         <table class="auth-table" style="margin-bottom:0;">
           <tr>
             <td style="width:42%;vertical-align:top;padding:8px;border-right:2px solid #000;">
-              ${officeLogo ? `<img src="${officeLogo}" style="max-height:52px;margin-bottom:4px;display:block;">` : `<div style="font-weight:bold;font-size:14px;color:#1a3a6b;">CB AMBIANCE</div>`}
-              <div style="font-weight:bold;font-size:10px;margin-top:3px;">AMBIANCE GAYRİMENKUL YATIRIM ORTAKLIĞI İNŞAAT SAN. TİC. LTD. ŞTİ.</div>
+              <div style="margin-bottom:4px;">${CB_LOGO_SVG.replace('width="220"','width="160"').replace('height="62"','height="46"')}</div>
               <div style="font-size:9px;margin-top:3px;line-height:1.5;">${(officeAddress || '').replace(/\n/g, '<br>')}</div>
             </td>
             <td style="width:58%;padding:0;vertical-align:top;">
@@ -661,9 +672,7 @@ function generatePrintHTML(params: {
     <button class="print-btn" onclick="window.print()">🖨️ Yazdır / PDF Kaydet</button>
   </div>
   <div class="letterhead">
-    ${officeLogo
-      ? `<img src="${officeLogo}" alt="${officeName} Logo" />`
-      : `<div style="font-size:16px;font-weight:bold;color:#1a3a6b;letter-spacing:1px;font-family:Arial,sans-serif;">AMBIANCE<br><span style="font-size:11px;font-weight:normal;letter-spacing:3px;">GAYRİMENKUL</span></div>`}
+    ${CB_LOGO_SVG}
     <div class="letterhead-text">
       <strong>${officeName}</strong><br>
       ${officeAddress ? officeAddress.replace(/\n/g, '<br>') : ''}
