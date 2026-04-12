@@ -47,7 +47,7 @@ export async function GET(
   return NextResponse.json({
     sigReq,
     doc,
-    officeName: setting?.value ? String(setting.value).replace(/^"|"$/g, '') : 'Gayrimenkul Ofisi',
+    officeName: setting?.value ? String(setting.value).replace(/^"|"$/g, '') : 'Ambiance Gayrimenkul',
   })
 }
 

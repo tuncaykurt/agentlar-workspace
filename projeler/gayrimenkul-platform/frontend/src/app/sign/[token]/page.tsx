@@ -155,7 +155,7 @@ function SignaturePad({ onReady }: { onReady: (getDataURL: () => string | null) 
 
 // ─── Document Summary ─────────────────────────────────────────────────────────
 
-function DocSummary({ doc, signerRole }: { doc: DocInfo; signerRole: string }) {
+function DocSummary({ doc, signerRole, token }: { doc: DocInfo; signerRole: string; token: string }) {
   const [expanded, setExpanded] = useState(false)
   const data = doc.template_data || {}
 
@@ -281,14 +281,14 @@ function DocSummary({ doc, signerRole }: { doc: DocInfo; signerRole: string }) {
           <p className="text-xs text-blue-700">
             <span className="font-semibold">Rolünüz:</span> {roleLabel}
           </p>
-          {contractSections.length > 0 && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="text-xs font-semibold text-blue-700 underline underline-offset-2"
-            >
-              {expanded ? 'Gizle' : 'Sözleşmeyi Oku ▾'}
-            </button>
-          )}
+          <a
+            href={`/api/sign/${token}/preview`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-blue-700 underline underline-offset-2"
+          >
+            Belgeyi Görüntüle ↗
+          </a>
         </div>
       </div>
 
@@ -489,7 +489,7 @@ export default function SignPage() {
       <div className="max-w-lg mx-auto p-4 space-y-4 pb-8">
 
         {/* Belge Özeti */}
-        {doc && sigReq && <DocSummary doc={doc} signerRole={sigReq.signer_role} />}
+        {doc && sigReq && <DocSummary doc={doc} signerRole={sigReq.signer_role} token={token} />}
 
         {/* İmzacı Bilgisi */}
         {sigReq && (
