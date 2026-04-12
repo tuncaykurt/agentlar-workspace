@@ -64,8 +64,10 @@ function sigArea(signatures: SigRow[], role: string): string {
 function generateDocHTML(doc: any, settings: Record<string, string>, signatures: SigRow[] = []) {
   const data = (doc.template_data || {}) as Record<string, string | null>
   const officeName = settings.office_name || 'Ambiance Gayrimenkul'
+  const officeLegalName = settings.office_legal_name || officeName
   const officeAddress = settings.office_address || ''
   const officeLogo = settings.office_logo || ''
+  const officeMersis = settings.office_mersis || '0068090568900012'
   const today = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })
 
   const secondName = data.second_client_name || '_______________'
@@ -73,26 +75,30 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
   const consultant = doc.consultant
 
   const letterhead = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;">
-      ${officeLogo ? `<img src="${officeLogo}" style="max-height:70px;max-width:200px;object-fit:contain;" />` : `<div style="font-weight:bold;font-size:14px;">${officeName}</div>`}
-      <div style="text-align:right;font-size:11px;color:#444;line-height:1.6;">
-        <strong>${officeName}</strong><br>
-        ${officeAddress.replace(/\n/g, '<br>')}<br>
-        <span style="color:#666;">Mersis No: 0068090568900012</span>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #ccc;">
+      <div style="flex:0 0 auto;">
+        ${officeLogo
+          ? `<img src="${officeLogo}" style="max-height:80px;max-width:220px;object-fit:contain;display:block;" />`
+          : `<div style="font-weight:bold;font-size:16px;color:#111;">${officeName}</div>`}
+      </div>
+      <div style="text-align:right;font-size:12px;color:#333;line-height:1.8;max-width:300px;">
+        <div style="font-weight:bold;font-size:13px;color:#111;">${officeLegalName}</div>
+        ${officeAddress ? `<div style="color:#555;font-size:11.5px;">${officeAddress.replace(/\n/g, '<br>')}</div>` : ''}
+        <div style="color:#777;font-size:11px;margin-top:2px;">Mersis No: ${officeMersis}</div>
       </div>
     </div>`
 
   const baseStyles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Times New Roman', Times, serif; max-width: 820px; margin: 0 auto; padding: 40px 36px; color: #111; font-size: 13px; line-height: 1.8; }
-    h1 { font-size: 18px; text-align: center; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 6px; }
-    .sub { text-align: center; font-size: 12px; color: #555; margin-bottom: 6px; }
+    body { font-family: 'Times New Roman', Times, serif; max-width: 840px; margin: 0 auto; padding: 40px 40px; color: #111; font-size: 14px; line-height: 1.85; }
+    h1 { font-size: 19px; text-align: center; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 6px; }
+    .sub { text-align: center; font-size: 13px; color: #555; margin-bottom: 6px; }
     .divider { border: none; border-top: 2px solid #111; margin: 12px 0 20px; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-    table td { padding: 3px 6px; vertical-align: top; font-size: 12px; }
+    table td { padding: 4px 6px; vertical-align: top; font-size: 13px; }
     .sigs { display: flex; justify-content: space-around; margin-top: 48px; gap: 16px; }
     .sig { text-align: center; flex: 1; }
-    .sig-line { border-top: 1px solid #000; padding-top: 6px; font-size: 11px; min-height: 60px; }
+    .sig-line { border-top: 1px solid #000; padding-top: 6px; font-size: 12px; min-height: 60px; }
     @media print { body { padding: 20px; } }`
 
   // ── Sales contract ────────────────────────────────────────────────────────
@@ -299,7 +305,7 @@ export async function GET(
     supabase
       .from('settings')
       .select('key, value')
-      .in('key', ['office_name', 'office_address', 'office_logo']),
+      .in('key', ['office_name', 'office_legal_name', 'office_address', 'office_logo', 'office_mersis']),
     supabase
       .from('signature_requests')
       .select('signer_role, status, signature_data, signature_type, signer_name')
