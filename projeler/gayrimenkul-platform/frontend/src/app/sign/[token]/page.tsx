@@ -348,13 +348,12 @@ export default function SignPage() {
 
       if (!req) { setState('error'); return }
       setSigReq(req as SignRequest)
+      if (name) setOfficeName(name)
 
       if (req.status === 'signed') { setState('already_signed'); return }
 
       if (!docData) { setState('error'); return }
       setDoc(docData as DocInfo)
-
-      if (name) setOfficeName(name)
 
       setState('ready')
     } catch {
@@ -431,6 +430,14 @@ export default function SignPage() {
               : ''}{' '}
             tarihinde imzalanmıştır.
           </p>
+          <a
+            href={`/api/sign/${token}/preview`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
+          >
+            Belgeyi Görüntüle / PDF İndir
+          </a>
           <p className="text-xs text-slate-400 mt-4">{officeName}</p>
         </div>
       </div>
@@ -470,6 +477,14 @@ export default function SignPage() {
             <p className="text-xs text-slate-500 font-medium">{doc?.title}</p>
             {doc?.property && <p className="text-xs text-slate-400">{doc.property.title}</p>}
           </div>
+          <a
+            href={`/api/sign/${token}/preview`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
+          >
+            Belgeyi Görüntüle / PDF İndir
+          </a>
           <p className="text-xs text-slate-400 mt-6">{officeName}</p>
         </div>
       </div>
