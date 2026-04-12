@@ -463,7 +463,7 @@ export async function POST(req: NextRequest) {
       workflow = buildAiBotWorkflow(
         name,
         consultant.id,
-        consultant.wa_instance || '',
+        consultant.full_name,
         systemPrompt || '',
         message || DEFAULT_USER_PROMPT,
         evolutionCred,
@@ -500,7 +500,7 @@ export async function POST(req: NextRequest) {
         templateId,
         name,
         consultant.id,
-        consultant.wa_instance!,
+        consultant.full_name,
         message || 'Merhaba, size ulaşmak istedik.',
         evolutionCred,
       )
