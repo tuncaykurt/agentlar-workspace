@@ -54,6 +54,21 @@ export async function PATCH(
 
     // Activate / deactivate
     if ('active' in body) {
+      // When activating: re-PUT the workflow first so n8n re-validates credentials
+      // (fixes the "credential not confirmed" warning that prevents activation)
+      if (body.active) {
+        try {
+          const full = await n8nFetch('GET', `/workflows/${params.id}`)
+          await n8nFetch('PUT', `/workflows/${params.id}`, {
+            name: full.name,
+            nodes: full.nodes,
+            connections: full.connections,
+            settings: full.settings ?? {},
+            staticData: full.staticData ?? null,
+          })
+        } catch { /* non-fatal — proceed to activate anyway */ }
+      }
+
       const path = body.active
         ? `/workflows/${params.id}/activate`
         : `/workflows/${params.id}/deactivate`

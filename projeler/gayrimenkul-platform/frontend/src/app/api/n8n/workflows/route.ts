@@ -647,6 +647,19 @@ export async function POST(req: NextRequest) {
       // Tag assignment failure is non-fatal
     }
 
+    // Re-PUT the workflow so n8n re-validates credentials (fixes "credential not confirmed" warning)
+    // Without this, nodes with API-created credentials show a warning and can't be activated
+    try {
+      const full = await n8nFetch(cfg, 'GET', `/workflows/${created.id}`)
+      await n8nFetch(cfg, 'PUT', `/workflows/${created.id}`, {
+        name: full.name,
+        nodes: full.nodes,
+        connections: full.connections,
+        settings: full.settings ?? {},
+        staticData: full.staticData ?? null,
+      })
+    } catch { /* non-fatal */ }
+
     // Auto-activate the workflow so it starts running immediately
     try {
       await n8nFetch(cfg, 'POST', `/workflows/${created.id}/activate`)
