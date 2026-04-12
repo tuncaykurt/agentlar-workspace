@@ -122,7 +122,6 @@ function buildWaWorkflow(
       },
     },
     settings: { executionOrder: 'v1' },
-    tags: [{ id: tagId }],
   }
 }
 
@@ -208,7 +207,6 @@ function buildEmailWorkflow(
       },
     },
     settings: { executionOrder: 'v1' },
-    tags: [{ id: tagId }],
   }
 }
 
@@ -322,6 +320,14 @@ export async function POST(req: NextRequest) {
     }
 
     const created = await n8nFetch(cfg, 'POST', '/workflows', workflow)
+
+    // Assign tag separately — n8n doesn't accept tags in POST body
+    try {
+      await n8nFetch(cfg, 'PUT', `/workflows/${created.id}/tags`, [{ id: tagId }])
+    } catch {
+      // Tag assignment failure is non-fatal; workflow was created successfully
+    }
+
     return NextResponse.json({ workflow: created })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Hata' }, { status: 500 })
