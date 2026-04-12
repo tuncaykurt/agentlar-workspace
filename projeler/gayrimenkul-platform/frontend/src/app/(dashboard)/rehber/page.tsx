@@ -54,12 +54,22 @@ export default function RehberPage() {
 
   async function fetchContacts() {
     const supabase = createClient()
-    const { data } = await supabase
-      .from('clients')
-      .select('id, full_name, salutation, phone, email, client_type, lead_status')
-      .eq('is_active', true)
-      .order('full_name', { ascending: true })
-    if (data) setContacts(data as Contact[])
+    const PAGE = 1000
+    let all: Contact[] = []
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, full_name, salutation, phone, email, client_type, lead_status')
+        .eq('is_active', true)
+        .order('full_name', { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (error || !data || data.length === 0) break
+      all = [...all, ...(data as Contact[])]
+      if (data.length < PAGE) break
+      from += PAGE
+    }
+    setContacts(all)
     setLoading(false)
   }
 

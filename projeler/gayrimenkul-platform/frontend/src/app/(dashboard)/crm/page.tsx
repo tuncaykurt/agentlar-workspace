@@ -138,9 +138,13 @@ function parseVCF(text: string): ParsedContact[] {
   const cardBlocks = normalized.split(/^BEGIN:VCARD$/im)
 
   for (const block of cardBlocks.slice(1)) {
-    // Unfold lines (RFC 2425: continuation lines start with space/tab)
+    // 1. RFC 2425 unfolding: satır başında boşluk/tab varsa önceki satıra ekle
     const unfolded = block.replace(/\n[ \t]/g, '')
-    const lines = unfolded.split('\n')
+
+    // 2. vCard 2.1 QP unfolding: satır sonu = ile bitiyorsa sonraki satırı birleştir
+    const qpJoined = unfolded.replace(/=\n/g, '')
+
+    const lines = qpJoined.split('\n')
 
     let fn = ''
     let phone = ''
@@ -173,7 +177,8 @@ function parseVCF(text: string): ParsedContact[] {
         fn = [first, last].filter(Boolean).join(' ')
       } else if (propName === 'TEL') {
         if (!phone && valuePart.trim()) {
-          phone = valuePart.trim().replace(/\s+/g, '')
+          // Boşluk ve tire gibi formatlamayı kaldır, sadece + ve rakamları bırak
+          phone = valuePart.trim().replace(/[\s\-().]/g, '')
         }
       } else if (propName === 'EMAIL') {
         if (!email) email = decoded.trim()
