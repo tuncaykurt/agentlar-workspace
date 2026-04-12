@@ -136,10 +136,7 @@ function buildWaWorkflow(
       },
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: JSON.stringify({
-        number: '={{ $json.body.phone }}',
-        text: message,
-      }),
+      jsonBody: `{\n  "number": "={{ $json.phone }}",\n  "text": ${JSON.stringify(message)}\n}`,
     },
   }
 
@@ -194,7 +191,7 @@ function buildEmailWorkflow(
     position: [480, 300] as [number, number],
     parameters: {
       fromEmail: `${fromName} <${smtpUser}>`,
-      toEmail: '={{ $json.body.email }}',
+      toEmail: '={{ $json.email }}',
       subject,
       emailType: 'text',
       text: message,
