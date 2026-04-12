@@ -979,6 +979,7 @@ export default function NewDocumentPage() {
         second_client_name: secondClient
           ? `${secondClient.salutation ? secondClient.salutation + ' ' : ''}${secondClient.full_name}`.trim()
           : null,
+        second_client_phone: secondClient?.phone || null,
       },
       notes,
       signature_status: 'draft',

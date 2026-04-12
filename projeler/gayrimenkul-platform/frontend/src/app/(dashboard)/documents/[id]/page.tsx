@@ -16,7 +16,7 @@ import {
 type DocRow = Document & {
   client?: { id: string; full_name: string; salutation?: string; phone?: string; email?: string } | null
   property?: { id: string; title: string; city?: string; district?: string } | null
-  consultant?: { id: string; full_name: string } | null
+  consultant?: { id: string; full_name: string; phone?: string } | null
 }
 
 type SigRequest = {
@@ -182,16 +182,18 @@ function AddSignerModal({
     onClose()
   }
 
-  // Pre-fill second party when role changes
+  // Pre-fill party info when role changes
   function handleRoleChange(role: string) {
     setSignerRole(role)
     if (role === 'main' && doc.client) {
       setSignerName(`${doc.client.salutation ? doc.client.salutation + ' ' : ''}${doc.client.full_name}`.trim())
       setSignerPhone(doc.client.phone || '')
     } else if (role === 'second') {
-      const secondName = templateData.second_client_name
-      setSignerName(String(secondName || ''))
-      setSignerPhone('')
+      setSignerName(String(templateData.second_client_name || ''))
+      setSignerPhone(String(templateData.second_client_phone || ''))
+    } else if (role === 'consultant' && doc.consultant) {
+      setSignerName(doc.consultant.full_name)
+      setSignerPhone(doc.consultant.phone || '')
     } else {
       setSignerName('')
       setSignerPhone('')
@@ -210,6 +212,7 @@ function AddSignerModal({
           <select value={signerRole} onChange={e => handleRoleChange(e.target.value)} className={inp}>
             <option value="main">{mainLabel}</option>
             {hasSecond && <option value="second">{secondLabel}</option>}
+            {doc.consultant && <option value="consultant">Danışman ({doc.consultant.full_name})</option>}
             <option value="other">Diğer</option>
           </select>
         </div>
@@ -745,7 +748,7 @@ export default function DocumentDetailPage() {
     const [docRes, sigsRes, settingsRes] = await Promise.all([
       supabase
         .from('documents')
-        .select('*, client:clients(id, full_name, salutation, phone, email), property:properties(id, title, city, district), consultant:consultants(id, full_name, wa_instance)')
+        .select('*, client:clients(id, full_name, salutation, phone, email), property:properties(id, title, city, district), consultant:consultants(id, full_name, phone, wa_instance)')
         .eq('id', id)
         .single(),
       supabase
