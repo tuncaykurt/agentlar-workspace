@@ -31,9 +31,14 @@ export interface Consultant {
   id_front_url?: string
   id_back_url?: string
   certifications: Certification[]
+  id_number?: string
+  address?: string
   instagram_handle?: string
   facebook_page?: string
   linkedin_url?: string
+  wa_instance?: string
+  wa_phone?: string
+  wa_connected_at?: string
   is_active: boolean
   created_at: string
   updated_at: string

@@ -273,6 +273,15 @@ END $$;
   },
 
   {
+    id: '006_consultant_whatsapp',
+    sql: `
+ALTER TABLE consultants ADD COLUMN IF NOT EXISTS wa_instance TEXT;
+ALTER TABLE consultants ADD COLUMN IF NOT EXISTS wa_phone TEXT;
+ALTER TABLE consultants ADD COLUMN IF NOT EXISTS wa_connected_at TIMESTAMPTZ;
+    `,
+  },
+
+  {
     id: '005_signature_requests',
     sql: `
 CREATE TABLE IF NOT EXISTS signature_requests (

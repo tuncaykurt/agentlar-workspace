@@ -655,9 +655,28 @@ function ConsultantsTab() {
                     {!c.is_active && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">Pasif</span>
                     )}
+                    {/* WhatsApp durum rozeti */}
+                    {c.wa_phone ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
+                        <MessageCircle size={10} />
+                        <span className="hidden sm:inline">WA</span>
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                      </span>
+                    ) : c.wa_instance ? (
+                      <span className="flex items-center gap-1 text-xs text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full" title="Instance var ama bağlı değil">
+                        <MessageCircle size={10} />
+                        <span className="hidden sm:inline">WA</span>
+                        <span className="w-1.5 h-1.5 bg-orange-400 rounded-full" />
+                      </span>
+                    ) : null}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">{c.email}</p>
                   {c.phone && <p className="text-xs text-slate-400">{c.phone}</p>}
+                  {c.wa_phone && (
+                    <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                      <MessageCircle size={10} /> +{c.wa_phone}
+                    </p>
+                  )}
                 </div>
 
                 {/* Komisyon */}

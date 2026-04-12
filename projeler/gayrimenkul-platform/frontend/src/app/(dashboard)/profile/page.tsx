@@ -1,12 +1,262 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import type { Consultant } from '@/lib/types'
 import {
   User, Phone, Mail, FileText, Award, Upload,
   Save, Loader2, CheckCircle, Plus, Trash2,
+  MessageCircle, QrCode, Wifi, WifiOff, X, Smartphone,
+  RefreshCw, Unlink,
 } from 'lucide-react'
+
+// ─── WhatsApp QR Modal ────────────────────────────────────────────────────────
+
+function WAQRModal({ onClose, onConnected }: { onClose: () => void; onConnected: (phone: string) => void }) {
+  const [qr, setQr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState('')
+  const [countdown, setCountdown] = useState(25)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const qrRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchQR = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/whatsapp/consultant', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'QR alınamadı'); setLoading(false); return }
+      if (data.connected) { setConnected(true); setLoading(false); return }
+      setQr(data.base64 || null)
+      setCountdown(25)
+    } catch {
+      setError('Bağlantı hatası')
+    }
+    setLoading(false)
+  }, [])
+
+  const checkStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/whatsapp/consultant')
+      const data = await res.json()
+      if (data.connected) {
+        setConnected(true)
+        onConnected(data.phone || '')
+      }
+    } catch { /* ignore */ }
+  }, [onConnected])
+
+  useEffect(() => {
+    fetchQR()
+    pollRef.current = setInterval(checkStatus, 4000)
+    qrRef.current = setInterval(fetchQR, 25000)
+    countRef.current = setInterval(() => setCountdown(c => c <= 1 ? 25 : c - 1), 1000)
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+      if (qrRef.current) clearInterval(qrRef.current)
+      if (countRef.current) clearInterval(countRef.current)
+    }
+  }, [fetchQR, checkStatus])
+
+  useEffect(() => {
+    if (!connected) return
+    if (pollRef.current) clearInterval(pollRef.current)
+    if (qrRef.current) clearInterval(qrRef.current)
+    if (countRef.current) clearInterval(countRef.current)
+  }, [connected])
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Smartphone size={18} className="text-green-600" />
+            <h3 className="font-semibold text-slate-900">WhatsApp Bağla</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-5">
+          {connected ? (
+            <div className="text-center py-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <CheckCircle size={32} className="text-green-600" />
+              </div>
+              <h4 className="font-semibold text-slate-900 mb-1">WhatsApp Bağlandı!</h4>
+              <p className="text-sm text-slate-500 mb-4">Artık mesaj gönderebilirsiniz.</p>
+              <button onClick={onClose} className="btn-primary">Tamam</button>
+            </div>
+          ) : error ? (
+            <div className="text-center py-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <WifiOff size={22} className="text-red-500" />
+              </div>
+              <p className="text-sm text-red-600 mb-3">{error}</p>
+              <button onClick={fetchQR} className="flex items-center gap-1.5 mx-auto px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">
+                <RefreshCw size={13} /> Tekrar Dene
+              </button>
+            </div>
+          ) : (
+            <div className="text-center">
+              <p className="text-sm text-slate-600 mb-4">
+                WhatsApp'ı açın → <strong>Bağlı Cihazlar</strong> → <strong>Cihaz Ekle</strong> → QR kodu okutun
+              </p>
+              <div className="relative inline-block">
+                {loading ? (
+                  <div className="w-52 h-52 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
+                    <Loader2 size={32} className="animate-spin text-slate-400" />
+                  </div>
+                ) : qr ? (
+                  <div className="relative">
+                    <img src={qr} alt="WhatsApp QR" className="w-52 h-52 rounded-xl border-2 border-slate-200 mx-auto" />
+                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm">
+                      <span className="text-xs font-bold text-slate-500">{countdown}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-52 h-52 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
+                    <QrCode size={48} className="text-slate-300" />
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 space-y-1">
+                <p className="text-xs text-slate-400">QR kod {countdown} saniye sonra yenilenir</p>
+                <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                  Telefon bağlantısı bekleniyor...
+                </div>
+              </div>
+              <button onClick={fetchQR} disabled={loading} className="mt-3 flex items-center gap-1.5 mx-auto px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50">
+                <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> QR'ı Yenile
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── WhatsApp Status Card ─────────────────────────────────────────────────────
+
+function WACard() {
+  type WAStatus = { exists: boolean; connected: boolean; instanceName?: string; phone?: string; connectedAt?: string }
+  const [status, setStatus] = useState<WAStatus | null>(null)
+  const [checking, setChecking] = useState(true)
+  const [showQR, setShowQR] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+
+  useEffect(() => { checkStatus() }, [])
+
+  async function checkStatus() {
+    setChecking(true)
+    try {
+      const res = await fetch('/api/whatsapp/consultant')
+      const data = await res.json()
+      setStatus(data)
+    } catch {
+      setStatus(null)
+    }
+    setChecking(false)
+  }
+
+  async function disconnect() {
+    if (!confirm('WhatsApp bağlantısını kesmek istediğinize emin misiniz?')) return
+    setDisconnecting(true)
+    await fetch('/api/whatsapp/consultant', { method: 'DELETE' })
+    setDisconnecting(false)
+    checkStatus()
+  }
+
+  const isConnected = status?.connected
+  const phone = status?.phone
+
+  return (
+    <>
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+            <MessageCircle size={16} className="text-green-600" />
+            WhatsApp Bağlantısı
+          </h2>
+          <button onClick={checkStatus} disabled={checking} className="text-slate-400 hover:text-slate-600 p-1">
+            <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {/* Durum */}
+        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl mb-4">
+          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+            checking ? 'bg-slate-300 animate-pulse' :
+            isConnected ? 'bg-green-500' : 'bg-orange-400'
+          }`} />
+          <div className="flex-1">
+            <p className={`text-sm font-medium ${
+              checking ? 'text-slate-400' :
+              isConnected ? 'text-green-600' : 'text-orange-500'
+            }`}>
+              {checking ? 'Kontrol ediliyor...' : isConnected ? 'Bağlı' : 'Bağlı Değil'}
+            </p>
+            {isConnected && phone && (
+              <p className="text-xs text-slate-500 mt-0.5">+{phone}</p>
+            )}
+            {isConnected && status?.connectedAt && (
+              <p className="text-xs text-slate-400 mt-0.5">
+                {new Date(status.connectedAt).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })} tarihinde bağlandı
+              </p>
+            )}
+            {!isConnected && !checking && (
+              <p className="text-xs text-slate-400 mt-0.5">Kendi WhatsApp numaranızı bağlayın</p>
+            )}
+          </div>
+          {isConnected && (
+            <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+              <Wifi size={11} /> Aktif
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setShowQR(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+          >
+            <QrCode size={14} />
+            {isConnected ? 'Yeniden Bağla' : 'QR ile Bağlan'}
+          </button>
+          {isConnected && (
+            <button
+              onClick={disconnect}
+              disabled={disconnecting}
+              className="flex items-center gap-1.5 px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50"
+            >
+              {disconnecting ? <Loader2 size={14} className="animate-spin" /> : <Unlink size={14} />}
+              Bağlantıyı Kes
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-400 mt-3">
+          Bağladığınız numara, müşterilere gönderilen tüm WhatsApp mesajlarında kullanılır.
+        </p>
+      </div>
+
+      {showQR && (
+        <WAQRModal
+          onClose={() => { setShowQR(false); checkStatus() }}
+          onConnected={(p) => { setShowQR(false); checkStatus(); void p }}
+        />
+      )}
+    </>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
   const [consultant, setConsultant] = useState<Consultant | null>(null)
@@ -310,6 +560,9 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+
+        {/* WhatsApp Bağlantısı */}
+        <WACard />
 
         {/* Komisyon Bilgisi (Salt Okunur) */}
         {consultant && (

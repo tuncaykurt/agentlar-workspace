@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function POST(req: NextRequest) {
-  let body: { phone?: string; message?: string }
+  let body: { phone?: string; message?: string; instanceName?: string }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Geçersiz istek.' }, { status: 400 })
   }
 
-  const { phone, message } = body
+  const { phone, message, instanceName: bodyInstance } = body
   if (!phone || !message) {
     return NextResponse.json({ error: 'phone ve message gerekli.' }, { status: 400 })
   }
@@ -17,34 +17,29 @@ export async function POST(req: NextRequest) {
   // Normalize phone: remove spaces, +, dashes
   const normalizedPhone = phone.replace(/[\s\-+()]/g, '')
 
-  // Get Evolution API settings from Supabase settings table
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   )
 
-  const { data: settings } = await supabase
-    .from('settings')
-    .select('key, value')
-    .in('key', ['evolution_api_url', 'evolution_api_key', 'evolution_instance'])
+  const evolutionUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '')
+  const evolutionKey = process.env.EVOLUTION_API_KEY || ''
 
-  const cfg: Record<string, string> = {}
-  for (const row of settings || []) {
-    cfg[row.key] = String(row.value).replace(/^"|"$/g, '')
-  }
-
-  // Also allow env var overrides
-  const evolutionUrl = process.env.EVOLUTION_API_URL || cfg.evolution_api_url
-  const evolutionKey = process.env.EVOLUTION_API_KEY || cfg.evolution_api_key
-  const evolutionInstance = process.env.EVOLUTION_INSTANCE || cfg.evolution_instance
+  // Instance priority: body param (consultant's) > global env
+  const evolutionInstance =
+    bodyInstance ||
+    process.env.EVOLUTION_INSTANCE ||
+    ''
 
   if (!evolutionUrl || !evolutionKey || !evolutionInstance) {
     return NextResponse.json(
-      { error: 'Evolution API yapılandırması eksik. Lütfen Admin > Ayarlar sayfasından Evolution API bilgilerini girin.' },
+      { error: 'Evolution API yapılandırması eksik.' },
       { status: 503 }
     )
   }
+
+  void supabase // suppress unused warning
 
   try {
     const endpoint = `${evolutionUrl.replace(/\/$/, '')}/message/sendText/${evolutionInstance}`
