@@ -197,13 +197,17 @@ function DocSummary({ doc, signerRole, token }: { doc: DocInfo; signerRole: stri
   }
 
   const roleLabel =
-    signerRole === 'main'
+    signerRole === 'consultant' ? 'Danışman'
+    : signerRole === 'other' ? 'Diğer İmzacı'
+    : signerRole === 'main'
       ? doc.doc_type === 'authorization' ? 'Mülk Sahibi'
         : doc.doc_type === 'sales_contract' ? 'Satıcı'
         : doc.doc_type === 'rental_contract' ? 'Kiraya Veren'
-        : 'Alıcı'
-      : doc.doc_type === 'sales_contract' ? 'Alıcı'
+        : 'İmzacı'
+      : /* second */
+        doc.doc_type === 'sales_contract' ? 'Alıcı'
         : doc.doc_type === 'rental_contract' ? 'Kiracı'
+        : doc.doc_type === 'authorization' ? 'Alıcı Aday'
         : 'İmzacı'
 
   // Full contract text sections
