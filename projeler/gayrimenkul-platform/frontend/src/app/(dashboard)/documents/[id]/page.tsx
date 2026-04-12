@@ -28,6 +28,7 @@ type SigRequest = {
   token: string
   status: string
   signature_type: string | null
+  signature_data: string | null
   viewed_at: string | null
   signed_at: string | null
   wa_sent_at: string | null
@@ -435,12 +436,27 @@ function SignerRow({
 
 // ─── Print HTML ───────────────────────────────────────────────────────────────
 
-function buildPrintHTML(doc: DocRow, officeName: string) {
+function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest[] = []) {
   const data = (doc.template_data || {}) as TemplateData
   const created = formatDate(doc.created_at)
 
   const clientName = (c?: { full_name: string; salutation?: string } | null) =>
     c ? `${c.salutation ? c.salutation + ' ' : ''}${c.full_name}` : '_______________'
+
+  // Find signed request for a given role and render signature
+  const sigArea = (role: string, fallbackName: string) => {
+    const req = sigRequests.find(r => r.signer_role === role && r.status === 'signed')
+    if (!req) {
+      return `<div class="sig-area"></div>`
+    }
+    if (req.signature_type === 'drawn' && req.signature_data?.startsWith('data:image')) {
+      return `<div class="sig-area"><img src="${req.signature_data}" alt="İmza" /></div>`
+    }
+    if (req.signature_type === 'typed' && req.signature_data) {
+      return `<div class="sig-area"><span class="sig-typed">${req.signature_data}</span></div>`
+    }
+    return `<div class="sig-area"></div>`
+  }
 
   const m = (v: string | null | undefined) => money(v)
   const fd = (v: string | null | undefined) => formatDate(v as string)
@@ -458,7 +474,10 @@ function buildPrintHTML(doc: DocRow, officeName: string) {
     p { margin-bottom: 8px; text-align: justify; }
     .sigs { display: flex; justify-content: space-between; margin-top: 64px; flex-wrap: wrap; gap: 24px; }
     .sig { text-align: center; min-width: 180px; }
-    .sig-line { border-top: 1px solid #333; padding-top: 8px; margin-top: 48px; font-size: 12px; }
+    .sig-line { border-top: 1px solid #333; padding-top: 8px; margin-top: 8px; font-size: 12px; }
+    .sig-area { height: 56px; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 0; }
+    .sig-area img { max-height: 52px; max-width: 180px; object-fit: contain; }
+    .sig-typed { font-family: 'Brush Script MT', cursive; font-size: 22px; color: #1e293b; line-height: 1.2; }
     .footer { margin-top: 40px; font-size: 10px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 10px; }
     .print-btn { background: #2563eb; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; margin-bottom: 24px; }
     @media print { .no-print { display: none !important; } body { padding: 20px; } }
@@ -501,8 +520,8 @@ function buildPrintHTML(doc: DocRow, officeName: string) {
         <h2>5. Genel Hükümler</h2><p>Mülk sahibi, yetki süresi boyunca taşınmazı başka aracı aracılığıyla satamaz/kiralayamaz.</p>
       `,
       sigs: `
-        <div class="sig"><div class="sig-line">Mülk Sahibi<br><strong>${clientName(doc.client)}</strong></div></div>
-        <div class="sig"><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
+        <div class="sig">${sigArea('main', clientName(doc.client))}<div class="sig-line">Mülk Sahibi<br><strong>${clientName(doc.client)}</strong></div></div>
+        <div class="sig"><div class="sig-area"></div><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
       `,
     },
     sales_contract: {
@@ -522,9 +541,9 @@ function buildPrintHTML(doc: DocRow, officeName: string) {
         <h2>6. Genel Hükümler</h2><p>İş bu sözleşme taraflarca serbestçe imzalanmıştır.</p>
       `,
       sigs: `
-        <div class="sig"><div class="sig-line">Satıcı<br><strong>${clientName(doc.client)}</strong></div></div>
-        <div class="sig"><div class="sig-line">Alıcı<br><strong>${secondName}</strong></div></div>
-        <div class="sig"><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong></div></div>
+        <div class="sig">${sigArea('main', clientName(doc.client))}<div class="sig-line">Satıcı<br><strong>${clientName(doc.client)}</strong></div></div>
+        <div class="sig">${sigArea('second', secondName)}<div class="sig-line">Alıcı<br><strong>${secondName}</strong></div></div>
+        <div class="sig"><div class="sig-area"></div><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong></div></div>
       `,
     },
     rental_contract: {
@@ -544,9 +563,9 @@ function buildPrintHTML(doc: DocRow, officeName: string) {
         <h2>5. Özel Şartlar</h2><p>${data.ozel_sartlar || 'Yoktur.'}</p>
       `,
       sigs: `
-        <div class="sig"><div class="sig-line">Kiraya Veren<br><strong>${clientName(doc.client)}</strong></div></div>
-        <div class="sig"><div class="sig-line">Kiracı<br><strong>${secondName}</strong></div></div>
-        <div class="sig"><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong></div></div>
+        <div class="sig">${sigArea('main', clientName(doc.client))}<div class="sig-line">Kiraya Veren<br><strong>${clientName(doc.client)}</strong></div></div>
+        <div class="sig">${sigArea('second', secondName)}<div class="sig-line">Kiracı<br><strong>${secondName}</strong></div></div>
+        <div class="sig"><div class="sig-area"></div><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong></div></div>
       `,
     },
     offer_letter: {
@@ -563,8 +582,8 @@ function buildPrintHTML(doc: DocRow, officeName: string) {
         <h2>4. Özel Şartlar</h2><p>${data.ozel_sartlar || 'Yoktur.'}</p>
       `,
       sigs: `
-        <div class="sig"><div class="sig-line">Teklif Eden<br><strong>${clientName(doc.client)}</strong></div></div>
-        <div class="sig"><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong></div></div>
+        <div class="sig">${sigArea('main', clientName(doc.client))}<div class="sig-line">Teklif Eden<br><strong>${clientName(doc.client)}</strong></div></div>
+        <div class="sig"><div class="sig-area"></div><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong></div></div>
       `,
     },
   }
@@ -705,7 +724,7 @@ export default function DocumentDetailPage() {
 
   function handlePrint() {
     if (!doc) return
-    const html = buildPrintHTML(doc, officeName)
+    const html = buildPrintHTML(doc, officeName, sigRequests)
     const w = window.open('', '_blank', 'width=900,height=750,scrollbars=yes')
     if (w) { w.document.write(html); w.document.close(); w.focus() }
   }
