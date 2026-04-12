@@ -1022,10 +1022,16 @@ function AutomationsTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !wf.active }),
       })
-      const data = await res.json()
-      if (!res.ok) setError(data.error || 'Durum değiştirilemedi')
-      else loadWorkflows()
-    } catch { setError('Bağlantı hatası') }
+      const text = await res.text()
+      let data: Record<string, string> = {}
+      try { data = JSON.parse(text) } catch { /* raw text */ }
+      if (!res.ok) {
+        const msg = data.error || text.slice(0, 300) || 'Durum değiştirilemedi'
+        setError(`n8n hatası: ${msg}`)
+      } else {
+        loadWorkflows()
+      }
+    } catch (e) { setError(`Bağlantı hatası: ${e instanceof Error ? e.message : String(e)}`) }
     setToggling(null)
   }
 

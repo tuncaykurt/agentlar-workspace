@@ -36,9 +36,10 @@ async function n8nFetch(method: string, path: string, body?: object) {
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(10000),
   })
-  if (!res.ok) throw new Error(`n8n ${res.status}: ${(await res.text()).slice(0, 200)}`)
-  if (res.status === 204) return {}
-  return res.json()
+  const resText = await res.text()
+  if (!res.ok) throw new Error(`n8n ${res.status}: ${resText.slice(0, 300)}`)
+  if (!resText || res.status === 204) return {}
+  try { return JSON.parse(resText) } catch { return {} }
 }
 
 // PATCH /api/n8n/workflows/[id]
