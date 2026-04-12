@@ -121,7 +121,6 @@ function buildWaWorkflow(
         main: [[{ node: 'WhatsApp Gönder', type: 'main', index: 0 }]],
       },
     },
-    active: false,
     settings: { executionOrder: 'v1' },
     tags: [{ id: tagId }],
   }
@@ -208,11 +207,8 @@ function buildEmailWorkflow(
         main: [[{ node: 'Email Gönder', type: 'main', index: 0 }]],
       },
     },
-    active: false,
     settings: { executionOrder: 'v1' },
     tags: [{ id: tagId }],
-    // Store SMTP creds as static data so admin can wire them in n8n
-    staticData: { smtpHost, smtpPort, smtpUser, smtpPass },
   }
 }
 
