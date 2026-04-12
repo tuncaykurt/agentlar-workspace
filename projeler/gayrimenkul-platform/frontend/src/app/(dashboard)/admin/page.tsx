@@ -964,6 +964,7 @@ function AutomationsTab() {
   const [creating, setCreating] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -998,7 +999,7 @@ function AutomationsTab() {
         body: JSON.stringify({ consultantId: selectedId, templateId: tplId, message, subject, systemPrompt }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error); } else { setShowModal(false); loadWorkflows() }
+      if (!res.ok) { setError(data.error); } else { setShowModal(false); loadWorkflows(); if (data.warning) setError(data.warning) }
     } catch { setError('Oluşturulamadı') }
     setCreating(false)
   }
@@ -1014,6 +1015,22 @@ function AutomationsTab() {
       loadWorkflows()
     } catch { /* ignore */ }
     setToggling(null)
+  }
+
+  async function handleSyncWebhook(wfId: string) {
+    setSyncing(wfId)
+    setError('')
+    try {
+      const res = await fetch(`/api/n8n/workflows/${wfId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncWebhook: true, consultantId: selectedId }),
+      })
+      const data = await res.json()
+      if (!res.ok) setError(data.error)
+      else setError('✅ Evolution webhook başarıyla ayarlandı. Bot mesajları almaya hazır.')
+    } catch { setError('Webhook ayarlanamadı') }
+    setSyncing(null)
   }
 
   async function handleDelete(id: string) {
@@ -1105,6 +1122,17 @@ function AutomationsTab() {
                       title="Webhook URL'yi kopyala"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    </button>
+                  )}
+                  {/* Sync Evolution webhook — only for AI Bot */}
+                  {wf.name.includes('AI Bot') && (
+                    <button
+                      onClick={() => handleSyncWebhook(wf.id)}
+                      disabled={syncing === wf.id}
+                      className="p-1.5 text-slate-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                      title="Evolution webhook'u senkronize et (botu aktifleştir)"
+                    >
+                      {syncing === wf.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                     </button>
                   )}
                   {/* Active toggle */}

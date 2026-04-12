@@ -9,6 +9,18 @@ function getServiceClient() {
   )
 }
 
+async function getN8nConfig() {
+  const supabase = getServiceClient()
+  const { data: rows } = await supabase
+    .from('settings').select('key, value')
+    .in('key', ['n8n_url', 'n8n_api_key', 'evolution_api_url', 'evolution_api_key'])
+  const cfg: Record<string, string> = {}
+  for (const r of rows || []) cfg[r.key] = String(r.value || '').replace(/^"|"$/g, '')
+  if (!cfg.evolution_api_url) cfg.evolution_api_url = process.env.EVOLUTION_API_URL || ''
+  if (!cfg.evolution_api_key) cfg.evolution_api_key = process.env.EVOLUTION_API_KEY || ''
+  return cfg
+}
+
 async function n8nFetch(method: string, path: string, body?: object) {
   const supabase = getServiceClient()
   const { data: rows } = await supabase
@@ -29,18 +41,93 @@ async function n8nFetch(method: string, path: string, body?: object) {
   return res.json()
 }
 
-// PATCH /api/n8n/workflows/[id] — { active: true/false }
+// PATCH /api/n8n/workflows/[id]
+// { active: true/false }  → activate/deactivate
+// { syncWebhook: true, consultantId: "..." } → re-sync Evolution API webhook
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { active } = await req.json()
-    const path = active
-      ? `/workflows/${params.id}/activate`
-      : `/workflows/${params.id}/deactivate`
-    const result = await n8nFetch('POST', path)
-    return NextResponse.json({ workflow: result })
+    const body = await req.json()
+
+    // Activate / deactivate
+    if ('active' in body) {
+      const path = body.active
+        ? `/workflows/${params.id}/activate`
+        : `/workflows/${params.id}/deactivate`
+      const result = await n8nFetch('POST', path)
+      return NextResponse.json({ workflow: result })
+    }
+
+    // Re-sync Evolution webhook for AI Bot
+    if (body.syncWebhook && body.consultantId) {
+      const supabase = getServiceClient()
+      const cfg = await getN8nConfig()
+
+      const { data: consultant } = await supabase
+        .from('consultants')
+        .select('id, wa_instance, evolution_instance_key')
+        .eq('id', body.consultantId)
+        .single()
+
+      if (!consultant?.wa_instance) {
+        return NextResponse.json({ error: 'Danışmana ait WA instance bulunamadı' }, { status: 400 })
+      }
+
+      const waInstance = consultant.wa_instance
+      const evolutionUrl = cfg.evolution_api_url?.replace(/\/$/, '')
+
+      // Resolve instance key (fetch from Evolution if not stored)
+      let instanceKey = consultant.evolution_instance_key || null
+      if (!instanceKey && evolutionUrl && cfg.evolution_api_key) {
+        try {
+          const res = await fetch(`${evolutionUrl}/instance/fetchInstances?instanceName=${encodeURIComponent(waInstance)}`, {
+            headers: { apikey: cfg.evolution_api_key },
+            signal: AbortSignal.timeout(8000),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            const list: { instance?: { instanceName?: string }; hash?: { apikey?: string } }[] = Array.isArray(data) ? data : [data]
+            const match = list.find(item => item.instance?.instanceName === waInstance)
+            instanceKey = match?.hash?.apikey || null
+            if (instanceKey) {
+              await supabase.from('consultants').update({ evolution_instance_key: instanceKey }).eq('id', consultant.id)
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (!instanceKey) {
+        return NextResponse.json({ error: 'Evolution instance API key çekilemedi' }, { status: 400 })
+      }
+
+      // Get n8n base URL for webhook
+      const n8nBase = cfg.n8n_url?.replace(/\/$/, '')
+      const webhookUrl = `${n8nBase}/webhook/wa_aibot-${consultant.id}`
+
+      // Set Evolution webhook
+      const setRes = await fetch(`${evolutionUrl}/webhook/set/${encodeURIComponent(waInstance)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: instanceKey },
+        body: JSON.stringify({
+          url: webhookUrl,
+          webhook_by_events: false,
+          webhook_base64: false,
+          events: ['MESSAGES_UPSERT'],
+        }),
+        signal: AbortSignal.timeout(8000),
+      })
+
+      if (!setRes.ok) {
+        const text = await setRes.text().catch(() => '')
+        return NextResponse.json({ error: `Evolution webhook hatası: ${setRes.status} ${text.slice(0, 100)}` }, { status: 500 })
+      }
+
+      return NextResponse.json({ success: true, webhookUrl })
+    }
+
+    return NextResponse.json({ error: 'Geçersiz istek' }, { status: 400 })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Hata' }, { status: 500 })
   }

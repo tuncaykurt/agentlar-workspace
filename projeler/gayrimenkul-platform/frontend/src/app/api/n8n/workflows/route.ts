@@ -102,6 +102,34 @@ async function findCredentialByType(
   }
 }
 
+// Configure Evolution API webhook for an instance to forward inbound messages to n8n
+async function setEvolutionWebhook(
+  evolutionUrl: string,
+  instanceName: string,
+  instanceKey: string,
+  webhookUrl: string,
+): Promise<void> {
+  const url = `${evolutionUrl}/webhook/set/${encodeURIComponent(instanceName)}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: instanceKey,
+    },
+    body: JSON.stringify({
+      url: webhookUrl,
+      webhook_by_events: false,
+      webhook_base64: false,
+      events: ['MESSAGES_UPSERT'],
+    }),
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Evolution webhook ayarlanamadı: ${res.status} ${text.slice(0, 100)}`)
+  }
+}
+
 // Auto-fetch per-instance API key from Evolution API and save to Supabase
 async function resolveEvolutionInstanceKey(
   cfg: Record<string, string>,
@@ -591,7 +619,23 @@ export async function POST(req: NextRequest) {
     try {
       await n8nFetch(cfg, 'PUT', `/workflows/${created.id}/tags`, [{ id: tagId }])
     } catch {
-      // Tag assignment failure is non-fatal; workflow was created successfully
+      // Tag assignment failure is non-fatal
+    }
+
+    // For AI Bot: auto-configure Evolution API to forward inbound messages to this webhook
+    if (isAiBot && resolvedKey) {
+      const n8nBase = cfg.n8n_url?.replace(/\/$/, '')
+      const evolutionBase = cfg.evolution_api_url?.replace(/\/$/, '')
+      const webhookUrl = `${n8nBase}/webhook/wa_aibot-${consultant.id}`
+      try {
+        await setEvolutionWebhook(evolutionBase!, waInstance, resolvedKey, webhookUrl)
+      } catch (e) {
+        // Non-fatal: workflow created but webhook not configured — return warning
+        return NextResponse.json({
+          workflow: created,
+          warning: `Workflow oluşturuldu ancak Evolution webhook ayarlanamadı: ${e instanceof Error ? e.message : 'Bilinmeyen hata'}. Evolution Manager'dan manuel olarak ayarlayın.`,
+        })
+      }
     }
 
     return NextResponse.json({ workflow: created })
