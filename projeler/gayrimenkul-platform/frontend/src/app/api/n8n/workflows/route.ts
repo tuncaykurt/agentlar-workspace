@@ -67,7 +67,6 @@ async function ensureSmtpCredential(
       user: smtpUser,
       password: smtpPass,
       secure: false,
-      allowUnauthorizedCerts: false,
     },
   })
   return created.id
