@@ -639,14 +639,14 @@ export default function NewDocumentPage() {
     else setHizmetBedeli('')
   }, [kapora])
 
-  // Auto-calculate tapuda ödenecek
+  // Auto-calculate tapuda ödenecek: satış bedeli − satıcıdan hizmet bedeli (%satici+KDV)
   useEffect(() => {
     const satis = parseFloat(satisBedeli) || 0
-    const kap = parseFloat(kapora) || 0
+    const saticiHizmet = parseFloat(hizmetBedeliSatici) || 0
     if (satis > 0) {
-      setTapudaOdenecek(String(satis - kap))
+      setTapudaOdenecek(saticiHizmet > 0 ? String(satis - saticiHizmet) : String(satis))
     }
-  }, [satisBedeli, kapora])
+  }, [satisBedeli, hizmetBedeliSatici])
 
   async function saveExtraToClient(clientId: string, extra: ExtraFields) {
     const supabase = createClient()
@@ -908,7 +908,7 @@ export default function NewDocumentPage() {
 
               {/* Tapuda ödenecek */}
               <div>
-                <label className={lbl}>Tapuda Ödenecek (₺) <span className="text-xs font-normal text-slate-400">— otomatik: satış − kapora</span></label>
+                <label className={lbl}>Tapuda Ödenecek (₺) <span className="text-xs font-normal text-slate-400">— otomatik: satış − satıcıdan hizmet bedeli</span></label>
                 <input type="number" value={tapudaOdenecek} onChange={e => setTapudaOdenecek(e.target.value)} className={inp} placeholder="0" />
               </div>
 
