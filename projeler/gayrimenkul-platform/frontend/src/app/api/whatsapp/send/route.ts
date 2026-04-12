@@ -14,8 +14,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'phone ve message gerekli.' }, { status: 400 })
   }
 
-  // Normalize phone: remove spaces, +, dashes
-  const normalizedPhone = phone.replace(/[\s\-+()]/g, '')
+  // Normalize phone: remove all non-digit characters, then apply Turkey country code
+  let normalizedPhone = phone.replace(/\D/g, '')
+  if (normalizedPhone.startsWith('0')) {
+    // 05xxxxxxxxx → 905xxxxxxxxx
+    normalizedPhone = '90' + normalizedPhone.slice(1)
+  } else if (normalizedPhone.startsWith('5') && normalizedPhone.length === 10) {
+    // 5xxxxxxxxx → 905xxxxxxxxx
+    normalizedPhone = '90' + normalizedPhone
+  }
+  // If already starts with 90 or is an international number, keep as is
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
