@@ -891,10 +891,254 @@ function ConsultantsTab() {
   )
 }
 
+// ─── Automations Tab ──────────────────────────────────────────────────────────
+
+const TEMPLATES = [
+  { id: 'wa_welcome',  label: 'WA Karşılama',       icon: '👋', desc: 'Yeni müşteri eklendiğinde karşılama mesajı',    defaultMsg: 'Merhaba, Ambiance Gayrimenkul ailesine hoş geldiniz! Size nasıl yardımcı olabiliriz?' },
+  { id: 'wa_followup', label: 'WA Takip',            icon: '📅', desc: 'Takip tarihi gelen müşteriye hatırlatma',       defaultMsg: 'Merhaba, bugün sizi aramayı planlamıştık. Uygun bir zaman var mı?' },
+  { id: 'wa_document', label: 'WA Belge Bildirimi',  icon: '📄', desc: 'Belge imzalandığında bildirim gönder',         defaultMsg: 'Merhaba, belgeniz başarıyla imzalanmıştır.' },
+  { id: 'wa_campaign', label: 'WA Kampanya',         icon: '📣', desc: 'Manuel tetiklenen toplu mesaj akışı',          defaultMsg: 'Merhaba, size özel bir teklifimiz var. Detaylar için bizi arayın.' },
+]
+
+type WFlow = { id: string; name: string; active: boolean }
+
+function AutomationsTab() {
+  const [consultants, setConsultants] = useState<Consultant[]>([])
+  const [selectedId, setSelectedId] = useState<string>('')
+  const [workflows, setWorkflows] = useState<WFlow[]>([])
+  const [loadingWf, setLoadingWf] = useState(false)
+  const [showModal, setShowModal] = useState(false)
+  const [tplId, setTplId] = useState('wa_welcome')
+  const [message, setMessage] = useState(TEMPLATES[0].defaultMsg)
+  const [creating, setCreating] = useState(false)
+  const [toggling, setToggling] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.from('consultants').select('id, full_name, wa_instance, is_active').order('full_name').then(({ data }) => {
+      if (data) setConsultants(data as Consultant[])
+    })
+  }, [])
+
+  useEffect(() => {
+    if (selectedId) loadWorkflows()
+  }, [selectedId])
+
+  async function loadWorkflows() {
+    setLoadingWf(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/n8n/workflows?consultantId=${selectedId}`)
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); setWorkflows([]); } else setWorkflows(data.workflows || [])
+    } catch { setError('Yüklenemedi') }
+    setLoadingWf(false)
+  }
+
+  async function handleCreate() {
+    setCreating(true)
+    setError('')
+    try {
+      const res = await fetch('/api/n8n/workflows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consultantId: selectedId, templateId: tplId, message }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); } else { setShowModal(false); loadWorkflows() }
+    } catch { setError('Oluşturulamadı') }
+    setCreating(false)
+  }
+
+  async function handleToggle(wf: WFlow) {
+    setToggling(wf.id)
+    try {
+      await fetch(`/api/n8n/workflows/${wf.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !wf.active }),
+      })
+      loadWorkflows()
+    } catch { /* ignore */ }
+    setToggling(null)
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Bu iş akışını silmek istediğinize emin misiniz?')) return
+    setDeleting(id)
+    try {
+      await fetch(`/api/n8n/workflows/${id}`, { method: 'DELETE' })
+      loadWorkflows()
+    } catch { /* ignore */ }
+    setDeleting(null)
+  }
+
+  const selected = consultants.find(c => c.id === selectedId)
+
+  return (
+    <div className="space-y-4">
+      {/* Consultant selector */}
+      <div className="card">
+        <h3 className="font-semibold text-slate-800 flex items-center gap-2 mb-3">
+          <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
+            <Zap size={14} className="text-orange-500" />
+          </div>
+          İş Akışı Yönetimi
+        </h3>
+        <label className="block text-sm text-slate-600 mb-1">Danışman Seçin</label>
+        <select
+          value={selectedId}
+          onChange={e => setSelectedId(e.target.value)}
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+        >
+          <option value="">— Danışman seçin —</option>
+          {consultants.map(c => (
+            <option key={c.id} value={c.id}>
+              {c.full_name} {!c.wa_instance ? '⚠️ WA yok' : ''}
+            </option>
+          ))}
+        </select>
+        {selected && !selected.wa_instance && (
+          <p className="text-xs text-orange-600 mt-2">⚠️ Bu danışmanın WhatsApp instance&apos;ı yok. İş akışı oluşturmak için önce WhatsApp bağlantısı kurulmalı.</p>
+        )}
+      </div>
+
+      {/* Workflow list */}
+      {selectedId && (
+        <div className="card p-0 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+              <Zap size={14} className="text-orange-500" />
+              {selected?.full_name} — İş Akışları
+            </h4>
+            <button
+              onClick={() => { setShowModal(true); setError('') }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600"
+            >
+              + Yeni İş Akışı
+            </button>
+          </div>
+
+          {error && (
+            <div className="mx-4 mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">{error}</div>
+          )}
+
+          {loadingWf ? (
+            <div className="flex justify-center py-10">
+              <Loader2 size={22} className="animate-spin text-slate-400" />
+            </div>
+          ) : workflows.length === 0 ? (
+            <div className="text-center py-10 text-slate-400">
+              <Zap size={32} className="mx-auto mb-2 opacity-20" />
+              <p className="text-sm">Henüz iş akışı yok</p>
+              <p className="text-xs mt-1">Yeni İş Akışı butonuyla şablon seçin</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {workflows.map(wf => (
+                <div key={wf.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{wf.name}</p>
+                    <p className="text-xs text-slate-400">ID: {wf.id}</p>
+                  </div>
+                  {/* Active toggle */}
+                  <button
+                    onClick={() => handleToggle(wf)}
+                    disabled={toggling === wf.id}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      wf.active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    {toggling === wf.id
+                      ? <Loader2 size={11} className="animate-spin" />
+                      : wf.active ? <CheckCircle size={11} /> : <XCircle size={11} />}
+                    {wf.active ? 'Aktif' : 'Pasif'}
+                  </button>
+                  {/* Delete */}
+                  <button
+                    onClick={() => handleDelete(wf.id)}
+                    disabled={deleting === wf.id}
+                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                    title="Sil"
+                  >
+                    {deleting === wf.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Create modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-900">Yeni İş Akışı Oluştur</h3>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {/* Template selection */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Şablon Seçin</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {TEMPLATES.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => { setTplId(t.id); setMessage(t.defaultMsg) }}
+                      className={`p-3 rounded-xl border-2 text-left transition-colors ${
+                        tplId === t.id ? 'border-orange-400 bg-orange-50' : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="text-lg mb-1">{t.icon}</div>
+                      <div className="text-xs font-semibold text-slate-800">{t.label}</div>
+                      <div className="text-xs text-slate-500 mt-0.5 leading-tight">{t.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Message */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Mesaj Şablonu</label>
+                <textarea
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                />
+                <p className="text-xs text-slate-400 mt-1">Değişkenler: &#123;name&#125;, &#123;phone&#125;</p>
+              </div>
+
+              {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setShowModal(false)} className="flex-1 py-2 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50">İptal</button>
+                <button
+                  onClick={handleCreate}
+                  disabled={creating || !message}
+                  className="flex-1 py-2 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {creating ? <><Loader2 size={14} className="animate-spin" /> Oluşturuluyor...</> : 'Oluştur'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<'consultants' | 'settings'>('consultants')
+  const [tab, setTab] = useState<'consultants' | 'automations' | 'settings'>('consultants')
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -914,16 +1158,26 @@ export default function AdminPage() {
           <Users size={15} /> Danışmanlar
         </button>
         <button
+          onClick={() => setTab('automations')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+            tab === 'automations' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Zap size={15} /> Otomasyonlar
+        </button>
+        <button
           onClick={() => setTab('settings')}
           className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
             tab === 'settings' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          <Settings size={15} /> Sistem Ayarları
+          <Settings size={15} /> Ayarlar
         </button>
       </div>
 
-      {tab === 'consultants' ? <ConsultantsTab /> : <SettingsTab />}
+      {tab === 'consultants' && <ConsultantsTab />}
+      {tab === 'automations' && <AutomationsTab />}
+      {tab === 'settings' && <SettingsTab />}
     </div>
   )
 }
