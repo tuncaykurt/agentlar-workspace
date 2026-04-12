@@ -405,12 +405,7 @@ function WhatsAppCard() {
              result?.reachable ? 'Evolution API Erişilebilir' : (result?.error || 'Bağlanamadı')}
           </p>
           {result?.reachable && (
-            <p className="text-xs text-slate-400 mt-0.5">
-              {result.instanceCount} instance — {result.connectedCount} aktif bağlantı
-            </p>
-          )}
-          {result?.url && (
-            <p className="text-xs text-slate-400 mt-0.5">{result.url}</p>
+            <p className="text-xs text-slate-400 mt-0.5">WhatsApp mesajları gönderilebilir</p>
           )}
         </div>
         {result?.reachable && (
