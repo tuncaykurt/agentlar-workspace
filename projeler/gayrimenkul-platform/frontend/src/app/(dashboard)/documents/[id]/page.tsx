@@ -250,6 +250,7 @@ function SignerRow({
   docTitle,
   consultantInstance,
   onRefresh,
+  onDelete,
 }: {
   req: SigRequest
   appUrl: string
@@ -257,12 +258,16 @@ function SignerRow({
   docTitle: string
   consultantInstance?: string | null
   onRefresh: () => void
+  onDelete: (id: string) => void
 }) {
   const supabase = createClient()
   const signingLink = `${appUrl}/sign/${req.token}`
   const [sending, setSending] = useState(false)
   const [copied, setCopied] = useState(false)
   const [sendResult, setSendResult] = useState<'idle' | 'ok' | 'error'>('idle')
+  const [sendError, setSendError] = useState<string>('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const statusConf = reqStatusConfig[req.status] || reqStatusConfig.pending
   const StatusIcon = statusConf.icon
@@ -270,6 +275,7 @@ function SignerRow({
   async function sendWhatsApp() {
     setSending(true)
     setSendResult('idle')
+    setSendError('')
     try {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
@@ -288,12 +294,22 @@ function SignerRow({
         setSendResult('ok')
         onRefresh()
       } else {
+        const errData = await res.json().catch(() => ({}))
+        setSendError(errData.error || `HTTP ${res.status}`)
         setSendResult('error')
       }
-    } catch {
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : 'Bağlantı hatası')
       setSendResult('error')
     }
     setSending(false)
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    await supabase.from('signature_requests').delete().eq('id', req.id)
+    onDelete(req.id)
+    setDeleting(false)
   }
 
   function copyLink() {
@@ -319,11 +335,44 @@ function SignerRow({
           </div>
           {req.signer_phone && <p className="text-xs text-slate-500 mt-0.5">{req.signer_phone}</p>}
         </div>
-        <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${statusConf.color}`}>
-          <StatusIcon size={10} />
-          {statusConf.label}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${statusConf.color}`}>
+            <StatusIcon size={10} />
+            {statusConf.label}
+          </span>
+          {req.status !== 'signed' && (
+            <button
+              onClick={() => setDeleteConfirm(true)}
+              className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
+              title="İmzacıyı Sil"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Delete confirm */}
+      {deleteConfirm && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+          <p className="text-xs text-red-700 font-medium">{req.signer_name} imzacıyı silmek istiyor musunuz?</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setDeleteConfirm(false)}
+              className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50"
+            >
+              İptal
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex-1 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleting ? 'Siliniyor...' : 'Sil'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Timestamps */}
       {(req.wa_sent_at || req.viewed_at || req.signed_at) && (
@@ -377,7 +426,7 @@ function SignerRow({
         <p className="text-xs text-green-600">✅ WhatsApp mesajı gönderildi.</p>
       )}
       {sendResult === 'error' && (
-        <p className="text-xs text-red-600">⚠️ Gönderilemedi. Evolution API ayarlarını kontrol edin.</p>
+        <p className="text-xs text-red-600">⚠️ Gönderilemedi: {sendError || 'Evolution API hatası'}</p>
       )}
     </div>
   )
@@ -812,6 +861,7 @@ export default function DocumentDetailPage() {
                   docTitle={doc.title}
                   consultantInstance={consultantInstance}
                   onRefresh={loadSigRequests}
+                  onDelete={(deletedId) => setSigRequests(prev => prev.filter(r => r.id !== deletedId))}
                 />
               ))}
               {totalCount > 0 && signedCount === totalCount && (
