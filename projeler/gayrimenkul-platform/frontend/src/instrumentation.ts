@@ -1,12 +1,16 @@
 /**
  * Next.js Instrumentation Hook
  * Uygulama sunucusu başladığında bir kez çalışır.
- * Supabase veritabanına tüm migration'ları otomatik uygular.
+ * Migration hatası uygulamayı çökertmez.
  */
 export async function register() {
-  // Sadece Node.js runtime'da çalış (Edge runtime'da değil)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
-    const { runMigrations } = await import('./lib/migrate')
-    await runMigrations()
+    try {
+      const { runMigrations } = await import('./lib/migrate')
+      await runMigrations()
+    } catch (err) {
+      // Migration hatası uygulamayı durdurmamalı
+      console.error('[instrumentation] Migration hatası (uygulama devam ediyor):', err)
+    }
   }
 }

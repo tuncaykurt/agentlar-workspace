@@ -271,6 +271,53 @@ END $$;
     id: '004_add_network_type',
     sql: `ALTER TYPE client_type ADD VALUE IF NOT EXISTS 'network';`,
   },
+
+  {
+    id: '005_signature_requests',
+    sql: `
+CREATE TABLE IF NOT EXISTS signature_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+  signer_name TEXT NOT NULL,
+  signer_phone TEXT,
+  signer_role TEXT NOT NULL DEFAULT 'main',
+  token UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  signature_data TEXT,
+  signature_type TEXT DEFAULT 'drawn',
+  ip_address TEXT,
+  user_agent TEXT,
+  viewed_at TIMESTAMPTZ,
+  signed_at TIMESTAMPTZ,
+  wa_sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE signature_requests ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS allow_authenticated_sig ON signature_requests;
+  CREATE POLICY allow_authenticated_sig ON signature_requests FOR ALL TO authenticated USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS allow_anon_sig_token ON signature_requests;
+  CREATE POLICY allow_anon_sig_token ON signature_requests FOR SELECT TO anon USING (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS allow_anon_sig_update ON signature_requests;
+  CREATE POLICY allow_anon_sig_update ON signature_requests FOR UPDATE TO anon USING (status = 'pending' OR status = 'viewed') WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+INSERT INTO settings (key, value, description) VALUES
+  ('evolution_api_url', '""', 'Evolution API URL (ör: https://evo.domain.com)'),
+  ('evolution_api_key', '""', 'Evolution API key'),
+  ('evolution_instance', '""', 'Evolution instance adı'),
+  ('app_url', '""', 'Uygulamanın dış URL''i (imza linkleri için, ör: https://crm.domain.com)')
+ON CONFLICT (key) DO NOTHING;
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────
