@@ -124,18 +124,23 @@ function PropertySearch({ value, onChange }: { value: Property | null; onChange:
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  async function handleSearch(term: string) {
-    setQ(term)
-    if (term.length < 2) { setResults([]); setOpen(false); return }
+  async function fetchProperties(term = '') {
     const supabase = createClient()
-    const { data } = await supabase
+    let q = supabase
       .from('properties')
       .select('id, title, city, district, address, price, m2_gross, room_count, property_type')
-      .ilike('title', `%${term}%`)
-      .eq('is_active', true)
-      .limit(8)
+      .neq('status', 'sold')
+      .neq('status', 'rented')
+      .limit(10)
+    if (term.length >= 2) q = q.ilike('title', `%${term}%`)
+    const { data } = await q
     setResults((data as Property[]) || [])
     setOpen(true)
+  }
+
+  async function handleSearch(term: string) {
+    setQ(term)
+    await fetchProperties(term)
   }
 
   if (value) {
@@ -166,7 +171,7 @@ function PropertySearch({ value, onChange }: { value: Property | null; onChange:
           type="text"
           value={q}
           onChange={e => handleSearch(e.target.value)}
-          onFocus={() => q.length >= 2 && setOpen(true)}
+          onFocus={() => fetchProperties(q)}
           placeholder="Mülk adı ara..."
           className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
