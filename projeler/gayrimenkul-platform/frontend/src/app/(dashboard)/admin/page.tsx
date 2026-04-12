@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import type { Consultant } from '@/lib/types'
 import {
   Settings, Users, Edit2, CheckCircle,
   XCircle, Shield, Loader2, TrendingUp,
-  MessageCircle, Building2, Globe, Key,
+  MessageCircle, Building2, Globe,
   Eye, EyeOff, Save, RefreshCw, Wifi, WifiOff,
+  QrCode, X, Smartphone,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -130,11 +131,175 @@ function SettingField({
   )
 }
 
+// ─── QR Modal ─────────────────────────────────────────────────────────────────
+
+function QRModal({ onClose }: { onClose: () => void }) {
+  const [qr, setQr] = useState<string | null>(null)
+  const [connected, setConnected] = useState(false)
+  const [loadingQr, setLoadingQr] = useState(true)
+  const [error, setError] = useState('')
+  const [countdown, setCountdown] = useState(25)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const qrRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchQR = useCallback(async () => {
+    setLoadingQr(true)
+    setError('')
+    try {
+      const res = await fetch('/api/whatsapp/qr')
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'QR alınamadı'); setLoadingQr(false); return }
+      if (data.connected) { setConnected(true); setLoadingQr(false); return }
+      setQr(data.base64)
+      setCountdown(25)
+    } catch {
+      setError('Bağlantı hatası')
+    }
+    setLoadingQr(false)
+  }, [])
+
+  const checkStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/whatsapp/status')
+      const data = await res.json()
+      if (data.connected) setConnected(true)
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    fetchQR()
+
+    // Poll connection status every 4 seconds
+    pollRef.current = setInterval(checkStatus, 4000)
+
+    // Refresh QR every 25 seconds
+    qrRef.current = setInterval(fetchQR, 25000)
+
+    // Countdown timer
+    countRef.current = setInterval(() => {
+      setCountdown(c => (c <= 1 ? 25 : c - 1))
+    }, 1000)
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+      if (qrRef.current) clearInterval(qrRef.current)
+      if (countRef.current) clearInterval(countRef.current)
+    }
+  }, [fetchQR, checkStatus])
+
+  // Stop polling once connected
+  useEffect(() => {
+    if (connected) {
+      if (pollRef.current) clearInterval(pollRef.current)
+      if (qrRef.current) clearInterval(qrRef.current)
+      if (countRef.current) clearInterval(countRef.current)
+    }
+  }, [connected])
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Smartphone size={18} className="text-green-600" />
+            <h3 className="font-semibold text-slate-900">WhatsApp Bağla</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-5">
+          {connected ? (
+            /* Success State */
+            <div className="text-center py-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <CheckCircle size={32} className="text-green-600" />
+              </div>
+              <h4 className="font-semibold text-slate-900 mb-1">WhatsApp Bağlandı!</h4>
+              <p className="text-sm text-slate-500 mb-4">Mesaj gönderebilirsiniz.</p>
+              <button onClick={onClose} className="btn-primary">Tamam</button>
+            </div>
+          ) : error ? (
+            /* Error State */
+            <div className="text-center py-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <WifiOff size={22} className="text-red-500" />
+              </div>
+              <p className="text-sm text-red-600 mb-3">{error}</p>
+              <p className="text-xs text-slate-400 mb-4">
+                Evolution API URL, API Key ve Instance adını kontrol edin.
+              </p>
+              <button onClick={fetchQR} className="flex items-center gap-1.5 mx-auto px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">
+                <RefreshCw size={13} /> Tekrar Dene
+              </button>
+            </div>
+          ) : (
+            /* QR State */
+            <div className="text-center">
+              <p className="text-sm text-slate-600 mb-4">
+                WhatsApp'ı açın → <strong>Bağlı Cihazlar</strong> → <strong>Cihaz Ekle</strong> → QR kodu okutun
+              </p>
+
+              {/* QR Code */}
+              <div className="relative inline-block">
+                {loadingQr ? (
+                  <div className="w-52 h-52 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
+                    <Loader2 size={32} className="animate-spin text-slate-400" />
+                  </div>
+                ) : qr ? (
+                  <div className="relative">
+                    <img
+                      src={qr}
+                      alt="WhatsApp QR Kodu"
+                      className="w-52 h-52 rounded-xl border-2 border-slate-200 mx-auto"
+                    />
+                    {/* Countdown ring overlay */}
+                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm">
+                      <span className="text-xs font-bold text-slate-500">{countdown}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-52 h-52 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
+                    <QrCode size={48} className="text-slate-300" />
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-1">
+                <p className="text-xs text-slate-400">
+                  QR kod {countdown} saniye sonra yenilenir
+                </p>
+                <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                  Telefon bağlantısı bekleniyor...
+                </div>
+              </div>
+
+              <button
+                onClick={fetchQR}
+                disabled={loadingQr}
+                className="mt-3 flex items-center gap-1.5 mx-auto px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={loadingQr ? 'animate-spin' : ''} />
+                QR'ı Yenile
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── WA Connection Test ───────────────────────────────────────────────────────
 
 function WAConnectTest({ saved }: { saved: boolean }) {
   const [status, setStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
   const [msg, setMsg] = useState('')
+  const [showQR, setShowQR] = useState(false)
 
   async function test() {
     setStatus('testing')
@@ -144,7 +309,7 @@ function WAConnectTest({ saved }: { saved: boolean }) {
       const data = await res.json()
       if (res.ok && data.connected) {
         setStatus('ok')
-        setMsg(data.instanceName ? `Instance: ${data.instanceName}` : 'Bağlantı başarılı')
+        setMsg(`Instance: ${data.instanceName || ''}`)
       } else {
         setStatus('error')
         setMsg(data.error || 'Bağlantı kurulamadı')
@@ -158,26 +323,38 @@ function WAConnectTest({ saved }: { saved: boolean }) {
   if (!saved) return null
 
   return (
-    <div className="flex items-center gap-3 pt-2">
-      <button
-        onClick={test}
-        disabled={status === 'testing'}
-        className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-      >
-        <RefreshCw size={12} className={status === 'testing' ? 'animate-spin' : ''} />
-        WhatsApp Bağlantısını Test Et
-      </button>
-      {status === 'ok' && (
-        <span className="flex items-center gap-1 text-xs text-green-600">
-          <Wifi size={12} /> {msg || 'Bağlı'}
-        </span>
-      )}
-      {status === 'error' && (
-        <span className="flex items-center gap-1 text-xs text-red-600">
-          <WifiOff size={12} /> {msg}
-        </span>
-      )}
-    </div>
+    <>
+      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+        <button
+          onClick={test}
+          disabled={status === 'testing'}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+        >
+          <RefreshCw size={12} className={status === 'testing' ? 'animate-spin' : ''} />
+          Bağlantıyı Test Et
+        </button>
+
+        <button
+          onClick={() => setShowQR(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700"
+        >
+          <QrCode size={12} /> QR ile Bağla
+        </button>
+
+        {status === 'ok' && (
+          <span className="flex items-center gap-1 text-xs text-green-600">
+            <Wifi size={12} /> Bağlı {msg && <span className="text-slate-400">({msg})</span>}
+          </span>
+        )}
+        {status === 'error' && (
+          <span className="flex items-center gap-1 text-xs text-red-600">
+            <WifiOff size={12} /> {msg}
+          </span>
+        )}
+      </div>
+
+      {showQR && <QRModal onClose={() => { setShowQR(false); test() }} />}
+    </>
   )
 }
 
