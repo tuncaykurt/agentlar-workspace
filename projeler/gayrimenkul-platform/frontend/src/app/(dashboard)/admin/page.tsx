@@ -9,7 +9,7 @@ import {
   MessageCircle, Building2, Globe,
   Eye, EyeOff, Save, RefreshCw, Wifi, WifiOff,
   QrCode, X, Smartphone, Upload, Trash2,
-  Zap, ChevronDown, ChevronUp,
+  Zap,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -372,27 +372,20 @@ function QRModal({ onClose }: { onClose: () => void }) {
 
 // ─── n8n Connection Card ──────────────────────────────────────────────────────
 
-type N8nWorkflow = { id: string; name: string; active: boolean }
-
 function N8nCard() {
   const [status, setStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
   const [error, setError] = useState('')
-  const [workflows, setWorkflows] = useState<N8nWorkflow[]>([])
-  const [showWorkflows, setShowWorkflows] = useState(false)
 
-  // Auto-test on mount
   useEffect(() => { test() }, [])
 
   async function test() {
     setStatus('testing')
     setError('')
-    setWorkflows([])
     try {
       const res = await fetch('/api/n8n/test')
       const data = await res.json()
       if (data.connected) {
         setStatus('ok')
-        setWorkflows(data.workflows || [])
       } else {
         setStatus('error')
         setError(data.error || 'Bağlantı kurulamadı')
@@ -420,8 +413,7 @@ function N8nCard() {
       {/* Status */}
       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl mb-4">
         <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-          status === 'idle' ? 'bg-slate-300' :
-          status === 'testing' ? 'bg-slate-300 animate-pulse' :
+          status === 'idle' || status === 'testing' ? 'bg-slate-300 animate-pulse' :
           status === 'ok' ? 'bg-green-500' : 'bg-red-400'
         }`} />
         <div className="flex-1">
@@ -429,13 +421,11 @@ function N8nCard() {
             status === 'idle' || status === 'testing' ? 'text-slate-400' :
             status === 'ok' ? 'text-green-600' : 'text-red-500'
           }`}>
-            {status === 'idle' ? 'Henüz test edilmedi' :
-             status === 'testing' ? 'Bağlantı test ediliyor...' :
-             status === 'ok' ? `Bağlı — ${workflows.length} workflow (${workflows.filter(w => w.active).length} aktif)` :
-             error}
+            {status === 'idle' || status === 'testing' ? 'Bağlantı kontrol ediliyor...' :
+             status === 'ok' ? 'n8n Bağlantısı Aktif' : error}
           </p>
           {status === 'ok' && (
-            <p className="text-xs text-slate-400 mt-0.5">Otomasyonlar yönetilebilir durumda</p>
+            <p className="text-xs text-slate-400 mt-0.5">İş akışları oluşturulabilir ve yönetilebilir</p>
           )}
         </div>
         {status === 'ok' && (
@@ -453,34 +443,6 @@ function N8nCard() {
         </div>
       )}
 
-      {/* Workflow list */}
-      {status === 'ok' && workflows.length > 0 && (
-        <div className="mb-4">
-          <button
-            onClick={() => setShowWorkflows(v => !v)}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 mb-2"
-          >
-            {showWorkflows ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            Workflow listesi ({workflows.length})
-          </button>
-          {showWorkflows && (
-            <div className="space-y-1 max-h-48 overflow-y-auto">
-              {workflows.map(w => (
-                <div key={w.id} className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded-lg">
-                  <span className="text-xs text-slate-700 truncate flex-1">{w.name}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ml-2 flex-shrink-0 ${
-                    w.active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {w.active ? 'Aktif' : 'Pasif'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Prominent test button */}
       <button
         onClick={test}
         disabled={status === 'testing'}
