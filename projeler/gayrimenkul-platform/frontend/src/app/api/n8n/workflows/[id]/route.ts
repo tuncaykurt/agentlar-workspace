@@ -78,7 +78,10 @@ export async function PATCH(
       const waInstance = consultant.wa_instance
       const evolutionUrl = cfg.evolution_api_url?.replace(/\/$/, '')
 
-      // Resolve instance key (fetch from Evolution if not stored)
+      // Resolve instance key:
+      // 1) stored key in DB
+      // 2) fetch from Evolution API /instance/fetchInstances
+      // 3) fallback: use global evolution_api_key (works in most single-tenant setups)
       let instanceKey = consultant.evolution_instance_key || null
       if (!instanceKey && evolutionUrl && cfg.evolution_api_key) {
         try {
@@ -96,10 +99,13 @@ export async function PATCH(
             }
           }
         } catch { /* ignore */ }
+
+        // Fallback: try global key (single-tenant Evolution setups use one key for everything)
+        if (!instanceKey) instanceKey = cfg.evolution_api_key
       }
 
-      if (!instanceKey) {
-        return NextResponse.json({ error: 'Evolution instance API key çekilemedi' }, { status: 400 })
+      if (!instanceKey || !evolutionUrl) {
+        return NextResponse.json({ error: 'Evolution API yapılandırılmamış (URL veya key eksik)' }, { status: 400 })
       }
 
       // Get n8n base URL for webhook

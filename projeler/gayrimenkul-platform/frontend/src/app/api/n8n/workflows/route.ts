@@ -149,21 +149,23 @@ async function resolveEvolutionInstanceKey(
       headers: { apikey: globalKey },
       signal: AbortSignal.timeout(8000),
     })
-    if (!res.ok) return null
-    const data = await res.json()
-    // Response: array of { instance: {...}, hash: { apikey: "..." } }
-    const list: { instance?: { instanceName?: string }; hash?: { apikey?: string } }[] = Array.isArray(data) ? data : [data]
-    const match = list.find(item => item.instance?.instanceName === waInstance)
-    const instanceKey = match?.hash?.apikey || null
-    if (instanceKey) {
-      // Persist so future requests skip this fetch
-      const supabase = getServiceClient()
-      await supabase.from('consultants').update({ evolution_instance_key: instanceKey }).eq('id', consultantId)
+    if (res.ok) {
+      const data = await res.json()
+      // Response: array of { instance: {...}, hash: { apikey: "..." } }
+      const list: { instance?: { instanceName?: string }; hash?: { apikey?: string } }[] = Array.isArray(data) ? data : [data]
+      const match = list.find(item => item.instance?.instanceName === waInstance)
+      const instanceKey = match?.hash?.apikey || null
+      if (instanceKey) {
+        // Persist so future requests skip this fetch
+        const supabase = getServiceClient()
+        await supabase.from('consultants').update({ evolution_instance_key: instanceKey }).eq('id', consultantId)
+        return instanceKey
+      }
     }
-    return instanceKey
-  } catch {
-    return null
-  }
+  } catch { /* ignore */ }
+
+  // Fallback: use global key (single-tenant Evolution setups use one key for everything)
+  return globalKey
 }
 
 // Ensure a per-consultant Evolution API credential exists in n8n, return {id, name} or null
