@@ -14,7 +14,7 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type SettingKey =
-  | 'office_name' | 'office_phone' | 'office_address' | 'office_commission_rate'
+  | 'office_name' | 'office_phone' | 'office_address' | 'office_logo' | 'office_commission_rate'
   | 'default_follow_up_days' | 'whatsapp_welcome_template'
   | 'evolution_api_url' | 'evolution_api_key' | 'evolution_instance' | 'app_url'
 
@@ -44,9 +44,10 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; s
     icon: Building2,
     color: 'blue',
     settings: [
-      { key: 'office_name',             label: 'Ofis Adı',                type: 'text',     placeholder: 'Gayrimenkul Ofisi',           desc: 'Belgelerde ve mesajlarda görünür' },
-      { key: 'office_phone',            label: 'Ofis Telefonu',           type: 'text',     placeholder: '0212 xxx xx xx',              desc: '' },
-      { key: 'office_address',          label: 'Ofis Adresi',             type: 'textarea', placeholder: 'Adres...',                    desc: '' },
+      { key: 'office_name',             label: 'Ofis Adı',                type: 'text',     placeholder: 'Ambiance Gayrimenkul',        desc: 'Belgelerde ve mesajlarda görünür' },
+      { key: 'office_phone',            label: 'Ofis Telefonu',           type: 'text',     placeholder: '0224 xxx xx xx',              desc: '' },
+      { key: 'office_address',          label: 'Ofis Adresi',             type: 'textarea', placeholder: 'Ahmet Yesevi Mah. Hudut Sok. Central Balat Sitesi 1/C\nNilüfer / BURSA', desc: '' },
+      { key: 'office_logo',             label: 'Logo URL',                type: 'url',      placeholder: 'https://... veya Supabase Storage URL', desc: 'Belgelerin sol üstünde görünür (PNG/JPG)' },
       { key: 'office_commission_rate',  label: 'Varsayılan Komisyon (%)', type: 'number',   placeholder: '3',                           desc: 'Yeni belgeler için default oran' },
       { key: 'default_follow_up_days',  label: 'Takip Aralığı (gün)',    type: 'number',   placeholder: '7',                           desc: 'Otomatik takip oluşturma aralığı' },
     ],

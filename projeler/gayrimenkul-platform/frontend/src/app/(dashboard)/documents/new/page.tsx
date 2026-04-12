@@ -661,13 +661,16 @@ function generatePrintHTML(params: {
     <button class="print-btn" onclick="window.print()">🖨️ Yazdır / PDF Kaydet</button>
   </div>
   <div class="letterhead">
-    ${officeLogo ? `<img src="${officeLogo}" alt="${officeName} Logo" />` : `<div style="font-size:18px;font-weight:bold;color:#1e3a5f;">${officeName}</div>`}
+    ${officeLogo
+      ? `<img src="${officeLogo}" alt="${officeName} Logo" />`
+      : `<div style="font-size:16px;font-weight:bold;color:#1a3a6b;letter-spacing:1px;font-family:Arial,sans-serif;">AMBIANCE<br><span style="font-size:11px;font-weight:normal;letter-spacing:3px;">GAYRİMENKUL</span></div>`}
     <div class="letterhead-text">
       <strong>${officeName}</strong><br>
       ${officeAddress ? officeAddress.replace(/\n/g, '<br>') : ''}
     </div>
   </div>
   <h1>${cfg.title}</h1>
+  ${docType === 'sales_contract' ? `<div class="sub" style="font-size:13px;font-weight:bold;letter-spacing:1px;color:#333;">PROTOKOL YAZISI</div>` : ''}
   <div class="sub">${today}</div>
   <hr class="divider">
   ${cfg.body}

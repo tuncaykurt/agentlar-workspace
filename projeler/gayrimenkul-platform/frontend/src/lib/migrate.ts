@@ -204,9 +204,10 @@ INSERT INTO settings (key, value, description) VALUES
   ('office_commission_rate', '3.0', 'Varsayılan ofis komisyon oranı (%)'),
   ('default_follow_up_days', '7', 'Varsayılan takip aralığı (gün)'),
   ('whatsapp_welcome_template', '"Merhaba {name}, hoş geldiniz!"', 'WhatsApp karşılama şablonu'),
-  ('office_name', '"Gayrimenkul Ofisi"', 'Ofis adı'),
+  ('office_name', '"Ambiance Gayrimenkul"', 'Ofis adı'),
   ('office_phone', '""', 'Ofis telefonu'),
-  ('office_address', '""', 'Ofis adresi')
+  ('office_address', '"Ahmet Yesevi Mah. Hudut Sok. Central Balat Sitesi 1/C\nNilüfer / BURSA"', 'Ofis adresi'),
+  ('office_logo', '""', 'Logo URL')
 ON CONFLICT (key) DO NOTHING;
 
 CREATE INDEX IF NOT EXISTS idx_clients_consultant ON clients(assigned_consultant_id);
@@ -337,7 +338,7 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS address TEXT;
   },
 
   {
-    id: '008_office_settings',
+    id: '008b_office_settings_ambiance',
     sql: `
 INSERT INTO settings (key, value, description) VALUES
   ('office_name', '"Ambiance Gayrimenkul"', 'Ofis adı'),
