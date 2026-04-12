@@ -2,7 +2,7 @@
 // Supabase şemasına göre oluşturulmuştur
 
 export type UserRole = 'admin' | 'manager' | 'consultant'
-export type ClientType = 'buyer' | 'seller' | 'both' | 'investor' | 'tenant' | 'landlord'
+export type ClientType = 'buyer' | 'seller' | 'both' | 'investor' | 'tenant' | 'landlord' | 'network'
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'negotiating' | 'won' | 'lost' | 'dormant'
 export type PropertyStatus = 'active' | 'under_offer' | 'sold' | 'rented' | 'withdrawn'
 export type PropertyType = 'apartment' | 'villa' | 'land' | 'commercial' | 'office' | 'shop' | 'warehouse' | 'detached_house'

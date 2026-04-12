@@ -47,6 +47,7 @@ const typeLabels: Record<ClientType, string> = {
   investor: 'Yatırımcı',
   tenant: 'Kiracı',
   landlord: 'Ev Sahibi',
+  network: 'Ağ / Tanışık',
 }
 
 // ─── VCF Parser ──────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ const clientTypes: { value: ClientType; label: string }[] = [
   { value: 'investor', label: 'Yatırımcı' },
   { value: 'tenant', label: 'Kiracı' },
   { value: 'landlord', label: 'Ev Sahibi' },
+  { value: 'network', label: 'Ağ / Tanışık' },
 ]
 
 const leadStatuses: { value: LeadStatus; label: string }[] = [

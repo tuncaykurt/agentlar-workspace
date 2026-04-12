@@ -266,6 +266,11 @@ END $$;
     id: '003_add_salutation',
     sql: `ALTER TABLE clients ADD COLUMN IF NOT EXISTS salutation TEXT DEFAULT '';`,
   },
+
+  {
+    id: '004_add_network_type',
+    sql: `ALTER TYPE client_type ADD VALUE IF NOT EXISTS 'network';`,
+  },
 ]
 
 // ─── Runner — Supabase pg-meta API üzerinden ─────────────────────────────────
