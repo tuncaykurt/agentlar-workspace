@@ -102,6 +102,42 @@ async function findCredentialByType(
   }
 }
 
+// Auto-fetch per-instance API key from Evolution API and save to Supabase
+async function resolveEvolutionInstanceKey(
+  cfg: Record<string, string>,
+  consultantId: string,
+  waInstance: string,
+  storedKey: string | null,
+): Promise<string | null> {
+  // Use stored key if already present
+  if (storedKey) return storedKey
+
+  const evolutionUrl = cfg.evolution_api_url?.replace(/\/$/, '')
+  const globalKey = cfg.evolution_api_key
+  if (!evolutionUrl || !globalKey || !waInstance) return null
+
+  try {
+    const res = await fetch(`${evolutionUrl}/instance/fetchInstances?instanceName=${encodeURIComponent(waInstance)}`, {
+      headers: { apikey: globalKey },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    // Response: array of { instance: {...}, hash: { apikey: "..." } }
+    const list: { instance?: { instanceName?: string }; hash?: { apikey?: string } }[] = Array.isArray(data) ? data : [data]
+    const match = list.find(item => item.instance?.instanceName === waInstance)
+    const instanceKey = match?.hash?.apikey || null
+    if (instanceKey) {
+      // Persist so future requests skip this fetch
+      const supabase = getServiceClient()
+      await supabase.from('consultants').update({ evolution_instance_key: instanceKey }).eq('id', consultantId)
+    }
+    return instanceKey
+  } catch {
+    return null
+  }
+}
+
 // Ensure a per-consultant Evolution API credential exists in n8n, return {id, name} or null
 async function ensureEvolutionCredential(
   cfg: Record<string, string>,
@@ -490,12 +526,19 @@ export async function POST(req: NextRequest) {
 
     const name = workflowName || `[${consultant.full_name}] ${TEMPLATE_LABELS[templateId] || templateId}`
 
+    const waInstance = consultant.wa_instance || consultant.full_name
+
+    // Auto-resolve per-instance Evolution key (fetches from Evolution API if not stored)
+    const resolvedKey = !isEmail
+      ? await resolveEvolutionInstanceKey(cfg, consultant.id, waInstance, consultant.evolution_instance_key || null)
+      : null
+
+    const evolutionCred = resolvedKey
+      ? await ensureEvolutionCredential(cfg, waInstance, resolvedKey)
+      : await findCredentialByType(cfg, 'evolutionApi', 'evolution')
+
     let workflow
     if (isAiBot) {
-      const waInstance = consultant.wa_instance || consultant.full_name
-      const evolutionCred = consultant.evolution_instance_key
-        ? await ensureEvolutionCredential(cfg, waInstance, consultant.evolution_instance_key)
-        : await findCredentialByType(cfg, 'evolutionApi', 'evolution')
       const openRouterCred = await findCredentialByType(cfg, 'openRouterApi', 'openrouter') || await ensureOpenRouterCredential(cfg)
       workflow = buildAiBotWorkflow(
         name,
@@ -532,10 +575,6 @@ export async function POST(req: NextRequest) {
         credName,
       )
     } else {
-      const waInstance = consultant.wa_instance || consultant.full_name
-      const evolutionCred = consultant.evolution_instance_key
-        ? await ensureEvolutionCredential(cfg, waInstance, consultant.evolution_instance_key)
-        : await findCredentialByType(cfg, 'evolutionApi', 'evolution')
       workflow = buildWaWorkflow(
         templateId,
         name,
