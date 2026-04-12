@@ -20,6 +20,7 @@ type SettingKey =
   | 'evolution_api_url' | 'evolution_api_key' | 'evolution_instance' | 'app_url'
   | 'n8n_url' | 'n8n_api_key'
   | 'smtp_host' | 'smtp_port' | 'smtp_user' | 'smtp_pass' | 'smtp_from_name'
+  | 'openrouter_api_key'
 
 type SettingMeta = {
   key: SettingKey
@@ -73,6 +74,14 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; s
     settings: [
       { key: 'n8n_url',     label: 'n8n URL',     type: 'url',      placeholder: 'https://n8n.sirketiniz.com', desc: 'n8n sunucusunun adresi' },
       { key: 'n8n_api_key', label: 'n8n API Key', type: 'password', placeholder: 'n8n_api_xxx...',             desc: 'n8n → Settings → API → Create API Key' },
+    ],
+  },
+  {
+    title: 'AI Ayarları (OpenRouter)',
+    icon: Zap,
+    color: 'purple',
+    settings: [
+      { key: 'openrouter_api_key', label: 'OpenRouter API Key', type: 'password', placeholder: 'sk-or-v1-...', desc: 'openrouter.ai → Keys → Create Key' },
     ],
   },
   {
@@ -906,16 +915,37 @@ function ConsultantsTab() {
 
 // ─── Automations Tab ──────────────────────────────────────────────────────────
 
+const DEFAULT_AI_SYSTEM = `Sen bir gayrimenkul danışmanının kişisel asistanısın. Danışmanın ağzından müşterilerle konuşuyorsun. Üslubun samimi, kısa, öz ve net olmalı.
+
+Yanıt Stratejisi:
+1. Soruları kısa ve net yanıtla, gereksiz detaya girme.
+2. Gayrimenkul/iş soruları için bilgi ver ama çok uzun açıklama yapma.
+3. Yanıtların 2-3 cümleyi geçmesin.
+4. "Müsait değilim", "Döneceğim" gibi otomatik mesaj ibareleri kullanma.
+
+Yasaklı:
+- Yapay zeka olduğunu belli etme.
+- "Size nasıl yardımcı olabilirim?" gibi profesyonel asistan cümleleri kurma.`
+
+const DEFAULT_AI_USER = `Aşağıdaki WhatsApp mesajını analiz et ve danışman olarak samimi bir cevap üret:
+
+Gönderen: {{ $json.body.data.pushName }}
+Mesaj: {{ $json.body.data.message.conversation || "Metin dışı mesaj (görsel/ses/çıkartma)" }}
+Tür: {{ $json.body.data.messageType }}
+Kaynak: {{ $json.body.data.key.remoteJid.endsWith('@g.us') ? 'Grup Mesajı' : 'Kişisel Mesaj' }}`
+
 const TEMPLATES = [
-  // WhatsApp
-  { id: 'wa_welcome',     label: 'WA Karşılama',        icon: '👋', cat: 'wa',    desc: 'Yeni müşteri eklendiğinde karşılama mesajı',  defaultMsg: 'Merhaba, Ambiance Gayrimenkul ailesine hoş geldiniz! Size nasıl yardımcı olabiliriz?', defaultSubj: '' },
-  { id: 'wa_followup',    label: 'WA Takip',             icon: '📅', cat: 'wa',    desc: 'Takip tarihi gelen müşteriye hatırlatma',     defaultMsg: 'Merhaba, bugün sizi aramayı planlamıştık. Uygun bir zaman var mı?',                    defaultSubj: '' },
-  { id: 'wa_document',    label: 'WA Belge Bildirimi',   icon: '📄', cat: 'wa',    desc: 'Belge imzalandığında bildirim gönder',        defaultMsg: 'Merhaba, belgeniz başarıyla imzalanmıştır.',                                            defaultSubj: '' },
-  { id: 'wa_campaign',    label: 'WA Kampanya',          icon: '📣', cat: 'wa',    desc: 'Manuel tetiklenen toplu mesaj akışı',         defaultMsg: 'Merhaba, size özel bir teklifimiz var. Detaylar için bizi arayın.',                     defaultSubj: '' },
+  // WhatsApp — Outbound
+  { id: 'wa_welcome',     label: 'WA Karşılama',        icon: '👋', cat: 'wa',    desc: 'Yeni müşteriye karşılama mesajı',             defaultMsg: 'Merhaba, Ambiance Gayrimenkul ailesine hoş geldiniz! Size nasıl yardımcı olabiliriz?', defaultSubj: '', defaultSystemPrompt: '' },
+  { id: 'wa_followup',    label: 'WA Takip',             icon: '📅', cat: 'wa',    desc: 'Takip tarihi gelen müşteriye hatırlatma',     defaultMsg: 'Merhaba, bugün sizi aramayı planlamıştık. Uygun bir zaman var mı?',                    defaultSubj: '', defaultSystemPrompt: '' },
+  { id: 'wa_document',    label: 'WA Belge Bildirimi',   icon: '📄', cat: 'wa',    desc: 'Belge imzalandığında bildirim gönder',        defaultMsg: 'Merhaba, belgeniz başarıyla imzalanmıştır.',                                            defaultSubj: '', defaultSystemPrompt: '' },
+  { id: 'wa_campaign',    label: 'WA Kampanya',          icon: '📣', cat: 'wa',    desc: 'Manuel tetiklenen toplu mesaj akışı',         defaultMsg: 'Merhaba, size özel bir teklifimiz var. Detaylar için bizi arayın.',                     defaultSubj: '', defaultSystemPrompt: '' },
+  // WhatsApp — AI Bot
+  { id: 'wa_aibot',       label: 'WA AI Bot',            icon: '🤖', cat: 'wa',    desc: 'Gelen mesajlara AI ile otomatik yanıt ver',   defaultMsg: DEFAULT_AI_USER, defaultSubj: '', defaultSystemPrompt: DEFAULT_AI_SYSTEM },
   // Email
-  { id: 'email_welcome',  label: 'Email Karşılama',      icon: '✉️', cat: 'email', desc: 'Yeni müşteriye karşılama e-postası gönder',   defaultMsg: 'Merhaba,\n\nAmbiance Gayrimenkul ailesine hoş geldiniz!\n\nSize en iyi hizmeti sunmak için buradayız.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Ambiance Gayrimenkul\'e Hoş Geldiniz!' },
-  { id: 'email_followup', label: 'Email Takip',          icon: '📬', cat: 'email', desc: 'Takip tarihi gelen müşteriye email gönder',   defaultMsg: 'Merhaba,\n\nSizi aramayı planlamıştık. Gayrimenkul ihtiyaçlarınızda yardımcı olmak isteriz.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Sizi Arayacağız — Ambiance Gayrimenkul' },
-  { id: 'email_document', label: 'Email Belge Bildirimi',icon: '📋', cat: 'email', desc: 'Belge imzalandığında email bildirimi gönder', defaultMsg: 'Merhaba,\n\nBelgeniz başarıyla imzalanmıştır. Süreçle ilgili sorularınız için bize ulaşabilirsiniz.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Belgeniz İmzalandı — Ambiance Gayrimenkul' },
+  { id: 'email_welcome',  label: 'Email Karşılama',      icon: '✉️', cat: 'email', desc: 'Yeni müşteriye karşılama e-postası gönder',   defaultMsg: 'Merhaba,\n\nAmbiance Gayrimenkul ailesine hoş geldiniz!\n\nSize en iyi hizmeti sunmak için buradayız.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Ambiance Gayrimenkul\'e Hoş Geldiniz!', defaultSystemPrompt: '' },
+  { id: 'email_followup', label: 'Email Takip',          icon: '📬', cat: 'email', desc: 'Takip tarihi gelen müşteriye email gönder',   defaultMsg: 'Merhaba,\n\nSizi aramayı planlamıştık. Gayrimenkul ihtiyaçlarınızda yardımcı olmak isteriz.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Sizi Arayacağız — Ambiance Gayrimenkul', defaultSystemPrompt: '' },
+  { id: 'email_document', label: 'Email Belge Bildirimi',icon: '📋', cat: 'email', desc: 'Belge imzalandığında email bildirimi gönder', defaultMsg: 'Merhaba,\n\nBelgeniz başarıyla imzalanmıştır. Süreçle ilgili sorularınız için bize ulaşabilirsiniz.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Belgeniz İmzalandı — Ambiance Gayrimenkul', defaultSystemPrompt: '' },
 ]
 
 type WFlow = { id: string; name: string; active: boolean; webhookUrl?: string }
@@ -930,6 +960,7 @@ function AutomationsTab() {
   const [tplCat, setTplCat] = useState<'wa' | 'email'>('wa')
   const [message, setMessage] = useState(TEMPLATES[0].defaultMsg)
   const [subject, setSubject] = useState(TEMPLATES[0].defaultSubj)
+  const [systemPrompt, setSystemPrompt] = useState(TEMPLATES[0].defaultSystemPrompt)
   const [creating, setCreating] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -964,7 +995,7 @@ function AutomationsTab() {
       const res = await fetch('/api/n8n/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ consultantId: selectedId, templateId: tplId, message, subject }),
+        body: JSON.stringify({ consultantId: selectedId, templateId: tplId, message, subject, systemPrompt }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); } else { setShowModal(false); loadWorkflows() }
@@ -1128,6 +1159,7 @@ function AutomationsTab() {
                         setTplId(first.id)
                         setMessage(first.defaultMsg)
                         setSubject(first.defaultSubj)
+                        setSystemPrompt(first.defaultSystemPrompt)
                       }}
                       className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
                         tplCat === cat ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -1143,7 +1175,7 @@ function AutomationsTab() {
                   {TEMPLATES.filter(t => t.cat === tplCat).map(t => (
                     <button
                       key={t.id}
-                      onClick={() => { setTplId(t.id); setMessage(t.defaultMsg); setSubject(t.defaultSubj) }}
+                      onClick={() => { setTplId(t.id); setMessage(t.defaultMsg); setSubject(t.defaultSubj); setSystemPrompt(t.defaultSystemPrompt) }}
                       className={`p-3 rounded-xl border-2 text-left transition-colors ${
                         tplId === t.id ? 'border-orange-400 bg-orange-50' : 'border-slate-200 hover:border-slate-300'
                       }`}
@@ -1155,6 +1187,21 @@ function AutomationsTab() {
                   ))}
                 </div>
               </div>
+
+              {/* System Prompt (AI Bot only) */}
+              {tplId === 'wa_aibot' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">AI Kişilik / Sistem Promptu</label>
+                  <textarea
+                    value={systemPrompt}
+                    onChange={e => setSystemPrompt(e.target.value)}
+                    rows={5}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none font-mono text-xs"
+                    placeholder="AI'nın nasıl davranacağını tanımlayan talimatlar..."
+                  />
+                  <p className="text-xs text-slate-400 mt-1">AI'nın karakterini ve yanıt kurallarını belirler</p>
+                </div>
+              )}
 
               {/* Subject (email only) */}
               {tplCat === 'email' && (
@@ -1173,7 +1220,7 @@ function AutomationsTab() {
               {/* Message */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {tplCat === 'email' ? 'E-posta İçeriği' : 'Mesaj Şablonu'}
+                  {tplCat === 'email' ? 'E-posta İçeriği' : tplId === 'wa_aibot' ? 'Kullanıcı Prompt Şablonu' : 'Mesaj Şablonu'}
                 </label>
                 <textarea
                   value={message}

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+const DEFAULT_USER_PROMPT = `Aşağıdaki WhatsApp mesajını analiz et ve danışman olarak samimi bir cevap üret:
+
+Gönderen: {{ $json.body.data.pushName }}
+Mesaj: {{ $json.body.data.message.conversation || "Metin dışı mesaj (görsel/ses/çıkartma)" }}
+Tür: {{ $json.body.data.messageType }}
+Kaynak: {{ $json.body.data.key.remoteJid.endsWith('@g.us') ? 'Grup Mesajı' : 'Kişisel Mesaj' }}`
+
 function getServiceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,7 +21,7 @@ async function getN8nConfig() {
   const { data: rows } = await supabase
     .from('settings')
     .select('key, value')
-    .in('key', ['n8n_url', 'n8n_api_key', 'evolution_api_url', 'evolution_api_key', 'smtp_user', 'smtp_pass', 'smtp_host', 'smtp_port', 'smtp_from_name'])
+    .in('key', ['n8n_url', 'n8n_api_key', 'evolution_api_url', 'evolution_api_key', 'smtp_user', 'smtp_pass', 'smtp_host', 'smtp_port', 'smtp_from_name', 'openrouter_api_key'])
   const cfg: Record<string, string> = {}
   for (const r of rows || []) cfg[r.key] = String(r.value || '').replace(/^"|"$/g, '')
 
@@ -70,6 +77,35 @@ async function ensureSmtpCredential(
     },
   })
   return created.id
+}
+
+// Find an existing credential by type, return {id, name} or null
+async function findCredentialByType(cfg: Record<string, string>, type: string): Promise<{ id: string; name: string } | null> {
+  try {
+    const data = await n8nFetch(cfg, 'GET', '/credentials?limit=100')
+    const creds: { id: string; name: string; type: string }[] = data.data || []
+    const found = creds.find(c => c.type === type)
+    return found ? { id: found.id, name: found.name } : null
+  } catch {
+    return null
+  }
+}
+
+// Ensure OpenRouter credential exists in n8n
+async function ensureOpenRouterCredential(cfg: Record<string, string>): Promise<{ id: string; name: string } | null> {
+  if (!cfg.openrouter_api_key) return null
+  const existing = await findCredentialByType(cfg, 'openRouterApi')
+  if (existing) return existing
+  try {
+    const created = await n8nFetch(cfg, 'POST', '/credentials', {
+      name: 'OpenRouter account',
+      type: 'openRouterApi',
+      data: { apiKey: cfg.openrouter_api_key },
+    })
+    return { id: created.id, name: created.name }
+  } catch {
+    return null
+  }
 }
 
 // Ensure a tag exists for the consultant, return its id
@@ -149,6 +185,104 @@ function buildWaWorkflow(
       [triggerName]: {
         main: [[{ node: 'WhatsApp Gönder', type: 'main', index: 0 }]],
       },
+    },
+    settings: { executionOrder: 'v1' },
+  }
+}
+
+// Workflow template generator — WA AI Bot (Evolution API + AI Agent + OpenRouter + Memory)
+function buildAiBotWorkflow(
+  workflowName: string,
+  consultantId: string,
+  waInstance: string,
+  systemPrompt: string,
+  userPromptTemplate: string,
+  evolutionCred: { id: string; name: string } | null,
+  openRouterCred: { id: string; name: string } | null,
+) {
+  const webhookNode = {
+    id: crypto.randomUUID(),
+    name: 'Webhook',
+    type: 'n8n-nodes-base.webhook',
+    typeVersion: 2.1,
+    position: [-304, -48] as [number, number],
+    webhookId: crypto.randomUUID(),
+    parameters: {
+      httpMethod: 'POST',
+      path: `wa_aibot-${consultantId}`,
+      options: {},
+    },
+  }
+
+  const aiAgentNode: Record<string, unknown> = {
+    id: crypto.randomUUID(),
+    name: 'AI Agent',
+    type: '@n8n/n8n-nodes-langchain.agent',
+    typeVersion: 3.1,
+    position: [-96, -48] as [number, number],
+    parameters: {
+      promptType: 'define',
+      text: userPromptTemplate,
+      options: {
+        systemMessage: systemPrompt,
+      },
+    },
+  }
+
+  const openRouterNode: Record<string, unknown> = {
+    id: crypto.randomUUID(),
+    name: 'OpenRouter Chat Model',
+    type: '@n8n/n8n-nodes-langchain.lmChatOpenRouter',
+    typeVersion: 1,
+    position: [-144, 176] as [number, number],
+    parameters: {
+      model: 'google/gemini-2.5-pro',
+      options: {},
+    },
+  }
+  if (openRouterCred) {
+    openRouterNode.credentials = { openRouterApi: { id: openRouterCred.id, name: openRouterCred.name } }
+  }
+
+  const memoryNode = {
+    id: crypto.randomUUID(),
+    name: 'Simple Memory',
+    type: '@n8n/n8n-nodes-langchain.memoryBufferWindow',
+    typeVersion: 1.3,
+    position: [0, 176] as [number, number],
+    parameters: {
+      sessionIdType: 'customKey',
+      sessionKey: "={{ $('Webhook').item.json.body.data.key.remoteJid }}",
+      contextWindowLength: 15,
+    },
+  }
+
+  const sendNode: Record<string, unknown> = {
+    id: crypto.randomUUID(),
+    name: 'Send text',
+    type: 'n8n-nodes-evolution-api-english.evolutionApi',
+    typeVersion: 1,
+    position: [256, -48] as [number, number],
+    parameters: {
+      resource: 'messages-api',
+      instanceName: waInstance,
+      remoteJid: "={{ $('Webhook').item.json.body.data.key.remoteJid }}",
+      messageText: '={{ $json.output }}',
+      options_message: {},
+    },
+  }
+  if (evolutionCred) {
+    sendNode.credentials = { evolutionApi: { id: evolutionCred.id, name: evolutionCred.name } }
+  }
+
+  return {
+    name: workflowName,
+    nodes: [webhookNode, aiAgentNode, openRouterNode, memoryNode, sendNode],
+    connections: {
+      Webhook: { main: [[{ node: 'AI Agent', type: 'main', index: 0 }]] },
+      'AI Agent': { main: [[{ node: 'Send text', type: 'main', index: 0 }]] },
+      'OpenRouter Chat Model': { ai_languageModel: [[{ node: 'AI Agent', type: 'ai_languageModel', index: 0 }]] },
+      'Simple Memory': { ai_memory: [[{ node: 'AI Agent', type: 'ai_memory', index: 0 }]] },
     },
     settings: { executionOrder: 'v1' },
   }
@@ -264,12 +398,13 @@ export async function GET(req: NextRequest) {
 // ─── POST /api/n8n/workflows ──────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
-    const { consultantId, templateId, message, subject, workflowName } = await req.json()
+    const { consultantId, templateId, message, subject, systemPrompt, workflowName } = await req.json()
     if (!consultantId || !templateId) {
       return NextResponse.json({ error: 'consultantId ve templateId gerekli' }, { status: 400 })
     }
 
     const isEmail = templateId.startsWith('email_')
+    const isAiBot = templateId === 'wa_aibot'
 
     const supabase = getServiceClient()
     const { data: consultant } = await supabase
@@ -306,6 +441,7 @@ export async function POST(req: NextRequest) {
       wa_followup:      'WA Takip',
       wa_document:      'WA Belge Bildirimi',
       wa_campaign:      'WA Kampanya',
+      wa_aibot:         'WA AI Bot',
       email_welcome:    'Email Karşılama',
       email_followup:   'Email Takip',
       email_document:   'Email Belge Bildirimi',
@@ -314,7 +450,19 @@ export async function POST(req: NextRequest) {
     const name = workflowName || `[${consultant.full_name}] ${TEMPLATE_LABELS[templateId] || templateId}`
 
     let workflow
-    if (isEmail) {
+    if (isAiBot) {
+      const evolutionCred = await findCredentialByType(cfg, 'evolutionApi')
+      const openRouterCred = await ensureOpenRouterCredential(cfg)
+      workflow = buildAiBotWorkflow(
+        name,
+        consultant.id,
+        consultant.wa_instance || '',
+        systemPrompt || '',
+        message || DEFAULT_USER_PROMPT,
+        evolutionCred,
+        openRouterCred,
+      )
+    } else if (isEmail) {
       const smtpHost = cfg.smtp_host || 'smtp.gmail.com'
       const smtpPort = cfg.smtp_port || '587'
       const credName = `SMTP ${cfg.smtp_user}`
