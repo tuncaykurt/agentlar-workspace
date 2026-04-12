@@ -385,7 +385,7 @@ function generatePrintHTML(params: {
           <tr><td>Peşinat / Kapora:</td><td>${money(templateData.kapora as string)}</td></tr>
           <tr><td>Kapora Tarihi:</td><td>${fmtDate(templateData.kapora_tarihi as string)}</td></tr>
           ${templateData.tapuda_odenecek ? `<tr><td>Tapuda Ödenecek:</td><td><strong>${money(templateData.tapuda_odenecek as string)}</strong></td></tr>` : ''}
-          ${templateData.teslim_tarihi ? `<tr><td>Teslim Tarihi:</td><td>${fmtDate(templateData.teslim_tarihi as string)}</td></tr>` : ''}
+          ${templateData.teslim_tarihi ? `<tr><td>Tapu Tescil Tarihi:</td><td>${fmtDate(templateData.teslim_tarihi as string)}</td></tr>` : ''}
         </table>
         ${(templateData.ada || templateData.parsel) ? `
         <h2>5. Taşınmaz Bilgileri</h2>
@@ -600,7 +600,7 @@ export default function NewDocumentPage() {
 
   const KDV = 1.20
 
-  // Auto-calculate hizmet bedeli when sale price or commission rates change
+  // Auto-calculate hizmet bedeli breakdown (alıcı/satıcı) from commission rates
   useEffect(() => {
     const satis = parseFloat(satisBedeli) || 0
     const aliciRate = parseFloat(komisyonAlici) || 0
@@ -610,9 +610,15 @@ export default function NewDocumentPage() {
       const satici = Math.round(satis * (saticiRate / 100) * KDV)
       setHizmetBedeliAlici(alici > 0 ? String(alici) : '')
       setHizmetBedeliSatici(satici > 0 ? String(satici) : '')
-      setHizmetBedeli(alici + satici > 0 ? String(alici + satici) : '')
     }
   }, [satisBedeli, komisyonAlici, komisyonSatici])
+
+  // Toplam hizmet bedeli = kapora (alınan kapora bizim hizmet bedelimiz)
+  useEffect(() => {
+    const kap = parseFloat(kapora) || 0
+    if (kap > 0) setHizmetBedeli(String(kap))
+    else setHizmetBedeli('')
+  }, [kapora])
 
   // Auto-calculate tapuda ödenecek
   useEffect(() => {
@@ -856,7 +862,7 @@ export default function NewDocumentPage() {
                   <input type="date" value={kaporaTarihi} onChange={e => setKaporaTarihi(e.target.value)} className={inp} />
                 </div>
                 <div>
-                  <label className={lbl}>Teslim Tarihi</label>
+                  <label className={lbl}>Tapu Tescil Tarihi</label>
                   <input type="date" value={teslimTarihi} onChange={e => setTeslimTarihi(e.target.value)} className={inp} />
                 </div>
               </div>
@@ -887,7 +893,7 @@ export default function NewDocumentPage() {
 
               {/* Hizmet bedeli */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                <p className="text-sm font-semibold text-slate-700">Hizmet Bedeli (Komisyon) <span className="text-xs font-normal text-slate-400">— %{komisyonAlici}+%{komisyonSatici}+KDV otomatik, elle değiştirilebilir</span></p>
+                <p className="text-sm font-semibold text-slate-700">Hizmet Bedeli (Komisyon) <span className="text-xs font-normal text-slate-400">— Toplam: kapora otomatik doldurulur, elle değiştirilebilir</span></p>
                 <div className={row2}>
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Alıcı Komisyon Oranı (%)</label>
@@ -910,7 +916,7 @@ export default function NewDocumentPage() {
                 </div>
                 <div className={row2}>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Toplam Hizmet Bedeli (₺)</label>
+                    <label className="block text-xs text-slate-500 mb-1">Toplam Hizmet Bedeli (₺) — kapora = hizmet bedeli</label>
                     <input type="number" value={hizmetBedeli} onChange={e => setHizmetBedeli(e.target.value)} className={`${inp} font-semibold`} placeholder="0" />
                   </div>
                   <div>

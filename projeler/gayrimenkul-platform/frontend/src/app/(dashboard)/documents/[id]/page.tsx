@@ -106,7 +106,7 @@ function TemplateDetails({ docType, data }: { docType: string; data: TemplateDat
     {row('Satış Bedeli', money(data.satis_bedeli as string))}
     {row('Kapora Tutarı', money(data.kapora as string))}
     {row('Kapora Tarihi', formatDate(data.kapora_tarihi as string))}
-    {row('Teslim Tarihi', formatDate(data.teslim_tarihi as string))}
+    {row('Tapu Tescil Tarihi', formatDate(data.teslim_tarihi as string))}
     {data.second_client_name && row('Alıcı', data.second_client_name)}
     {row('Özel Şartlar', data.ozel_sartlar)}
   </div>
@@ -535,7 +535,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
           <tr><td>Satış Bedeli:</td><td>${m(data.satis_bedeli as string)}</td></tr>
           <tr><td>Kapora:</td><td>${m(data.kapora as string)}</td></tr>
           <tr><td>Kapora Tarihi:</td><td>${fd(data.kapora_tarihi as string)}</td></tr>
-          <tr><td>Teslim Tarihi:</td><td>${fd(data.teslim_tarihi as string)}</td></tr>
+          <tr><td>Tapu Tescil Tarihi:</td><td>${fd(data.teslim_tarihi as string)}</td></tr>
         </table>
         <h2>5. Özel Şartlar</h2><p>${data.ozel_sartlar || 'Yoktur.'}</p>
         <h2>6. Genel Hükümler</h2><p>İş bu sözleşme taraflarca serbestçe imzalanmıştır.</p>
