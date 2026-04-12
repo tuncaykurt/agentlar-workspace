@@ -8,7 +8,7 @@ import {
   XCircle, Shield, Loader2, TrendingUp,
   MessageCircle, Building2, Globe,
   Eye, EyeOff, Save, RefreshCw, Wifi, WifiOff,
-  QrCode, X, Smartphone,
+  QrCode, X, Smartphone, Upload, Trash2,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,7 +22,7 @@ type SettingMeta = {
   key: SettingKey
   label: string
   desc: string
-  type: 'text' | 'password' | 'number' | 'textarea' | 'url'
+  type: 'text' | 'password' | 'number' | 'textarea' | 'url' | 'logo'
   placeholder?: string
 }
 
@@ -47,7 +47,7 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; s
       { key: 'office_name',             label: 'Ofis Adı',                type: 'text',     placeholder: 'Ambiance Gayrimenkul',        desc: 'Belgelerde ve mesajlarda görünür' },
       { key: 'office_phone',            label: 'Ofis Telefonu',           type: 'text',     placeholder: '0224 xxx xx xx',              desc: '' },
       { key: 'office_address',          label: 'Ofis Adresi',             type: 'textarea', placeholder: 'Ahmet Yesevi Mah. Hudut Sok. Central Balat Sitesi 1/C\nNilüfer / BURSA', desc: '' },
-      { key: 'office_logo',             label: 'Logo URL',                type: 'url',      placeholder: 'https://... veya Supabase Storage URL', desc: 'Belgelerin sol üstünde görünür (PNG/JPG)' },
+      { key: 'office_logo',             label: 'Ofis Logosu',             type: 'logo',     placeholder: '', desc: 'Belgelerin sol üstünde görünür (PNG/JPG)' },
       { key: 'office_commission_rate',  label: 'Varsayılan Komisyon (%)', type: 'number',   placeholder: '3',                           desc: 'Yeni belgeler için default oran' },
       { key: 'default_follow_up_days',  label: 'Takip Aralığı (gün)',    type: 'number',   placeholder: '7',                           desc: 'Otomatik takip oluşturma aralığı' },
     ],
@@ -65,6 +65,74 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; s
 
 // ─── Setting Field ────────────────────────────────────────────────────────────
 
+function LogoUploadField({ value, onChange, desc }: { value: string; onChange: (v: string) => void; desc: string }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const reader = new FileReader()
+    reader.onload = () => {
+      onChange(reader.result as string)
+      setUploading(false)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">
+        Ofis Logosu
+        {desc && <span className="text-slate-400 font-normal ml-1.5 text-xs">— {desc}</span>}
+      </label>
+
+      {/* Preview */}
+      {value && (
+        <div className="mb-3 relative inline-block">
+          <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 inline-flex items-center justify-center" style={{ minWidth: 120, minHeight: 60 }}>
+            <img
+              src={value}
+              alt="Logo önizleme"
+              className="max-h-16 max-w-[200px] object-contain"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => { onChange(''); if (fileRef.current) fileRef.current.value = '' }}
+            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+            title="Logoyu kaldır"
+          >
+            <Trash2 size={11} />
+          </button>
+        </div>
+      )}
+
+      {/* Upload button */}
+      <div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          onChange={handleFile}
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+        >
+          {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+          {uploading ? 'Yükleniyor...' : value ? 'Logoyu Değiştir' : 'Logo Seç (PNG / JPG)'}
+        </button>
+        <p className="text-xs text-slate-400 mt-1.5">Dosya seçildiğinde otomatik olarak yüklenir. &quot;Kaydet&quot; ile kaydedin.</p>
+      </div>
+    </div>
+  )
+}
+
 function SettingField({
   meta,
   value,
@@ -76,6 +144,10 @@ function SettingField({
 }) {
   const [showPass, setShowPass] = useState(false)
   const inp = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white'
+
+  if (meta.type === 'logo') {
+    return <LogoUploadField value={value} onChange={onChange} desc={meta.desc} />
+  }
 
   return (
     <div>
