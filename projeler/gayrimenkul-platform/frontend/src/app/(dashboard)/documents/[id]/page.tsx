@@ -248,12 +248,14 @@ function SignerRow({
   appUrl,
   officeName,
   docTitle,
+  consultantInstance,
   onRefresh,
 }: {
   req: SigRequest
   appUrl: string
   officeName: string
   docTitle: string
+  consultantInstance?: string | null
   onRefresh: () => void
 }) {
   const supabase = createClient()
@@ -275,6 +277,7 @@ function SignerRow({
         body: JSON.stringify({
           phone: req.signer_phone,
           message: `Merhaba ${req.signer_name},\n\n*${officeName}* adına düzenlenen belgeni imzalamak için aşağıdaki linke tıkla:\n\n${signingLink}\n\n_Bu link yalnızca sana özeldir._`,
+          ...(consultantInstance ? { instanceName: consultantInstance } : {}),
         }),
       })
       if (res.ok) {
@@ -553,6 +556,7 @@ export default function DocumentDetailPage() {
   const [updating, setUpdating] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [showAddSigner, setShowAddSigner] = useState(false)
+  const [consultantInstance, setConsultantInstance] = useState<string | null>(null)
 
   useEffect(() => {
     loadAll()
@@ -563,7 +567,7 @@ export default function DocumentDetailPage() {
     const [docRes, sigsRes, settingsRes] = await Promise.all([
       supabase
         .from('documents')
-        .select('*, client:clients(id, full_name, salutation, phone, email), property:properties(id, title, city, district), consultant:consultants(id, full_name)')
+        .select('*, client:clients(id, full_name, salutation, phone, email), property:properties(id, title, city, district), consultant:consultants(id, full_name, wa_instance)')
         .eq('id', id)
         .single(),
       supabase
@@ -580,6 +584,8 @@ export default function DocumentDetailPage() {
     if (docRes.data) {
       setDoc(docRes.data as DocRow)
       setNewStatus(docRes.data.signature_status)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setConsultantInstance((docRes.data as any).consultant?.wa_instance || null)
     }
     if (sigsRes.data) setSigRequests(sigsRes.data as SigRequest[])
 
@@ -804,6 +810,7 @@ export default function DocumentDetailPage() {
                   appUrl={resolvedAppUrl}
                   officeName={officeName}
                   docTitle={doc.title}
+                  consultantInstance={consultantInstance}
                   onRefresh={loadSigRequests}
                 />
               ))}
