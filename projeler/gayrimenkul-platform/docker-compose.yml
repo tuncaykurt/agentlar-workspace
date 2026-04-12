@@ -29,11 +29,3 @@ services:
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
       - RUNWAYML_API_KEY=${RUNWAYML_API_KEY}
     restart: unless-stopped
-    networks:
-      - default
-      - evolution_network
-
-networks:
-  evolution_network:
-    external: true
-    name: kg0koks0wc4s488s4co84c4w
