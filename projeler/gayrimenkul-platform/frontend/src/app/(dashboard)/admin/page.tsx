@@ -295,7 +295,7 @@ function QRModal({ onClose }: { onClose: () => void }) {
               </div>
               <p className="text-sm text-red-600 mb-3">{error}</p>
               <p className="text-xs text-slate-400 mb-4">
-                Evolution API URL, API Key ve Instance adını kontrol edin.
+                WhatsApp API URL, API Key ve Instance adını kontrol edin.
               </p>
               <button onClick={fetchQR} className="flex items-center gap-1.5 mx-auto px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">
                 <RefreshCw size={13} /> Tekrar Dene
@@ -458,7 +458,7 @@ function WhatsAppCard() {
           <div className="w-7 h-7 rounded-lg bg-green-50 flex items-center justify-center">
             <MessageCircle size={14} className="text-green-600" />
           </div>
-          Evolution API Bağlantısı
+          WhatsApp Bağlantısı
         </h3>
         <button onClick={checkStatus} disabled={checking} className="text-slate-400 hover:text-slate-600 p-1" title="Yenile">
           <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
@@ -477,7 +477,7 @@ function WhatsAppCard() {
             result?.reachable ? 'text-green-600' : 'text-red-500'
           }`}>
             {checking ? 'Kontrol ediliyor...' :
-             result?.reachable ? 'Evolution API Erişilebilir' : (result?.error || 'Bağlanamadı')}
+             result?.reachable ? 'WhatsApp Bağlantısı Aktif' : (result?.error || 'Bağlanamadı')}
           </p>
           {result?.reachable && (
             <p className="text-xs text-slate-400 mt-0.5">WhatsApp mesajları gönderilebilir</p>
@@ -492,11 +492,11 @@ function WhatsAppCard() {
 
       {!configured && (
         <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-4">
-          <p className="font-medium mb-0.5">Evolution API yapılandırılmamış</p>
+          <p className="font-medium mb-0.5">WhatsApp bağlantısı yapılandırılmamış</p>
           <p>Coolify'da şu env variable'ları ekleyin:</p>
           <code className="block mt-1 font-mono">
-            EVOLUTION_API_URL<br />
-            EVOLUTION_API_KEY
+            WA_API_URL<br />
+            WA_API_KEY
           </code>
         </div>
       )}
