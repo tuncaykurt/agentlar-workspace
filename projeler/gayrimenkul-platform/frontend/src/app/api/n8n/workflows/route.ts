@@ -186,7 +186,7 @@ function buildEmailWorkflow(
     },
   }
 
-  const emailNode = {
+  const emailNode: Record<string, unknown> = {
     id: crypto.randomUUID(),
     name: 'Email Gönder',
     type: 'n8n-nodes-base.emailSend',
@@ -200,12 +200,11 @@ function buildEmailWorkflow(
       text: message,
       options: {},
     },
-    credentials: {
-      smtp: {
-        id: credentialId,
-        name: credentialName,
-      },
-    },
+  }
+  if (credentialId) {
+    emailNode.credentials = {
+      smtp: { id: credentialId, name: credentialName },
+    }
   }
 
   return {
@@ -305,8 +304,17 @@ export async function POST(req: NextRequest) {
     if (isEmail) {
       const smtpHost = cfg.smtp_host || 'smtp.gmail.com'
       const smtpPort = cfg.smtp_port || '587'
-      const credId = await ensureSmtpCredential(cfg, smtpHost, smtpPort, cfg.smtp_user, cfg.smtp_pass)
       const credName = `SMTP ${cfg.smtp_user}`
+
+      // Try to create SMTP credential; non-fatal if it fails
+      let credId = ''
+      try {
+        credId = await ensureSmtpCredential(cfg, smtpHost, smtpPort, cfg.smtp_user, cfg.smtp_pass)
+      } catch {
+        // Credential creation failed — workflow will be created without it
+        // User can add it manually in n8n
+      }
+
       workflow = buildEmailWorkflow(
         templateId,
         name,
