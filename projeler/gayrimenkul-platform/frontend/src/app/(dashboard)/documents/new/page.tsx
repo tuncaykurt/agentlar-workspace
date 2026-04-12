@@ -205,8 +205,7 @@ function PropertySearch({ value, onChange }: { value: Property | null; onChange:
     let q = supabase
       .from('properties')
       .select('id, title, city, district, address, price, m2_gross, room_count, property_type')
-      .neq('status', 'sold')
-      .neq('status', 'rented')
+      .eq('is_active', true)
       .limit(10)
     if (term.length >= 2) q = q.ilike('title', `%${term}%`)
     const { data } = await q
