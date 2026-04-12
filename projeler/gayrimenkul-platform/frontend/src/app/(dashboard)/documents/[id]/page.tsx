@@ -860,9 +860,16 @@ export default function DocumentDetailPage() {
     router.push('/documents')
   }
 
-  function handlePrint() {
+  async function handlePrint() {
     if (!doc) return
-    const html = buildPrintHTML(doc, officeName, sigRequests, officeAddress, officeLogo)
+    const supabase = createClient()
+    const { data: freshSigs } = await supabase
+      .from('signature_requests')
+      .select('*')
+      .eq('document_id', doc.id)
+      .order('created_at', { ascending: true })
+    const sigs = (freshSigs as SigRequest[]) || sigRequests
+    const html = buildPrintHTML(doc, officeName, sigs, officeAddress, officeLogo)
     const w = window.open('', '_blank', 'width=900,height=750,scrollbars=yes')
     if (w) { w.document.write(html); w.document.close(); w.focus() }
   }
