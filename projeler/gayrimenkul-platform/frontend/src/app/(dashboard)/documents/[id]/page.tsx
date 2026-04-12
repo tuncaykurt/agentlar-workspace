@@ -587,13 +587,16 @@ export default function DocumentDetailPage() {
       for (const row of settingsRes.data) {
         const v = String(row.value).replace(/^"|"$/g, '')
         if (row.key === 'office_name') setOfficeName(v)
-        if (row.key === 'app_url') setAppUrl(v || (typeof window !== 'undefined' ? window.location.origin : ''))
+        if (row.key === 'app_url' && v) setAppUrl(v)
       }
     }
 
-    // Fallback for app_url
-    if (typeof window !== 'undefined' && !appUrl) {
-      setAppUrl(window.location.origin)
+    // Priority: env var > DB setting > window.location.origin
+    const envUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (envUrl) {
+      setAppUrl(envUrl)
+    } else if (typeof window !== 'undefined') {
+      setAppUrl(prev => prev || window.location.origin)
     }
 
     setLoading(false)

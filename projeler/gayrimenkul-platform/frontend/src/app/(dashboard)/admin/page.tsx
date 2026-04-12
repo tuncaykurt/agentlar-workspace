@@ -44,21 +44,11 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; s
     icon: Building2,
     color: 'blue',
     settings: [
-      { key: 'office_name',             label: 'Ofis Adı',                type: 'text',   placeholder: 'Gayrimenkul Ofisi',  desc: 'Belgelerde ve mesajlarda görünür' },
-      { key: 'office_phone',            label: 'Ofis Telefonu',           type: 'text',   placeholder: '0212 xxx xx xx',     desc: '' },
-      { key: 'office_address',          label: 'Ofis Adresi',             type: 'textarea', placeholder: 'Adres...',         desc: '' },
-      { key: 'office_commission_rate',  label: 'Varsayılan Komisyon (%)', type: 'number', placeholder: '3',                  desc: 'Yeni belgeler için default oran' },
-      { key: 'default_follow_up_days',  label: 'Takip Aralığı (gün)',    type: 'number', placeholder: '7',                  desc: 'Otomatik takip oluşturma aralığı' },
-    ],
-  },
-  {
-    title: 'WhatsApp (Evolution API)',
-    icon: MessageCircle,
-    color: 'green',
-    settings: [
-      { key: 'evolution_api_url',      label: 'Evolution API URL',      type: 'url',      placeholder: 'https://evo.domain.com',      desc: 'Sonunda / olmadan yazın' },
-      { key: 'evolution_api_key',      label: 'Evolution API Key',      type: 'password', placeholder: '••••••••',                    desc: 'Evolution API key (apikey header)' },
-      { key: 'evolution_instance',     label: 'Instance Adı',           type: 'text',     placeholder: 'my-instance',                 desc: 'Evolution instance ismi' },
+      { key: 'office_name',             label: 'Ofis Adı',                type: 'text',     placeholder: 'Gayrimenkul Ofisi',           desc: 'Belgelerde ve mesajlarda görünür' },
+      { key: 'office_phone',            label: 'Ofis Telefonu',           type: 'text',     placeholder: '0212 xxx xx xx',              desc: '' },
+      { key: 'office_address',          label: 'Ofis Adresi',             type: 'textarea', placeholder: 'Adres...',                    desc: '' },
+      { key: 'office_commission_rate',  label: 'Varsayılan Komisyon (%)', type: 'number',   placeholder: '3',                           desc: 'Yeni belgeler için default oran' },
+      { key: 'default_follow_up_days',  label: 'Takip Aralığı (gün)',    type: 'number',   placeholder: '7',                           desc: 'Otomatik takip oluşturma aralığı' },
     ],
   },
   {
@@ -66,8 +56,8 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; s
     icon: Globe,
     color: 'purple',
     settings: [
-      { key: 'app_url',                label: 'Uygulama URL',           type: 'url',      placeholder: 'https://crm.domain.com',      desc: 'İmzalama linkleri bu URL ile oluşturulur' },
-      { key: 'whatsapp_welcome_template', label: 'WA Karşılama Şablonu', type: 'textarea', placeholder: 'Merhaba {name}, hoş geldiniz!', desc: '{name} yerine müşteri adı gelir' },
+      { key: 'app_url',                    label: 'Uygulama URL',          type: 'url',      placeholder: 'https://crm.domain.com',      desc: 'İmzalama linkleri bu URL ile oluşturulur' },
+      { key: 'whatsapp_welcome_template',  label: 'WA Karşılama Şablonu', type: 'textarea', placeholder: 'Merhaba {name}, hoş geldiniz!', desc: '{name} yerine müşteri adı gelir' },
     ],
   },
 ]
@@ -358,6 +348,116 @@ function WAConnectTest({ saved }: { saved: boolean }) {
   )
 }
 
+// ─── WhatsApp Status Card ──────────────────────────────────────────────────────
+
+function WhatsAppCard() {
+  const [status, setStatus] = useState<'idle' | 'checking' | 'connected' | 'disconnected'>('idle')
+  const [instanceName, setInstanceName] = useState('')
+  const [showQR, setShowQR] = useState(false)
+  const [configured, setConfigured] = useState(true)
+
+  useEffect(() => { checkStatus() }, [])
+
+  async function checkStatus() {
+    setStatus('checking')
+    try {
+      const res = await fetch('/api/whatsapp/status')
+      const data = await res.json()
+      if (data.error?.includes('eksik')) {
+        setConfigured(false)
+        setStatus('disconnected')
+        return
+      }
+      setConfigured(true)
+      setInstanceName(data.instanceName || '')
+      setStatus(data.connected ? 'connected' : 'disconnected')
+    } catch {
+      setStatus('disconnected')
+    }
+  }
+
+  const statusInfo = {
+    idle:         { label: 'Kontrol ediliyor...', color: 'text-slate-400',  dot: 'bg-slate-300' },
+    checking:     { label: 'Kontrol ediliyor...', color: 'text-slate-400',  dot: 'bg-slate-300 animate-pulse' },
+    connected:    { label: 'Bağlı',               color: 'text-green-600',  dot: 'bg-green-500' },
+    disconnected: { label: 'Bağlı Değil',         color: 'text-orange-500', dot: 'bg-orange-400' },
+  }[status]
+
+  return (
+    <>
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-green-50 flex items-center justify-center">
+              <MessageCircle size={14} className="text-green-600" />
+            </div>
+            WhatsApp Bağlantısı
+          </h3>
+          <button onClick={checkStatus} className="text-slate-400 hover:text-slate-600 p-1" title="Yenile">
+            <RefreshCw size={14} className={status === 'checking' ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {/* Durum */}
+        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl mb-4">
+          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusInfo.dot}`} />
+          <div className="flex-1">
+            <p className={`text-sm font-medium ${statusInfo.color}`}>{statusInfo.label}</p>
+            {instanceName && (
+              <p className="text-xs text-slate-400 mt-0.5">Instance: {instanceName}</p>
+            )}
+          </div>
+          {status === 'connected' && (
+            <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+              <Wifi size={11} /> Aktif
+            </div>
+          )}
+        </div>
+
+        {!configured && (
+          <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-4">
+            <p className="font-medium mb-0.5">Evolution API yapılandırılmamış</p>
+            <p>Coolify'da şu env variable'ları ekleyin:</p>
+            <code className="block mt-1 text-xs font-mono">
+              EVOLUTION_API_URL<br />
+              EVOLUTION_API_KEY<br />
+              EVOLUTION_INSTANCE
+            </code>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          {configured && (
+            <button
+              onClick={() => setShowQR(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+            >
+              <QrCode size={14} />
+              {status === 'connected' ? 'Yeniden Bağla' : 'QR ile Bağla'}
+            </button>
+          )}
+          <button
+            onClick={checkStatus}
+            disabled={status === 'checking'}
+            className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={status === 'checking' ? 'animate-spin' : ''} />
+            Durumu Kontrol Et
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-400 mt-3">
+          Evolution API bilgileri (URL, Key, Instance) sunucu yapılandırmasından alınmaktadır.
+        </p>
+      </div>
+
+      {showQR && (
+        <QRModal onClose={() => { setShowQR(false); checkStatus() }} />
+      )}
+    </>
+  )
+}
+
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 
 function SettingsTab() {
@@ -365,7 +465,6 @@ function SettingsTab() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
-  const [waSaved, setWaSaved] = useState(false)
 
   useEffect(() => { loadSettings() }, [])
 
@@ -375,14 +474,12 @@ function SettingsTab() {
     if (data) {
       const map: Record<string, string> = {}
       for (const row of data) {
-        // Strip surrounding quotes from JSON strings
         const v = typeof row.value === 'string'
           ? row.value.replace(/^"|"$/g, '')
           : String(row.value)
         map[row.key] = v
       }
       setValues(map)
-      setWaSaved(!!(map.evolution_api_url && map.evolution_api_key && map.evolution_instance))
     }
     setLoading(false)
   }
@@ -394,10 +491,8 @@ function SettingsTab() {
 
     for (const key of keys) {
       const val = values[key] ?? ''
-      // Store strings as JSON strings (quoted), numbers as numbers
       const isNumeric = ['office_commission_rate', 'default_follow_up_days'].includes(key)
       const dbValue = isNumeric ? parseFloat(val) || 0 : val
-
       await supabase.from('settings').upsert(
         { key, value: dbValue, updated_at: new Date().toISOString() },
         { onConflict: 'key' }
@@ -407,11 +502,6 @@ function SettingsTab() {
     setSaving(null)
     setSaved(groupId)
     setTimeout(() => setSaved(null), 2000)
-
-    // Check if WA settings now complete
-    const waKeys: SettingKey[] = ['evolution_api_url', 'evolution_api_key', 'evolution_instance']
-    const allWA = waKeys.every(k => values[k]?.trim())
-    setWaSaved(allWA)
   }
 
   if (loading) {
@@ -424,6 +514,10 @@ function SettingsTab() {
 
   return (
     <div className="space-y-5">
+      {/* WhatsApp Bağlantısı */}
+      <WhatsAppCard />
+
+      {/* Diğer ayar grupları */}
       {SETTING_GROUPS.map(group => {
         const groupId = group.settings[0].key
         const isSaving = saving === groupId
@@ -432,14 +526,12 @@ function SettingsTab() {
 
         return (
           <div key={group.title} className="card space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-lg bg-${group.color}-50 flex items-center justify-center`}>
-                  <Icon size={14} className={`text-${group.color}-600`} />
-                </div>
-                {group.title}
-              </h3>
-            </div>
+            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+              <div className={`w-7 h-7 rounded-lg bg-${group.color}-50 flex items-center justify-center`}>
+                <Icon size={14} className={`text-${group.color}-600`} />
+              </div>
+              {group.title}
+            </h3>
 
             <div className="space-y-3">
               {group.settings.map(meta => (
@@ -451,10 +543,6 @@ function SettingsTab() {
                 />
               ))}
             </div>
-
-            {group.title.includes('WhatsApp') && (
-              <WAConnectTest saved={waSaved} />
-            )}
 
             <div className="flex items-center justify-end gap-2 pt-1">
               {isSaved && (
