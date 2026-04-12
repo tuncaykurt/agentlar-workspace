@@ -79,13 +79,24 @@ async function ensureSmtpCredential(
   return created.id
 }
 
-// Find an existing credential by type, return {id, name} or null
-async function findCredentialByType(cfg: Record<string, string>, type: string): Promise<{ id: string; name: string } | null> {
+// Find an existing credential by type or name keyword, return {id, name} or null
+async function findCredentialByType(
+  cfg: Record<string, string>,
+  type: string,
+  nameKeyword?: string,
+): Promise<{ id: string; name: string } | null> {
   try {
     const data = await n8nFetch(cfg, 'GET', '/credentials?limit=100')
-    const creds: { id: string; name: string; type: string }[] = data.data || []
-    const found = creds.find(c => c.type === type)
-    return found ? { id: found.id, name: found.name } : null
+    const creds: { id: string; name: string; type?: string }[] = data.data || []
+    // Try exact type match first
+    const byType = creds.find(c => c.type === type)
+    if (byType) return { id: byType.id, name: byType.name }
+    // Fallback: name keyword match
+    if (nameKeyword) {
+      const byName = creds.find(c => c.name.toLowerCase().includes(nameKeyword.toLowerCase()))
+      if (byName) return { id: byName.id, name: byName.name }
+    }
+    return null
   } catch {
     return null
   }
@@ -118,18 +129,15 @@ async function ensureTag(cfg: Record<string, string>, tagName: string): Promise<
   return created.id
 }
 
-// Workflow template generator — WhatsApp
+// Workflow template generator — WhatsApp (outbound, Evolution API node)
 function buildWaWorkflow(
   templateId: string,
   workflowName: string,
   consultantId: string,
   waInstance: string,
-  evolutionUrl: string,
-  evolutionKey: string,
   message: string,
-  tagId: string,
+  evolutionCred: { id: string; name: string } | null,
 ) {
-  const evo = evolutionUrl.replace(/\/$/, '')
   const webhookPath = `${templateId}-${consultantId}`
   const isCampaign = templateId === 'wa_campaign'
 
@@ -157,23 +165,22 @@ function buildWaWorkflow(
         },
       }
 
-  const sendNode = {
+  const sendNode: Record<string, unknown> = {
     id: crypto.randomUUID(),
-    name: 'WhatsApp Gönder',
-    type: 'n8n-nodes-base.httpRequest',
-    typeVersion: 4.2,
+    name: 'Mesaj Gönder',
+    type: 'n8n-nodes-evolution-api-english.evolutionApi',
+    typeVersion: 1,
     position: [480, 300] as [number, number],
     parameters: {
-      method: 'POST',
-      url: `${evo}/message/sendText/${waInstance}`,
-      sendHeaders: true,
-      headerParameters: {
-        parameters: [{ name: 'apikey', value: evolutionKey }],
-      },
-      sendBody: true,
-      specifyBody: 'json',
-      jsonBody: `{\n  "number": "={{ $json.phone }}",\n  "text": ${JSON.stringify(message)}\n}`,
+      resource: 'messages-api',
+      instanceName: waInstance,
+      remoteJid: '={{ $json.phone }}',
+      messageText: message,
+      options_message: {},
     },
+  }
+  if (evolutionCred) {
+    sendNode.credentials = { evolutionApi: { id: evolutionCred.id, name: evolutionCred.name } }
   }
 
   const triggerName = isCampaign ? 'Manuel Tetik' : 'Webhook'
@@ -183,7 +190,7 @@ function buildWaWorkflow(
     nodes: [triggerNode, sendNode],
     connections: {
       [triggerName]: {
-        main: [[{ node: 'WhatsApp Gönder', type: 'main', index: 0 }]],
+        main: [[{ node: 'Mesaj Gönder', type: 'main', index: 0 }]],
       },
     },
     settings: { executionOrder: 'v1' },
@@ -451,8 +458,8 @@ export async function POST(req: NextRequest) {
 
     let workflow
     if (isAiBot) {
-      const evolutionCred = await findCredentialByType(cfg, 'evolutionApi')
-      const openRouterCred = await ensureOpenRouterCredential(cfg)
+      const evolutionCred = await findCredentialByType(cfg, 'evolutionApi', 'evolution')
+      const openRouterCred = await findCredentialByType(cfg, 'openRouterApi', 'openrouter') || await ensureOpenRouterCredential(cfg)
       workflow = buildAiBotWorkflow(
         name,
         consultant.id,
@@ -488,15 +495,14 @@ export async function POST(req: NextRequest) {
         credName,
       )
     } else {
+      const evolutionCred = await findCredentialByType(cfg, 'evolutionApi', 'evolution')
       workflow = buildWaWorkflow(
         templateId,
         name,
         consultant.id,
         consultant.wa_instance!,
-        cfg.evolution_api_url,
-        cfg.evolution_api_key,
         message || 'Merhaba, size ulaşmak istedik.',
-        tagId,
+        evolutionCred,
       )
     }
 
