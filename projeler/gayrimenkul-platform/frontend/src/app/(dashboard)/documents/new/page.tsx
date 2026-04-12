@@ -1157,39 +1157,54 @@ export default function NewDocumentPage() {
                   ))}
                 </div>
               </div>
-              <div className={row2}>
-                <div>
-                  <label className={lbl}>Komisyon Oranı (%)</label>
-                  <input type="number" value={komisyonOrani} onChange={e => setKomisyonOrani(e.target.value)} className={inp} step="0.5" min="0" max="10" />
+              {yetkiTuru !== 'Kiralama' && (
+                <div className={row2}>
+                  <div>
+                    <label className={lbl}>Komisyon Oranı (%)</label>
+                    <input type="number" value={komisyonOrani} onChange={e => setKomisyonOrani(e.target.value)} className={inp} step="0.5" min="0" max="10" />
+                  </div>
+                  <div>
+                    <label className={lbl}>Komisyon Kime Ait</label>
+                    <select value={komisyonTuru} onChange={e => setKomisyonTuru(e.target.value)} className={inp}>
+                      <option>Satıcıdan</option>
+                      <option>Alıcıdan</option>
+                      <option>Her İkisinden Eşit</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className={lbl}>Komisyon Kime Ait</label>
-                  <select value={komisyonTuru} onChange={e => setKomisyonTuru(e.target.value)} className={inp}>
-                    <option>Satıcıdan</option>
-                    <option>Alıcıdan</option>
-                    <option>Her İkisinden Eşit</option>
-                  </select>
+              )}
+              {yetkiTuru !== 'Kiralama' && (
+                <div className={row2}>
+                  <div>
+                    <label className={lbl}>Satış Tutarı (₺)</label>
+                    <MoneyInput value={satisTutari} onChange={setSatisTutari} className={inp} placeholder="0" />
+                  </div>
+                  <div>
+                    <label className={lbl}>Ödeme Şekli</label>
+                    <select value={odemeSekli} onChange={e => setOdemeSekli(e.target.value)} className={inp}>
+                      <option>Nakit</option>
+                      <option>Banka Transferi</option>
+                      <option>Senet</option>
+                      <option>Karma</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
-              <div className={row2}>
-                <div>
-                  <label className={lbl}>Satış Tutarı (₺)</label>
-                  <MoneyInput value={satisTutari} onChange={setSatisTutari} className={inp} placeholder="0" />
-                </div>
-                <div>
-                  <label className={lbl}>Ödeme Şekli</label>
-                  <select value={odemeSekli} onChange={e => setOdemeSekli(e.target.value)} className={inp}>
-                    <option>Nakit</option>
-                    <option>Banka Transferi</option>
-                    <option>Senet</option>
-                    <option>Karma</option>
-                  </select>
-                </div>
-              </div>
+              )}
               {yetkiTuru === 'Kiralama' && (
-                <div>
-                  <label className={lbl}>Kira Bedeli (₺) <span className="text-slate-400">+ KDV otomatik eklenir</span></label>
-                  <MoneyInput value={kiraBedeli} onChange={setKiraBedeli} className={inp} placeholder="0" />
+                <div className={row2}>
+                  <div>
+                    <label className={lbl}>Kira Bedeli (₺) <span className="text-slate-400">+ KDV otomatik eklenir</span></label>
+                    <MoneyInput value={kiraBedeli} onChange={setKiraBedeli} className={inp} placeholder="0" />
+                  </div>
+                  <div>
+                    <label className={lbl}>Ödeme Şekli</label>
+                    <select value={odemeSekli} onChange={e => setOdemeSekli(e.target.value)} className={inp}>
+                      <option>Nakit</option>
+                      <option>Banka Transferi</option>
+                      <option>Senet</option>
+                      <option>Karma</option>
+                    </select>
+                  </div>
                 </div>
               )}
               <div>
