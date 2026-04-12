@@ -9,6 +9,7 @@ import {
   MessageCircle, Building2, Globe,
   Eye, EyeOff, Save, RefreshCw, Wifi, WifiOff,
   QrCode, X, Smartphone, Upload, Trash2,
+  Zap, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -17,6 +18,7 @@ type SettingKey =
   | 'office_name' | 'office_legal_name' | 'office_phone' | 'office_address' | 'office_logo' | 'office_commission_rate' | 'office_mersis'
   | 'default_follow_up_days' | 'whatsapp_welcome_template'
   | 'evolution_api_url' | 'evolution_api_key' | 'evolution_instance' | 'app_url'
+  | 'n8n_url' | 'n8n_api_key'
 
 type SettingMeta = {
   key: SettingKey
@@ -61,6 +63,15 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; s
     settings: [
       { key: 'app_url',                    label: 'Uygulama URL',          type: 'url',      placeholder: 'https://crm.domain.com',      desc: 'İmzalama linkleri bu URL ile oluşturulur' },
       { key: 'whatsapp_welcome_template',  label: 'WA Karşılama Şablonu', type: 'textarea', placeholder: 'Merhaba {name}, hoş geldiniz!', desc: '{name} yerine müşteri adı gelir' },
+    ],
+  },
+  {
+    title: 'Otomasyon Ayarları (n8n)',
+    icon: Zap,
+    color: 'orange',
+    settings: [
+      { key: 'n8n_url',     label: 'n8n URL',     type: 'url',      placeholder: 'https://n8n.sirketiniz.com', desc: 'n8n sunucusunun adresi' },
+      { key: 'n8n_api_key', label: 'n8n API Key', type: 'password', placeholder: 'n8n_api_xxx...',             desc: 'n8n → Settings → API → Create API Key' },
     ],
   },
 ]
@@ -359,6 +370,130 @@ function QRModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// ─── n8n Connection Card ──────────────────────────────────────────────────────
+
+type N8nWorkflow = { id: string; name: string; active: boolean }
+
+function N8nCard() {
+  const [status, setStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
+  const [error, setError] = useState('')
+  const [workflows, setWorkflows] = useState<N8nWorkflow[]>([])
+  const [showWorkflows, setShowWorkflows] = useState(false)
+
+  async function test() {
+    setStatus('testing')
+    setError('')
+    setWorkflows([])
+    try {
+      const res = await fetch('/api/n8n/test')
+      const data = await res.json()
+      if (data.connected) {
+        setStatus('ok')
+        setWorkflows(data.workflows || [])
+      } else {
+        setStatus('error')
+        setError(data.error || 'Bağlantı kurulamadı')
+      }
+    } catch {
+      setStatus('error')
+      setError('Sunucuya ulaşılamadı')
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
+            <Zap size={14} className="text-orange-500" />
+          </div>
+          n8n Otomasyon Bağlantısı
+        </h3>
+        <button onClick={test} disabled={status === 'testing'} className="text-slate-400 hover:text-slate-600 p-1" title="Yenile">
+          <RefreshCw size={14} className={status === 'testing' ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      {/* Status */}
+      <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl mb-4">
+        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+          status === 'idle' ? 'bg-slate-300' :
+          status === 'testing' ? 'bg-slate-300 animate-pulse' :
+          status === 'ok' ? 'bg-green-500' : 'bg-red-400'
+        }`} />
+        <div className="flex-1">
+          <p className={`text-sm font-medium ${
+            status === 'idle' ? 'text-slate-400' :
+            status === 'testing' ? 'text-slate-400' :
+            status === 'ok' ? 'text-green-600' : 'text-red-500'
+          }`}>
+            {status === 'idle' ? 'Henüz test edilmedi' :
+             status === 'testing' ? 'Bağlantı test ediliyor...' :
+             status === 'ok' ? `Bağlı — ${workflows.length} workflow (${workflows.filter(w => w.active).length} aktif)` :
+             error}
+          </p>
+          {status === 'ok' && (
+            <p className="text-xs text-slate-400 mt-0.5">Otomasyonlar yönetilebilir durumda</p>
+          )}
+        </div>
+        {status === 'ok' && (
+          <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+            <Wifi size={11} /> Aktif
+          </div>
+        )}
+      </div>
+
+      {/* Hint for setup */}
+      {status === 'error' && (
+        <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-4">
+          <p className="font-medium mb-0.5">Bağlantı kurulamadı</p>
+          <p>Aşağıdan n8n URL ve API Key bilgilerini girin, ardından tekrar test edin.</p>
+        </div>
+      )}
+
+      {/* Workflow list */}
+      {status === 'ok' && workflows.length > 0 && (
+        <div className="mb-4">
+          <button
+            onClick={() => setShowWorkflows(v => !v)}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 mb-2"
+          >
+            {showWorkflows ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            Workflow listesi ({workflows.length})
+          </button>
+          {showWorkflows && (
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {workflows.map(w => (
+                <div key={w.id} className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded-lg">
+                  <span className="text-xs text-slate-700 truncate flex-1">{w.name}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ml-2 flex-shrink-0 ${
+                    w.active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {w.active ? 'Aktif' : 'Pasif'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <button
+        onClick={test}
+        disabled={status === 'testing'}
+        className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+      >
+        <RefreshCw size={14} className={status === 'testing' ? 'animate-spin' : ''} />
+        {status === 'testing' ? 'Test ediliyor...' : 'Bağlantıyı Test Et'}
+      </button>
+
+      <p className="text-xs text-slate-400 mt-3">
+        n8n URL ve API Key aşağıdaki Otomasyon Ayarları bölümünden girilir.
+      </p>
+    </div>
+  )
+}
+
 // ─── WA Connection Test ───────────────────────────────────────────────────────
 
 function WAConnectTest({ saved }: { saved: boolean }) {
@@ -573,6 +708,9 @@ function SettingsTab() {
 
   return (
     <div className="space-y-5">
+      {/* n8n Bağlantısı */}
+      <N8nCard />
+
       {/* WhatsApp Bağlantısı */}
       <WhatsAppCard />
 
