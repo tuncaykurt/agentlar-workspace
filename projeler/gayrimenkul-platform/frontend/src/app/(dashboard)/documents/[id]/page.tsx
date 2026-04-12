@@ -436,7 +436,7 @@ function SignerRow({
 
 // ─── Print HTML ───────────────────────────────────────────────────────────────
 
-function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest[] = []) {
+function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest[] = [], officeAddress?: string, officeLogo?: string) {
   const data = (doc.template_data || {}) as TemplateData
   const created = formatDate(doc.created_at)
 
@@ -480,6 +480,9 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     .sig-typed { font-family: 'Brush Script MT', cursive; font-size: 22px; color: #1e293b; line-height: 1.2; }
     .footer { margin-top: 40px; font-size: 10px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 10px; }
     .print-btn { background: #2563eb; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; margin-bottom: 24px; }
+    .letterhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .letterhead img { max-height: 70px; max-width: 220px; object-fit: contain; }
+    .letterhead-text { text-align: right; font-size: 11px; color: #444; line-height: 1.6; }
     @media print { .no-print { display: none !important; } body { padding: 20px; } }
   `
 
@@ -601,12 +604,19 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
   <div class="no-print" style="text-align:right;margin-bottom:20px;">
     <button class="print-btn" onclick="window.print()">🖨️ Yazdır / PDF Kaydet</button>
   </div>
+  <div class="letterhead">
+    ${officeLogo ? `<img src="${officeLogo}" alt="${officeName} Logo" />` : `<div style="font-size:18px;font-weight:bold;color:#1e3a5f;">${officeName}</div>`}
+    <div class="letterhead-text">
+      <strong>${officeName}</strong><br>
+      ${officeAddress ? officeAddress.replace(/\n/g, '<br>') : ''}
+    </div>
+  </div>
   <h1>${cfg.title}</h1>
-  <div class="sub">${officeName} &bull; Düzenlenme: ${created}</div>
+  <div class="sub">Düzenlenme: ${created}</div>
   <hr class="divider">
   ${cfg.body}
   <div class="sigs">${cfg.sigs}</div>
-  <div class="footer">Bu belge ${officeName} tarafından ${created} tarihinde düzenlenmiştir. Referans: ${doc.id.slice(0, 8).toUpperCase()}</div>
+  <div class="footer">${officeName}${officeAddress ? ' &bull; ' + officeAddress.split('\n')[0] : ''} &bull; Referans: ${doc.id.slice(0, 8).toUpperCase()}</div>
 </body>
 </html>`
 }
@@ -618,7 +628,9 @@ export default function DocumentDetailPage() {
   const router = useRouter()
   const [doc, setDoc] = useState<DocRow | null>(null)
   const [loading, setLoading] = useState(true)
-  const [officeName, setOfficeName] = useState('Gayrimenkul Ofisi')
+  const [officeName, setOfficeName] = useState('Ambiance Gayrimenkul')
+  const [officeAddress, setOfficeAddress] = useState('Ahmet Yesevi Mah. Hudut Sok. Central Balat Sitesi 1/C\nNilüfer / BURSA')
+  const [officeLogo, setOfficeLogo] = useState('')
   const [appUrl, setAppUrl] = useState('')
   const [sigRequests, setSigRequests] = useState<SigRequest[]>([])
   const [newStatus, setNewStatus] = useState<SignatureStatus>('draft')
@@ -655,7 +667,7 @@ export default function DocumentDetailPage() {
       supabase
         .from('settings')
         .select('key, value')
-        .in('key', ['office_name', 'app_url']),
+        .in('key', ['office_name', 'office_address', 'office_logo', 'app_url']),
     ])
 
     if (docRes.data) {
@@ -669,7 +681,9 @@ export default function DocumentDetailPage() {
     if (settingsRes.data) {
       for (const row of settingsRes.data) {
         const v = String(row.value).replace(/^"|"$/g, '')
-        if (row.key === 'office_name') setOfficeName(v)
+        if (row.key === 'office_name' && v) setOfficeName(v)
+        if (row.key === 'office_address' && v) setOfficeAddress(v)
+        if (row.key === 'office_logo' && v) setOfficeLogo(v)
         if (row.key === 'app_url' && v) setAppUrl(v)
       }
     }
@@ -724,7 +738,7 @@ export default function DocumentDetailPage() {
 
   function handlePrint() {
     if (!doc) return
-    const html = buildPrintHTML(doc, officeName, sigRequests)
+    const html = buildPrintHTML(doc, officeName, sigRequests, officeAddress, officeLogo)
     const w = window.open('', '_blank', 'width=900,height=750,scrollbars=yes')
     if (w) { w.document.write(html); w.document.close(); w.focus() }
   }

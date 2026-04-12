@@ -282,8 +282,10 @@ function generatePrintHTML(params: {
   consultant: Pick<Consultant, 'id' | 'full_name'> | null
   templateData: TemplateData
   officeName: string
+  officeAddress?: string
+  officeLogo?: string
 }) {
-  const { docType, mainClient, secondClient, property, consultant, templateData, officeName } = params
+  const { docType, mainClient, secondClient, property, consultant, templateData, officeName, officeAddress, officeLogo } = params
 
   const today = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })
 
@@ -478,18 +480,30 @@ function generatePrintHTML(params: {
 <head>
   <meta charset="UTF-8">
   <title>${cfg.title}</title>
-  <style>${styles}</style>
+  <style>${styles}
+    .letterhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .letterhead img { max-height: 70px; max-width: 220px; object-fit: contain; }
+    .letterhead-text { text-align: right; font-size: 11px; color: #444; line-height: 1.6; }
+    @media print { .no-print { display: none !important; } body { padding: 20px; } }
+  </style>
 </head>
 <body>
   <div class="no-print" style="text-align:right;margin-bottom:20px;">
     <button class="print-btn" onclick="window.print()">🖨️ Yazdır / PDF Kaydet</button>
   </div>
+  <div class="letterhead">
+    ${officeLogo ? `<img src="${officeLogo}" alt="${officeName} Logo" />` : `<div style="font-size:18px;font-weight:bold;color:#1e3a5f;">${officeName}</div>`}
+    <div class="letterhead-text">
+      <strong>${officeName}</strong><br>
+      ${officeAddress ? officeAddress.replace(/\n/g, '<br>') : ''}
+    </div>
+  </div>
   <h1>${cfg.title}</h1>
-  <div class="sub">${officeName} &bull; ${today}</div>
+  <div class="sub">${today}</div>
   <hr class="divider">
   ${cfg.body}
   <div class="sigs">${cfg.sigs}</div>
-  <div class="footer">Bu belge ${officeName} tarafından ${today} tarihinde düzenlenmiştir.</div>
+  <div class="footer">${officeName}${officeAddress ? ' &bull; ' + officeAddress.split('\n')[0] : ''} &bull; ${today}</div>
 </body>
 </html>`
 }
@@ -501,7 +515,9 @@ export default function NewDocumentPage() {
 
   const [docType, setDocType] = useState<DocumentType>('authorization')
   const [title, setTitle] = useState('')
-  const [officeName, setOfficeName] = useState('Gayrimenkul Ofisi')
+  const [officeName, setOfficeName] = useState('Ambiance Gayrimenkul')
+  const [officeAddress, setOfficeAddress] = useState('Ahmet Yesevi Mah. Hudut Sok. Central Balat Sitesi 1/C\nNilüfer / BURSA')
+  const [officeLogo, setOfficeLogo] = useState('')
   const [consultants, setConsultants] = useState<Pick<Consultant, 'id' | 'full_name'>[]>([])
   const [consultantId, setConsultantId] = useState('')
 
@@ -564,12 +580,15 @@ export default function NewDocumentPage() {
           if (data[0]) setConsultantId(data[0].id)
         }
       })
-    supabase.from('settings').select('value').eq('key', 'office_name').single()
+    const settingsKeys = ['office_name', 'office_address', 'office_logo']
+    supabase.from('settings').select('key, value').in('key', settingsKeys)
       .then(({ data }) => {
-        if (data?.value) {
-          const v = typeof data.value === 'string' ? data.value.replace(/^"|"$/g, '') : String(data.value)
-          setOfficeName(v)
-        }
+        data?.forEach(row => {
+          const v = typeof row.value === 'string' ? row.value.replace(/^"|"$/g, '') : String(row.value)
+          if (row.key === 'office_name' && v) setOfficeName(v)
+          if (row.key === 'office_address' && v) setOfficeAddress(v)
+          if (row.key === 'office_logo' && v) setOfficeLogo(v)
+        })
       })
   }, [])
 
@@ -688,6 +707,8 @@ export default function NewDocumentPage() {
       consultant: consultant as Pick<Consultant, 'id' | 'full_name'> | null,
       templateData: getTemplateData(),
       officeName,
+      officeAddress,
+      officeLogo,
     })
     const w = window.open('', '_blank', 'width=900,height=750,scrollbars=yes')
     if (w) { w.document.write(html); w.document.close(); w.focus() }

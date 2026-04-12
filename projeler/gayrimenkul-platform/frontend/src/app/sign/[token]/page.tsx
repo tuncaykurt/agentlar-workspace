@@ -243,7 +243,7 @@ export default function SignPage() {
   const [state, setState] = useState<PageState>('loading')
   const [sigReq, setSigReq] = useState<SignRequest | null>(null)
   const [doc, setDoc] = useState<DocInfo | null>(null)
-  const [officeName, setOfficeName] = useState('Gayrimenkul Ofisi')
+  const [officeName, setOfficeName] = useState('Ambiance Gayrimenkul')
 
   const [tab, setTab] = useState<'draw' | 'type'>('draw')
   const [typedName, setTypedName] = useState('')
