@@ -102,6 +102,40 @@ async function findCredentialByType(
   }
 }
 
+// Ensure a per-consultant Evolution API credential exists in n8n, return {id, name} or null
+async function ensureEvolutionCredential(
+  cfg: Record<string, string>,
+  waInstance: string,
+  instanceKey: string,
+): Promise<{ id: string; name: string } | null> {
+  const credName = `Evolution ${waInstance}`
+  const evolutionUrl = cfg.evolution_api_url?.replace(/\/$/, '')
+  if (!evolutionUrl || !instanceKey) return null
+
+  // Find existing by name
+  try {
+    const data = await n8nFetch(cfg, 'GET', '/credentials?limit=100')
+    const creds: { id: string; name: string }[] = data.data || []
+    const existing = creds.find(c => c.name === credName)
+    if (existing) return { id: existing.id, name: existing.name }
+  } catch { /* proceed to create */ }
+
+  // Create new credential
+  try {
+    const created = await n8nFetch(cfg, 'POST', '/credentials', {
+      name: credName,
+      type: 'evolutionApi',
+      data: {
+        serverUrl: evolutionUrl,
+        apiKey: instanceKey,
+      },
+    })
+    return { id: created.id, name: created.name }
+  } catch {
+    return null
+  }
+}
+
 // Ensure OpenRouter credential exists in n8n
 async function ensureOpenRouterCredential(cfg: Record<string, string>): Promise<{ id: string; name: string } | null> {
   if (!cfg.openrouter_api_key) return null
@@ -366,7 +400,7 @@ export async function GET(req: NextRequest) {
     const supabase = getServiceClient()
     const { data: consultant } = await supabase
       .from('consultants')
-      .select('id, full_name, wa_instance')
+      .select('id, full_name, wa_instance, evolution_instance_key')
       .eq('id', consultantId)
       .single()
 
@@ -416,7 +450,7 @@ export async function POST(req: NextRequest) {
     const supabase = getServiceClient()
     const { data: consultant } = await supabase
       .from('consultants')
-      .select('id, full_name, wa_instance')
+      .select('id, full_name, wa_instance, evolution_instance_key')
       .eq('id', consultantId)
       .single()
 
@@ -458,12 +492,15 @@ export async function POST(req: NextRequest) {
 
     let workflow
     if (isAiBot) {
-      const evolutionCred = await findCredentialByType(cfg, 'evolutionApi', 'evolution')
+      const waInstance = consultant.wa_instance || consultant.full_name
+      const evolutionCred = consultant.evolution_instance_key
+        ? await ensureEvolutionCredential(cfg, waInstance, consultant.evolution_instance_key)
+        : await findCredentialByType(cfg, 'evolutionApi', 'evolution')
       const openRouterCred = await findCredentialByType(cfg, 'openRouterApi', 'openrouter') || await ensureOpenRouterCredential(cfg)
       workflow = buildAiBotWorkflow(
         name,
         consultant.id,
-        consultant.wa_instance || consultant.full_name,
+        waInstance,
         systemPrompt || '',
         message || DEFAULT_USER_PROMPT,
         evolutionCred,
@@ -495,12 +532,15 @@ export async function POST(req: NextRequest) {
         credName,
       )
     } else {
-      const evolutionCred = await findCredentialByType(cfg, 'evolutionApi', 'evolution')
+      const waInstance = consultant.wa_instance || consultant.full_name
+      const evolutionCred = consultant.evolution_instance_key
+        ? await ensureEvolutionCredential(cfg, waInstance, consultant.evolution_instance_key)
+        : await findCredentialByType(cfg, 'evolutionApi', 'evolution')
       workflow = buildWaWorkflow(
         templateId,
         name,
         consultant.id,
-        consultant.wa_instance || consultant.full_name,
+        waInstance,
         message || 'Merhaba, size ulaşmak istedik.',
         evolutionCred,
       )

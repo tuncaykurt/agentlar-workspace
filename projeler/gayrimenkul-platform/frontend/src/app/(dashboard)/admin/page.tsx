@@ -9,7 +9,7 @@ import {
   MessageCircle, Building2, Globe,
   Eye, EyeOff, Save, RefreshCw, Wifi, WifiOff,
   QrCode, X, Smartphone, Upload, Trash2,
-  Zap,
+  Zap, Key,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -757,6 +757,8 @@ function ConsultantsTab() {
   const [loading, setLoading] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)
   const [editRate, setEditRate] = useState('')
+  const [editKeyId, setEditKeyId] = useState<string | null>(null)
+  const [editKey, setEditKey] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { fetchConsultants() }, [])
@@ -778,6 +780,16 @@ function ConsultantsTab() {
     await supabase.from('consultants').update({ commission_rate: Number(editRate) }).eq('id', id)
     setEditId(null)
     setEditRate('')
+    setSaving(false)
+    fetchConsultants()
+  }
+
+  async function updateKey(id: string) {
+    setSaving(true)
+    const supabase = createClient()
+    await supabase.from('consultants').update({ evolution_instance_key: editKey.trim() || null }).eq('id', id)
+    setEditKeyId(null)
+    setEditKey('')
     setSaving(false)
     fetchConsultants()
   }
@@ -894,6 +906,35 @@ function ConsultantsTab() {
                     )}
                   </div>
 
+                  {/* Evolution API Key per instance */}
+                  <div className="flex items-center gap-1">
+                    {editKeyId === c.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={editKey}
+                          onChange={e => setEditKey(e.target.value)}
+                          className="w-32 border border-purple-300 rounded px-2 py-0.5 text-xs focus:outline-none font-mono"
+                          placeholder="Evolution API Key"
+                        />
+                        <button onClick={() => updateKey(c.id)} disabled={saving} className="text-green-600 hover:text-green-700">
+                          {saving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={14} />}
+                        </button>
+                        <button onClick={() => setEditKeyId(null)} className="text-slate-400">
+                          <XCircle size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEditKeyId(c.id); setEditKey(c.evolution_instance_key || '') }}
+                        className={`p-1.5 rounded-lg transition-colors ${c.evolution_instance_key ? 'text-purple-600 hover:bg-purple-50' : 'text-slate-300 hover:bg-slate-100'}`}
+                        title={c.evolution_instance_key ? 'Evolution API Key var — düzenle' : 'Evolution API Key ekle'}
+                      >
+                        <Key size={14} />
+                      </button>
+                    )}
+                  </div>
+
                   <button
                     onClick={() => toggleActive(c.id, c.is_active)}
                     className={`p-1.5 rounded-lg transition-colors ${
@@ -968,7 +1009,7 @@ function AutomationsTab() {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.from('consultants').select('id, full_name, wa_instance, is_active').order('full_name').then(({ data }) => {
+    supabase.from('consultants').select('id, full_name, wa_instance, evolution_instance_key, is_active').order('full_name').then(({ data }) => {
       if (data) setConsultants(data as Consultant[])
     })
   }, [])

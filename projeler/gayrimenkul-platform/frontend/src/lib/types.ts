@@ -38,6 +38,7 @@ export interface Consultant {
   linkedin_url?: string
   wa_instance?: string
   wa_phone?: string
+  evolution_instance_key?: string
   wa_connected_at?: string
   is_active: boolean
   created_at: string
