@@ -48,6 +48,7 @@ export default function NewClientPage() {
 
   const [form, setForm] = useState({
     full_name: '',
+    salutation: '',
     phone: '',
     email: '',
     client_type: 'buyer' as ClientType,
@@ -90,6 +91,7 @@ export default function NewClientPage() {
 
     const payload = {
       full_name: form.full_name.trim(),
+      salutation: form.salutation.trim() || null,
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
       client_type: form.client_type,
@@ -143,17 +145,39 @@ export default function NewClientPage() {
             <User size={16} /> Temel Bilgiler
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Ad Soyad <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={form.full_name}
-                onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-                placeholder="Ahmet Yılmaz"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <div className="sm:col-span-2 flex gap-3">
+              <div className="w-36">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Hitap Şekli</label>
+                <select
+                  value={form.salutation}
+                  onChange={e => setForm(f => ({ ...f, salutation: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">—</option>
+                  <option value="Bey">Bey</option>
+                  <option value="Hanım">Hanım</option>
+                  <option value="Dr.">Dr.</option>
+                  <option value="Op. Dr.">Op. Dr.</option>
+                  <option value="Uzm. Dr.">Uzm. Dr.</option>
+                  <option value="Av.">Av.</option>
+                  <option value="Prof.">Prof.</option>
+                  <option value="Prof. Dr.">Prof. Dr.</option>
+                  <option value="Doç.">Doç.</option>
+                  <option value="Müh.">Müh.</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Ad Soyad <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.full_name}
+                  onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
+                  placeholder="Ahmet Yılmaz"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">

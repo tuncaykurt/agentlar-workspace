@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import type { Client, LeadStatus, ClientType } from '@/lib/types'
 import {
   Search,
   Plus,
-  Filter,
   Phone,
   Mail,
   ChevronRight,
@@ -15,6 +14,10 @@ import {
   Clock,
   TrendingUp,
   CheckCircle,
+  Upload,
+  X,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react'
 
 const statusColors: Record<LeadStatus, string> = {
@@ -46,12 +49,174 @@ const typeLabels: Record<ClientType, string> = {
   landlord: 'Ev Sahibi',
 }
 
+// ─── VCF Parser ──────────────────────────────────────────────────────────────
+
+function decodeQP(str: string): string {
+  // Handle soft line breaks (=\n or =\r\n)
+  const joined = str.replace(/=\r?\n/g, '')
+  // Decode =XX hex sequences → byte array → UTF-8 string
+  const bytes: number[] = []
+  let i = 0
+  while (i < joined.length) {
+    if (joined[i] === '=' && i + 2 < joined.length) {
+      const hex = joined.substring(i + 1, i + 3)
+      if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
+        bytes.push(parseInt(hex, 16))
+        i += 3
+        continue
+      }
+    }
+    bytes.push(joined.charCodeAt(i) & 0xff)
+    i++
+  }
+  try {
+    return new TextDecoder('utf-8').decode(new Uint8Array(bytes))
+  } catch {
+    return joined
+  }
+}
+
+function decodeFieldValue(params: string[], value: string): string {
+  const isQP = params.some(p => /ENCODING=QUOTED-PRINTABLE/i.test(p))
+  if (isQP) return decodeQP(value)
+  return value
+}
+
+interface ParsedContact {
+  full_name: string
+  salutation: string
+  phone: string
+  email: string
+  org: string
+  notes: string
+}
+
+function detectSalutation(name: string): { cleanName: string; salutation: string } {
+  // Suffix-based (Turkish post-nominal honorifics)
+  const suffixRules: [RegExp, string][] = [
+    [/\s+Bey$/i, 'Bey'],
+    [/\s+Han[iı]m$/i, 'Hanım'],
+    [/\s+Efendi$/i, 'Efendi'],
+  ]
+  for (const [re, sal] of suffixRules) {
+    if (re.test(name)) {
+      return { cleanName: name.replace(re, '').trim(), salutation: sal }
+    }
+  }
+
+  // Prefix-based (professional titles)
+  const prefixRules: [RegExp, string][] = [
+    [/^Dr\.\s*/i, 'Dr.'],
+    [/^Av\.\s*/i, 'Av.'],
+    [/^Prof\.\s*Dr\.\s*/i, 'Prof. Dr.'],
+    [/^Prof\.\s*/i, 'Prof.'],
+    [/^Doç\.\s*Dr\.\s*/i, 'Doç. Dr.'],
+    [/^Doç\.\s*/i, 'Doç.'],
+    [/^Uzm\.\s*Dr\.\s*/i, 'Uzm. Dr.'],
+    [/^Uzm\.\s*/i, 'Uzm.'],
+    [/^Yrd\.\s*Doç\.\s*/i, 'Yrd. Doç.'],
+    [/^Mh\.\s*/i, 'Mh.'],
+    [/^Müh\.\s*/i, 'Müh.'],
+    [/^Op\.\s*Dr\.\s*/i, 'Op. Dr.'],
+  ]
+  for (const [re, sal] of prefixRules) {
+    if (re.test(name)) {
+      return { cleanName: name.replace(re, '').trim(), salutation: sal }
+    }
+  }
+
+  return { cleanName: name, salutation: '' }
+}
+
+function parseVCF(text: string): ParsedContact[] {
+  const contacts: ParsedContact[] = []
+
+  // Normalize line endings
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
+  // Split into vCard blocks
+  const cardBlocks = normalized.split(/^BEGIN:VCARD$/im)
+
+  for (const block of cardBlocks.slice(1)) {
+    // Unfold lines (RFC 2425: continuation lines start with space/tab)
+    const unfolded = block.replace(/\n[ \t]/g, '')
+    const lines = unfolded.split('\n')
+
+    let fn = ''
+    let phone = ''
+    let email = ''
+    let org = ''
+    let notes = ''
+
+    for (const line of lines) {
+      if (!line || /^END:VCARD/i.test(line)) continue
+
+      const colonIdx = line.indexOf(':')
+      if (colonIdx === -1) continue
+
+      const propPart = line.substring(0, colonIdx)
+      const valuePart = line.substring(colonIdx + 1).trim()
+
+      const propSegments = propPart.split(';')
+      const propName = propSegments[0].toUpperCase()
+      const params = propSegments.slice(1)
+
+      const decoded = decodeFieldValue(params, valuePart)
+
+      if (propName === 'FN') {
+        fn = decoded.trim()
+      } else if (propName === 'N' && !fn) {
+        // N format: Last;First;Middle;Prefix;Suffix
+        const parts = decoded.split(';')
+        const last = parts[0]?.trim() || ''
+        const first = parts[1]?.trim() || ''
+        fn = [first, last].filter(Boolean).join(' ')
+      } else if (propName === 'TEL') {
+        if (!phone && valuePart.trim()) {
+          phone = valuePart.trim().replace(/\s+/g, '')
+        }
+      } else if (propName === 'EMAIL') {
+        if (!email) email = decoded.trim()
+      } else if (propName === 'ORG') {
+        org = decoded.split(';')[0].trim()
+      } else if (propName === 'NOTE') {
+        notes = decoded.trim()
+      }
+    }
+
+    if (!fn || !phone) continue
+
+    const { cleanName, salutation } = detectSalutation(fn)
+
+    contacts.push({
+      full_name: cleanName || fn,
+      salutation,
+      phone,
+      email,
+      org,
+      notes,
+    })
+  }
+
+  return contacts
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function CRMPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<LeadStatus | 'all'>('all')
   const [filterType, setFilterType] = useState<ClientType | 'all'>('all')
+
+  // VCF import state
+  const [showImport, setShowImport] = useState(false)
+  const [parsedContacts, setParsedContacts] = useState<ParsedContact[]>([])
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ ok: number; skip: number } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchClients()
@@ -83,6 +248,89 @@ export default function CRMPage() {
     )
   })
 
+  // ── VCF handlers ──
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const contacts = parseVCF(text)
+      setParsedContacts(contacts)
+      setSelected(new Set(contacts.map((_, i) => i)))
+      setImportResult(null)
+    }
+    reader.readAsText(file, 'utf-8')
+  }
+
+  function toggleSelect(i: number) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (selected.size === parsedContacts.length) setSelected(new Set())
+    else setSelected(new Set(parsedContacts.map((_, i) => i)))
+  }
+
+  async function handleImport() {
+    if (selected.size === 0) return
+    setImporting(true)
+
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: consultant } = await supabase
+      .from('consultants').select('id').eq('user_id', user?.id).single()
+
+    const rows = Array.from(selected).map(i => {
+      const c = parsedContacts[i]
+      const notesParts = []
+      if (c.org) notesParts.push(`Firma: ${c.org}`)
+      if (c.notes) notesParts.push(c.notes)
+      return {
+        full_name: c.full_name,
+        salutation: c.salutation,
+        phone: c.phone,
+        email: c.email || null,
+        notes: notesParts.join('\n') || null,
+        client_type: 'buyer' as const,
+        lead_status: 'new' as const,
+        source: 'other' as const,
+        assigned_consultant_id: consultant?.id || null,
+      }
+    })
+
+    // Insert in batches of 50
+    let okCount = 0
+    let skipCount = 0
+    for (let i = 0; i < rows.length; i += 50) {
+      const batch = rows.slice(i, i + 50)
+      const { data, error } = await supabase.from('clients').insert(batch).select('id')
+      if (error) {
+        skipCount += batch.length
+      } else {
+        okCount += data?.length || 0
+      }
+    }
+
+    setImportResult({ ok: okCount, skip: skipCount })
+    setImporting(false)
+    fetchClients()
+  }
+
+  function closeImport() {
+    setShowImport(false)
+    setParsedContacts([])
+    setSelected(new Set())
+    setImportResult(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   return (
     <div className="p-6">
       {/* Başlık */}
@@ -91,10 +339,17 @@ export default function CRMPage() {
           <h1 className="text-2xl font-bold text-slate-900">CRM</h1>
           <p className="text-slate-500 text-sm mt-1">Tüm müşterilerinizi buradan yönetin</p>
         </div>
-        <Link href="/crm/new" className="btn-primary flex items-center gap-2">
-          <Plus size={16} />
-          Yeni Müşteri
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <Upload size={15} /> VCF İçe Aktar
+          </button>
+          <Link href="/crm/new" className="btn-primary flex items-center gap-2">
+            <Plus size={16} /> Yeni Müşteri
+          </Link>
+        </div>
       </div>
 
       {/* Özet Kartlar */}
@@ -193,8 +448,10 @@ export default function CRMPage() {
                 {/* Bilgiler */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <p className="font-medium text-slate-900 text-sm truncate">{client.full_name}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${typeLabels[client.client_type] ? 'bg-slate-100 text-slate-600' : ''}`}>
+                    <p className="font-medium text-slate-900 text-sm truncate">
+                      {client.salutation ? `${client.salutation} ` : ''}{client.full_name}
+                    </p>
+                    <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 bg-slate-100 text-slate-600">
                       {typeLabels[client.client_type]}
                     </span>
                   </div>
@@ -229,6 +486,128 @@ export default function CRMPage() {
           </div>
         )}
       </div>
+
+      {/* ── VCF Import Modal ─────────────────────────────────────────────── */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            {/* Modal Başlık */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <h2 className="font-semibold text-slate-900">VCF Kişi Dosyası İçe Aktar</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Telefondan indirilen .vcf dosyasını seçin</p>
+              </div>
+              <button onClick={closeImport} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {/* Dosya Seç */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".vcf,text/vcard"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full border-2 border-dashed border-slate-200 rounded-xl py-6 flex flex-col items-center gap-2 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                >
+                  <Upload size={24} />
+                  <span className="text-sm font-medium">
+                    {parsedContacts.length > 0
+                      ? `${parsedContacts.length} kişi bulundu — başka dosya seçmek için tıklayın`
+                      : '.vcf dosyasını seçmek için tıklayın'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Kişi Listesi */}
+              {parsedContacts.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-slate-700">
+                      {selected.size} / {parsedContacts.length} kişi seçili
+                    </p>
+                    <button
+                      onClick={toggleAll}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      {selected.size === parsedContacts.length ? 'Tümünü Kaldır' : 'Tümünü Seç'}
+                    </button>
+                  </div>
+
+                  <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                    {parsedContacts.map((c, i) => (
+                      <label
+                        key={i}
+                        className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 ${selected.has(i) ? 'bg-blue-50/40' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected.has(i)}
+                          onChange={() => toggleSelect(i)}
+                          className="rounded border-slate-300 text-blue-600"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {c.salutation && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium">
+                                {c.salutation}
+                              </span>
+                            )}
+                            <span className="text-sm font-medium text-slate-900 truncate">{c.full_name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
+                            <span>{c.phone}</span>
+                            {c.org && <span className="truncate text-slate-400">{c.org}</span>}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Sonuç */}
+              {importResult && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                  importResult.skip > 0 ? 'bg-yellow-50 text-yellow-800' : 'bg-green-50 text-green-800'
+                }`}>
+                  {importResult.skip > 0
+                    ? <AlertCircle size={15} />
+                    : <CheckCircle size={15} />}
+                  <span>
+                    {importResult.ok} kişi başarıyla aktarıldı
+                    {importResult.skip > 0 && `, ${importResult.skip} kişi aktarılamadı`}.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
+              <button onClick={closeImport} className="btn-secondary flex-1">
+                {importResult ? 'Kapat' : 'İptal'}
+              </button>
+              {!importResult && (
+                <button
+                  onClick={handleImport}
+                  disabled={importing || selected.size === 0}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {importing
+                    ? <><Loader2 size={15} className="animate-spin" /> Aktarılıyor...</>
+                    : <><Upload size={15} /> {selected.size} Kişiyi Aktar</>}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -14,11 +14,13 @@ import {
   UserCircle,
   Settings,
   LogOut,
+  BookUser,
 } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/crm', label: 'CRM', icon: Users },
+  { href: '/rehber', label: 'Rehber', icon: BookUser },
   { href: '/portfolio', label: 'Portföy', icon: Building2 },
   { href: '/finance', label: 'Finans', icon: DollarSign },
   { href: '/communications', label: 'İletişim', icon: MessageSquare },

@@ -7,6 +7,10 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    instrumentationHook: true,
+  },
+  serverExternalPackages: [],
 };
 
 export default nextConfig;

@@ -48,6 +48,7 @@ export interface Certification {
 export interface Client {
   id: string
   full_name: string
+  salutation?: string
   phone?: string
   email?: string
   client_type: ClientType
