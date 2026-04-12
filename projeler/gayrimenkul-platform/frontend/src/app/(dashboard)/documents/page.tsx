@@ -146,7 +146,7 @@ export default function DocumentsPage() {
               const sigConf = sigStatusConfig[doc.signature_status]
               const SigIcon = sigConf.icon
               return (
-                <div key={doc.id} className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors">
+                <Link key={doc.id} href={`/documents/${doc.id}`} className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors cursor-pointer">
                   {/* Tip ikonu */}
                   <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
                     <FileText size={18} className="text-slate-500" />
@@ -188,7 +188,7 @@ export default function DocumentsPage() {
                     )}
                     <ChevronRight size={15} className="text-slate-300" />
                   </div>
-                </div>
+                </Link>
               )
             })}
           </div>
