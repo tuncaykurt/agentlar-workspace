@@ -295,7 +295,8 @@ function SignerRow({
         onRefresh()
       } else {
         const errData = await res.json().catch(() => ({}))
-        setSendError(errData.error || `HTTP ${res.status}`)
+        const detail = errData.detail ? ` (${errData.detail.slice(0, 120)})` : ''
+        setSendError((errData.error || `HTTP ${res.status}`) + detail)
         setSendResult('error')
       }
     } catch (e) {

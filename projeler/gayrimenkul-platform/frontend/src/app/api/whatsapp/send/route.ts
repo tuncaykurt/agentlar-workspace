@@ -66,9 +66,12 @@ export async function POST(req: NextRequest) {
 
     if (!res.ok) {
       const errText = await res.text()
-      console.error('[whatsapp/send] Evolution API error:', res.status, errText)
+      console.error('[whatsapp/send] Evolution API error:', res.status, errText, '| instance:', evolutionInstance, '| phone:', normalizedPhone)
+      // Try to parse JSON for a cleaner error message
+      let detail = ''
+      try { detail = JSON.parse(errText)?.message || JSON.parse(errText)?.error || '' } catch { /* ignore */ }
       return NextResponse.json(
-        { error: `Evolution API hatası: ${res.status}` },
+        { error: `Evolution API ${res.status}${detail ? ': ' + detail : ''}`, detail: errText, instance: evolutionInstance, phone: normalizedPhone },
         { status: 502 }
       )
     }
