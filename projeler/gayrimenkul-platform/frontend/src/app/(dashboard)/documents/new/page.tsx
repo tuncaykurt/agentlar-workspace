@@ -271,6 +271,51 @@ function PropertySearch({ value, onChange }: { value: Property | null; onChange:
   )
 }
 
+// ─── Money Input ─────────────────────────────────────────────────────────────
+
+function MoneyInput({
+  value,
+  onChange,
+  className,
+  placeholder,
+}: {
+  value: string
+  onChange: (raw: string) => void
+  className?: string
+  placeholder?: string
+}) {
+  // Format: raw number string → "1.200.000"
+  const format = (raw: string) => {
+    const digits = raw.replace(/\D/g, '')
+    if (!digits) return ''
+    return parseInt(digits, 10).toLocaleString('tr-TR')
+  }
+
+  const [display, setDisplay] = useState(format(value))
+
+  // Sync when value changes from outside (auto-calculation)
+  useEffect(() => {
+    setDisplay(format(value))
+  }, [value])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\./g, '').replace(/,/g, '').replace(/\D/g, '')
+    setDisplay(format(raw))
+    onChange(raw)
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={display}
+      onChange={handleChange}
+      className={className}
+      placeholder={placeholder}
+    />
+  )
+}
+
 // ─── Print HTML Generator ─────────────────────────────────────────────────────
 
 function generatePrintHTML(params: {
@@ -870,11 +915,11 @@ export default function NewDocumentPage() {
               <div className={row2}>
                 <div>
                   <label className={lbl}>Satış Bedeli (₺)</label>
-                  <input type="number" value={satisBedeli} onChange={e => setSatisBedeli(e.target.value)} className={inp} placeholder="0" />
+                  <MoneyInput value={satisBedeli} onChange={setSatisBedeli} className={inp} placeholder="0" />
                 </div>
                 <div>
                   <label className={lbl}>Kapora Tutarı (₺)</label>
-                  <input type="number" value={kapora} onChange={e => setKapora(e.target.value)} className={inp} placeholder="0" />
+                  <MoneyInput value={kapora} onChange={setKapora} className={inp} placeholder="0" />
                 </div>
               </div>
               <div className={row2}>
@@ -909,7 +954,7 @@ export default function NewDocumentPage() {
               {/* Tapuda ödenecek */}
               <div>
                 <label className={lbl}>Tapuda Ödenecek (₺) <span className="text-xs font-normal text-slate-400">— otomatik: satış − satıcıdan hizmet bedeli</span></label>
-                <input type="number" value={tapudaOdenecek} onChange={e => setTapudaOdenecek(e.target.value)} className={inp} placeholder="0" />
+                <MoneyInput value={tapudaOdenecek} onChange={setTapudaOdenecek} className={inp} placeholder="0" />
               </div>
 
               {/* Hizmet bedeli */}
@@ -928,21 +973,21 @@ export default function NewDocumentPage() {
                 <div className={row2}>
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Alıcıdan Hizmet Bedeli (₺ +KDV)</label>
-                    <input type="number" value={hizmetBedeliAlici} onChange={e => setHizmetBedeliAlici(e.target.value)} className={inp} placeholder="0" />
+                    <MoneyInput value={hizmetBedeliAlici} onChange={setHizmetBedeliAlici} className={inp} placeholder="0" />
                   </div>
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Satıcıdan Hizmet Bedeli (₺ +KDV)</label>
-                    <input type="number" value={hizmetBedeliSatici} onChange={e => setHizmetBedeliSatici(e.target.value)} className={inp} placeholder="0" />
+                    <MoneyInput value={hizmetBedeliSatici} onChange={setHizmetBedeliSatici} className={inp} placeholder="0" />
                   </div>
                 </div>
                 <div className={row2}>
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Toplam Hizmet Bedeli (₺) — kapora = hizmet bedeli</label>
-                    <input type="number" value={hizmetBedeli} onChange={e => setHizmetBedeli(e.target.value)} className={`${inp} font-semibold`} placeholder="0" />
+                    <MoneyInput value={hizmetBedeli} onChange={setHizmetBedeli} className={`${inp} font-semibold`} placeholder="0" />
                   </div>
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Ceza Miktarı (₺) — vazgeçme</label>
-                    <input type="number" value={cezaMiktari} onChange={e => setCezaMiktari(e.target.value)} className={inp} placeholder="0" />
+                    <MoneyInput value={cezaMiktari} onChange={setCezaMiktari} className={inp} placeholder="0" />
                   </div>
                 </div>
               </div>
@@ -954,11 +999,11 @@ export default function NewDocumentPage() {
               <div className={row2}>
                 <div>
                   <label className={lbl}>Aylık Kira (₺)</label>
-                  <input type="number" value={aylikKira} onChange={e => setAylikKira(e.target.value)} className={inp} placeholder="0" />
+                  <MoneyInput value={aylikKira} onChange={setAylikKira} className={inp} placeholder="0" />
                 </div>
                 <div>
                   <label className={lbl}>Depozito (₺)</label>
-                  <input type="number" value={depozito} onChange={e => setDepozito(e.target.value)} className={inp} placeholder="0" />
+                  <MoneyInput value={depozito} onChange={setDepozito} className={inp} placeholder="0" />
                 </div>
               </div>
               <div className={row2}>
@@ -982,7 +1027,7 @@ export default function NewDocumentPage() {
             <div className={row2}>
               <div>
                 <label className={lbl}>Teklif Bedeli (₺)</label>
-                <input type="number" value={teklifBedeli} onChange={e => setTeklifBedeli(e.target.value)} className={inp} placeholder="0" />
+                <MoneyInput value={teklifBedeli} onChange={setTeklifBedeli} className={inp} placeholder="0" />
               </div>
               <div>
                 <label className={lbl}>Geçerlilik Tarihi</label>
