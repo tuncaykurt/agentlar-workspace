@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const DEFAULT_USER_PROMPT = `Aşağıdaki WhatsApp mesajını analiz et ve danışman olarak samimi bir cevap üret:
+const DEFAULT_USER_PROMPT = `Gönderen: {{ $('Webhook').item.json.body.data.pushName || 'Müşteri' }}
+Mesaj: {{ $('Webhook').item.json.body.data.message.conversation || $('Webhook').item.json.body.data.message.extendedTextMessage?.text || '[Ses/görsel/çıkartma]' }}
 
-Gönderen: {{ $json.body.data.pushName }}
-Mesaj: {{ $json.body.data.message.conversation || "Metin dışı mesaj (görsel/ses/çıkartma)" }}
-Tür: {{ $json.body.data.messageType }}
-Kaynak: {{ $json.body.data.key.remoteJid.endsWith('@g.us') ? 'Grup Mesajı' : 'Kişisel Mesaj' }}`
+Danışman olarak bu mesaja kısa ve doğal bir WhatsApp yanıtı yaz.`
 
 function getServiceClient() {
   return createClient(
@@ -315,12 +313,33 @@ function buildAiBotWorkflow(
     name: 'Webhook',
     type: 'n8n-nodes-base.webhook',
     typeVersion: 2.1,
-    position: [-304, -48] as [number, number],
+    position: [-520, -48] as [number, number],
     webhookId: crypto.randomUUID(),
     parameters: {
       httpMethod: 'POST',
       path: `wa_aibot-${consultantId}`,
       options: {},
+    },
+  }
+
+  // Filter out bot's own sent messages to prevent infinite loop
+  const filterNode = {
+    id: crypto.randomUUID(),
+    name: 'Kendi Mesajı mı?',
+    type: 'n8n-nodes-base.if',
+    typeVersion: 2,
+    position: [-304, -48] as [number, number],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [{
+          id: crypto.randomUUID(),
+          leftValue: '={{ $json.body.data.key.fromMe }}',
+          rightValue: false,
+          operator: { type: 'boolean', operation: 'equals' },
+        }],
+        combinator: 'and',
+      },
     },
   }
 
@@ -387,9 +406,10 @@ function buildAiBotWorkflow(
 
   return {
     name: workflowName,
-    nodes: [webhookNode, aiAgentNode, openRouterNode, memoryNode, sendNode],
+    nodes: [webhookNode, filterNode, aiAgentNode, openRouterNode, memoryNode, sendNode],
     connections: {
-      Webhook: { main: [[{ node: 'AI Agent', type: 'main', index: 0 }]] },
+      Webhook: { main: [[{ node: 'Kendi Mesajı mı?', type: 'main', index: 0 }]] },
+      'Kendi Mesajı mı?': { main: [[{ node: 'AI Agent', type: 'main', index: 0 }], []] },
       'AI Agent': { main: [[{ node: 'Send text', type: 'main', index: 0 }]] },
       'OpenRouter Chat Model': { ai_languageModel: [[{ node: 'AI Agent', type: 'ai_languageModel', index: 0 }]] },
       'Simple Memory': { ai_memory: [[{ node: 'AI Agent', type: 'ai_memory', index: 0 }]] },
