@@ -46,8 +46,22 @@ function clientName(c?: { full_name: string; salutation?: string } | null) {
   return `${c.salutation ? c.salutation + ' ' : ''}${c.full_name}`.trim()
 }
 
+type SigRow = { signer_role: string; status: string; signature_data: string | null; signature_type: string | null; signer_name: string }
+
+function sigArea(signatures: SigRow[], role: string): string {
+  const req = signatures.find(r => r.signer_role === role && r.status === 'signed')
+  if (!req) return ''
+  if (req.signature_type === 'drawn' && req.signature_data?.startsWith('data:image')) {
+    return `<div style="margin:4px 0;"><img src="${req.signature_data}" alt="İmza" style="max-height:60px;max-width:180px;object-fit:contain;" /></div>`
+  }
+  if (req.signature_type === 'typed' && req.signature_data) {
+    return `<div style="margin:4px 0;font-family:'Brush Script MT',cursive;font-size:22px;color:#1a237e;">${req.signature_data}</div>`
+  }
+  return ''
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function generateDocHTML(doc: any, settings: Record<string, string>) {
+function generateDocHTML(doc: any, settings: Record<string, string>, signatures: SigRow[] = []) {
   const data = (doc.template_data || {}) as Record<string, string | null>
   const officeName = settings.office_name || 'Ambiance Gayrimenkul'
   const officeAddress = settings.office_address || ''
@@ -106,9 +120,9 @@ function generateDocHTML(doc: any, settings: Record<string, string>) {
       </div>`
 
     const sigs = `
-      <div class="sig"><div class="sig-line">SATICI<br><strong>${clientName(doc.client)}</strong></div></div>
-      <div class="sig"><div class="sig-line">ALICI<br><strong>${secondName}</strong></div></div>
-      <div class="sig"><div class="sig-line">Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}SATICI<br><strong>${clientName(doc.client)}</strong></div></div>
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'second')}ALICI<br><strong>${secondName}</strong></div></div>
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
       ${letterhead}
@@ -147,9 +161,9 @@ function generateDocHTML(doc: any, settings: Record<string, string>) {
       </table>`
 
     const sigs = `
-      <div class="sig"><div class="sig-line">KİRAYA VEREN<br><strong>${clientName(doc.client)}</strong></div></div>
-      <div class="sig"><div class="sig-line">KİRACI<br><strong>${secondName}</strong></div></div>
-      <div class="sig"><div class="sig-line">Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}KİRAYA VEREN<br><strong>${clientName(doc.client)}</strong></div></div>
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'second')}KİRACI<br><strong>${secondName}</strong></div></div>
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>GAYRİMENKUL KİRA SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
       ${letterhead}
@@ -237,8 +251,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>) {
       </div>`
 
     const sigs = `
-      <div class="sig"><div class="sig-line">MÜŞTERİ<br><strong>${clientName(doc.client)}</strong></div></div>
-      <div class="sig"><div class="sig-line">GAYRİMENKUL DANIŞMANI<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Adına İmza</div></div>
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}MÜŞTERİ<br><strong>${clientName(doc.client)}</strong></div></div>
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}GAYRİMENKUL DANIŞMANI<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Adına İmza</div></div>
       <div class="sig" style="max-width:130px;"><div class="sig-line">TARİH<br>${today}</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
@@ -276,7 +290,7 @@ export async function GET(
     return new NextResponse('Belge bulunamadı.', { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
   }
 
-  const [docRes, settingsRes] = await Promise.all([
+  const [docRes, settingsRes, sigsRes] = await Promise.all([
     supabase
       .from('documents')
       .select('id, title, doc_type, template_data, client:clients(id, full_name, salutation, phone, address, email), property:properties(id, title, city, district, address, property_type), consultant:consultants(id, full_name)')
@@ -286,6 +300,10 @@ export async function GET(
       .from('settings')
       .select('key, value')
       .in('key', ['office_name', 'office_address', 'office_logo']),
+    supabase
+      .from('signature_requests')
+      .select('signer_role, status, signature_data, signature_type, signer_name')
+      .eq('document_id', sigReq.document_id),
   ])
 
   if (!docRes.data) {
@@ -297,7 +315,9 @@ export async function GET(
     settings[row.key] = String(row.value || '').replace(/^"|"$/g, '')
   }
 
-  const html = generateDocHTML(docRes.data, settings)
+  const signatures = (sigsRes.data || []) as { signer_role: string; status: string; signature_data: string | null; signature_type: string | null; signer_name: string }[]
+
+  const html = generateDocHTML(docRes.data, settings, signatures)
   return new NextResponse(html, {
     status: 200,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
