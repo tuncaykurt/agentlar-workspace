@@ -565,7 +565,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
             <td style="text-align:center;">${chk(!['detached_house','apartment','commercial','office','shop','villa','land'].includes(propType))} Diğer</td>
           </tr>
           <tr><td colspan="2" style="font-weight:bold;">Adresi</td><td colspan="5">${propAddr}</td></tr>
-          <tr><td style="font-weight:bold;">İlçesi</td><td colspan="2">${doc.property?.district || '___'}</td><td style="font-weight:bold;">İli</td><td colspan="3">${doc.property?.city || '___'}</td></tr>
+          <tr><td style="font-weight:bold;">Mahallesi</td><td colspan="2">${(data.mahalle as string) || '_______________'}</td><td style="font-weight:bold;">İlçesi</td><td>${(data.ilce as string) || doc.property?.district || '___'}</td><td style="font-weight:bold;">İli</td><td>${(data.il as string) || doc.property?.city || '___'}</td></tr>
           <tr><td colspan="2" style="font-weight:bold;">Tapu Kayıt Bilg.</td><td>Pafta: ${data.pafta || '___'}</td><td colspan="2">Ada: ${data.ada || '___'}</td><td colspan="2">Parsel: ${data.parsel || '___'}</td></tr>
           <tr><td colspan="2" style="font-weight:bold;">Diğer Özellikler</td><td colspan="5">${data.ozel_sartlar || ''}</td></tr>
         </table>
