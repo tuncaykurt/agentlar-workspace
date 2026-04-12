@@ -380,6 +380,9 @@ function N8nCard() {
   const [workflows, setWorkflows] = useState<N8nWorkflow[]>([])
   const [showWorkflows, setShowWorkflows] = useState(false)
 
+  // Auto-test on mount
+  useEffect(() => { test() }, [])
+
   async function test() {
     setStatus('testing')
     setError('')
@@ -423,8 +426,7 @@ function N8nCard() {
         }`} />
         <div className="flex-1">
           <p className={`text-sm font-medium ${
-            status === 'idle' ? 'text-slate-400' :
-            status === 'testing' ? 'text-slate-400' :
+            status === 'idle' || status === 'testing' ? 'text-slate-400' :
             status === 'ok' ? 'text-green-600' : 'text-red-500'
           }`}>
             {status === 'idle' ? 'Henüz test edilmedi' :
@@ -443,11 +445,11 @@ function N8nCard() {
         )}
       </div>
 
-      {/* Hint for setup */}
+      {/* Error hint */}
       {status === 'error' && (
         <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-4">
           <p className="font-medium mb-0.5">Bağlantı kurulamadı</p>
-          <p>Aşağıdan n8n URL ve API Key bilgilerini girin, ardından tekrar test edin.</p>
+          <p>Aşağıdaki <strong>Otomasyon Ayarları</strong> bölümünden n8n URL ve API Key girin, kaydedin, sonra tekrar test edin.</p>
         </div>
       )}
 
@@ -478,17 +480,18 @@ function N8nCard() {
         </div>
       )}
 
+      {/* Prominent test button */}
       <button
         onClick={test}
         disabled={status === 'testing'}
-        className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+        className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium disabled:opacity-50 transition-colors"
       >
         <RefreshCw size={14} className={status === 'testing' ? 'animate-spin' : ''} />
         {status === 'testing' ? 'Test ediliyor...' : 'Bağlantıyı Test Et'}
       </button>
 
       <p className="text-xs text-slate-400 mt-3">
-        n8n URL ve API Key aşağıdaki Otomasyon Ayarları bölümünden girilir.
+        n8n URL ve API Key aşağıdaki <strong>Otomasyon Ayarları</strong> bölümünden girilir.
       </p>
     </div>
   )
