@@ -397,7 +397,7 @@ function generatePrintHTML(params: {
       return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })
     } catch { return '_______________' }
   })()
-  const propType = property?.property_type || ''
+  const propType = (templateData.mulk_tipi as string) || property?.property_type || ''
   const propAddress = [property?.address, property?.district, property?.city].filter(Boolean).join(', ') || '_______________'
   const propIlce = property?.district || '_______________'
   const propIl = property?.city || '_______________'
@@ -497,8 +497,10 @@ function generatePrintHTML(params: {
         <div class="sec-title" style="margin-top:6px;">YAPILACAK İŞLEME AİT BİLGİLER</div>
         <table class="auth-table">
           <tr>
-            <td style="font-weight:bold;">Satış Tutarı</td>
-            <td>${templateData.satis_tutari ? money(templateData.satis_tutari as string) : '_______________'} TL</td>
+            <td style="font-weight:bold;">${templateData.yetki_turu === 'Kiralama' ? 'Kira Bedeli' : 'Satış Tutarı'}</td>
+            <td>${templateData.yetki_turu === 'Kiralama'
+              ? (templateData.kira_bedeli ? money(templateData.kira_bedeli as string) + ' + KDV' : '_______________')
+              : (templateData.satis_tutari ? money(templateData.satis_tutari as string) : '_______________')} TL</td>
             <td style="font-weight:bold;">Ödeme Şekli</td>
             <td>${templateData.odeme_sekli || 'Nakit'}</td>
           </tr>
@@ -752,6 +754,8 @@ export default function NewDocumentPage() {
 
   const [ozelSartlar, setOzelSartlar] = useState('')
   const [ekMadde, setEkMadde] = useState('')
+  const [mulkTipi, setMulkTipi] = useState('')
+  const [kiraBedeli, setKiraBedeli] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -847,7 +851,7 @@ export default function NewDocumentPage() {
     const mainInfo = { main_tc_no: mainExtra.tc_no, main_address: mainExtra.address, main_email: mainExtra.email }
     const secondInfo = { second_tc_no: secondExtra.tc_no, second_address: secondExtra.address, second_email: secondExtra.email }
     const base: TemplateData = { ozel_sartlar: ozelSartlar, ...mainInfo, ...secondInfo }
-    if (docType === 'authorization') return { ...base, yetki_turu: yetkiTuru, komisyon_orani: komisyonOrani, komisyon_turu: komisyonTuru, ek_madde: ekMadde, baslangic_tarihi: baslangicTarihi, yetki_suresi_gun: yetkiSuresiGun, satis_tutari: satisTutari, odeme_sekli: odemeSekli, ada: yAda, parsel: yParsel, pafta: yPafta }
+    if (docType === 'authorization') return { ...base, yetki_turu: yetkiTuru, komisyon_orani: komisyonOrani, komisyon_turu: komisyonTuru, ek_madde: ekMadde, mulk_tipi: mulkTipi, kira_bedeli: kiraBedeli, baslangic_tarihi: baslangicTarihi, yetki_suresi_gun: yetkiSuresiGun, satis_tutari: satisTutari, odeme_sekli: odemeSekli, ada: yAda, parsel: yParsel, pafta: yPafta }
     if (docType === 'sales_contract') return { ...base, satis_bedeli: satisBedeli, kapora, kapora_tarihi: kaporaTarihi, teslim_tarihi: teslimTarihi, tapuda_odenecek: tapudaOdenecek, komisyon_alici: komisyonAlici, komisyon_satici: komisyonSatici, hizmet_bedeli_alici: hizmetBedeliAlici, hizmet_bedeli_satici: hizmetBedeliSatici, hizmet_bedeli: hizmetBedeli, ceza_miktari: cezaMiktari, ada: ada, parsel: parsel, pafta: pafta }
     if (docType === 'rental_contract') return { ...base, aylik_kira: aylikKira, depozito, kira_baslangic: kiraBaslangic, kira_suresi_ay: kiraSuresiAy, odeme_gunu: odemeGunu }
     return { ...base, teklif_bedeli: teklifBedeli, gecerlilik_tarihi: gecerlilikTarihi }
@@ -1028,6 +1032,32 @@ export default function NewDocumentPage() {
                   <input type="number" value={yetkiSuresiGun} onChange={e => setYetkiSuresiGun(e.target.value)} className={inp} min="1" />
                 </div>
               </div>
+              {/* Mülk Tipi Seçimi */}
+              <div>
+                <label className={lbl}>Mülk Tipi</label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {[
+                    { val: 'apartment', label: 'Apt. Dairesi' },
+                    { val: 'detached_house', label: 'Ev' },
+                    { val: 'villa', label: 'Villa' },
+                    { val: 'commercial', label: 'İşyeri' },
+                    { val: 'shop', label: 'Dükkan' },
+                    { val: 'land', label: 'Arsa' },
+                    { val: 'other', label: 'Diğer' },
+                  ].map(o => (
+                    <button
+                      key={o.val}
+                      type="button"
+                      onClick={() => setMulkTipi(mulkTipi === o.val ? '' : o.val)}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                        (mulkTipi || property?.property_type) === o.val
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-slate-300 text-slate-600 hover:border-blue-300'
+                      }`}
+                    >{o.label}</button>
+                  ))}
+                </div>
+              </div>
               <div className={row2}>
                 <div>
                   <label className={lbl}>Komisyon Oranı (%)</label>
@@ -1057,6 +1087,12 @@ export default function NewDocumentPage() {
                   </select>
                 </div>
               </div>
+              {yetkiTuru === 'Kiralama' && (
+                <div>
+                  <label className={lbl}>Kira Bedeli (₺) <span className="text-slate-400">+ KDV otomatik eklenir</span></label>
+                  <MoneyInput value={kiraBedeli} onChange={setKiraBedeli} className={inp} placeholder="0" />
+                </div>
+              )}
               <div>
                 <label className={lbl}>Tapu Kayıt Bilgileri</label>
                 <div className="grid grid-cols-3 gap-2">

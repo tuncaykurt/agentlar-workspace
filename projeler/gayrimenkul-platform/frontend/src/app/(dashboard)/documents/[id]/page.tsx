@@ -510,7 +510,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
   const sureSon = (() => {
     try { const d = new Date(data.baslangic_tarihi as string || new Date()); d.setDate(d.getDate() + parseInt(String(data.yetki_suresi_gun || '90'))); return d.toLocaleDateString('tr-TR', { day:'2-digit', month:'long', year:'numeric' }) } catch { return '___' }
   })()
-  const propType = doc.property?.property_type || ''
+  const propType = (data.mulk_tipi as string) || doc.property?.property_type || ''
   const propAddr = [doc.property?.address, doc.property?.district, doc.property?.city].filter(Boolean).join(', ') || '___'
   const stBAuth = `
     <style>
@@ -572,7 +572,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
         <div class="sec-title" style="margin-top:6px;">YAPILACAK İŞLEME AİT BİLGİLER</div>
         <table class="auth-table">
           <tr>
-            <td style="font-weight:bold;">Satış Tutarı</td><td>${data.satis_tutari ? money(data.satis_tutari as string) : '___'} TL</td>
+            <td style="font-weight:bold;">${data.yetki_turu === 'Kiralama' ? 'Kira Bedeli' : 'Satış Tutarı'}</td><td>${data.yetki_turu === 'Kiralama' ? (data.kira_bedeli ? money(data.kira_bedeli as string) + ' + KDV' : '___') : (data.satis_tutari ? money(data.satis_tutari as string) : '___')} TL</td>
             <td style="font-weight:bold;">Ödeme Şekli</td><td>${data.odeme_sekli || 'Nakit'}</td>
           </tr>
           <tr>
