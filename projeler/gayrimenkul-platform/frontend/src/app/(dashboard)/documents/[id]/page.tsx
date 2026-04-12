@@ -143,18 +143,11 @@ function AddSignerModal({
   onAdded: () => void
 }) {
   const templateData = (doc.template_data || {}) as TemplateData
-  const [signerName, setSignerName] = useState('')
-  const [signerPhone, setSignerPhone] = useState('')
+  const mainName = doc.client ? `${doc.client.salutation ? doc.client.salutation + ' ' : ''}${doc.client.full_name}`.trim() : ''
+  const [signerName, setSignerName] = useState(mainName)
+  const [signerPhone, setSignerPhone] = useState(doc.client?.phone || '')
   const [signerRole, setSignerRole] = useState('main')
   const [saving, setSaving] = useState(false)
-
-  // Pre-fill from doc parties
-  useEffect(() => {
-    if (doc.client) {
-      setSignerName(`${doc.client.salutation ? doc.client.salutation + ' ' : ''}${doc.client.full_name}`.trim())
-      setSignerPhone(doc.client.phone || '')
-    }
-  }, [doc])
 
   const mainLabel =
     doc.doc_type === 'authorization' ? 'Mülk Sahibi' :
@@ -466,6 +459,26 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
 
   const m = (v: string | null | undefined) => money(v)
   const fd = (v: string | null | undefined) => formatDate(v as string)
+  const numToWords = (v: string | null | undefined): string => {
+    if (!v) return '___'
+    const n = parseInt(String(v).replace(/[^0-9]/g, ''))
+    if (isNaN(n) || n === 0) return 'sıfır'
+    const ones = ['','bir','iki','üç','dört','beş','altı','yedi','sekiz','dokuz']
+    const tens = ['','on','yirmi','otuz','kırk','elli','altmış','yetmiş','seksen','doksan']
+    const cvt3 = (x: number): string => {
+      if (x === 0) return ''
+      let r = ''
+      if (x >= 100) { r += (x >= 200 ? ones[Math.floor(x/100)] : '') + 'yüz'; x %= 100 }
+      if (x >= 10) { r += tens[Math.floor(x/10)]; x %= 10 }
+      if (x > 0) r += ones[x]
+      return r
+    }
+    let x = n, r = ''
+    if (x >= 1000000000) { r += cvt3(Math.floor(x/1000000000)) + 'milyar'; x %= 1000000000 }
+    if (x >= 1000000) { r += cvt3(Math.floor(x/1000000)) + 'milyon'; x %= 1000000 }
+    if (x >= 1000) { const t = Math.floor(x/1000); r += (t === 1 ? '' : cvt3(t)) + 'bin'; x %= 1000 }
+    return r + cvt3(x)
+  }
 
   const styles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -620,23 +633,43 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     sales_contract: {
       title: 'GAYRİMENKUL SATIŞ SÖZLEŞMESİ',
       body: `
-        <h2>1. Satıcı</h2><table>${cRow('Satıcı', doc.client)}</table>
-        <h2>2. Alıcı</h2><table><tr><td>Alıcı:</td><td>${secondName}</td></tr><tr><td>TC / Vergi No:</td><td>_______________</td></tr></table>
-        <h2>3. Taşınmaz</h2><table>${propRows}</table>
-        <h2>4. Satış Şartları</h2>
-        <table>
-          <tr><td>Satış Bedeli:</td><td>${m(data.satis_bedeli as string)}</td></tr>
-          <tr><td>Kapora:</td><td>${m(data.kapora as string)}</td></tr>
-          <tr><td>Kapora Tarihi:</td><td>${fd(data.kapora_tarihi as string)}</td></tr>
-          <tr><td>Tapu Tescil Tarihi:</td><td>${fd(data.teslim_tarihi as string)}</td></tr>
+        <table style="margin-bottom:16px;font-size:12px;">
+          <tr>
+            <td style="font-weight:bold;width:130px;white-space:nowrap;padding:4px 6px;">SATICI</td>
+            <td style="padding:4px 6px;">${clientName(doc.client)}${data.main_tc_no ? ' &bull; TC: ' + data.main_tc_no : ''}${doc.client?.phone ? ' &bull; Tel: ' + doc.client.phone : ''}${(data.main_address || doc.client?.address) ? '<br><span style="color:#555;">' + (data.main_address || doc.client?.address) + '</span>' : ''}</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold;padding:4px 6px;">ALICI</td>
+            <td style="padding:4px 6px;">${secondName}${data.second_tc_no ? ' &bull; TC: ' + data.second_tc_no : ''}${data.second_client_phone ? ' &bull; Tel: ' + data.second_client_phone : ''}${data.second_address ? '<br><span style="color:#555;">' + data.second_address + '</span>' : ''}</td>
+          </tr>
+          ${prop || data.ada ? `<tr><td style="font-weight:bold;padding:4px 6px;">TAŞINMAZ</td><td style="padding:4px 6px;">${prop ? [prop.title, prop.city, prop.district].filter(Boolean).join(' — ') : ''}${data.ada ? ' &bull; Ada: ' + data.ada + (data.parsel ? ' / Parsel: ' + data.parsel : '') + (data.pafta ? ' / Pafta: ' + data.pafta : '') : ''}</td></tr>` : ''}
         </table>
-        <h2>5. Özel Şartlar</h2><p>${data.ozel_sartlar || 'Yoktur.'}</p>
-        <h2>6. Genel Hükümler</h2><p>İş bu sözleşme taraflarca serbestçe imzalanmıştır.</p>
+        <div style="line-height:1.9;font-size:12px;">
+          <p style="margin-bottom:12px;text-align:justify;">
+            <strong>1-</strong> ALICI ile SATICI yukarıda bahsi geçen gayrimenkulün satışı hususunda aşağıdaki şartlarla anlaşmayı kabul eder. SATICI, sahibi bulunduğu veya satmaya yetkili olduğu bu mülkün satışını <strong>${m(data.satis_bedeli as string)} (${numToWords(data.satis_bedeli as string)})</strong> olarak kabul etmiştir. Satış bedeline mahsuben ALICI'dan <strong>${m(data.kapora as string)}</strong> kaparo olarak alınmıştır.${data.hizmet_tapuda ? ` Hizmet bedelinin kalan <strong>${m(data.hizmet_tapuda as string)}</strong> Tapu işlemleri sırasında alınacaktır.` : ''} Satış bedelinin <strong>${m(data.pesin_odenen as string)}</strong> peşinen ödenmiş olup, geri kalanı da <strong>${m(data.tapuda_odenecek as string)}</strong> tapuda ödenecektir.
+          </p>
+          <p style="margin-bottom:12px;text-align:justify;">
+            <strong>2-</strong> Bu anlaşma imzalandıktan sonra, Borçlar Kanununun ilgili maddesine göre taraflardan ALICI gayrimenkulü almaktan vazgeçtiği takdirde verdiği kaporayı geri almayacaktır.
+          </p>
+          <p style="margin-bottom:12px;text-align:justify;">
+            <strong>3-</strong> ALICI ve SATICI kendilerine bu anlaşmayı sağlayan <strong>Coldwell Banker Ambiance Gayrimenkul</strong>'e işbu sözleşmenin imzalanmasıyla yukarıdaki satış bedeli üzerinden <strong>(%${data.komisyon_alici || '2'} + %${data.komisyon_satici || '2'}) + KDV</strong> komisyon ücretini hiçbir ihtara ve ihbara gerek kalmadan ödemeyi peşinen kabul ve taahhüt eder.
+          </p>
+          <p style="margin-bottom:12px;text-align:justify;">
+            <strong>4-</strong> ALICI ve SATICI'nın her biri, daha sonra alım ve/veya satımdan vazgeçerlerse veya Coldwell Banker Ambiance Gayrimenkul'ün dışında gelişen herhangi bir nedenle tapudaki satışı gerçekleştiremezseler; vazgeçen ve/veya satışa engel çıkartan taraf hem kendi ödeyeceği, hem de diğer tarafın ödeyeceği komisyon ücretinin tamamını <strong>(% ${(parseFloat(String(data.komisyon_alici||2))+parseFloat(String(data.komisyon_satici||2))).toFixed(0)} + KDV)</strong> Coldwell Banker Ambiance Gayrimenkul'a ödemeyi peşinen kabul ve taahhüt eder.
+          </p>
+          <p style="margin-bottom:12px;text-align:justify;">
+            <strong>5-</strong> Satıştan vazgeçen ve/veya satışa engel çıkartan tarafın diğer tarafa ödeyeceği ceza miktarı <strong>${m(data.ceza_miktari as string)}</strong>'dir.
+          </p>
+          <p style="margin-bottom:12px;text-align:justify;">
+            <strong>6-</strong> Dijital olarak tanzim edilen işbu sözleşme yukarıdaki hükümler ve sözleşmeye eklenecek ekleri (var ise) ile birlikte geçerli olmak üzere taraflarca kayıtsız, şartsız kabul edilmiş olup, sözleşmeden doğacak ihtilaflarda merci T.C. Bursa mahkeme ve icra daireleri yetkilidir.
+          </p>
+          ${data.ozel_sartlar ? `<p style="margin-bottom:12px;text-align:justify;"><strong>EK MADDE:</strong> ${data.ozel_sartlar}</p>` : ''}
+        </div>
       `,
       sigs: `
-        <div class="sig">${sigArea('main', clientName(doc.client))}<div class="sig-line">Satıcı<br><strong>${clientName(doc.client)}</strong></div></div>
-        <div class="sig">${sigArea('second', secondName)}<div class="sig-line">Alıcı<br><strong>${secondName}</strong></div></div>
-        <div class="sig"><div class="sig-area"></div><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong></div></div>
+        <div class="sig">${sigArea('main', clientName(doc.client))}<div class="sig-line">SATICI<br><strong>${clientName(doc.client)}</strong></div></div>
+        <div class="sig">${sigArea('second', secondName)}<div class="sig-line">ALICI<br><strong>${secondName}</strong></div></div>
+        <div class="sig"><div class="sig-area"></div><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong><br>Ambiance Gayrimenkul</div></div>
       `,
     },
     rental_contract: {
@@ -708,7 +741,6 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
   <hr class="divider">
   ${cfg.body}
   <div class="sigs">${cfg.sigs}</div>
-  <div class="footer">${officeName}${officeAddress ? ' &bull; ' + officeAddress.split('\n')[0] : ''} &bull; Referans: ${doc.id.slice(0, 8).toUpperCase()}</div>
 </body>
 </html>`
 }

@@ -578,13 +578,13 @@ function generatePrintHTML(params: {
         <table style="margin-bottom:16px;font-size:12px;">
           <tr>
             <td style="font-weight:bold;width:130px;white-space:nowrap;padding:4px 6px;">SATICI</td>
-            <td style="padding:4px 6px;">${clientName(mainClient)}${templateData.main_tc_no ? ' &bull; TC: ' + templateData.main_tc_no : ''}${mainClient?.phone ? ' &bull; Tel: ' + mainClient.phone : ''}</td>
+            <td style="padding:4px 6px;">${clientName(mainClient)}${templateData.main_tc_no ? ' &bull; TC: ' + templateData.main_tc_no : ''}${mainClient?.phone ? ' &bull; Tel: ' + mainClient.phone : ''}${(templateData.main_address || mainClient?.address) ? '<br><span style="color:#555;">' + (templateData.main_address || mainClient?.address) + '</span>' : ''}</td>
           </tr>
           <tr>
             <td style="font-weight:bold;padding:4px 6px;">ALICI</td>
-            <td style="padding:4px 6px;">${clientName(secondClient)}${templateData.second_tc_no ? ' &bull; TC: ' + templateData.second_tc_no : ''}${secondClient?.phone ? ' &bull; Tel: ' + secondClient.phone : ''}</td>
+            <td style="padding:4px 6px;">${clientName(secondClient)}${templateData.second_tc_no ? ' &bull; TC: ' + templateData.second_tc_no : ''}${secondClient?.phone ? ' &bull; Tel: ' + secondClient.phone : ''}${(templateData.second_address || secondClient?.address) ? '<br><span style="color:#555;">' + (templateData.second_address || secondClient?.address) + '</span>' : ''}</td>
           </tr>
-          ${property ? `<tr><td style="font-weight:bold;padding:4px 6px;">TAŞINMAZ</td><td style="padding:4px 6px;">${[property.title, property.address, property.district, property.city].filter(Boolean).join(' — ')}</td></tr>` : ''}
+          ${property || templateData.ada ? `<tr><td style="font-weight:bold;padding:4px 6px;">TAŞINMAZ</td><td style="padding:4px 6px;">${property ? [property.title, property.address, property.district, property.city].filter(Boolean).join(' — ') : ''}${templateData.ada ? ' &bull; Ada: ' + templateData.ada + (templateData.parsel ? ' / Parsel: ' + templateData.parsel : '') + (templateData.pafta ? ' / Pafta: ' + templateData.pafta : '') : ''}</td></tr>` : ''}
         </table>
         <div style="line-height:1.9;font-size:12px;">
           <p style="margin-bottom:12px;text-align:justify;">
@@ -771,7 +771,6 @@ function generatePrintHTML(params: {
   <hr class="divider">
   ${cfg.body}
   <div class="sigs">${cfg.sigs}</div>
-  <div class="footer">${officeName}${officeAddress ? ' &bull; ' + officeAddress.split('\n')[0] : ''} &bull; ${today}</div>
 </body>
 </html>`
 }
