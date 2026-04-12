@@ -273,29 +273,7 @@ END $$;
   },
 ]
 
-// ─── Runner — Supabase pg-meta API üzerinden ─────────────────────────────────
-
-async function runSQL(sql: string, supabaseUrl: string, serviceKey: string): Promise<void> {
-  // pg-meta /query endpoint'i service role key ile SQL çalıştırır
-  const metaUrl = supabaseUrl.replace(/\/$/, '') + '/rest/v1/rpc/exec_sql'
-
-  // Önce Supabase'in yerleşik SQL executor'ını dene (Edge Function veya pg-meta)
-  // Fallback: doğrudan postgres paketi
-  const res = await fetch(metaUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${serviceKey}`,
-      'apikey': serviceKey,
-    },
-    body: JSON.stringify({ sql }),
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`SQL hata (${res.status}): ${text}`)
-  }
-}
+// ─── Runner ───────────────────────────────────────────────────────────────────
 
 export async function runMigrations(): Promise<void> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -306,28 +284,12 @@ export async function runMigrations(): Promise<void> {
     return
   }
 
-  // Supabase JS client ile migration takip tablosu oluştur ve SQL çalıştır
   const { createClient } = await import('@supabase/supabase-js')
   const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false },
   })
 
-  // Migration takip tablosunu oluştur (direkt RPC ile)
-  const { error: tableErr } = await supabase.rpc('exec_sql', {
-    sql: `CREATE TABLE IF NOT EXISTS _schema_migrations (
-      id TEXT PRIMARY KEY,
-      applied_at TIMESTAMPTZ DEFAULT now()
-    )`,
-  })
-
-  if (tableErr) {
-    // exec_sql RPC yoksa Supabase'in sql() metodu ile dene
-    console.warn('[migrate] exec_sql RPC yok, pg-meta API deneniyor...')
-    await runViaPgMeta(supabase, supabaseUrl, serviceKey)
-    return
-  }
-
-  // Uygulanmış migration'ları çek
+  // Uygulanmış migration'ları çek (_schema_migrations yoksa boş döner)
   const { data: applied } = await supabase
     .from('_schema_migrations')
     .select('id')
@@ -335,7 +297,10 @@ export async function runMigrations(): Promise<void> {
   const appliedIds = new Set((applied || []).map((r: { id: string }) => r.id))
 
   for (const migration of MIGRATIONS) {
-    if (appliedIds.has(migration.id)) continue
+    if (appliedIds.has(migration.id)) {
+      console.log(`[migrate] ↷ ${migration.id} zaten uygulanmış.`)
+      continue
+    }
 
     console.log(`[migrate] ▶ ${migration.id} uygulanıyor...`)
     const { error } = await supabase.rpc('exec_sql', { sql: migration.sql })
@@ -347,69 +312,7 @@ export async function runMigrations(): Promise<void> {
     await supabase
       .from('_schema_migrations')
       .insert({ id: migration.id })
-      .onConflict('id')
-      .ignore()
 
     console.log(`[migrate] ✓ ${migration.id} tamamlandı.`)
-  }
-}
-
-// pg-meta API üzerinden SQL çalıştır (Supabase self-hosted için)
-async function runViaPgMeta(
-  supabase: ReturnType<typeof import('@supabase/supabase-js').createClient>,
-  supabaseUrl: string,
-  serviceKey: string,
-): Promise<void> {
-  // Supabase self-hosted'da pg-meta /query endpoint'i
-  const pgMetaUrl = supabaseUrl.replace('kong:8000', 'meta:8080').replace(/\/$/, '')
-
-  async function execSQL(sql: string): Promise<void> {
-    const res = await fetch(`${pgMetaUrl}/query`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ query: sql }),
-    })
-    if (!res.ok) {
-      const t = await res.text()
-      throw new Error(`${res.status}: ${t}`)
-    }
-  }
-
-  // Migration takip tablosunu oluştur
-  try {
-    await execSQL(`CREATE TABLE IF NOT EXISTS _schema_migrations (
-      id TEXT PRIMARY KEY,
-      applied_at TIMESTAMPTZ DEFAULT now()
-    )`)
-  } catch (e) {
-    console.error('[migrate] Takip tablosu oluşturulamadı:', e)
-    return
-  }
-
-  // Uygulanmış migration'ları çek
-  const { data: applied } = await supabase
-    .from('_schema_migrations')
-    .select('id')
-
-  const appliedIds = new Set((applied || []).map((r: { id: string }) => r.id))
-
-  for (const migration of MIGRATIONS) {
-    if (appliedIds.has(migration.id)) continue
-
-    console.log(`[migrate] ▶ ${migration.id} (pg-meta) uygulanıyor...`)
-    try {
-      await execSQL(migration.sql)
-      await supabase
-        .from('_schema_migrations')
-        .insert({ id: migration.id })
-        .onConflict('id')
-        .ignore()
-      console.log(`[migrate] ✓ ${migration.id} tamamlandı.`)
-    } catch (e) {
-      console.error(`[migrate] ✗ ${migration.id}:`, e)
-    }
   }
 }
