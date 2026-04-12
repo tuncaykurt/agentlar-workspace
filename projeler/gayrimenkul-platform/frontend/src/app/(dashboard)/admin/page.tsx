@@ -918,7 +918,7 @@ const TEMPLATES = [
   { id: 'email_document', label: 'Email Belge Bildirimi',icon: '📋', cat: 'email', desc: 'Belge imzalandığında email bildirimi gönder', defaultMsg: 'Merhaba,\n\nBelgeniz başarıyla imzalanmıştır. Süreçle ilgili sorularınız için bize ulaşabilirsiniz.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Belgeniz İmzalandı — Ambiance Gayrimenkul' },
 ]
 
-type WFlow = { id: string; name: string; active: boolean }
+type WFlow = { id: string; name: string; active: boolean; webhookUrl?: string }
 
 function AutomationsTab() {
   const [consultants, setConsultants] = useState<Consultant[]>([])
@@ -1061,8 +1061,21 @@ function AutomationsTab() {
                 <div key={wf.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800 truncate">{wf.name}</p>
-                    <p className="text-xs text-slate-400">ID: {wf.id}</p>
+                    {wf.webhookUrl
+                      ? <p className="text-xs text-slate-400 truncate font-mono">{wf.webhookUrl}</p>
+                      : <p className="text-xs text-slate-400">ID: {wf.id}</p>
+                    }
                   </div>
+                  {/* Copy URL */}
+                  {wf.webhookUrl && (
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(wf.webhookUrl!); alert('URL kopyalandı!') }}
+                      className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="Webhook URL'yi kopyala"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    </button>
+                  )}
                   {/* Active toggle */}
                   <button
                     onClick={() => handleToggle(wf)}

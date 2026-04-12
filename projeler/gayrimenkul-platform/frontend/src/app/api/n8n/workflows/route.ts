@@ -240,7 +240,23 @@ export async function GET(req: NextRequest) {
     // Get all workflows and filter by tag
     const data = await n8nFetch(cfg, 'GET', '/workflows?limit=100')
     const all: { id: string; name: string; active: boolean; tags?: { id: string }[] }[] = data.data || []
-    const workflows = all.filter(w => w.tags?.some(t => t.id === tagId))
+    const filtered = all.filter(w => w.tags?.some(t => t.id === tagId))
+
+    // Enrich each workflow with its webhook URL by fetching full details
+    const n8nBase = cfg.n8n_url?.replace(/\/$/, '')
+    const workflows = await Promise.all(filtered.map(async (wf) => {
+      try {
+        const detail = await n8nFetch(cfg, 'GET', `/workflows/${wf.id}`)
+        const webhookNode = (detail.nodes || []).find(
+          (n: { type: string }) => n.type === 'n8n-nodes-base.webhook'
+        )
+        const webhookPath = webhookNode?.parameters?.path || ''
+        const webhookUrl = webhookPath ? `${n8nBase}/webhook/${webhookPath}` : ''
+        return { ...wf, webhookUrl }
+      } catch {
+        return { ...wf, webhookUrl: '' }
+      }
+    }))
 
     return NextResponse.json({ workflows, tagId, consultantName: consultant.full_name })
   } catch (err) {
