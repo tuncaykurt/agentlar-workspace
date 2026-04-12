@@ -90,21 +90,27 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
 
   const baseStyles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Times New Roman', Times, serif; max-width: 840px; margin: 0 auto; padding: 40px 40px; color: #111; font-size: 14px; line-height: 1.85; }
-    h1 { font-size: 19px; text-align: center; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 6px; }
-    .sub { text-align: center; font-size: 13px; color: #555; margin-bottom: 6px; }
-    .divider { border: none; border-top: 2px solid #111; margin: 12px 0 20px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-    table td { padding: 4px 6px; vertical-align: top; font-size: 13px; }
-    .sigs { display: flex; justify-content: space-around; margin-top: 48px; gap: 16px; }
+    body { font-family: 'Times New Roman', Times, serif; max-width: 860px; margin: 0 auto; padding: 32px 28px; color: #111; font-size: 16px; line-height: 1.9; }
+    h1 { font-size: 21px; text-align: center; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 8px; }
+    .sub { text-align: center; font-size: 15px; color: #555; margin-bottom: 6px; }
+    .divider { border: none; border-top: 2px solid #111; margin: 14px 0 22px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    table td { padding: 5px 8px; vertical-align: top; font-size: 15px; }
+    .sigs { display: flex; justify-content: space-around; margin-top: 52px; gap: 16px; }
     .sig { text-align: center; flex: 1; }
-    .sig-line { border-top: 1px solid #000; padding-top: 6px; font-size: 12px; min-height: 60px; }
-    @media print { body { padding: 20px; } }`
+    .sig-line { border-top: 1px solid #000; padding-top: 8px; font-size: 14px; min-height: 64px; }
+    p { font-size: 16px; }
+    @media screen and (max-width: 700px) {
+      body { font-size: 15px; padding: 20px 16px; }
+      table td { font-size: 14px; }
+      .sigs { flex-direction: column; gap: 24px; }
+    }
+    @media print { body { padding: 16px; font-size: 13px; } table td { font-size: 12px; } h1 { font-size: 16px; } }`
 
   // ── Sales contract ────────────────────────────────────────────────────────
   if (doc.doc_type === 'sales_contract') {
     const body = `
-      <table style="margin-bottom:16px;font-size:12px;">
+      <table style="margin-bottom:16px;font-size:15px;">
         <tr>
           <td style="font-weight:bold;width:130px;white-space:nowrap;padding:4px 6px;">SATICI</td>
           <td style="padding:4px 6px;">${clientName(doc.client)}${data.main_tc_no ? ' &bull; TC: ' + data.main_tc_no : ''}${doc.client?.phone ? ' &bull; Tel: ' + doc.client.phone : ''}${(data.main_address || doc.client?.address) ? '<br><span style="color:#555;">' + (data.main_address || doc.client?.address) + '</span>' : ''}</td>
@@ -130,7 +136,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'second')}ALICI<br><strong>${secondName}</strong></div></div>
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
 
-    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
       ${letterhead}
       <h1>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</h1>
       <div class="sub">PROTOKOL YAZISI</div>
@@ -148,7 +154,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
 
     const body = `
       <style>
-        .kira-tbl { width:100%; border-collapse:collapse; font-size:11px; margin-bottom:16px; }
+        .kira-tbl { width:100%; border-collapse:collapse; font-size:15px; margin-bottom:16px; }
         .kira-tbl td { border:1px solid #000; padding:4px 8px; vertical-align:top; }
         .kira-tbl td:first-child { font-weight:bold; white-space:nowrap; width:220px; background:#f5f5f5; }
       </style>
@@ -171,7 +177,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'second')}KİRACI<br><strong>${secondName}</strong></div></div>
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
 
-    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>GAYRİMENKUL KİRA SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL KİRA SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
       ${letterhead}
       <h1>GAYRİMENKUL KİRA SÖZLEŞMESİ</h1>
       <div class="sub">${today}</div>
@@ -197,10 +203,10 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
 
     const body = `
       <style>
-        .auth-tbl{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;}
+        .auth-tbl{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:8px;}
         .auth-tbl td{border:1px solid #000;padding:3px 6px;}
-        .sec-title{background:#e0e0e0;font-weight:bold;font-size:11px;padding:3px 6px;border:1px solid #000;border-bottom:none;text-transform:uppercase;}
-        .clause{font-size:10.5px;line-height:1.65;margin-bottom:5px;text-align:justify;}
+        .sec-title{background:#e0e0e0;font-weight:bold;font-size:14px;padding:4px 8px;border:1px solid #000;border-bottom:none;text-transform:uppercase;}
+        .clause{font-size:15px;line-height:1.8;margin-bottom:8px;text-align:justify;}
       </style>
       <div class="sec-title">GAYRİMENKULE AİT BİLGİLER</div>
       <table class="auth-tbl">
@@ -246,7 +252,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
           <td>${sureSon}</td>
         </tr>
       </table>
-      <div style="margin-top:12px;font-size:10.5px;line-height:1.65;">
+      <div style="margin-top:14px;font-size:15px;line-height:1.8;">
         <p class="clause"><strong>1. GAYRİMENKUL SATIŞI:</strong> Müşteri, yukarıda adresi yazılı gayrimenkulünü satmak/kiralamak amacıyla ${officeName}'e <strong>${data.yetki_suresi_gun || '90'} gün</strong> süre ile <strong>${fmtDate(data.baslangic_tarihi)}</strong> tarihinden itibaren münhasır yetki vermektedir.</p>
         <p class="clause"><strong>2. HİZMET BEDELİ:</strong> Müşteri, ${officeName}'in aracılığıyla gerçekleşecek satış/kiralama işleminde, satış/kira bedeli üzerinden <strong>%${data.komisyon_orani || '3'} + KDV</strong> oranında hizmet bedeli ödemeyi kabul eder. Bu ücret, tapu devri/sözleşme imzası sırasında peşinen ödenecektir.</p>
         <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları ${officeName}'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Müşteri, sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması/kiralaması halinde yukarıdaki satış tutarı üzerinden %${data.komisyon_orani || '3'} + KDV komisyon miktarını ${officeName}'e ödemeyi kabul eder.</p>
@@ -261,7 +267,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}GAYRİMENKUL DANIŞMANI<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Adına İmza</div></div>
       <div class="sig" style="max-width:130px;"><div class="sig-line">TARİH<br>${today}</div></div>`
 
-    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
       ${letterhead}
       <h1>ARACILIK SÖZLEŞMESİ</h1>
       <div class="sub">${today}</div>
@@ -272,7 +278,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
   }
 
   // ── Fallback ──────────────────────────────────────────────────────────────
-  return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>Belge</title><style>${baseStyles}</style></head><body>
+  return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Belge</title><style>${baseStyles}</style></head><body>
     ${letterhead}
     <h1>${doc.title || 'BELGE'}</h1>
     <hr class="divider">
