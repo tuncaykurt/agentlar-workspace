@@ -381,24 +381,33 @@ function generatePrintHTML(params: {
         <table>${propRows}</table>
         <h2>4. Satış Şartları</h2>
         <table>
-          <tr><td>Satış Bedeli:</td><td>${money(templateData.satis_bedeli as string)}</td></tr>
-          <tr><td>Kapora Tutarı:</td><td>${money(templateData.kapora as string)}</td></tr>
+          <tr><td>Satış Bedeli:</td><td><strong>${money(templateData.satis_bedeli as string)}</strong></td></tr>
+          <tr><td>Peşinat / Kapora:</td><td>${money(templateData.kapora as string)}</td></tr>
           <tr><td>Kapora Tarihi:</td><td>${fmtDate(templateData.kapora_tarihi as string)}</td></tr>
-          <tr><td>Teslim Tarihi:</td><td>${fmtDate(templateData.teslim_tarihi as string)}</td></tr>
-          ${templateData.ada_parsel ? `<tr><td>Ada / Parsel:</td><td>${templateData.ada_parsel}</td></tr>` : ''}
+          ${templateData.tapuda_odenecek ? `<tr><td>Tapuda Ödenecek:</td><td><strong>${money(templateData.tapuda_odenecek as string)}</strong></td></tr>` : ''}
+          ${templateData.teslim_tarihi ? `<tr><td>Teslim Tarihi:</td><td>${fmtDate(templateData.teslim_tarihi as string)}</td></tr>` : ''}
         </table>
-        <h2>5. Hizmet Bedeli (Komisyon)</h2>
-        <p>ALICI ve SATICI, ${officeName}'e aşağıdaki komisyon ücretini ödemeyi kabul ve taahhüt eder:</p>
+        ${(templateData.ada || templateData.parsel) ? `
+        <h2>5. Taşınmaz Bilgileri</h2>
         <table>
-          <tr><td>Alıcıdan:</td><td>%${templateData.komisyon_alici || '2'} + KDV</td></tr>
-          <tr><td>Satıcıdan:</td><td>%${templateData.komisyon_satici || '2'} + KDV</td></tr>
-          ${templateData.hizmet_bedeli && templateData.hizmet_bedeli !== '0' ? `<tr><td>Toplam Hizmet Bedeli:</td><td>${money(templateData.hizmet_bedeli as string)}</td></tr>` : ''}
+          ${templateData.ada ? `<tr><td>Ada:</td><td>${templateData.ada}</td></tr>` : ''}
+          ${templateData.parsel ? `<tr><td>Parsel:</td><td>${templateData.parsel}</td></tr>` : ''}
+          ${templateData.pafta ? `<tr><td>Pafta:</td><td>${templateData.pafta}</td></tr>` : ''}
+        </table>` : ''}
+        <h2>6. Hizmet Bedeli (Komisyon)</h2>
+        <p>ALICI ve SATICI, ${officeName}'e işbu sözleşmenin imzalanmasıyla birlikte aşağıdaki hizmet bedelini hiçbir ihtara ve ihbara gerek kalmadan ödemeyi kabul ve taahhüt eder:</p>
+        <table>
+          <tr><td>Alıcıdan (%${templateData.komisyon_alici || '2'} + KDV):</td><td>${templateData.hizmet_bedeli_alici ? money(templateData.hizmet_bedeli_alici as string) : '%' + (templateData.komisyon_alici || '2') + ' + KDV'}</td></tr>
+          <tr><td>Satıcıdan (%${templateData.komisyon_satici || '2'} + KDV):</td><td>${templateData.hizmet_bedeli_satici ? money(templateData.hizmet_bedeli_satici as string) : '%' + (templateData.komisyon_satici || '2') + ' + KDV'}</td></tr>
+          ${templateData.hizmet_bedeli ? `<tr><td><strong>Toplam Hizmet Bedeli:</strong></td><td><strong>${money(templateData.hizmet_bedeli as string)}</strong></td></tr>` : ''}
         </table>
-        ${templateData.ceza_miktari && templateData.ceza_miktari !== '0' ? `<h2>6. Cayma Cezası</h2><p>Sözleşmeden cayılması halinde cayma bedeli ${money(templateData.ceza_miktari as string)} olarak belirlenmiştir.</p>` : ''}
-        <h2>${templateData.ceza_miktari && templateData.ceza_miktari !== '0' ? '7' : '6'}. Özel Şartlar</h2>
+        ${templateData.ceza_miktari && templateData.ceza_miktari !== '0' ? `
+        <h2>7. Cayma Cezası</h2>
+        <p>Sözleşmeden cayılması halinde, cayma bedeli <strong>${money(templateData.ceza_miktari as string)}</strong> olarak belirlenmiştir. Cayma durumunda hem kendi hem de karşı tarafın ödeyeceği komisyon tutarının tamamını ${officeName}'e ödemeyi kabul eder.</p>` : ''}
+        <h2>8. Özel Şartlar</h2>
         <p>${templateData.ozel_sartlar || 'Yoktur.'}</p>
-        <h2>Genel Hükümler</h2>
-        <p>İş bu sözleşme taraflarca serbestçe imzalanmıştır. Uyuşmazlıklarda taşınmazın bulunduğu yerin mahkemeleri yetkilidir.</p>
+        <h2>9. Genel Hükümler</h2>
+        <p>İş bu sözleşme taraflarca serbestçe imzalanmıştır. Uyuşmazlıklarda taşınmazın bulunduğu yerin mahkeme ve icra daireleri yetkilidir.</p>
       `,
       sigs: `
         <div class="sig"><div class="sig-line">Satıcı<br><strong>${clientName(mainClient)}</strong></div></div>
@@ -532,9 +541,15 @@ export default function NewDocumentPage() {
   // Sales commission fields
   const [komisyonAlici, setKomisyonAlici] = useState('2')
   const [komisyonSatici, setKomisyonSatici] = useState('2')
-  const [hizmetBedeli, setHizmetBedeli] = useState('')
+  const [hizmetBedeliAlici, setHizmetBedeliAlici] = useState('')   // auto: satis × alici% × 1.20
+  const [hizmetBedeliSatici, setHizmetBedeliSatici] = useState('') // auto: satis × satici% × 1.20
+  const [hizmetBedeli, setHizmetBedeli] = useState('')             // auto: alici + satici
+  const [tapudaOdenecek, setTapudaOdenecek] = useState('')         // auto: satis - kapora
   const [cezaMiktari, setCezaMiktari] = useState('')
-  const [adaParsel, setAdaParsel] = useState('')
+  // Ada/Parsel/Pafta ayrı alanlar
+  const [ada, setAda] = useState('')
+  const [parsel, setParsel] = useState('')
+  const [pafta, setPafta] = useState('')
 
   const [ozelSartlar, setOzelSartlar] = useState('')
   const [notes, setNotes] = useState('')
@@ -583,6 +598,31 @@ export default function NewDocumentPage() {
     }
   }, [secondClient])
 
+  const KDV = 1.20
+
+  // Auto-calculate hizmet bedeli when sale price or commission rates change
+  useEffect(() => {
+    const satis = parseFloat(satisBedeli) || 0
+    const aliciRate = parseFloat(komisyonAlici) || 0
+    const saticiRate = parseFloat(komisyonSatici) || 0
+    if (satis > 0) {
+      const alici = Math.round(satis * (aliciRate / 100) * KDV)
+      const satici = Math.round(satis * (saticiRate / 100) * KDV)
+      setHizmetBedeliAlici(alici > 0 ? String(alici) : '')
+      setHizmetBedeliSatici(satici > 0 ? String(satici) : '')
+      setHizmetBedeli(alici + satici > 0 ? String(alici + satici) : '')
+    }
+  }, [satisBedeli, komisyonAlici, komisyonSatici])
+
+  // Auto-calculate tapuda ödenecek
+  useEffect(() => {
+    const satis = parseFloat(satisBedeli) || 0
+    const kap = parseFloat(kapora) || 0
+    if (satis > 0) {
+      setTapudaOdenecek(String(satis - kap))
+    }
+  }, [satisBedeli, kapora])
+
   async function saveExtraToClient(clientId: string, extra: ExtraFields) {
     const supabase = createClient()
     const update: Record<string, string> = {}
@@ -599,7 +639,7 @@ export default function NewDocumentPage() {
     const secondInfo = { second_tc_no: secondExtra.tc_no, second_address: secondExtra.address, second_email: secondExtra.email }
     const base: TemplateData = { ozel_sartlar: ozelSartlar, ...mainInfo, ...secondInfo }
     if (docType === 'authorization') return { ...base, yetki_turu: yetkiTuru, komisyon_orani: komisyonOrani, komisyon_turu: komisyonTuru, baslangic_tarihi: baslangicTarihi, yetki_suresi_gun: yetkiSuresiGun }
-    if (docType === 'sales_contract') return { ...base, satis_bedeli: satisBedeli, kapora, kapora_tarihi: kaporaTarihi, teslim_tarihi: teslimTarihi, komisyon_alici: komisyonAlici, komisyon_satici: komisyonSatici, hizmet_bedeli: hizmetBedeli, ceza_miktari: cezaMiktari, ada_parsel: adaParsel }
+    if (docType === 'sales_contract') return { ...base, satis_bedeli: satisBedeli, kapora, kapora_tarihi: kaporaTarihi, teslim_tarihi: teslimTarihi, tapuda_odenecek: tapudaOdenecek, komisyon_alici: komisyonAlici, komisyon_satici: komisyonSatici, hizmet_bedeli_alici: hizmetBedeliAlici, hizmet_bedeli_satici: hizmetBedeliSatici, hizmet_bedeli: hizmetBedeli, ceza_miktari: cezaMiktari, ada: ada, parsel: parsel, pafta: pafta }
     if (docType === 'rental_contract') return { ...base, aylik_kira: aylikKira, depozito, kira_baslangic: kiraBaslangic, kira_suresi_ay: kiraSuresiAy, odeme_gunu: odemeGunu }
     return { ...base, teklif_bedeli: teklifBedeli, gecerlilik_tarihi: gecerlilikTarihi }
   }
@@ -820,29 +860,63 @@ export default function NewDocumentPage() {
                   <input type="date" value={teslimTarihi} onChange={e => setTeslimTarihi(e.target.value)} className={inp} />
                 </div>
               </div>
+              {/* Ada / Parsel / Pafta — ayrı kutular */}
               <div>
-                <label className={lbl}>Ada / Parsel / Pafta</label>
-                <input type="text" value={adaParsel} onChange={e => setAdaParsel(e.target.value)} className={inp} placeholder="Ada: 103, Parsel: 58, Pafta: ..." />
+                <label className={lbl}>Taşınmaz Bilgileri</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Ada</label>
+                    <input type="text" value={ada} onChange={e => setAda(e.target.value)} className={inp} placeholder="103" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Parsel</label>
+                    <input type="text" value={parsel} onChange={e => setParsel(e.target.value)} className={inp} placeholder="58" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Pafta</label>
+                    <input type="text" value={pafta} onChange={e => setPafta(e.target.value)} className={inp} placeholder="—" />
+                  </div>
+                </div>
               </div>
-              <p className="text-xs font-semibold text-slate-600 pt-1">Hizmet Bedeli (Komisyon)</p>
-              <div className={row2}>
-                <div>
-                  <label className={lbl}>Alıcıdan (%)</label>
-                  <input type="number" value={komisyonAlici} onChange={e => setKomisyonAlici(e.target.value)} className={inp} step="0.5" min="0" max="10" />
-                </div>
-                <div>
-                  <label className={lbl}>Satıcıdan (%)</label>
-                  <input type="number" value={komisyonSatici} onChange={e => setKomisyonSatici(e.target.value)} className={inp} step="0.5" min="0" max="10" />
-                </div>
+
+              {/* Tapuda ödenecek */}
+              <div>
+                <label className={lbl}>Tapuda Ödenecek (₺) <span className="text-xs font-normal text-slate-400">— otomatik: satış − kapora</span></label>
+                <input type="number" value={tapudaOdenecek} onChange={e => setTapudaOdenecek(e.target.value)} className={inp} placeholder="0" />
               </div>
-              <div className={row2}>
-                <div>
-                  <label className={lbl}>Hizmet Bedeli Tutarı (₺) <span className="text-slate-400 font-normal">— varsa</span></label>
-                  <input type="number" value={hizmetBedeli} onChange={e => setHizmetBedeli(e.target.value)} className={inp} placeholder="0" />
+
+              {/* Hizmet bedeli */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-slate-700">Hizmet Bedeli (Komisyon) <span className="text-xs font-normal text-slate-400">— %{komisyonAlici}+%{komisyonSatici}+KDV otomatik, elle değiştirilebilir</span></p>
+                <div className={row2}>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Alıcı Komisyon Oranı (%)</label>
+                    <input type="number" value={komisyonAlici} onChange={e => setKomisyonAlici(e.target.value)} className={inp} step="0.5" min="0" max="10" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Satıcı Komisyon Oranı (%)</label>
+                    <input type="number" value={komisyonSatici} onChange={e => setKomisyonSatici(e.target.value)} className={inp} step="0.5" min="0" max="10" />
+                  </div>
                 </div>
-                <div>
-                  <label className={lbl}>Ceza Miktarı (₺) <span className="text-slate-400 font-normal">— vazgeçme durumu</span></label>
-                  <input type="number" value={cezaMiktari} onChange={e => setCezaMiktari(e.target.value)} className={inp} placeholder="0" />
+                <div className={row2}>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Alıcıdan Hizmet Bedeli (₺ +KDV)</label>
+                    <input type="number" value={hizmetBedeliAlici} onChange={e => setHizmetBedeliAlici(e.target.value)} className={inp} placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Satıcıdan Hizmet Bedeli (₺ +KDV)</label>
+                    <input type="number" value={hizmetBedeliSatici} onChange={e => setHizmetBedeliSatici(e.target.value)} className={inp} placeholder="0" />
+                  </div>
+                </div>
+                <div className={row2}>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Toplam Hizmet Bedeli (₺)</label>
+                    <input type="number" value={hizmetBedeli} onChange={e => setHizmetBedeli(e.target.value)} className={`${inp} font-semibold`} placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Ceza Miktarı (₺) — vazgeçme</label>
+                    <input type="number" value={cezaMiktari} onChange={e => setCezaMiktari(e.target.value)} className={inp} placeholder="0" />
+                  </div>
                 </div>
               </div>
             </>
