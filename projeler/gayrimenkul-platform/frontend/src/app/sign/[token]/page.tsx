@@ -156,6 +156,7 @@ function SignaturePad({ onReady }: { onReady: (getDataURL: () => string | null) 
 // ─── Document Summary ─────────────────────────────────────────────────────────
 
 function DocSummary({ doc, signerRole }: { doc: DocInfo; signerRole: string }) {
+  const [expanded, setExpanded] = useState(false)
   const data = doc.template_data || {}
 
   const money = (v: string | null | undefined) => {
@@ -165,18 +166,25 @@ function DocSummary({ doc, signerRole }: { doc: DocInfo; signerRole: string }) {
     return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(n)
   }
 
+  const fmtDate = (v: string | null | undefined) =>
+    v ? new Date(v).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' }) : '___'
+
   const keyItems: { label: string; value: string | null | undefined }[] = []
 
   if (doc.doc_type === 'authorization') {
     keyItems.push(
       { label: 'Yetki Türü', value: data.yetki_turu },
-      { label: 'Komisyon Oranı', value: data.komisyon_orani ? `%${data.komisyon_orani}` : null },
+      { label: 'Satış Tutarı', value: money(data.satis_tutari) },
+      { label: 'Komisyon Oranı', value: data.komisyon_orani ? `%${data.komisyon_orani} + KDV (${data.komisyon_turu || 'Satıcıdan'})` : null },
       { label: 'Yetki Süresi', value: data.yetki_suresi_gun ? `${data.yetki_suresi_gun} gün` : null },
+      { label: 'Başlangıç', value: fmtDate(data.baslangic_tarihi) },
     )
   } else if (doc.doc_type === 'sales_contract') {
     keyItems.push(
       { label: 'Satış Bedeli', value: money(data.satis_bedeli) },
       { label: 'Kapora', value: money(data.kapora) },
+      { label: 'Tapuda Ödenecek', value: money(data.tapuda_odenecek) },
+      { label: 'Hizmet Bedeli', value: money(data.hizmet_bedeli) },
     )
   } else if (doc.doc_type === 'rental_contract') {
     keyItems.push(
@@ -186,10 +194,6 @@ function DocSummary({ doc, signerRole }: { doc: DocInfo; signerRole: string }) {
     )
   } else if (doc.doc_type === 'offer_letter') {
     keyItems.push({ label: 'Teklif Bedeli', value: money(data.teklif_bedeli) })
-  }
-
-  if (data.ozel_sartlar) {
-    keyItems.push({ label: 'Özel Şartlar', value: data.ozel_sartlar })
   }
 
   const roleLabel =
@@ -202,33 +206,110 @@ function DocSummary({ doc, signerRole }: { doc: DocInfo; signerRole: string }) {
         : doc.doc_type === 'rental_contract' ? 'Kiracı'
         : 'İmzacı'
 
+  // Full contract text sections
+  const contractSections: { title: string; rows: { label: string; value: string }[] }[] = []
+
+  if (doc.doc_type === 'authorization') {
+    contractSections.push({
+      title: 'Taraf Bilgileri',
+      rows: [
+        { label: 'Mülk Sahibi', value: doc.client?.full_name || '___' },
+        { label: 'Adres', value: (data.main_address as string) || '___' },
+        { label: 'TC No', value: (data.main_tc_no as string) || '___' },
+      ]
+    }, {
+      title: 'Mülk Bilgileri',
+      rows: [
+        ...(doc.property ? [{ label: 'Mülk', value: doc.property.title }] : []),
+        ...(data.ada ? [{ label: 'Ada / Parsel / Pafta', value: `${data.ada} / ${data.parsel || '___'} / ${data.pafta || '___'}` }] : []),
+      ]
+    }, {
+      title: 'Sözleşme Detayları',
+      rows: [
+        { label: 'Yetki Türü', value: (data.yetki_turu as string) || 'Satış' },
+        { label: 'Satış Tutarı', value: money(data.satis_tutari) || '___' },
+        { label: 'Ödeme Şekli', value: (data.odeme_sekli as string) || 'Nakit' },
+        { label: 'Komisyon Oranı', value: `%${data.komisyon_orani || '3'} + KDV (${data.komisyon_turu || 'Satıcıdan'})` },
+        { label: 'Yetki Süresi', value: `${data.yetki_suresi_gun || '90'} gün` },
+        { label: 'Başlangıç', value: fmtDate(data.baslangic_tarihi) },
+      ]
+    })
+    if (data.ozel_sartlar) contractSections.push({ title: 'Özel Şartlar', rows: [{ label: '', value: data.ozel_sartlar as string }] })
+  } else if (doc.doc_type === 'sales_contract') {
+    contractSections.push({
+      title: 'Satış Detayları',
+      rows: [
+        { label: 'Satış Bedeli', value: money(data.satis_bedeli) || '___' },
+        { label: 'Kapora', value: money(data.kapora) || '___' },
+        { label: 'Kapora Tarihi', value: fmtDate(data.kapora_tarihi) },
+        { label: 'Tapuda Ödenecek', value: money(data.tapuda_odenecek) || '___' },
+        { label: 'Tapu Tescil Tarihi', value: fmtDate(data.teslim_tarihi) },
+        { label: 'Toplam Hizmet Bedeli', value: money(data.hizmet_bedeli) || '___' },
+        { label: 'Alıcıdan Hizmet Bedeli', value: money(data.hizmet_bedeli_alici) || '___' },
+        { label: 'Satıcıdan Hizmet Bedeli', value: money(data.hizmet_bedeli_satici) || '___' },
+      ]
+    })
+    if (data.ada) contractSections.push({ title: 'Tapu Bilgileri', rows: [{ label: 'Ada / Parsel / Pafta', value: `${data.ada} / ${data.parsel || '___'} / ${data.pafta || '___'}` }] })
+    if (data.ozel_sartlar) contractSections.push({ title: 'Özel Şartlar', rows: [{ label: '', value: data.ozel_sartlar as string }] })
+  }
+
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
-      <div>
-        <span className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{docTypeLabels[doc.doc_type]}</span>
-        <h2 className="text-base font-bold text-slate-900 mt-0.5 leading-tight">{doc.title}</h2>
+    <div className="bg-blue-50 border border-blue-200 rounded-xl overflow-hidden">
+      {/* Summary */}
+      <div className="p-4 space-y-3">
+        <div>
+          <span className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{docTypeLabels[doc.doc_type]}</span>
+          <h2 className="text-base font-bold text-slate-900 mt-0.5 leading-tight">{doc.title}</h2>
+        </div>
+
+        {doc.property && (
+          <div className="text-sm text-slate-700">
+            <span className="text-slate-500">Mülk: </span>
+            <span className="font-medium">{doc.property.title}</span>
+            {doc.property.city && <span className="text-slate-500"> · {doc.property.city}</span>}
+          </div>
+        )}
+
+        {keyItems.filter(i => i.value).map(item => (
+          <div key={item.label} className="flex justify-between text-sm">
+            <span className="text-slate-500">{item.label}</span>
+            <span className="font-semibold text-slate-900">{item.value}</span>
+          </div>
+        ))}
+
+        <div className="pt-2 border-t border-blue-200 flex items-center justify-between">
+          <p className="text-xs text-blue-700">
+            <span className="font-semibold">Rolünüz:</span> {roleLabel}
+          </p>
+          {contractSections.length > 0 && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-xs font-semibold text-blue-700 underline underline-offset-2"
+            >
+              {expanded ? 'Gizle' : 'Sözleşmeyi Oku ▾'}
+            </button>
+          )}
+        </div>
       </div>
 
-      {doc.property && (
-        <div className="text-sm text-slate-700">
-          <span className="text-slate-500">Mülk: </span>
-          <span className="font-medium">{doc.property.title}</span>
-          {doc.property.city && <span className="text-slate-500"> · {doc.property.city}</span>}
+      {/* Full contract view */}
+      {expanded && contractSections.length > 0 && (
+        <div className="border-t border-blue-200 bg-white px-4 py-4 space-y-4">
+          {contractSections.map(section => (
+            <div key={section.title}>
+              {section.title && <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">{section.title}</p>}
+              <div className="space-y-1">
+                {section.rows.map((row, i) => (
+                  <div key={i} className={row.label ? 'flex justify-between text-sm' : 'text-sm text-slate-700 leading-relaxed'}>
+                    {row.label && <span className="text-slate-500 shrink-0 mr-3">{row.label}</span>}
+                    <span className="font-medium text-slate-900 text-right">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
-
-      {keyItems.filter(i => i.value).map(item => (
-        <div key={item.label} className="flex justify-between text-sm">
-          <span className="text-slate-500">{item.label}</span>
-          <span className="font-semibold text-slate-900">{item.value}</span>
-        </div>
-      ))}
-
-      <div className="pt-2 border-t border-blue-200">
-        <p className="text-xs text-blue-700">
-          <span className="font-semibold">Rolünüz:</span> {roleLabel}
-        </p>
-      </div>
     </div>
   )
 }

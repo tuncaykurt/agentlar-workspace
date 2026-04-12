@@ -385,36 +385,160 @@ function generatePrintHTML(params: {
     <tr><td>m²:</td><td>_______________</td></tr>
   `
 
+  // Authorization doc helpers
+  const chk = (c: boolean) => c ? '&#9745;' : '&#9744;'
+  const sureSon = (() => {
+    try {
+      const d = new Date(templateData.baslangic_tarihi as string || new Date())
+      d.setDate(d.getDate() + parseInt(String(templateData.yetki_suresi_gun || '90')))
+      return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })
+    } catch { return '_______________' }
+  })()
+  const propType = property?.property_type || ''
+  const propAddress = [property?.address, property?.district, property?.city].filter(Boolean).join(', ') || '_______________'
+  const propIlce = property?.district || '_______________'
+  const propIl = property?.city || '_______________'
+  const propAda = templateData.ada || '___'
+  const propParsel = templateData.parsel || '___'
+  const propPafta = templateData.pafta || '___'
+  const propM2 = property?.m2_gross ? `${property.m2_gross} m²` : '_______________'
+  const propOzellik = [
+    property?.room_count ? `${property.room_count} oda` : '',
+    property?.floor ? `${property.floor}. kat` : '',
+    property?.m2_net ? `Net ${property.m2_net} m²` : '',
+  ].filter(Boolean).join(' — ') || (templateData.ozel_sartlar as string || '')
+  const mainAddr = (templateData.main_address as string) || mainClient?.address || ''
+  const mainPhone = mainClient?.phone || ''
+  const mainEmail = (templateData.main_email as string) || mainClient?.email || ''
+  const mainTc = (templateData.main_tc_no as string) || mainClient?.tc_no || ''
+  const stB = `
+    <style>
+      .auth-table { width:100%; border-collapse:collapse; margin-bottom:0; font-size:11px; }
+      .auth-table td, .auth-table th { border:1px solid #000; padding:3px 6px; vertical-align:middle; }
+      .auth-table th { background:#ddd; font-weight:bold; text-align:center; }
+      .sec-title { background:#e0e0e0; font-weight:bold; font-size:11px; padding:3px 6px; border:1px solid #000; border-bottom:none; text-transform:uppercase; letter-spacing:0.5px; }
+      .clause { font-size:10.5px; line-height:1.65; margin-bottom:5px; text-align:justify; }
+      .clause strong { font-weight:bold; }
+      .auth-sigs { display:flex; justify-content:space-between; margin-top:24px; gap:20px; }
+      .auth-sig { text-align:center; flex:1; }
+      .auth-sig-label { font-size:10px; font-weight:bold; margin-bottom:4px; }
+      .auth-sig-box { border-top:1px solid #000; padding-top:4px; min-height:50px; font-size:10px; }
+    </style>`
+
   const docTypeConfigs: Record<string, { title: string; body: string; sigs: string }> = {
     authorization: {
-      title: 'GAYRİMENKUL YETKİ BELGESİ',
+      title: 'ARACILIK SÖZLEŞMESİ',
       body: `
-        <h2>1. Taraflar</h2>
-        <table>
-          ${partyRows('Mülk Sahibi', mainClient, 'main')}
-          <tr><td colspan="2" style="padding-top:10px;font-weight:bold;">Yetkili Danışman / Ofis</td></tr>
-          <tr><td>Danışman:</td><td>${consultant?.full_name || '_______________'}</td></tr>
-          <tr><td>Ofis:</td><td>${officeName}</td></tr>
+        ${stB}
+        <!-- HEADER -->
+        <table class="auth-table" style="margin-bottom:0;">
+          <tr>
+            <td style="width:42%;vertical-align:top;padding:8px;border-right:2px solid #000;">
+              ${officeLogo ? `<img src="${officeLogo}" style="max-height:52px;margin-bottom:4px;display:block;">` : `<div style="font-weight:bold;font-size:14px;color:#1a3a6b;">CB AMBIANCE</div>`}
+              <div style="font-weight:bold;font-size:10px;margin-top:3px;">AMBIANCE GAYRİMENKUL YATIRIM ORTAKLIĞI İNŞAAT SAN. TİC. LTD. ŞTİ.</div>
+              <div style="font-size:9px;margin-top:3px;line-height:1.5;">${(officeAddress || '').replace(/\n/g, '<br>')}</div>
+            </td>
+            <td style="width:58%;padding:0;vertical-align:top;">
+              <div style="background:#1a3a6b;color:#fff;text-align:center;padding:5px 8px;font-weight:bold;font-size:13px;letter-spacing:2px;">ARACILIK SÖZLEŞMESİ</div>
+              <div style="padding:6px 8px;">
+                <table style="width:100%;border-collapse:collapse;font-size:10px;">
+                  <tr><td style="font-weight:bold;width:85px;padding:2px 0;">AD SOYAD</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${clientName(mainClient)}</td></tr>
+                  <tr><td style="font-weight:bold;padding:2px 0;">ADRESİ</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${mainAddr}</td></tr>
+                  <tr><td style="font-weight:bold;padding:2px 0;">TELEFON</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${mainPhone}</td></tr>
+                  <tr><td style="font-weight:bold;padding:2px 0;">TC No</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${mainTc}</td></tr>
+                  <tr><td style="font-weight:bold;padding:2px 0;">e-mail</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${mainEmail}</td></tr>
+                </table>
+              </div>
+            </td>
+          </tr>
         </table>
-        <h2>2. Taşınmaz Bilgileri</h2>
-        <table>${propRows}</table>
-        <h2>3. Yetki Kapsamı</h2>
-        <table>
-          <tr><td>Yetki Türü:</td><td>${templateData.yetki_turu || 'Satış'}</td></tr>
-          <tr><td>Başlangıç Tarihi:</td><td>${fmtDate(templateData.baslangic_tarihi as string)}</td></tr>
-          <tr><td>Yetki Süresi:</td><td>${templateData.yetki_suresi_gun || '90'} gün</td></tr>
-          <tr><td>Bitiş Tarihi:</td><td>${(() => { const d = new Date(templateData.baslangic_tarihi as string || new Date()); d.setDate(d.getDate() + parseInt(String(templateData.yetki_suresi_gun || '90'))); return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' }) })()} </td></tr>
-          <tr><td>Komisyon Oranı:</td><td>%${templateData.komisyon_orani || '3'} + KDV</td></tr>
-          <tr><td>Komisyon Kime Ait:</td><td>${templateData.komisyon_turu || 'Satıcıdan'}</td></tr>
+
+        <!-- GAYRİMENKULE AİT BİLGİLER -->
+        <div class="sec-title" style="margin-top:6px;">GAYRİMENKULE AİT BİLGİLER</div>
+        <table class="auth-table">
+          <tr>
+            <td style="text-align:center;">${chk(propType==='detached_house')} Ev</td>
+            <td style="text-align:center;">${chk(propType==='apartment')} Apt. Dairesi</td>
+            <td style="text-align:center;">${chk(['commercial','office'].includes(propType))} İşyeri</td>
+            <td style="text-align:center;">${chk(propType==='shop')} Dükkan</td>
+            <td style="text-align:center;">${chk(propType==='villa')} Villa</td>
+            <td style="text-align:center;">${chk(propType==='land')} Arsa</td>
+            <td style="text-align:center;">${chk(!['detached_house','apartment','commercial','office','shop','villa','land'].includes(propType))} Diğer</td>
+          </tr>
+          <tr>
+            <td colspan="2" style="font-weight:bold;">Adresi</td>
+            <td colspan="5">${propAddress}</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold;">İlçesi</td>
+            <td colspan="2">${propIlce}</td>
+            <td style="font-weight:bold;">İli</td>
+            <td colspan="3">${propIl}</td>
+          </tr>
+          <tr>
+            <td colspan="2" style="font-weight:bold;">Tapu Kayıt Bilg.</td>
+            <td>Pafta: ${propPafta}</td>
+            <td colspan="2">Ada: ${propAda}</td>
+            <td colspan="2">Parsel: ${propParsel}</td>
+          </tr>
+          <tr>
+            <td colspan="2" style="font-weight:bold;">Diğer Özellikler</td>
+            <td colspan="5">${propOzellik}</td>
+          </tr>
         </table>
-        <h2>4. Özel Şartlar</h2>
-        <p>${templateData.ozel_sartlar || 'Bu yetki belgesi, yukarıda belirtilen şartlar dahilinde düzenlenmiş olup taraflar arasında mutabık kalınan hususları içermektedir.'}</p>
-        <h2>5. Genel Hükümler</h2>
-        <p>Mülk sahibi, yetki süresi boyunca taşınmazı başka bir aracı aracılığıyla satamaz/kiralayamaz. Taşınmazın satış/kiralanması halinde komisyon tutarı belirtilen oranda tahsil edilecektir.</p>
+
+        <!-- YAPILACAK İŞLEME AİT BİLGİLER -->
+        <div class="sec-title" style="margin-top:6px;">YAPILACAK İŞLEME AİT BİLGİLER</div>
+        <table class="auth-table">
+          <tr>
+            <td style="font-weight:bold;">Satış Tutarı</td>
+            <td>${templateData.satis_tutari ? money(templateData.satis_tutari as string) : '_______________'} TL</td>
+            <td style="font-weight:bold;">Ödeme Şekli</td>
+            <td>${templateData.odeme_sekli || 'Nakit'}</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold;">Komisyon Oranı</td>
+            <td>%${templateData.komisyon_orani || '3'} + KDV (${templateData.komisyon_turu || 'Satıcıdan'})</td>
+            <td style="font-weight:bold;">Gayrimenkul Danışmanı</td>
+            <td>${consultant?.full_name || '_______________'}</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold;">Yetki Türü</td>
+            <td>${templateData.yetki_turu || 'Satış'}</td>
+            <td style="font-weight:bold;">Süre</td>
+            <td>${templateData.yetki_suresi_gun || '90'} gün (${fmtDate(templateData.baslangic_tarihi as string)} – ${sureSon})</td>
+          </tr>
+        </table>
+
+        <!-- MADDELER -->
+        <div style="margin-top:8px;">
+          <p class="clause"><strong>1. KONU:</strong> Müşteri ile ${officeName}, yukarıda belirtilen gayrimenkulün ${templateData.yetki_turu || 'satış'}ına aracılık edilmesi işlemi için karşılıklı olarak anlaşılmıştır.</p>
+          <p class="clause"><strong>2. TANITIM YETKİSİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak satış işlemi amacıyla internet, basın, yayın ve medyayı da dahil etmek üzere tanıtım faaliyetlerinde bulunmak hakkını ve gayrimenkule giriş imkânı sağlamayı ${officeName}'e kabul ve taahhüt eder.</p>
+          <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları ${officeName}'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Müşteri, sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması/kiralaması halinde yukarıdaki satış tutarı üzerinden komisyon miktarını ${officeName}'e ödemeyi kabul eder.</p>
+          <p class="clause"><strong>4. İŞLEM YETKİSİ:</strong> Müşteri, gayrimenkulünün üzerinde işlem yapma yetkisi bulunmayan üçüncü kişilerin sebep olacağı zararı önlemek amacıyla ${officeName}'in gerekli tedbirleri almasına izin vermeyi kabul eder.</p>
+          <p class="clause"><strong>5. SÜRE:</strong> İşbu sözleşme, taraflarca imzalandığı tarihten itibaren <strong>${templateData.yetki_suresi_gun || '90'} gün</strong> süreyle geçerlidir. Bitiş tarihi: <strong>${sureSon}</strong>. Sözleşme süresi içinde taşınmaz satılır/kiralanırsa komisyon tutarı tahsil edilecektir.</p>
+          <p class="clause"><strong>6. SÜRENİN BİTİMİ:</strong> Sözleşme süresinin dolmasından veya herhangi bir şekilde sona ermesinden sonra 90 gün içinde ${officeName}'in tanıştırdığı/gösterdiği kişi veya kuruluşlarla işlem yapılması halinde, ${officeName}'e yukarıda belirtilen komisyon miktarının 2 katı + KDV'si hizmet bedeli olarak ödenir.</p>
+          <p class="clause"><strong>7. İHTİLAF:</strong> Bu sözleşmenin uygulanmasından doğacak her türlü uyuşmazlıkta Bursa (Merkez) Mahkemeleri ve İcra Daireleri yetkilidir. Doğacak damga vergisi, resim, pul ve harçların tamamı müşteriye aittir.</p>
+          ${templateData.ozel_sartlar ? `<p class="clause"><strong>ÖZEL ŞARTLAR:</strong> ${templateData.ozel_sartlar}</p>` : ''}
+        </div>
       `,
       sigs: `
-        <div class="sig"><div class="sig-line">Mülk Sahibi<br><strong>${clientName(mainClient)}</strong></div></div>
-        <div class="sig"><div class="sig-line">Danışman<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
+        <div class="auth-sigs">
+          <div class="auth-sig">
+            <div class="auth-sig-label">Müşteri<br>Ad Soyad ve İmza</div>
+            <div class="auth-sig-box" style="min-height:60px;"></div>
+            <div style="font-size:10px;margin-top:4px;">${clientName(mainClient)}</div>
+          </div>
+          <div class="auth-sig">
+            <div class="auth-sig-label">${officeName} Adına<br>İsim ve İmza</div>
+            <div class="auth-sig-box" style="min-height:60px;"></div>
+            <div style="font-size:10px;margin-top:4px;">${consultant?.full_name || '_______________'}</div>
+          </div>
+          <div class="auth-sig" style="flex:0.5;text-align:left;">
+            <div class="auth-sig-label">Tarih</div>
+            <div class="auth-sig-box">${today}</div>
+          </div>
+        </div>
       `,
     },
     sales_contract: {
@@ -581,6 +705,11 @@ export default function NewDocumentPage() {
   const [komisyonTuru, setKomisyonTuru] = useState('Satıcıdan')
   const [baslangicTarihi, setBaslangicTarihi] = useState(new Date().toISOString().slice(0, 10))
   const [yetkiSuresiGun, setYetkiSuresiGun] = useState('90')
+  const [satisTutari, setSatisTutari] = useState('')
+  const [odemeSekli, setOdemeSekli] = useState('Nakit')
+  const [yAda, setYAda] = useState('')
+  const [yParsel, setYParsel] = useState('')
+  const [yPafta, setYPafta] = useState('')
 
   // Sales fields
   const [satisBedeli, setSatisBedeli] = useState('')
@@ -708,7 +837,7 @@ export default function NewDocumentPage() {
     const mainInfo = { main_tc_no: mainExtra.tc_no, main_address: mainExtra.address, main_email: mainExtra.email }
     const secondInfo = { second_tc_no: secondExtra.tc_no, second_address: secondExtra.address, second_email: secondExtra.email }
     const base: TemplateData = { ozel_sartlar: ozelSartlar, ...mainInfo, ...secondInfo }
-    if (docType === 'authorization') return { ...base, yetki_turu: yetkiTuru, komisyon_orani: komisyonOrani, komisyon_turu: komisyonTuru, baslangic_tarihi: baslangicTarihi, yetki_suresi_gun: yetkiSuresiGun }
+    if (docType === 'authorization') return { ...base, yetki_turu: yetkiTuru, komisyon_orani: komisyonOrani, komisyon_turu: komisyonTuru, baslangic_tarihi: baslangicTarihi, yetki_suresi_gun: yetkiSuresiGun, satis_tutari: satisTutari, odeme_sekli: odemeSekli, ada: yAda, parsel: yParsel, pafta: yPafta }
     if (docType === 'sales_contract') return { ...base, satis_bedeli: satisBedeli, kapora, kapora_tarihi: kaporaTarihi, teslim_tarihi: teslimTarihi, tapuda_odenecek: tapudaOdenecek, komisyon_alici: komisyonAlici, komisyon_satici: komisyonSatici, hizmet_bedeli_alici: hizmetBedeliAlici, hizmet_bedeli_satici: hizmetBedeliSatici, hizmet_bedeli: hizmetBedeli, ceza_miktari: cezaMiktari, ada: ada, parsel: parsel, pafta: pafta }
     if (docType === 'rental_contract') return { ...base, aylik_kira: aylikKira, depozito, kira_baslangic: kiraBaslangic, kira_suresi_ay: kiraSuresiAy, odeme_gunu: odemeGunu }
     return { ...base, teklif_bedeli: teklifBedeli, gecerlilik_tarihi: gecerlilikTarihi }
@@ -901,6 +1030,38 @@ export default function NewDocumentPage() {
                     <option>Alıcıdan</option>
                     <option>Her İkisinden Eşit</option>
                   </select>
+                </div>
+              </div>
+              <div className={row2}>
+                <div>
+                  <label className={lbl}>Satış Tutarı (₺)</label>
+                  <MoneyInput value={satisTutari} onChange={setSatisTutari} className={inp} placeholder="0" />
+                </div>
+                <div>
+                  <label className={lbl}>Ödeme Şekli</label>
+                  <select value={odemeSekli} onChange={e => setOdemeSekli(e.target.value)} className={inp}>
+                    <option>Nakit</option>
+                    <option>Banka Transferi</option>
+                    <option>Senet</option>
+                    <option>Karma</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className={lbl}>Tapu Kayıt Bilgileri</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Ada</label>
+                    <input type="text" value={yAda} onChange={e => setYAda(e.target.value)} className={inp} placeholder="103" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Parsel</label>
+                    <input type="text" value={yParsel} onChange={e => setYParsel(e.target.value)} className={inp} placeholder="1" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Pafta</label>
+                    <input type="text" value={yPafta} onChange={e => setYPafta(e.target.value)} className={inp} placeholder="—" />
+                  </div>
                 </div>
               </div>
               <div>

@@ -502,29 +502,109 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
 
   const secondName = data.second_client_name || '_______________'
 
+  // Authorization helpers (reuse in template)
+  const chk = (c: boolean) => c ? '&#9745;' : '&#9744;'
+  const sureSon = (() => {
+    try { const d = new Date(data.baslangic_tarihi as string || new Date()); d.setDate(d.getDate() + parseInt(String(data.yetki_suresi_gun || '90'))); return d.toLocaleDateString('tr-TR', { day:'2-digit', month:'long', year:'numeric' }) } catch { return '___' }
+  })()
+  const propType = doc.property?.property_type || ''
+  const propAddr = [doc.property?.address, doc.property?.district, doc.property?.city].filter(Boolean).join(', ') || '___'
+  const stBAuth = `
+    <style>
+      .auth-table{width:100%;border-collapse:collapse;margin-bottom:0;font-size:11px;}
+      .auth-table td{border:1px solid #000;padding:3px 6px;vertical-align:middle;}
+      .sec-title{background:#e0e0e0;font-weight:bold;font-size:11px;padding:3px 6px;border:1px solid #000;border-bottom:none;text-transform:uppercase;}
+      .clause{font-size:10.5px;line-height:1.65;margin-bottom:5px;text-align:justify;}
+      .auth-sigs{display:flex;justify-content:space-between;margin-top:24px;gap:20px;}
+      .auth-sig{text-align:center;flex:1;}
+      .auth-sig-label{font-size:10px;font-weight:bold;margin-bottom:4px;}
+      .auth-sig-box{border-top:1px solid #000;padding-top:4px;min-height:60px;font-size:10px;}
+    </style>`
+
   const templates: Record<string, { title: string; body: string; sigs: string }> = {
     authorization: {
-      title: 'GAYRİMENKUL YETKİ BELGESİ',
+      title: 'ARACILIK SÖZLEŞMESİ',
       body: `
-        <h2>1. Taraflar</h2><table>${cRow('Mülk Sahibi', doc.client)}
-          <tr><td colspan="2" style="padding-top:8px;font-weight:bold;">Yetkili Danışman / Ofis</td></tr>
-          <tr><td>Danışman:</td><td>${doc.consultant?.full_name || '_______________'}</td></tr>
-          <tr><td>Ofis:</td><td>${officeName}</td></tr>
+        ${stBAuth}
+        <table class="auth-table" style="margin-bottom:0;">
+          <tr>
+            <td style="width:42%;vertical-align:top;padding:8px;border-right:2px solid #000;">
+              ${officeLogo ? `<img src="${officeLogo}" style="max-height:52px;margin-bottom:4px;display:block;">` : `<div style="font-weight:bold;font-size:14px;color:#1a3a6b;">CB AMBIANCE</div>`}
+              <div style="font-weight:bold;font-size:10px;margin-top:3px;">AMBIANCE GAYRİMENKUL YATIRIM ORTAKLIĞI İNŞAAT SAN. TİC. LTD. ŞTİ.</div>
+              <div style="font-size:9px;margin-top:3px;line-height:1.5;">${(officeAddress || '').replace(/\n/g, '<br>')}</div>
+            </td>
+            <td style="width:58%;padding:0;vertical-align:top;">
+              <div style="background:#1a3a6b;color:#fff;text-align:center;padding:5px 8px;font-weight:bold;font-size:13px;letter-spacing:2px;">ARACILIK SÖZLEŞMESİ</div>
+              <div style="padding:6px 8px;">
+                <table style="width:100%;border-collapse:collapse;font-size:10px;">
+                  <tr><td style="font-weight:bold;width:85px;padding:2px 0;">AD SOYAD</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${clientName(doc.client)}</td></tr>
+                  <tr><td style="font-weight:bold;padding:2px 0;">ADRESİ</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${(data.main_address as string) || doc.client?.address || ''}</td></tr>
+                  <tr><td style="font-weight:bold;padding:2px 0;">TELEFON</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${doc.client?.phone || ''}</td></tr>
+                  <tr><td style="font-weight:bold;padding:2px 0;">TC No</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${(data.main_tc_no as string) || ''}</td></tr>
+                  <tr><td style="font-weight:bold;padding:2px 0;">e-mail</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${(data.main_email as string) || doc.client?.email || ''}</td></tr>
+                </table>
+              </div>
+            </td>
+          </tr>
         </table>
-        <h2>2. Taşınmaz</h2><table>${propRows}</table>
-        <h2>3. Yetki Kapsamı</h2>
-        <table>
-          <tr><td>Yetki Türü:</td><td>${data.yetki_turu || 'Satış'}</td></tr>
-          <tr><td>Başlangıç:</td><td>${fd(data.baslangic_tarihi as string)}</td></tr>
-          <tr><td>Süre:</td><td>${data.yetki_suresi_gun || '90'} gün</td></tr>
-          <tr><td>Komisyon:</td><td>%${data.komisyon_orani || '3'} + KDV (${data.komisyon_turu || 'Satıcıdan'})</td></tr>
+        <div class="sec-title" style="margin-top:6px;">GAYRİMENKULE AİT BİLGİLER</div>
+        <table class="auth-table">
+          <tr>
+            <td style="text-align:center;">${chk(propType==='detached_house')} Ev</td>
+            <td style="text-align:center;">${chk(propType==='apartment')} Apt. Dairesi</td>
+            <td style="text-align:center;">${chk(['commercial','office'].includes(propType))} İşyeri</td>
+            <td style="text-align:center;">${chk(propType==='shop')} Dükkan</td>
+            <td style="text-align:center;">${chk(propType==='villa')} Villa</td>
+            <td style="text-align:center;">${chk(propType==='land')} Arsa</td>
+            <td style="text-align:center;">${chk(!['detached_house','apartment','commercial','office','shop','villa','land'].includes(propType))} Diğer</td>
+          </tr>
+          <tr><td colspan="2" style="font-weight:bold;">Adresi</td><td colspan="5">${propAddr}</td></tr>
+          <tr><td style="font-weight:bold;">İlçesi</td><td colspan="2">${doc.property?.district || '___'}</td><td style="font-weight:bold;">İli</td><td colspan="3">${doc.property?.city || '___'}</td></tr>
+          <tr><td colspan="2" style="font-weight:bold;">Tapu Kayıt Bilg.</td><td>Pafta: ${data.pafta || '___'}</td><td colspan="2">Ada: ${data.ada || '___'}</td><td colspan="2">Parsel: ${data.parsel || '___'}</td></tr>
+          <tr><td colspan="2" style="font-weight:bold;">Diğer Özellikler</td><td colspan="5">${data.ozel_sartlar || ''}</td></tr>
         </table>
-        <h2>4. Özel Şartlar</h2><p>${data.ozel_sartlar || 'Yoktur.'}</p>
-        <h2>5. Genel Hükümler</h2><p>Mülk sahibi, yetki süresi boyunca taşınmazı başka aracı aracılığıyla satamaz/kiralayamaz.</p>
+        <div class="sec-title" style="margin-top:6px;">YAPILACAK İŞLEME AİT BİLGİLER</div>
+        <table class="auth-table">
+          <tr>
+            <td style="font-weight:bold;">Satış Tutarı</td><td>${data.satis_tutari ? money(data.satis_tutari as string) : '___'} TL</td>
+            <td style="font-weight:bold;">Ödeme Şekli</td><td>${data.odeme_sekli || 'Nakit'}</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold;">Komisyon Oranı</td><td>%${data.komisyon_orani || '3'} + KDV (${data.komisyon_turu || 'Satıcıdan'})</td>
+            <td style="font-weight:bold;">Gayrimenkul Danışmanı</td><td>${doc.consultant?.full_name || '___'}</td>
+          </tr>
+          <tr>
+            <td style="font-weight:bold;">Yetki Türü</td><td>${data.yetki_turu || 'Satış'}</td>
+            <td style="font-weight:bold;">Süre</td><td>${data.yetki_suresi_gun || '90'} gün (${fd(data.baslangic_tarihi as string)} – ${sureSon})</td>
+          </tr>
+        </table>
+        <div style="margin-top:8px;">
+          <p class="clause"><strong>1. KONU:</strong> Müşteri ile ${officeName}, yukarıda belirtilen gayrimenkulün ${data.yetki_turu || 'satış'}ına aracılık edilmesi işlemi için karşılıklı olarak anlaşılmıştır.</p>
+          <p class="clause"><strong>2. TANITIM YETKİSİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak satış işlemi amacıyla internet, basın, yayın ve medyayı da dahil etmek üzere tanıtım faaliyetlerinde bulunmak hakkını ve gayrimenkule giriş imkânı sağlamayı ${officeName}'e kabul ve taahhüt eder.</p>
+          <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları ${officeName}'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması halinde komisyon miktarını ${officeName}'e ödemeyi kabul eder.</p>
+          <p class="clause"><strong>4. İŞLEM YETKİSİ:</strong> Müşteri, gayrimenkulünün üzerinde işlem yapma yetkisi bulunmayan üçüncü kişilerin sebep olacağı zararı önlemek amacıyla ${officeName}'in gerekli tedbirleri almasına izin vermeyi kabul eder.</p>
+          <p class="clause"><strong>5. SÜRE:</strong> İşbu sözleşme imzalandığı tarihten itibaren <strong>${data.yetki_suresi_gun || '90'} gün</strong> süreyle geçerlidir. Bitiş: <strong>${sureSon}</strong>. Sözleşme süresi içinde taşınmaz satılır/kiralanırsa komisyon tutarı tahsil edilecektir.</p>
+          <p class="clause"><strong>6. SÜRENİN BİTİMİ:</strong> Sözleşme süresinin dolmasından sonra 90 gün içinde ${officeName}'in tanıştırdığı kişiyle işlem yapılması halinde komisyon miktarının 2 katı + KDV hizmet bedeli olarak ödenir.</p>
+          <p class="clause"><strong>7. İHTİLAF:</strong> Bu sözleşmenin uygulanmasından doğacak uyuşmazlıklarda Bursa (Merkez) Mahkemeleri ve İcra Daireleri yetkilidir. Doğacak damga vergisi, resim, pul ve harçların tamamı müşteriye aittir.</p>
+        </div>
       `,
       sigs: `
-        <div class="sig">${sigArea('main', clientName(doc.client))}<div class="sig-line">Mülk Sahibi<br><strong>${clientName(doc.client)}</strong></div></div>
-        <div class="sig"><div class="sig-area"></div><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
+        <div class="auth-sigs">
+          <div class="auth-sig">
+            <div class="auth-sig-label">Müşteri<br>Ad Soyad ve İmza</div>
+            <div class="auth-sig-box">${sigArea('main', clientName(doc.client))}</div>
+            <div style="font-size:10px;margin-top:4px;">${clientName(doc.client)}</div>
+          </div>
+          <div class="auth-sig">
+            <div class="auth-sig-label">${officeName} Adına<br>İsim ve İmza</div>
+            <div class="auth-sig-box">${sigArea('consultant', doc.consultant?.full_name || '')}</div>
+            <div style="font-size:10px;margin-top:4px;">${doc.consultant?.full_name || '___'}</div>
+          </div>
+          <div class="auth-sig" style="flex:0.5;text-align:left;">
+            <div class="auth-sig-label">Tarih</div>
+            <div class="auth-sig-box">${created}</div>
+          </div>
+        </div>
       `,
     },
     sales_contract: {
