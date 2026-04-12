@@ -174,7 +174,7 @@ function buildWaWorkflow(
     parameters: {
       resource: 'messages-api',
       instanceName: waInstance,
-      remoteJid: '={{ $json.phone }}',
+      remoteJid: '={{ $json.phone + "@s.whatsapp.net" }}',
       messageText: message,
       options_message: {},
     },
@@ -463,7 +463,7 @@ export async function POST(req: NextRequest) {
       workflow = buildAiBotWorkflow(
         name,
         consultant.id,
-        consultant.full_name,
+        consultant.wa_instance || consultant.full_name,
         systemPrompt || '',
         message || DEFAULT_USER_PROMPT,
         evolutionCred,
@@ -500,7 +500,7 @@ export async function POST(req: NextRequest) {
         templateId,
         name,
         consultant.id,
-        consultant.full_name,
+        consultant.wa_instance || consultant.full_name,
         message || 'Merhaba, size ulaşmak istedik.',
         evolutionCred,
       )
