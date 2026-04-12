@@ -612,6 +612,14 @@ export default function DocumentDetailPage() {
     loadAll()
   }, [id])
 
+  // Auto-poll signature status every 8s while any request is pending/viewed
+  useEffect(() => {
+    const hasPending = sigRequests.some(r => r.status === 'pending' || r.status === 'viewed')
+    if (!hasPending) return
+    const interval = setInterval(loadSigRequests, 8000)
+    return () => clearInterval(interval)
+  }, [sigRequests])
+
   async function loadAll() {
     const supabase = createClient()
     const [docRes, sigsRes, settingsRes] = await Promise.all([
@@ -660,12 +668,23 @@ export default function DocumentDetailPage() {
 
   async function loadSigRequests() {
     const supabase = createClient()
-    const { data } = await supabase
-      .from('signature_requests')
-      .select('*')
-      .eq('document_id', id)
-      .order('created_at', { ascending: true })
-    if (data) setSigRequests(data as SigRequest[])
+    const [sigsRes, docRes] = await Promise.all([
+      supabase
+        .from('signature_requests')
+        .select('*')
+        .eq('document_id', id)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('documents')
+        .select('signature_status, signed_at')
+        .eq('id', id)
+        .single(),
+    ])
+    if (sigsRes.data) setSigRequests(sigsRes.data as SigRequest[])
+    if (docRes.data) {
+      setDoc(prev => prev ? { ...prev, signature_status: docRes.data.signature_status, signed_at: docRes.data.signed_at } : prev)
+      setNewStatus(docRes.data.signature_status as SignatureStatus)
+    }
   }
 
   async function handleUpdateStatus() {
