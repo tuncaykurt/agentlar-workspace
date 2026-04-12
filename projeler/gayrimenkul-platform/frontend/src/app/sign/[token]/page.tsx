@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
 import { CheckCircle, XCircle, PenLine, Type, Trash2, AlertCircle } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -260,45 +259,21 @@ export default function SignPage() {
 
   async function loadRequest() {
     try {
-      const supabase = createClient()
+      // Use API route (service_role) — avoids RLS issues with anon client
+      const res = await fetch(`/api/sign/${token}`)
+      if (!res.ok) { setState('error'); return }
 
-      // Fetch signature request by token
-      const { data: req, error: reqErr } = await supabase
-        .from('signature_requests')
-        .select('*')
-        .eq('token', token)
-        .single()
+      const { sigReq: req, doc: docData, officeName: name } = await res.json()
 
-      if (reqErr || !req) { setState('error'); return }
-
+      if (!req) { setState('error'); return }
       setSigReq(req as SignRequest)
 
       if (req.status === 'signed') { setState('already_signed'); return }
 
-      // Fetch document
-      const { data: docData } = await supabase
-        .from('documents')
-        .select('id, title, doc_type, template_data, client:clients(full_name, salutation), property:properties(title, city)')
-        .eq('id', req.document_id)
-        .single()
-
       if (!docData) { setState('error'); return }
       setDoc(docData as DocInfo)
 
-      // Fetch office name from settings
-      const { data: setting } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'office_name')
-        .single()
-      if (setting?.value) setOfficeName(String(setting.value).replace(/^"|"$/g, ''))
-
-      // Mark as viewed
-      await supabase
-        .from('signature_requests')
-        .update({ status: 'viewed', viewed_at: new Date().toISOString() })
-        .eq('id', req.id)
-        .eq('status', 'pending')
+      if (name) setOfficeName(name)
 
       setState('ready')
     } catch {

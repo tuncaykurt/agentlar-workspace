@@ -7,23 +7,48 @@ function getServiceClient() {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
-// GET /api/sign/[token] — Get signing request info (not used by UI currently, useful for debugging)
+// GET /api/sign/[token] — Get signing request + document info (uses service_role, no RLS issues)
 export async function GET(
   _req: NextRequest,
   { params }: { params: { token: string } }
 ) {
   const supabase = getServiceClient()
-  const { data, error } = await supabase
+
+  const { data: sigReq, error } = await supabase
     .from('signature_requests')
-    .select('id, signer_name, signer_role, status, document_id')
+    .select('id, signer_name, signer_phone, signer_role, status, document_id, viewed_at, signed_at, token')
     .eq('token', params.token)
     .single()
 
-  if (error || !data) {
+  if (error || !sigReq) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  return NextResponse.json(data)
+  const { data: doc } = await supabase
+    .from('documents')
+    .select('id, title, doc_type, template_data, client:clients(full_name, salutation), property:properties(title, city)')
+    .eq('id', sigReq.document_id)
+    .single()
+
+  const { data: setting } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'office_name')
+    .single()
+
+  // Mark as viewed if pending
+  if (sigReq.status === 'pending') {
+    await supabase
+      .from('signature_requests')
+      .update({ status: 'viewed', viewed_at: new Date().toISOString() })
+      .eq('id', sigReq.id)
+  }
+
+  return NextResponse.json({
+    sigReq,
+    doc,
+    officeName: setting?.value ? String(setting.value).replace(/^"|"$/g, '') : 'Gayrimenkul Ofisi',
+  })
 }
 
 // POST /api/sign/[token] — Submit signature
