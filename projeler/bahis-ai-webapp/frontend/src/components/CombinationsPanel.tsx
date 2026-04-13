@@ -142,7 +142,16 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
   const [showSaved, setShowSaved]       = useState(false);
   const [refreshing, setRefreshing]     = useState(false);
 
-  useEffect(() => { setSavedCoupons(loadSaved()); }, []);
+  useEffect(() => {
+    const coupons = loadSaved();
+    setSavedCoupons(coupons);
+    // Bekleyen kupon varsa otomatik güncelle
+    const hasPending = coupons.some(c =>
+      c.overall !== "won" && c.overall !== "lost" &&
+      c.combo.selections.some(s => s.fixture_id)
+    );
+    if (hasPending) refreshResultsFor(coupons);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function generate() {
     if (analyses.length === 0) { setError("Önce Günlük sekmesinden maç analizi yapın."); return; }
@@ -196,17 +205,16 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
   }
 
   /* ── Sonuçları & canlı skorları güncelle ──────────────────── */
-  async function refreshResults() {
+  async function refreshResultsFor(coupons: SavedCoupon[]) {
     setRefreshing(true);
     try {
-      // fixture_id → skor/durum map
       const scoreMap = new Map<number, {
         home_goals: number; away_goals: number; status: string; elapsed?: number;
       }>();
 
       // Benzersiz tarihleri topla → her tarih için fixture çek
       const dates = new Set<string>();
-      savedCoupons.forEach(c =>
+      coupons.forEach(c =>
         c.combo.selections.forEach(s => { if (s.match_date) dates.add(s.match_date); })
       );
       for (const date of dates) {
@@ -225,7 +233,7 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
         } catch {}
       }
 
-      // Canlı maçları da çek (today fixture'larında olmayabilir)
+      // Canlı maçları da çek
       try {
         const live = await getLiveFixtures();
         live.fixtures.forEach(f => {
@@ -238,17 +246,15 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
         });
       } catch {}
 
-      const updated = savedCoupons.map(coupon => {
+      const updated = coupons.map(coupon => {
         const newSels: SavedSelection[] = coupon.combo.selections.map(sel => {
           if (!sel.fixture_id) return sel;
-          // Zaten kesin sonuç varsa güncelleme
-          if (sel.result) return sel;
+          if (sel.result) return sel; // zaten kesinleşti
 
           const score = scoreMap.get(sel.fixture_id);
           if (!score) return sel;
 
           if (DONE_STATUSES.has(score.status)) {
-            // Maç bitti — kesin sonuç
             return {
               ...sel,
               live_score: undefined,
@@ -260,9 +266,7 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
               },
             };
           }
-
           if (LIVE_STATUSES.has(score.status)) {
-            // Canlı — geçici skor göster, result yok
             return {
               ...sel,
               live_score: {
@@ -273,7 +277,6 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
               },
             };
           }
-
           return sel;
         });
 
@@ -290,6 +293,8 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
       setRefreshing(false);
     }
   }
+
+  function refreshResults() { return refreshResultsFor(savedCoupons); }
 
   return (
     <div className="py-4 space-y-4">

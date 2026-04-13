@@ -10,18 +10,21 @@ DONE_STATUSES = {"FT", "AET", "PEN", "AWD", "WO"}
 def _needs_refresh(cached: list, match_date: str) -> bool:
     """
     DB'deki veriyi yenile:
-    - Bugün veya yarının maçıysa (sonuçlar güncelleniyor olabilir)
-    - Cached'deki maçlardan herhangi biri hâlâ NS/1H/2H/HT durumundaysa
+    - Geçmiş tarih bile olsa NS maç varsa — maç başlamadan cache'lendi, güncelle
+    - Bugün/gelecek: bitmemiş maç varsa güncelle
     """
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    if match_date < today:
-        return False  # Geçmiş tarih — sonuçlar kesinleşmiş, yenileme
-    # Bugün veya gelecek — NS/live maç varsa API'den çek (sonuç güncellemesi)
     for f in cached:
         status = f.get("fixture", {}).get("status", {}).get("short", "")
-        if status not in DONE_STATUSES:
-            return True  # Henüz bitmemiş maç var — güncelle
-    return False  # Hepsi bitti — DB yeterli
+        if match_date < today:
+            # Geçmiş gün: NS kalmışsa cache yanlış zamanlanmış — yenile
+            if status == "NS":
+                return True
+        else:
+            # Bugün veya gelecek: bitmemiş maç varsa güncelle
+            if status not in DONE_STATUSES:
+                return True
+    return False  # Hepsi bitti veya geçmiş+NS yok — cache yeterli
 
 @router.get("/today")
 def today_fixtures(league_id: int = None):
