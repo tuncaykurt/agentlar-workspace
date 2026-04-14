@@ -25,7 +25,7 @@ const statusLabels: Record<PropertyStatus, string> = {
 const typeLabels: Record<PropertyType, string> = {
   apartment: 'Daire', villa: 'Villa', land: 'Arsa',
   commercial: 'İşyeri', office: 'Ofis', shop: 'Dükkan',
-  warehouse: 'Depo', detached_house: 'Müstakil',
+  warehouse: 'Depo', detached_house: 'Müstakil', field: 'Tarla',
 }
 
 function formatPrice(n: number, currency = 'TRY') {

@@ -18,6 +18,7 @@ const propertyTypes: { value: PropertyType; label: string }[] = [
   { value: 'office', label: 'Ofis' },
   { value: 'shop', label: 'Dükkan' },
   { value: 'detached_house', label: 'Müstakil Ev' },
+  { value: 'field', label: 'Tarla' },
 ]
 
 type ScrapingStatus = 'idle' | 'loading' | 'success' | 'error'

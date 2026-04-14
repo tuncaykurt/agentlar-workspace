@@ -233,7 +233,7 @@ function DocSummary({ doc, signerRole, token }: { doc: DocInfo; signerRole: stri
         { label: 'Yetki Türü', value: (data.yetki_turu as string) || 'Satış' },
         { label: 'Satış Tutarı', value: money(data.satis_tutari) || '___' },
         { label: 'Ödeme Şekli', value: (data.odeme_sekli as string) || 'Nakit' },
-        { label: 'Komisyon Oranı', value: `%${data.komisyon_orani || '3'} + KDV (${data.komisyon_turu || 'Satıcıdan'})` },
+        { label: 'Komisyon Oranı', value: `%${data.komisyon_orani || '2'} + KDV (${data.komisyon_turu || 'Satıcıdan'})` },
         { label: 'Yetki Süresi', value: `${data.yetki_suresi_gun || '90'} gün` },
         { label: 'Başlangıç', value: fmtDate(data.baslangic_tarihi) },
       ]
@@ -592,7 +592,7 @@ export default function SignPage() {
         {/* Submit */}
         <button
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || !agreed}
           className="w-full py-4 bg-blue-600 text-white font-semibold rounded-xl text-base hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {submitting ? 'İmzalanıyor...' : 'Belgeyi İmzala'}

@@ -145,25 +145,33 @@ export async function POST(
 
   // 6. Send WA notification to consultant
   try {
-    // Get document + consultant info
+    // Get document + consultant info (include instance key for auth)
     const { data: doc } = await supabase
       .from('documents')
-      .select('id, title, consultant:consultants(id, full_name, phone, wa_instance)')
+      .select('id, title, consultant:consultants(id, full_name, phone, wa_instance, evolution_instance_key)')
       .eq('id', sigReq.document_id)
       .single()
 
     // Get Evolution API settings
-    const { data: evoUrlSetting } = await supabase
-      .from('settings').select('value').eq('key', 'evolution_api_url').single()
-    const { data: evoKeySetting } = await supabase
-      .from('settings').select('value').eq('key', 'evolution_api_key').single()
+    const [evoUrlRes, evoKeyRes] = await Promise.all([
+      supabase.from('settings').select('value').eq('key', 'evolution_api_url').single(),
+      supabase.from('settings').select('value').eq('key', 'evolution_api_key').single(),
+    ])
 
-    const consultant = doc?.consultant as { id: string; full_name: string; phone: string; wa_instance: string } | null
-    const evoUrl = evoUrlSetting?.value ? String(evoUrlSetting.value).replace(/^"|"$/g, '').replace(/\/$/, '') : null
-    const evoKey = evoKeySetting?.value ? String(evoKeySetting.value).replace(/^"|"$/g, '') : null
+    type ConsultantWA = { id: string; full_name: string; phone: string; wa_instance: string; evolution_instance_key?: string }
+    const consultant = doc?.consultant as ConsultantWA | null
+    const evoUrl = evoUrlRes.data?.value ? String(evoUrlRes.data.value).replace(/^"|"$/g, '').replace(/\/$/, '') : null
+    // Prefer per-instance key, fall back to global key
+    const evoKey = consultant?.evolution_instance_key
+      ? String(consultant.evolution_instance_key).replace(/^"|"$/g, '')
+      : evoKeyRes.data?.value ? String(evoKeyRes.data.value).replace(/^"|"$/g, '') : null
 
     if (consultant?.phone && consultant?.wa_instance && evoUrl && evoKey) {
-      const phone = consultant.phone.replace(/\D/g, '')
+      // Normalize phone: strip non-digits, convert 05... → 905...
+      let phone = consultant.phone.replace(/\D/g, '')
+      if (phone.startsWith('0')) phone = '90' + phone.slice(1)
+      else if (!phone.startsWith('90') && phone.length === 10) phone = '90' + phone
+
       const docTitle = doc?.title || 'Belge'
       const signerInfo = `${sigReq.signer_name}${sigReq.signer_role ? ` (${sigReq.signer_role})` : ''}`
 
@@ -174,10 +182,21 @@ export async function POST(
         msg = `✍️ *${docTitle}*\n\n${signerInfo} belgeyi imzaladı.\n\nDiğer imzalar bekleniyor.`
       }
 
-      await fetch(`${evoUrl}/message/sendText/${consultant.wa_instance}`, {
+      const waRes = await fetch(`${evoUrl}/message/sendText/${consultant.wa_instance}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
         body: JSON.stringify({ number: phone, text: msg }),
+      })
+      // Log failure to console for debugging (does not affect response)
+      if (!waRes.ok) {
+        console.error('[sign] WA notification failed:', waRes.status, await waRes.text().catch(() => ''))
+      }
+    } else {
+      console.warn('[sign] WA notification skipped — missing:', {
+        phone: !!consultant?.phone,
+        wa_instance: !!consultant?.wa_instance,
+        evoUrl: !!evoUrl,
+        evoKey: !!evoKey,
       })
     }
   } catch {

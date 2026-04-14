@@ -37,7 +37,9 @@ const propertyTypes: { value: PropertyType; label: string }[] = [
   { value: 'villa', label: 'Villa' },
   { value: 'land', label: 'Arsa' },
   { value: 'commercial', label: 'İşyeri' },
+  { value: 'office', label: 'Ofis' },
   { value: 'detached_house', label: 'Müstakil Ev' },
+  { value: 'field', label: 'Tarla' },
 ]
 
 const cities = ['İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Mersin', 'Adana', 'Kocaeli', 'Konya', 'Gaziantep']

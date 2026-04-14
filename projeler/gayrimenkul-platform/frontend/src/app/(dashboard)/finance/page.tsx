@@ -30,7 +30,7 @@ export default function FinancePage() {
 
   // Komisyon hesaplayıcı
   const [salePrice, setSalePrice] = useState('')
-  const [commissionRate, setCommissionRate] = useState('3')
+  const [commissionRate, setCommissionRate] = useState('2')
   const [consultantRate, setConsultantRate] = useState('50')
   const [calcResult, setCalcResult] = useState<{
     total: number; office: number; consultant: number

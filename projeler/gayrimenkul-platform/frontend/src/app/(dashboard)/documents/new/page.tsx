@@ -369,20 +369,27 @@ function generatePrintHTML(params: {
 
   const styles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Times New Roman', Times, serif; max-width: 820px; margin: 0 auto; padding: 48px 40px; color: #111; font-size: 13px; line-height: 1.8; }
+    html, body { overflow-x: hidden; }
+    body { font-family: 'Times New Roman', Times, serif; max-width: 820px; margin: 0 auto; padding: 32px 20px; color: #111; font-size: 13px; line-height: 1.8; word-break: break-word; }
     h1 { font-size: 20px; text-align: center; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 6px; }
     .sub { text-align: center; font-size: 12px; color: #555; margin-bottom: 6px; }
     .divider { border: none; border-top: 2px solid #111; margin: 12px 0 24px; }
     h2 { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin: 20px 0 10px; }
+    .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-    td { padding: 3px 6px; vertical-align: top; }
-    td:first-child { font-weight: bold; width: 200px; white-space: nowrap; }
+    td { padding: 3px 6px; vertical-align: top; word-break: break-word; }
+    td:first-child { font-weight: bold; width: 160px; }
     p { margin-bottom: 8px; text-align: justify; }
     .sigs { display: flex; justify-content: space-between; margin-top: 64px; flex-wrap: wrap; gap: 24px; }
     .sig { text-align: center; min-width: 180px; }
     .sig-line { border-top: 1px solid #333; padding-top: 8px; margin-top: 48px; font-size: 12px; }
     .footer { margin-top: 40px; font-size: 10px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 10px; }
     .print-btn { background: #2563eb; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; margin-bottom: 24px; }
+    @media screen and (max-width: 600px) {
+      body { padding: 16px 14px; font-size: 12px; }
+      h1 { font-size: 16px; letter-spacing: 2px; }
+      td:first-child { width: 120px; }
+    }
     @media print { .no-print { display: none !important; } body { padding: 20px; } }
   `
 
@@ -481,7 +488,7 @@ function generatePrintHTML(params: {
 
         <!-- GAYRİMENKULE AİT BİLGİLER -->
         <div class="sec-title" style="margin-top:6px;">GAYRİMENKULE AİT BİLGİLER</div>
-        <table class="auth-table">
+        <div class="tbl-wrap"><table class="auth-table">
           <tr>
             <td style="text-align:center;">${chk(propType==='detached_house')} Ev</td>
             <td style="text-align:center;">${chk(propType==='apartment')} Apt. Dairesi</td>
@@ -513,11 +520,11 @@ function generatePrintHTML(params: {
             <td colspan="2" style="font-weight:bold;">Diğer Özellikler</td>
             <td colspan="5">${propOzellik}</td>
           </tr>
-        </table>
+        </table></div>
 
         <!-- YAPILACAK İŞLEME AİT BİLGİLER -->
         <div class="sec-title" style="margin-top:6px;">YAPILACAK İŞLEME AİT BİLGİLER</div>
-        <table class="auth-table">
+        <div class="tbl-wrap"><table class="auth-table">
           <tr>
             <td style="font-weight:bold;">${templateData.yetki_turu === 'Kiralama' ? 'Kira Bedeli' : 'Satış Tutarı'}</td>
             <td>${templateData.yetki_turu === 'Kiralama'
@@ -528,7 +535,7 @@ function generatePrintHTML(params: {
           </tr>
           <tr>
             <td style="font-weight:bold;">Komisyon Oranı</td>
-            <td>%${templateData.komisyon_orani || '3'} + KDV (${templateData.komisyon_turu || 'Satıcıdan'})</td>
+            <td>%${templateData.komisyon_orani || '2'} + KDV (${templateData.komisyon_turu || 'Satıcıdan'})</td>
             <td style="font-weight:bold;">Gayrimenkul Danışmanı</td>
             <td>${consultant?.full_name || '_______________'}</td>
           </tr>
@@ -538,13 +545,13 @@ function generatePrintHTML(params: {
             <td style="font-weight:bold;">Süre</td>
             <td>${templateData.yetki_suresi_gun || '90'} gün (${fmtDate(templateData.baslangic_tarihi as string)} – ${sureSon})</td>
           </tr>
-        </table>
+        </table></div>
 
         <!-- MADDELER -->
         <div style="margin-top:8px;">
           <p class="clause"><strong>1. KONU:</strong> Müşteri ile ${officeName}, yukarıda belirtilen gayrimenkulün ${templateData.yetki_turu || 'satış'}ına aracılık edilmesi işlemi için karşılıklı olarak anlaşılmıştır.</p>
           <p class="clause"><strong>2. TANITIM YETKİSİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak satış işlemi amacıyla internet, basın, yayın ve medyayı da dahil etmek üzere tanıtım faaliyetlerinde bulunmak hakkını ve gayrimenkule giriş imkânı sağlamayı ${officeName}'e kabul ve taahhüt eder.</p>
-          <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları ${officeName}'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Müşteri, sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması/kiralaması halinde yukarıdaki satış tutarı üzerinden %${templateData.komisyon_orani || '3'} + KDV komisyon miktarını ${officeName}'e ödemeyi kabul eder.</p>
+          <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları ${officeName}'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Müşteri, sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması/kiralaması halinde yukarıdaki satış tutarı üzerinden %${templateData.komisyon_orani || '2'} + KDV komisyon miktarını ${officeName}'e ödemeyi kabul eder.</p>
           <p class="clause"><strong>4. İŞLEM YETKİSİ:</strong> Müşteri, gayrimenkulünün üzerinde işlem yapma yetkisi bulunmayan üçüncü kişilerin sebep olacağı zararı önlemek amacıyla ${officeName}'in gerekli tedbirleri almasına izin vermeyi kabul eder.</p>
           <p class="clause"><strong>5. SÜRE:</strong> İşbu sözleşme, taraflarca imzalandığı tarihten itibaren <strong>${templateData.yetki_suresi_gun || '90'} gün</strong> süreyle geçerlidir. Bitiş tarihi: <strong>${sureSon}</strong>. Sözleşme süresi içinde taşınmaz satılır/kiralanırsa komisyon tutarı tahsil edilecektir.</p>
           <p class="clause"><strong>6. SÜRENİN BİTİMİ:</strong> Sözleşme süresinin dolmasından veya herhangi bir şekilde sona ermesinden sonra ${templateData.yetki_suresi_gun || '90'} gün içinde ${officeName}'in tanıştırdığı/gösterdiği kişi veya kuruluşlarla işlem yapılması halinde, ${officeName}'e yukarıda belirtilen komisyon miktarının 2 katı + KDV'si hizmet bedeli olarak ödenir.</p>
@@ -622,7 +629,7 @@ function generatePrintHTML(params: {
           .kira-tbl td { border:1px solid #000; padding:4px 8px; vertical-align:top; }
           .kira-tbl td:first-child { font-weight:bold; white-space:nowrap; width:220px; background:#f5f5f5; }
         </style>
-        <table class="kira-tbl">
+        <div class="tbl-wrap"><table class="kira-tbl">
           <tr><td>KİRALANANIN ADRESİ</td><td>${templateData.kiralanan_adres || (property ? [property.address, property.district, property.city].filter(Boolean).join(', ') : '_______________')}</td></tr>
           <tr><td>CİNSİ</td><td>${templateData.kullanim_amaci || 'KONUT'}</td></tr>
           <tr><td>KİRAYA VERENİN ADI SOYADI</td><td>${clientName(mainClient)}${templateData.main_tc_no ? '\nT.C. ' + templateData.main_tc_no : ''}${mainClient?.phone ? '\nTEL: ' + mainClient.phone : ''}</td></tr>
@@ -636,7 +643,7 @@ function generatePrintHTML(params: {
           <tr><td>YILLIK KİRA ARTIŞ ORANI</td><td>${templateData.artis_orani || 'YILLIK TÜFE ORANINA GÖRE YAPILACAKTIR.'}</td></tr>
           <tr><td>KİRALANANIN KULLANIM AMACI</td><td>${templateData.kullanim_amaci || 'KONUT'}</td></tr>
           <tr><td>TESLİM ALINAN DEMİRBAŞ LİSTESİ</td><td>${templateData.demirbas_listesi || '---'}</td></tr>
-        </table>
+        </table></div>
         <div style="display:flex;justify-content:space-around;margin:28px 0 20px;font-size:11px;font-weight:bold;text-align:center;">
           <div>KİRACI<br><br><br>${clientName(secondClient)}</div>
           <div>KİRAYA VEREN<br><br><br>${clientName(mainClient)}</div>
@@ -745,6 +752,7 @@ function generatePrintHTML(params: {
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>${cfg.title}</title>
   <style>${styles}
     .letterhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -799,7 +807,7 @@ export default function NewDocumentPage() {
 
   // Authorization fields
   const [yetkiTuru, setYetkiTuru] = useState('Satış')
-  const [komisyonOrani, setKomisyonOrani] = useState('3')
+  const [komisyonOrani, setKomisyonOrani] = useState('2')
   const [komisyonTuru, setKomisyonTuru] = useState('Satıcıdan')
   const [baslangicTarihi, setBaslangicTarihi] = useState(new Date().toISOString().slice(0, 10))
   const [yetkiSuresiGun, setYetkiSuresiGun] = useState('90')
@@ -1152,8 +1160,10 @@ export default function NewDocumentPage() {
                     { val: 'detached_house', label: 'Ev' },
                     { val: 'villa', label: 'Villa' },
                     { val: 'commercial', label: 'İşyeri' },
+                    { val: 'office', label: 'Ofis' },
                     { val: 'shop', label: 'Dükkan' },
                     { val: 'land', label: 'Arsa' },
+                    { val: 'field', label: 'Tarla' },
                     { val: 'other', label: 'Diğer' },
                   ].map(o => (
                     <button
