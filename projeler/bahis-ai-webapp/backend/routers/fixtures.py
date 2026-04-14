@@ -35,7 +35,11 @@ def today_fixtures(league_id: int = None):
     fixtures = get_fixtures_by_date(today, league_id)
     if fixtures:
         save_fixtures(today, fixtures)
-    return {"date": today, "count": len(fixtures), "fixtures": _format(fixtures)}
+        return {"date": today, "count": len(fixtures), "fixtures": _format(fixtures)}
+    # API boş döndü (kota aşıldı / ağ hatası) — DB cache'e düş
+    if cached:
+        return {"date": today, "count": len(cached), "fixtures": _format(cached), "source": "db_fallback"}
+    return {"date": today, "count": 0, "fixtures": []}
 
 @router.get("/date/{date}")
 def fixtures_by_date(date: str, league_id: int = None):
@@ -45,7 +49,11 @@ def fixtures_by_date(date: str, league_id: int = None):
     fixtures = get_fixtures_by_date(date, league_id)
     if fixtures:
         save_fixtures(date, fixtures)
-    return {"date": date, "count": len(fixtures), "fixtures": _format(fixtures)}
+        return {"date": date, "count": len(fixtures), "fixtures": _format(fixtures)}
+    # API boş döndü (kota aşıldı / ağ hatası) — DB cache'e düş
+    if cached:
+        return {"date": date, "count": len(cached), "fixtures": _format(cached), "source": "db_fallback"}
+    return {"date": date, "count": 0, "fixtures": []}
 
 @router.get("/live")
 def live_fixtures(league_id: int = None):
