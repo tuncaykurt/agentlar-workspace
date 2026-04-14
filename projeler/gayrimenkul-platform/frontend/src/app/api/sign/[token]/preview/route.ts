@@ -123,7 +123,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       h1 { font-size: 16px; }
     }`
 
-  const jsBlock = `<script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm}body{font-size:10px!important;line-height:1.4!important;padding:0!important}h1{font-size:13px!important;letter-spacing:1px!important}.sub{font-size:11px!important}p,.clause{font-size:10px!important;line-height:1.4!important;margin-bottom:4px!important}td,table td{font-size:9px!important;padding:2px 4px!important}.auth-tbl td,.kira-tbl td{font-size:9px!important;padding:2px 4px!important}.sigs{margin-top:16px!important}.sig-line{min-height:40px!important;font-size:10px!important}.divider{margin:6px 0 10px!important}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}<\/script>`
+  const jsBlock = `<script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm}@media print{body{zoom:0.68}}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}<\/script>`
 
   // ── Sales contract ────────────────────────────────────────────────────────
   if (doc.doc_type === 'sales_contract') {

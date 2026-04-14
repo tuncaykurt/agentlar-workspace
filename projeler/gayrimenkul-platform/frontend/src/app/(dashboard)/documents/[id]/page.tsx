@@ -745,7 +745,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>${cfg.title}</title>
   <style>${styles}</style>
-  <script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm}body{font-size:10px!important;line-height:1.4!important;padding:0!important}h1{font-size:13px!important;letter-spacing:1px!important}.sub{font-size:11px!important}p,.clause{font-size:10px!important;line-height:1.4!important;margin-bottom:4px!important}td,table td{font-size:9px!important;padding:2px 4px!important}.sigs{margin-top:16px!important}.sig-line{min-height:40px!important;font-size:10px!important}.divider{margin:6px 0 10px!important}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}</script>
+  <script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm}@media print{body{zoom:0.68}}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}</script>
 </head>
 <body>
   <div class="no-print" style="text-align:right;margin-bottom:20px;">
