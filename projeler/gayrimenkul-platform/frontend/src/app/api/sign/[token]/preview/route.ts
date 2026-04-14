@@ -123,6 +123,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       h1 { font-size: 16px; }
     }`
 
+  const jsBlock = `<script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm}body{font-size:10px!important;line-height:1.4!important;padding:0!important}h1{font-size:13px!important;letter-spacing:1px!important}.sub{font-size:11px!important}p,.clause{font-size:10px!important;line-height:1.4!important;margin-bottom:4px!important}td,table td{font-size:9px!important;padding:2px 4px!important}.auth-tbl td,.kira-tbl td{font-size:9px!important;padding:2px 4px!important}.sigs{margin-top:16px!important}.sig-line{min-height:40px!important;font-size:10px!important}.divider{margin:6px 0 10px!important}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}<\/script>`
+
   // ── Sales contract ────────────────────────────────────────────────────────
   if (doc.doc_type === 'sales_contract') {
     const body = `
@@ -152,8 +154,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'second')}ALICI<br><strong>${secondName}</strong></div></div>
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
 
-    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
-      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="document.title='Satış Sözleşmesi';window.print()">⬇️ PDF İndir</button></div>
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</title><style>${baseStyles}</style>${jsBlock}</head><body>
+      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Satış Sözleşmesi','sales_contract')">⬇️ PDF İndir</button></div>
       ${letterhead}
       <h1>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</h1>
       <div class="sub">PROTOKOL YAZISI</div>
@@ -194,8 +196,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'second')}KİRACI<br><strong>${secondName}</strong></div></div>
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
 
-    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL KİRA SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
-      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="document.title='Kira Sözleşmesi';window.print()">⬇️ PDF İndir</button></div>
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL KİRA SÖZLEŞMESİ</title><style>${baseStyles}</style>${jsBlock}</head><body>
+      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Kira Sözleşmesi','rental_contract')">⬇️ PDF İndir</button></div>
       ${letterhead}
       <h1>GAYRİMENKUL KİRA SÖZLEŞMESİ</h1>
       <div class="sub">${today}</div>
@@ -285,8 +287,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}GAYRİMENKUL DANIŞMANI<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Adına İmza</div></div>
       <div class="sig" style="max-width:130px;"><div class="sig-line">TARİH<br>${today}</div></div>`
 
-    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
-      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="document.title='Aracılık Sözleşmesi';window.print()">⬇️ PDF İndir</button></div>
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style>${jsBlock}</head><body>
+      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Aracılık Sözleşmesi','authorization')">⬇️ PDF İndir</button></div>
       ${letterhead}
       <h1>ARACILIK SÖZLEŞMESİ</h1>
       <div class="sub">${today}</div>
@@ -296,9 +298,35 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
     </body></html>`
   }
 
+  // ── Offer letter ─────────────────────────────────────────────────────────
+  if (doc.doc_type === 'offer_letter') {
+    const body = `
+      <table style="margin-bottom:16px;font-size:15px;">
+        <tr><td style="font-weight:bold;width:160px;padding:4px 6px;">TEKLİF EDEN</td><td style="padding:4px 6px;">${clientName(doc.client)}${data.main_tc_no ? ' &bull; TC: ' + data.main_tc_no : ''}</td></tr>
+        ${prop ? `<tr><td style="font-weight:bold;padding:4px 6px;">TAŞINMAZ</td><td style="padding:4px 6px;">${[prop.title, prop.district, prop.city].filter(Boolean).join(' — ')}</td></tr>` : ''}
+        <tr><td style="font-weight:bold;padding:4px 6px;">TEKLİF BEDELİ</td><td style="padding:4px 6px;"><strong>${money(data.teklif_bedeli)}</strong></td></tr>
+        ${data.gecerlilik_tarihi ? `<tr><td style="font-weight:bold;padding:4px 6px;">GEÇERLİLİK</td><td style="padding:4px 6px;">${fmtDate(data.gecerlilik_tarihi)}</td></tr>` : ''}
+      </table>
+      ${data.ozel_sartlar ? `<p style="margin-top:12px;font-size:15px;line-height:1.8;text-align:justify;"><strong>Özel Şartlar:</strong> ${data.ozel_sartlar}</p>` : ''}`
+
+    const sigs = `
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}TEKLİF EDEN<br><strong>${clientName(doc.client)}</strong></div></div>
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
+
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL ALIM TEKLİF MEKTUBU</title><style>${baseStyles}</style>${jsBlock}</head><body>
+      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Teklif Mektubu','offer_letter')">⬇️ PDF İndir</button></div>
+      ${letterhead}
+      <h1>GAYRİMENKUL ALIM TEKLİF MEKTUBU</h1>
+      <div class="sub">${fmtDate(new Date().toISOString())}</div>
+      <hr class="divider">
+      ${body}
+      <div class="sigs">${sigs}</div>
+    </body></html>`
+  }
+
   // ── Fallback ──────────────────────────────────────────────────────────────
-  return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Belge</title><style>${baseStyles}</style></head><body>
-    <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="document.title='Belge';window.print()">⬇️ PDF İndir</button></div>
+  return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Belge</title><style>${baseStyles}</style>${jsBlock}</head><body>
+    <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Belge','other')">⬇️ PDF İndir</button></div>
     ${letterhead}
     <h1>${doc.title || 'BELGE'}</h1>
     <hr class="divider">
