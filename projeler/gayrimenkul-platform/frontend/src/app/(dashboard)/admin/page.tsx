@@ -938,6 +938,24 @@ YAPMA:
 - "Merhaba" ile başlama (ilk mesajda tamam, tekrar mesajda hayır)
 - Bilmediğin bir mülk detayını uydurmak — "Detayları kontrol edeyim, döneceğim" de`
 
+const DEFAULT_PROPERTY_BOT_SYSTEM = `Sen Ambiance Gayrimenkul'dan bir danışmansın. Sana gönderilen mülk bilgilerini kullanarak müşteri sorularını WhatsApp'tan yanıtlıyorsun.
+
+KİŞİLİK:
+- Güven veren, sıcak, bilgili bir gayrimenkul danışmanısın
+- Mülk bilgilerini doğal bir dille aktar — tablo gibi listeleme, sohbet et
+- Kısa tut: maksimum 2-3 cümle, soru cevapsa doğrudan yanıtla
+- Emoji kullanabilirsin ama abartma (1-2 max)
+
+MÜLK BİLGİLERİ KULLANIMI:
+- Fiyat sorulunca: mülk bilgisindeki fiyatı ver, müzakere edilebilirliğini belirt
+- Özellik sorulunca: mülk bilgisindeki detayları doğal cümleyle ilet
+- Bilmediğin detay sorulunca: "Detayları kontrol edeyim, döneceğim" de — uydurmak yok
+
+YAPMA:
+- "Yapay zeka olarak..." ibareleri
+- Uzun paragraflar, madde listeleri
+- Bilmediğin bilgiyi uydurmak`
+
 const DEFAULT_AI_USER = `Gönderen: {{ $('Webhook').item.json.body.data.pushName || 'Müşteri' }}
 Mesaj: {{ $('Webhook').item.json.body.data.message.conversation || $('Webhook').item.json.body.data.message.extendedTextMessage?.text || '[Ses/görsel/çıkartma]' }}
 
@@ -945,19 +963,23 @@ Danışman olarak bu mesaja kısa ve doğal bir WhatsApp yanıtı yaz.`
 
 const TEMPLATES = [
   // WhatsApp — Outbound
-  { id: 'wa_welcome',     label: 'WA Karşılama',        icon: '👋', cat: 'wa',    desc: 'Yeni müşteriye karşılama mesajı',             defaultMsg: 'Merhaba, Ambiance Gayrimenkul ailesine hoş geldiniz! Size nasıl yardımcı olabiliriz?', defaultSubj: '', defaultSystemPrompt: '' },
-  { id: 'wa_followup',    label: 'WA Takip',             icon: '📅', cat: 'wa',    desc: 'Takip tarihi gelen müşteriye hatırlatma',     defaultMsg: 'Merhaba, bugün sizi aramayı planlamıştık. Uygun bir zaman var mı?',                    defaultSubj: '', defaultSystemPrompt: '' },
-  { id: 'wa_document',    label: 'WA Belge Bildirimi',   icon: '📄', cat: 'wa',    desc: 'Belge imzalandığında bildirim gönder',        defaultMsg: 'Merhaba, belgeniz başarıyla imzalanmıştır.',                                            defaultSubj: '', defaultSystemPrompt: '' },
-  { id: 'wa_campaign',    label: 'WA Kampanya',          icon: '📣', cat: 'wa',    desc: 'Manuel tetiklenen toplu mesaj akışı',         defaultMsg: 'Merhaba, size özel bir teklifimiz var. Detaylar için bizi arayın.',                     defaultSubj: '', defaultSystemPrompt: '' },
-  // WhatsApp — AI Bot
-  { id: 'wa_aibot',       label: 'WA AI Bot',            icon: '🤖', cat: 'wa',    desc: 'Gelen mesajlara AI ile otomatik yanıt ver',   defaultMsg: DEFAULT_AI_USER, defaultSubj: '', defaultSystemPrompt: DEFAULT_AI_SYSTEM },
+  { id: 'wa_welcome',      label: 'WA Karşılama',         icon: '👋', cat: 'wa',    desc: 'Yeni müşteriye karşılama mesajı',             defaultMsg: 'Merhaba, Ambiance Gayrimenkul ailesine hoş geldiniz! Size nasıl yardımcı olabiliriz?', defaultSubj: '', defaultSystemPrompt: '' },
+  { id: 'wa_followup',     label: 'WA Takip',              icon: '📅', cat: 'wa',    desc: 'Takip tarihi gelen müşteriye hatırlatma',     defaultMsg: 'Merhaba, bugün sizi aramayı planlamıştık. Uygun bir zaman var mı?',                    defaultSubj: '', defaultSystemPrompt: '' },
+  { id: 'wa_document',     label: 'WA Belge',              icon: '📄', cat: 'wa',    desc: 'Belge imzalandığında bildirim gönder',        defaultMsg: 'Merhaba, belgeniz başarıyla imzalanmıştır.',                                            defaultSubj: '', defaultSystemPrompt: '' },
+  { id: 'wa_campaign',     label: 'WA Kampanya',           icon: '📣', cat: 'wa',    desc: 'Manuel tetiklenen toplu mesaj akışı',         defaultMsg: 'Merhaba, size özel bir teklifimiz var. Detaylar için bizi arayın.',                     defaultSubj: '', defaultSystemPrompt: '' },
+  { id: 'wa_targeted',     label: 'WA Hedefli',            icon: '🎯', cat: 'wa',    desc: 'Seçilen müşterilere WA gönder + log',        defaultMsg: 'Merhaba, size önemli bir bilgi iletmek istedik.',                                       defaultSubj: '', defaultSystemPrompt: '' },
+  // WhatsApp — AI Bots
+  { id: 'wa_aibot',        label: 'WA AI Bot',             icon: '🤖', cat: 'wa',    desc: 'Gelen mesajlara AI ile otomatik yanıt ver',   defaultMsg: DEFAULT_AI_USER, defaultSubj: '', defaultSystemPrompt: DEFAULT_AI_SYSTEM },
+  { id: 'wa_property_bot', label: 'WA Mülk Botu',          icon: '🏠', cat: 'wa',    desc: 'Seçilen mülk hakkında AI ile soru yanıtlar', defaultMsg: DEFAULT_AI_USER, defaultSubj: '', defaultSystemPrompt: DEFAULT_PROPERTY_BOT_SYSTEM },
   // Email
-  { id: 'email_welcome',  label: 'Email Karşılama',      icon: '✉️', cat: 'email', desc: 'Yeni müşteriye karşılama e-postası gönder',   defaultMsg: 'Merhaba,\n\nAmbiance Gayrimenkul ailesine hoş geldiniz!\n\nSize en iyi hizmeti sunmak için buradayız.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Ambiance Gayrimenkul\'e Hoş Geldiniz!', defaultSystemPrompt: '' },
-  { id: 'email_followup', label: 'Email Takip',          icon: '📬', cat: 'email', desc: 'Takip tarihi gelen müşteriye email gönder',   defaultMsg: 'Merhaba,\n\nSizi aramayı planlamıştık. Gayrimenkul ihtiyaçlarınızda yardımcı olmak isteriz.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Sizi Arayacağız — Ambiance Gayrimenkul', defaultSystemPrompt: '' },
-  { id: 'email_document', label: 'Email Belge Bildirimi',icon: '📋', cat: 'email', desc: 'Belge imzalandığında email bildirimi gönder', defaultMsg: 'Merhaba,\n\nBelgeniz başarıyla imzalanmıştır. Süreçle ilgili sorularınız için bize ulaşabilirsiniz.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Belgeniz İmzalandı — Ambiance Gayrimenkul', defaultSystemPrompt: '' },
+  { id: 'email_welcome',   label: 'Email Karşılama',       icon: '✉️', cat: 'email', desc: 'Yeni müşteriye karşılama e-postası gönder',   defaultMsg: 'Merhaba,\n\nAmbiance Gayrimenkul ailesine hoş geldiniz!\n\nSize en iyi hizmeti sunmak için buradayız.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Ambiance Gayrimenkul\'e Hoş Geldiniz!', defaultSystemPrompt: '' },
+  { id: 'email_followup',  label: 'Email Takip',           icon: '📬', cat: 'email', desc: 'Takip tarihi gelen müşteriye email gönder',   defaultMsg: 'Merhaba,\n\nSizi aramayı planlamıştık. Gayrimenkul ihtiyaçlarınızda yardımcı olmak isteriz.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Sizi Arayacağız — Ambiance Gayrimenkul', defaultSystemPrompt: '' },
+  { id: 'email_document',  label: 'Email Belge',           icon: '📋', cat: 'email', desc: 'Belge imzalandığında email bildirimi gönder', defaultMsg: 'Merhaba,\n\nBelgeniz başarıyla imzalanmıştır. Süreçle ilgili sorularınız için bize ulaşabilirsiniz.\n\nSaygılarımızla,\nAmbiance Gayrimenkul', defaultSubj: 'Belgeniz İmzalandı — Ambiance Gayrimenkul', defaultSystemPrompt: '' },
 ]
 
 type WFlow = { id: string; name: string; active: boolean; webhookUrl?: string }
+type ClientItem = { id: string; full_name: string; phone?: string }
+type PropertyItem = { id: string; title: string; city?: string; district?: string }
 
 function AutomationsTab() {
   const [consultants, setConsultants] = useState<Consultant[]>([])
@@ -975,11 +997,25 @@ function AutomationsTab() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [syncing, setSyncing] = useState<string | null>(null)
   const [error, setError] = useState('')
+  // Targeted campaign state
+  const [clientList, setClientList] = useState<ClientItem[]>([])
+  const [selectedClients, setSelectedClients] = useState<string[]>([])
+  const [clientSearch, setClientSearch] = useState('')
+  // Property bot state
+  const [propertyList, setPropertyList] = useState<PropertyItem[]>([])
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('')
 
   useEffect(() => {
     const supabase = createClient()
     supabase.from('consultants').select('id, full_name, wa_instance, evolution_instance_key, is_active').order('full_name').then(({ data }) => {
       if (data) setConsultants(data as Consultant[])
+    })
+    // Fetch clients and properties for selectors
+    supabase.from('clients').select('id, full_name, phone').order('full_name').then(({ data }) => {
+      if (data) setClientList(data as ClientItem[])
+    })
+    supabase.from('properties').select('id, title, city, district').eq('is_active', true).order('title').then(({ data }) => {
+      if (data) setPropertyList(data as PropertyItem[])
     })
   }, [])
 
@@ -1005,7 +1041,15 @@ function AutomationsTab() {
       const res = await fetch('/api/n8n/workflows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ consultantId: selectedId, templateId: tplId, message, subject, systemPrompt }),
+        body: JSON.stringify({
+          consultantId: selectedId,
+          templateId: tplId,
+          message,
+          subject,
+          systemPrompt,
+          clientIds: tplId === 'wa_targeted' ? selectedClients : undefined,
+          propertyId: tplId === 'wa_property_bot' ? selectedPropertyId : undefined,
+        }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); } else { setShowModal(false); loadWorkflows(); if (data.warning) setError(data.warning) }
@@ -1100,7 +1144,18 @@ function AutomationsTab() {
               {selected?.full_name} — İş Akışları
             </h4>
             <button
-              onClick={() => { setShowModal(true); setError('') }}
+              onClick={() => {
+                setShowModal(true)
+                setError('')
+                setSelectedClients([])
+                setSelectedPropertyId('')
+                setClientSearch('')
+                setTplId('wa_welcome')
+                setTplCat('wa')
+                setMessage(TEMPLATES[0].defaultMsg)
+                setSubject(TEMPLATES[0].defaultSubj)
+                setSystemPrompt(TEMPLATES[0].defaultSystemPrompt)
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600"
             >
               + Yeni İş Akışı
@@ -1124,57 +1179,63 @@ function AutomationsTab() {
           ) : (
             <div className="divide-y divide-slate-100">
               {workflows.map(wf => (
-                <div key={wf.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{wf.name}</p>
-                    {wf.webhookUrl
-                      ? <p className="text-xs text-slate-400 truncate font-mono">{wf.webhookUrl}</p>
-                      : <p className="text-xs text-slate-400">ID: {wf.id}</p>
-                    }
+                <div key={wf.id} className="px-3 sm:px-4 py-2.5 hover:bg-slate-50">
+                  {/* Top row: name + active toggle */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="flex-1 text-xs sm:text-sm font-medium text-slate-800 truncate">{wf.name}</p>
+                    {/* Active toggle */}
+                    <button
+                      onClick={() => handleToggle(wf)}
+                      disabled={toggling === wf.id}
+                      className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium transition-colors ${
+                        wf.active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      {toggling === wf.id
+                        ? <Loader2 size={10} className="animate-spin" />
+                        : wf.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                      {wf.active ? 'Aktif' : 'Pasif'}
+                    </button>
                   </div>
-                  {/* Copy URL */}
-                  {wf.webhookUrl && (
+                  {/* Bottom row: url + action buttons */}
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex-1 min-w-0">
+                      {wf.webhookUrl
+                        ? <p className="text-[10px] text-slate-400 truncate font-mono">{wf.webhookUrl}</p>
+                        : <p className="text-[10px] text-slate-400">ID: {wf.id}</p>
+                      }
+                    </div>
+                    {/* Copy URL */}
+                    {wf.webhookUrl && (
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(wf.webhookUrl!); alert('URL kopyalandı!') }}
+                        className="p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Webhook URL'yi kopyala"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                      </button>
+                    )}
+                    {/* Sync Evolution webhook — for AI Bot and Property Bot */}
+                    {(wf.name.includes('AI Bot') || wf.name.includes('Pazarlama Botu')) && (
+                      <button
+                        onClick={() => handleSyncWebhook(wf.id)}
+                        disabled={syncing === wf.id}
+                        className="p-1 text-slate-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Evolution webhook'u senkronize et"
+                      >
+                        {syncing === wf.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                      </button>
+                    )}
+                    {/* Delete */}
                     <button
-                      onClick={() => { navigator.clipboard.writeText(wf.webhookUrl!); alert('URL kopyalandı!') }}
-                      className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="Webhook URL'yi kopyala"
+                      onClick={() => handleDelete(wf.id)}
+                      disabled={deleting === wf.id}
+                      className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                      title="Sil"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                      {deleting === wf.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                     </button>
-                  )}
-                  {/* Sync Evolution webhook — only for AI Bot */}
-                  {wf.name.includes('AI Bot') && (
-                    <button
-                      onClick={() => handleSyncWebhook(wf.id)}
-                      disabled={syncing === wf.id}
-                      className="p-1.5 text-slate-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="Evolution webhook'u senkronize et (botu aktifleştir)"
-                    >
-                      {syncing === wf.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                    </button>
-                  )}
-                  {/* Active toggle */}
-                  <button
-                    onClick={() => handleToggle(wf)}
-                    disabled={toggling === wf.id}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                      wf.active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                    }`}
-                  >
-                    {toggling === wf.id
-                      ? <Loader2 size={11} className="animate-spin" />
-                      : wf.active ? <CheckCircle size={11} /> : <XCircle size={11} />}
-                    {wf.active ? 'Aktif' : 'Pasif'}
-                  </button>
-                  {/* Delete */}
-                  <button
-                    onClick={() => handleDelete(wf.id)}
-                    disabled={deleting === wf.id}
-                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                    title="Sil"
-                  >
-                    {deleting === wf.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1184,15 +1245,15 @@ function AutomationsTab() {
 
       {/* Create modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
-              <h3 className="font-semibold text-slate-900">Yeni İş Akışı Oluştur</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100">
-                <X size={18} />
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
+              <h3 className="font-semibold text-slate-900 text-sm">Yeni İş Akışı Oluştur</h3>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100">
+                <X size={16} />
               </button>
             </div>
-            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
               {/* Category tabs */}
               <div>
                 <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 mb-3">
@@ -1206,6 +1267,9 @@ function AutomationsTab() {
                         setMessage(first.defaultMsg)
                         setSubject(first.defaultSubj)
                         setSystemPrompt(first.defaultSystemPrompt)
+                        setSelectedClients([])
+                        setSelectedPropertyId('')
+                        setClientSearch('')
                       }}
                       className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
                         tplCat === cat ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -1216,83 +1280,162 @@ function AutomationsTab() {
                   ))}
                 </div>
                 {/* Template selection */}
-                <label className="block text-sm font-medium text-slate-700 mb-2">Şablon Seçin</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label className="block text-xs font-medium text-slate-600 mb-2">Şablon Seçin</label>
+                <div className="grid grid-cols-2 gap-1.5">
                   {TEMPLATES.filter(t => t.cat === tplCat).map(t => (
                     <button
                       key={t.id}
-                      onClick={() => { setTplId(t.id); setMessage(t.defaultMsg); setSubject(t.defaultSubj); setSystemPrompt(t.defaultSystemPrompt) }}
-                      className={`p-3 rounded-xl border-2 text-left transition-colors ${
+                      onClick={() => {
+                        setTplId(t.id)
+                        setMessage(t.defaultMsg)
+                        setSubject(t.defaultSubj)
+                        setSystemPrompt(t.defaultSystemPrompt)
+                        setSelectedClients([])
+                        setSelectedPropertyId('')
+                        setClientSearch('')
+                      }}
+                      className={`p-2.5 rounded-xl border-2 text-left transition-colors ${
                         tplId === t.id ? 'border-orange-400 bg-orange-50' : 'border-slate-200 hover:border-slate-300'
                       }`}
                     >
-                      <div className="text-lg mb-1">{t.icon}</div>
-                      <div className="text-xs font-semibold text-slate-800">{t.label}</div>
-                      <div className="text-xs text-slate-500 mt-0.5 leading-tight">{t.desc}</div>
+                      <div className="text-base mb-0.5">{t.icon}</div>
+                      <div className="text-xs font-semibold text-slate-800 leading-tight">{t.label}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{t.desc}</div>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* System Prompt (AI Bot only) */}
-              {tplId === 'wa_aibot' && (
+              {/* Client multi-select (wa_targeted only) */}
+              {tplId === 'wa_targeted' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">AI Kişilik / Sistem Promptu</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                    Müşteri Seçin <span className="text-slate-400">({selectedClients.length} seçili)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={clientSearch}
+                    onChange={e => setClientSearch(e.target.value)}
+                    placeholder="Müşteri ara..."
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs mb-1.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                  <div className="border border-slate-200 rounded-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
+                    {clientList
+                      .filter(c => c.full_name.toLowerCase().includes(clientSearch.toLowerCase()) || (c.phone || '').includes(clientSearch))
+                      .map(c => (
+                        <label key={c.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedClients.includes(c.id)}
+                            onChange={e => setSelectedClients(prev =>
+                              e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id)
+                            )}
+                            className="rounded border-slate-300 text-orange-500 focus:ring-orange-400"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-slate-800 truncate">{c.full_name}</p>
+                            {c.phone && <p className="text-[10px] text-slate-400">{c.phone}</p>}
+                          </div>
+                        </label>
+                      ))}
+                    {clientList.filter(c => c.full_name.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
+                      <p className="text-xs text-slate-400 text-center py-3">Müşteri bulunamadı</p>
+                    )}
+                  </div>
+                  {selectedClients.length > 0 && (
+                    <button onClick={() => setSelectedClients([])} className="mt-1 text-[10px] text-slate-400 hover:text-red-500">Seçimi temizle</button>
+                  )}
+                </div>
+              )}
+
+              {/* Property selector (wa_property_bot only) */}
+              {tplId === 'wa_property_bot' && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Mülk Seçin</label>
+                  <select
+                    value={selectedPropertyId}
+                    onChange={e => setSelectedPropertyId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                  >
+                    <option value="">— Mülk seçin —</option>
+                    {propertyList.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.title}{p.city ? ` — ${p.city}${p.district ? ` / ${p.district}` : ''}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">Bot bu mülkün bilgilerini Supabase&apos;den çekip müşteri sorularını yanıtlar</p>
+                </div>
+              )}
+
+              {/* System Prompt (AI bots only) */}
+              {(tplId === 'wa_aibot' || tplId === 'wa_property_bot') && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">AI Sistem Promptu</label>
                   <textarea
                     value={systemPrompt}
                     onChange={e => setSystemPrompt(e.target.value)}
-                    rows={5}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none font-mono text-xs"
+                    rows={4}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none font-mono"
                     placeholder="AI'nın nasıl davranacağını tanımlayan talimatlar..."
                   />
-                  <p className="text-xs text-slate-400 mt-1">AI'nın karakterini ve yanıt kurallarını belirler</p>
                 </div>
               )}
 
               {/* Subject (email only) */}
               {tplCat === 'email' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">E-posta Konusu</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">E-posta Konusu</label>
                   <input
                     type="text"
                     value={subject}
                     onChange={e => setSubject(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
                     placeholder="E-posta konu satırı"
                   />
                 </div>
               )}
 
-              {/* Message */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {tplCat === 'email' ? 'E-posta İçeriği' : tplId === 'wa_aibot' ? 'Kullanıcı Prompt Şablonu' : 'Mesaj Şablonu'}
-                </label>
-                <textarea
-                  value={message}
-                  onChange={e => setMessage(e.target.value)}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
-                />
-                <p className="text-xs text-slate-400 mt-1">Değişkenler: &#123;name&#125;, &#123;phone&#125;, &#123;email&#125;</p>
-              </div>
+              {/* Message — hide for property bot (AI handles everything) */}
+              {tplId !== 'wa_property_bot' && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    {tplCat === 'email' ? 'E-posta İçeriği' : tplId === 'wa_aibot' ? 'Kullanıcı Prompt Şablonu' : 'Mesaj Şablonu'}
+                  </label>
+                  <textarea
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                  />
+                  {tplId !== 'wa_aibot' && (
+                    <p className="text-[10px] text-slate-400 mt-1">Değişkenler: &#123;name&#125;, &#123;phone&#125;, &#123;email&#125;</p>
+                  )}
+                </div>
+              )}
 
               {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
 
             {/* Sticky footer buttons */}
-            <div className="px-5 py-4 border-t border-slate-100 flex-shrink-0 flex gap-2">
-                <button onClick={() => setShowModal(false)} className="flex-1 py-2 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50">İptal</button>
-                <button
-                  onClick={handleCreate}
-                  disabled={creating || !message || (tplCat === 'email' && !subject)}
-                  className="flex-1 py-2 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {creating ? <><Loader2 size={14} className="animate-spin" /> Oluşturuluyor...</> : 'Oluştur'}
-                </button>
-              </div>
+            <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 flex gap-2">
+              <button onClick={() => setShowModal(false)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50">İptal</button>
+              <button
+                onClick={handleCreate}
+                disabled={
+                  creating ||
+                  (tplId !== 'wa_property_bot' && !message) ||
+                  (tplCat === 'email' && !subject) ||
+                  (tplId === 'wa_targeted' && selectedClients.length === 0) ||
+                  (tplId === 'wa_property_bot' && !selectedPropertyId)
+                }
+                className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {creating ? <><Loader2 size={14} className="animate-spin" /> Oluşturuluyor...</> : 'Oluştur'}
+              </button>
             </div>
           </div>
+        </div>
       )}
     </div>
   )
@@ -1304,37 +1447,37 @@ export default function AdminPage() {
   const [tab, setTab] = useState<'consultants' | 'automations' | 'settings'>('consultants')
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Yönetim Paneli</h1>
-        <p className="text-slate-500 text-sm mt-1">Danışman yönetimi ve sistem ayarları</p>
+    <div className="p-3 sm:p-6 max-w-3xl mx-auto">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Yönetim Paneli</h1>
+        <p className="text-slate-500 text-xs sm:text-sm mt-0.5">Danışman yönetimi ve sistem ayarları</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-5">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-4 sm:mb-5">
         <button
           onClick={() => setTab('consultants')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
             tab === 'consultants' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          <Users size={15} /> Danışmanlar
+          <Users size={13} /> <span className="hidden xs:inline">Danışmanlar</span><span className="xs:hidden">Ekip</span>
         </button>
         <button
           onClick={() => setTab('automations')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
             tab === 'automations' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          <Zap size={15} /> Otomasyonlar
+          <Zap size={13} /> <span className="hidden xs:inline">Otomasyonlar</span><span className="xs:hidden">Otomasyon</span>
         </button>
         <button
           onClick={() => setTab('settings')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
             tab === 'settings' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          <Settings size={15} /> Ayarlar
+          <Settings size={13} /> Ayarlar
         </button>
       </div>
 

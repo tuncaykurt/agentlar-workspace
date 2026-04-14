@@ -90,20 +90,27 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
 
   const baseStyles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Times New Roman', Times, serif; max-width: 860px; margin: 0 auto; padding: 32px 28px; color: #111; font-size: 16px; line-height: 1.9; }
+    html { overflow-x: hidden; }
+    body { font-family: 'Times New Roman', Times, serif; max-width: 860px; margin: 0 auto; padding: 32px 28px; color: #111; font-size: 16px; line-height: 1.9; overflow-x: hidden; word-break: break-word; }
     h1 { font-size: 21px; text-align: center; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 8px; }
     .sub { text-align: center; font-size: 15px; color: #555; margin-bottom: 6px; }
     .divider { border: none; border-top: 2px solid #111; margin: 14px 0 22px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-    table td { padding: 5px 8px; vertical-align: top; font-size: 15px; }
-    .sigs { display: flex; justify-content: space-around; margin-top: 52px; gap: 16px; }
-    .sig { text-align: center; flex: 1; }
+    .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; min-width: 0; }
+    table td { padding: 5px 8px; vertical-align: top; font-size: 15px; word-break: break-word; }
+    .sigs { display: flex; justify-content: space-around; margin-top: 52px; gap: 16px; flex-wrap: wrap; }
+    .sig { text-align: center; flex: 1; min-width: 120px; }
     .sig-line { border-top: 1px solid #000; padding-top: 8px; font-size: 14px; min-height: 64px; }
     p { font-size: 16px; }
-    @media screen and (max-width: 700px) {
-      body { font-size: 15px; padding: 20px 16px; }
-      table td { font-size: 14px; }
-      .sigs { flex-direction: column; gap: 24px; }
+    @media screen and (max-width: 640px) {
+      body { font-size: 13px; padding: 16px 12px; }
+      h1 { font-size: 16px; letter-spacing: 1px; }
+      table td { font-size: 12px; padding: 3px 5px; }
+      .sigs { flex-direction: column; gap: 20px; }
+      .sig { min-width: unset; }
+      .auth-tbl td { font-size: 11px; padding: 3px 4px; }
+      .kira-tbl td { font-size: 12px; }
+      .kira-tbl td:first-child { width: auto; white-space: normal; }
     }
     @media print { body { padding: 16px; font-size: 13px; } table td { font-size: 12px; } h1 { font-size: 16px; } }`
 
@@ -155,10 +162,10 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
     const body = `
       <style>
         .kira-tbl { width:100%; border-collapse:collapse; font-size:15px; margin-bottom:16px; }
-        .kira-tbl td { border:1px solid #000; padding:4px 8px; vertical-align:top; }
+        .kira-tbl td { border:1px solid #000; padding:4px 8px; vertical-align:top; word-break:break-word; }
         .kira-tbl td:first-child { font-weight:bold; white-space:nowrap; width:220px; background:#f5f5f5; }
       </style>
-      <table class="kira-tbl">
+      <div class="tbl-wrap"><table class="kira-tbl">
         <tr><td>KİRALANANIN ADRESİ</td><td>${data.kiralanan_adres || (prop ? [prop.address, prop.district, prop.city].filter(Boolean).join(', ') : '___')}</td></tr>
         <tr><td>KİRAYA VERENİN ADI SOYADI</td><td>${clientName(doc.client)}${doc.client?.phone ? ' — TEL: ' + doc.client.phone : ''}</td></tr>
         <tr><td>KİRACININ AD SOYADI ADRESİ</td><td>${secondName}${data.second_client_phone ? ' — TEL: ' + data.second_client_phone : ''}${data.kontrat_adres ? '<br>KONTRAT ADRESİ: ' + data.kontrat_adres : ''}</td></tr>
@@ -170,7 +177,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
         <tr><td>YILLIK KİRA ARTIŞ ORANI</td><td>${data.artis_orani || 'YILLIK TÜFE ORANINA GÖRE YAPILACAKTIR.'}</td></tr>
         <tr><td>KİRALANANIN KULLANIM AMACI</td><td>${data.kullanim_amaci || 'KONUT'}</td></tr>
         <tr><td>TESLİM ALINAN DEMİRBAŞ LİSTESİ</td><td>${data.demirbas_listesi || '---'}</td></tr>
-      </table>`
+      </table></div>`
 
     const sigs = `
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}KİRAYA VEREN<br><strong>${clientName(doc.client)}</strong></div></div>
@@ -209,7 +216,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
         .clause{font-size:15px;line-height:1.8;margin-bottom:8px;text-align:justify;}
       </style>
       <div class="sec-title">GAYRİMENKULE AİT BİLGİLER</div>
-      <table class="auth-tbl">
+      <div class="tbl-wrap"><table class="auth-tbl">
         <tr>
           <td style="text-align:center;">${chk(propType==='apartment')} Apt. Dairesi</td>
           <td style="text-align:center;">${chk(propType==='detached_house')} Müstakil Ev</td>
@@ -230,9 +237,9 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
           <td colspan="2">Ada: ${data.ada || '___'}</td>
           <td colspan="2">Parsel: ${data.parsel || '___'}</td>
         </tr>
-      </table>
+      </table></div>
       <div class="sec-title">YAPILACAK İŞLEME AİT BİLGİLER</div>
-      <table class="auth-tbl">
+      <div class="tbl-wrap"><table class="auth-tbl">
         <tr>
           <td style="font-weight:bold;">${data.yetki_turu === 'Kiralama' ? 'Kira Bedeli' : 'Satış Tutarı'}</td>
           <td>${data.yetki_turu === 'Kiralama' ? (data.kira_bedeli ? money(data.kira_bedeli) + ' + KDV' : '___') : money(data.satis_tutari)} TL</td>
@@ -251,7 +258,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
           <td style="font-weight:bold;">Bitiş Tarihi</td>
           <td>${sureSon}</td>
         </tr>
-      </table>
+      </table></div>
       <div style="margin-top:14px;font-size:15px;line-height:1.8;">
         <p class="clause"><strong>1. GAYRİMENKUL SATIŞI:</strong> Müşteri, yukarıda adresi yazılı gayrimenkulünü satmak/kiralamak amacıyla ${officeName}'e <strong>${data.yetki_suresi_gun || '90'} gün</strong> süre ile <strong>${fmtDate(data.baslangic_tarihi)}</strong> tarihinden itibaren münhasır yetki vermektedir.</p>
         <p class="clause"><strong>2. HİZMET BEDELİ:</strong> Müşteri, ${officeName}'in aracılığıyla gerçekleşecek satış/kiralama işleminde, satış/kira bedeli üzerinden <strong>%${data.komisyon_orani || '3'} + KDV</strong> oranında hizmet bedeli ödemeyi kabul eder. Bu ücret, tapu devri/sözleşme imzası sırasında peşinen ödenecektir.</p>
