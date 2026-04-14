@@ -10,6 +10,16 @@ class ComboRequest(BaseModel):
     min_probability: float = 0.60
     top_n: int = 5
 
+def _parse_prob(raw) -> float:
+    """Probability değerini güvenle float'a çevir. String, None veya >1 yüzde değerlerini normalize eder."""
+    try:
+        p = float(raw or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if p > 1.5:          # AI bazen 72.0 gibi yüzde döndürür
+        p = p / 100.0
+    return round(p, 4)
+
 @router.post("/build")
 def build(req: ComboRequest):
     candidates = []
@@ -17,24 +27,32 @@ def build(req: ComboRequest):
         home = a.get("home", "?")
         away = a.get("away", "?")
         fid  = a.get("fixture_id")
-        recs = a.get("ai", {}).get("data", {}).get("recommendations", []) if a.get("ai", {}).get("success") else []
 
-        # AI başarısızsa istatistiksel fallback
+        ai_obj = a.get("ai") or {}
+        recs: list = []
+        if ai_obj.get("success"):
+            data = ai_obj.get("data") or {}
+            recs = data.get("recommendations") or []
+
+        # AI başarısızsa veya öneri boşsa istatistiksel fallback
         if not recs:
-            p = a.get("statistical", {}).get("probabilities", {})
+            p = (a.get("statistical") or {}).get("probabilities") or {}
             recs = _stat_fallback(p)
 
         for rec in recs:
-            prob = rec.get("probability", 0)
-            if prob >= req.min_probability:
-                candidates.append({
-                    "match":       f"{home} vs {away}",
-                    "fixture_id":  fid,
-                    "label":       rec.get("label", rec.get("type", "")),
-                    "probability": prob,
-                    "confidence":  rec.get("confidence", "medium"),
-                    "reason":      rec.get("reason", ""),
-                })
+            try:
+                prob = _parse_prob(rec.get("probability", 0))
+                if prob >= req.min_probability:
+                    candidates.append({
+                        "match":       f"{home} vs {away}",
+                        "fixture_id":  fid,
+                        "label":       rec.get("label") or rec.get("type") or "",
+                        "probability": prob,
+                        "confidence":  rec.get("confidence") or "medium",
+                        "reason":      rec.get("reason") or "",
+                    })
+            except Exception:
+                continue  # bozuk rec'i atla, devam et
 
     if len(candidates) < req.combo_size:
         return {"combos": [], "message": f"Yeterli aday yok ({len(candidates)} < {req.combo_size})"}

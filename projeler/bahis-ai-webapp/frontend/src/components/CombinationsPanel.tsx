@@ -147,7 +147,7 @@ const confBg: Record<string, string> = {
 
 export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) {
   const [comboSize, setComboSize]       = useState(3);
-  const [minProb, setMinProb]           = useState(0.60);
+  const [minProb, setMinProb]           = useState(0.55);
   const [topN, setTopN]                 = useState(5);
   const [combos, setCombos]             = useState<Combo[]>([]);
   const [loading, setLoading]           = useState(false);
@@ -177,7 +177,10 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
       if (res.combos.length === 0) setError(res.message || "Yeterli seçenek bulunamadı. Min. olasılığı düşürün.");
       setCombos(res.combos);
       setOpenIdx(0);
-    } catch { setError("Kombinasyon oluşturulamadı."); }
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || "";
+      setError("Kombinasyon oluşturulamadı." + (detail ? ` (${detail})` : ""));
+    }
     finally { setLoading(false); }
   }
 
@@ -341,9 +344,9 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
 
         <div>
           <label className="text-xs text-slate-400 mb-2 block">Min. Tekil Olasılık: <span className="text-white font-bold">%{Math.round(minProb * 100)}</span></label>
-          <input type="range" min={50} max={85} value={Math.round(minProb * 100)} onChange={e => setMinProb(+e.target.value / 100)} className="w-full accent-violet-500" />
+          <input type="range" min={45} max={85} value={Math.round(minProb * 100)} onChange={e => setMinProb(+e.target.value / 100)} className="w-full accent-violet-500" />
           <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
-            <span>%50</span><span>%60</span><span>%70</span><span>%85</span>
+            <span>%45</span><span>%55</span><span>%65</span><span>%75</span><span>%85</span>
           </div>
         </div>
 
