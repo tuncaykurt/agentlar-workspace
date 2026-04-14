@@ -86,8 +86,8 @@ export default function FixtureList({ model, onAnalyses, onFixtures, statusFilte
   const q = searchQuery.trim().toLowerCase();
 
   const filtered = fixtures.filter(fix => {
-    if (statusFilter === "all")       { if (DONE_STATUSES.has(fix.status) || LIVE_STATUSES.has(fix.status)) return false; }
-    else if (statusFilter === "upcoming")  { if (!isUpcomingWithinWindow(fix)) return false; }
+    // "all" (Günlük) → günün tüm maçları; diğer tablar kendi filtresini uygular
+    if (statusFilter === "upcoming")  { if (!isUpcomingWithinWindow(fix)) return false; }
     else if (statusFilter === "live")      { if (!LIVE_STATUSES.has(fix.status)) return false; }
     else if (statusFilter === "finished")  { if (!DONE_STATUSES.has(fix.status)) return false; }
     if (q) {
