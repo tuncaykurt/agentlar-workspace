@@ -61,6 +61,7 @@ export default function FixtureList({ model, onAnalyses, onFixtures, statusFilte
   const [date, setDate]         = useState(today);
   const [leagueId, setLeagueId] = useState(0);
   const [timeWindow, setTimeWindow] = useState(2); // saat — yaklaşan filtresi
+  const [searchQuery, setSearchQuery] = useState("");
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [loading, setLoading]   = useState(false);
   const [analyses, setAnalyses] = useState<Record<number, AnalysisResult>>({});
@@ -82,11 +83,18 @@ export default function FixtureList({ model, onAnalyses, onFixtures, statusFilte
     } catch { return false; }
   }
 
+  const q = searchQuery.trim().toLowerCase();
+
   const filtered = fixtures.filter(fix => {
-    if (statusFilter === "all")       return !DONE_STATUSES.has(fix.status) && !LIVE_STATUSES.has(fix.status); // Günlük: bitmişleri ve canlıları gösterme
-    if (statusFilter === "upcoming")  return isUpcomingWithinWindow(fix);
-    if (statusFilter === "live")      return LIVE_STATUSES.has(fix.status);
-    if (statusFilter === "finished")  return DONE_STATUSES.has(fix.status);
+    if (statusFilter === "all")       { if (DONE_STATUSES.has(fix.status) || LIVE_STATUSES.has(fix.status)) return false; }
+    else if (statusFilter === "upcoming")  { if (!isUpcomingWithinWindow(fix)) return false; }
+    else if (statusFilter === "live")      { if (!LIVE_STATUSES.has(fix.status)) return false; }
+    else if (statusFilter === "finished")  { if (!DONE_STATUSES.has(fix.status)) return false; }
+    if (q) {
+      const home = fix.home.name.toLowerCase();
+      const away = fix.away.name.toLowerCase();
+      if (!home.includes(q) && !away.includes(q)) return false;
+    }
     return true;
   });
 
@@ -217,6 +225,27 @@ export default function FixtureList({ model, onAnalyses, onFixtures, statusFilte
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Maç adı arama */}
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Takım adı ara..."
+          className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-8 py-2.5
+                     text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       {error && (
