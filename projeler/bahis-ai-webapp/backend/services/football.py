@@ -87,9 +87,19 @@ def _api(endpoint: str, params: dict, ttl: int = 3600) -> dict:
 # ── Veri çekme ───────────────────────────────────────────────────────────── #
 
 def get_fixtures_by_date(date: str, league_id: int = None) -> list:
+    from datetime import datetime, timezone as _tz
     params = {"date": date}
     if league_id:
         params["league"] = league_id
+    # Geçmiş tarihler için Redis cache'i temizle — NS olarak cache'lenmiş
+    # olabilir, API'den taze sonuç almak şart
+    today = datetime.now(_tz.utc).strftime("%Y-%m-%d")
+    if date < today and REDIS_OK and _r:
+        ck = f"fb:fixtures:{json.dumps(params, sort_keys=True)}"
+        try:
+            _r.delete(ck)
+        except Exception:
+            pass
     return _api("fixtures", params, ttl=1800).get("response", [])
 
 def get_live_fixtures(league_id: int = None) -> list:

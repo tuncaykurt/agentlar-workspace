@@ -75,19 +75,35 @@ function saveCoupons(coupons: SavedCoupon[]) {
 function checkWin(label: string, homeGoals: number, awayGoals: number): boolean | null {
   const total = homeGoals + awayGoals;
   const l = label.toLowerCase();
+  // ÖNEMLİ: daha spesifik kontroller önce gelmeli — alt string çakışmalarını önler
+  // "Çifte Şans 1X (Ev sahibi kazanır veya beraberlik)" gibi label'lar
+  // "ev sahibi kazanır" içerdiği için önce çifte şans kontrolü yapılmalı
+  if (l.includes("çifte şans 1x"))        return homeGoals >= awayGoals; // Ev kazanır VEYA beraberlik
+  if (l.includes("çifte şans x2"))        return awayGoals >= homeGoals; // Dep kazanır VEYA beraberlik
+  if (l.includes("double chance 1x"))     return homeGoals >= awayGoals;
+  if (l.includes("double chance x2"))     return awayGoals >= homeGoals;
+  // "Karşılıklı Gol Olmaz" → "Karşılıklı Gol"u içeriyor, önce kontrol et
+  if (l.includes("karşılıklı gol olmaz")) return !(homeGoals > 0 && awayGoals > 0);
+  if (l.includes("btts no"))              return !(homeGoals > 0 && awayGoals > 0);
+  if (l.includes("karşılıklı gol"))       return homeGoals > 0 && awayGoals > 0;
+  if (l.includes("btts"))                 return homeGoals > 0 && awayGoals > 0;
+  // Tekil sonuç kontrolleri
   if (l.includes("ev sahibi kazanır") || l.includes("ev kazanır")) return homeGoals > awayGoals;
   if (l.includes("dep") && l.includes("kazanır"))                  return awayGoals > homeGoals;
-  if (l.includes("beraberlik") && !l.includes("çifte"))            return homeGoals === awayGoals;
-  if (l.includes("çifte şans 1x"))   return homeGoals >= awayGoals;
-  if (l.includes("çifte şans x2"))   return awayGoals >= homeGoals;
-  if (l.includes("karşılıklı gol olmaz")) return !(homeGoals > 0 && awayGoals > 0);
-  if (l.includes("karşılıklı gol"))  return homeGoals > 0 && awayGoals > 0;
-  if (l.includes("üst 3.5"))         return total > 3.5;
-  if (l.includes("alt 3.5"))         return total < 3.5;
-  if (l.includes("üst 2.5"))         return total > 2.5;
-  if (l.includes("alt 2.5"))         return total < 2.5;
-  if (l.includes("üst 1.5"))         return total > 1.5;
-  if (l.includes("alt 1.5"))         return total < 1.5;
+  if (l.includes("beraberlik"))           return homeGoals === awayGoals;
+  // Üst/Alt — 3.5 önce (2.5'u içermiyor ama sıralama temiz olsun)
+  if (l.includes("üst 3.5"))  return total > 3.5;
+  if (l.includes("alt 3.5"))  return total < 3.5;
+  if (l.includes("üst 2.5"))  return total > 2.5;
+  if (l.includes("alt 2.5"))  return total < 2.5;
+  if (l.includes("üst 1.5"))  return total > 1.5;
+  if (l.includes("alt 1.5"))  return total < 1.5;
+  if (l.includes("over 3.5")) return total > 3.5;
+  if (l.includes("under 3.5"))return total < 3.5;
+  if (l.includes("over 2.5")) return total > 2.5;
+  if (l.includes("under 2.5"))return total < 2.5;
+  if (l.includes("over 1.5")) return total > 1.5;
+  if (l.includes("under 1.5"))return total < 1.5;
   return null;
 }
 
