@@ -143,5 +143,46 @@ export async function POST(
       .eq('signature_status', 'draft')
   }
 
+  // 6. Send WA notification to consultant
+  try {
+    // Get document + consultant info
+    const { data: doc } = await supabase
+      .from('documents')
+      .select('id, title, consultant:consultants(id, full_name, phone, wa_instance)')
+      .eq('id', sigReq.document_id)
+      .single()
+
+    // Get Evolution API settings
+    const { data: evoUrlSetting } = await supabase
+      .from('settings').select('value').eq('key', 'evolution_api_url').single()
+    const { data: evoKeySetting } = await supabase
+      .from('settings').select('value').eq('key', 'evolution_api_key').single()
+
+    const consultant = doc?.consultant as { id: string; full_name: string; phone: string; wa_instance: string } | null
+    const evoUrl = evoUrlSetting?.value ? String(evoUrlSetting.value).replace(/^"|"$/g, '').replace(/\/$/, '') : null
+    const evoKey = evoKeySetting?.value ? String(evoKeySetting.value).replace(/^"|"$/g, '') : null
+
+    if (consultant?.phone && consultant?.wa_instance && evoUrl && evoKey) {
+      const phone = consultant.phone.replace(/\D/g, '')
+      const docTitle = doc?.title || 'Belge'
+      const signerInfo = `${sigReq.signer_name}${sigReq.signer_role ? ` (${sigReq.signer_role})` : ''}`
+
+      let msg: string
+      if (allSigned) {
+        msg = `✅ *${docTitle}*\n\nTüm taraflar belgeyi imzaladı! 🎉\n\nSon imzalayan: ${signerInfo}`
+      } else {
+        msg = `✍️ *${docTitle}*\n\n${signerInfo} belgeyi imzaladı.\n\nDiğer imzalar bekleniyor.`
+      }
+
+      await fetch(`${evoUrl}/message/sendText/${consultant.wa_instance}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+        body: JSON.stringify({ number: phone, text: msg }),
+      })
+    }
+  } catch {
+    // Notification failure must not block the response
+  }
+
   return NextResponse.json({ success: true, allSigned })
 }
