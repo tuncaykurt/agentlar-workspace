@@ -112,7 +112,16 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       .kira-tbl td { font-size: 12px; }
       .kira-tbl td:first-child { width: auto; white-space: normal; }
     }
-    @media print { body { padding: 16px; font-size: 13px; } table td { font-size: 12px; } h1 { font-size: 16px; } }`
+    .print-bar { display: flex; gap: 10px; justify-content: flex-end; margin-bottom: 20px; }
+    .print-btn { background: #2563eb; color: #fff; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
+    .pdf-btn { background: #16a34a; color: #fff; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
+    @media print {
+      .no-print { display: none !important; }
+      @page { size: A4; margin: 15mm; }
+      body { padding: 0; font-size: 13px; }
+      table td { font-size: 12px; }
+      h1 { font-size: 16px; }
+    }`
 
   // ── Sales contract ────────────────────────────────────────────────────────
   if (doc.doc_type === 'sales_contract') {
@@ -144,6 +153,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
+      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="document.title='Satış Sözleşmesi';window.print()">⬇️ PDF İndir</button></div>
       ${letterhead}
       <h1>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</h1>
       <div class="sub">PROTOKOL YAZISI</div>
@@ -185,6 +195,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL KİRA SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
+      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="document.title='Kira Sözleşmesi';window.print()">⬇️ PDF İndir</button></div>
       ${letterhead}
       <h1>GAYRİMENKUL KİRA SÖZLEŞMESİ</h1>
       <div class="sub">${today}</div>
@@ -248,7 +259,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
         </tr>
         <tr>
           <td style="font-weight:bold;">Komisyon Oranı</td>
-          <td>%${data.komisyon_orani || '3'} + KDV (${data.komisyon_turu || 'Satıcıdan'})</td>
+          <td>%${data.komisyon_orani || '2'} + KDV (${data.komisyon_turu || 'Satıcıdan'})</td>
           <td style="font-weight:bold;">Yetki Türü</td>
           <td>${data.yetki_turu || 'Satış'}</td>
         </tr>
@@ -261,8 +272,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       </table></div>
       <div style="margin-top:14px;font-size:15px;line-height:1.8;">
         <p class="clause"><strong>1. GAYRİMENKUL SATIŞI:</strong> Müşteri, yukarıda adresi yazılı gayrimenkulünü satmak/kiralamak amacıyla ${officeName}'e <strong>${data.yetki_suresi_gun || '90'} gün</strong> süre ile <strong>${fmtDate(data.baslangic_tarihi)}</strong> tarihinden itibaren münhasır yetki vermektedir.</p>
-        <p class="clause"><strong>2. HİZMET BEDELİ:</strong> Müşteri, ${officeName}'in aracılığıyla gerçekleşecek satış/kiralama işleminde, satış/kira bedeli üzerinden <strong>%${data.komisyon_orani || '3'} + KDV</strong> oranında hizmet bedeli ödemeyi kabul eder. Bu ücret, tapu devri/sözleşme imzası sırasında peşinen ödenecektir.</p>
-        <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları ${officeName}'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Müşteri, sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması/kiralaması halinde yukarıdaki satış tutarı üzerinden %${data.komisyon_orani || '3'} + KDV komisyon miktarını ${officeName}'e ödemeyi kabul eder.</p>
+        <p class="clause"><strong>2. HİZMET BEDELİ:</strong> Müşteri, ${officeName}'in aracılığıyla gerçekleşecek satış/kiralama işleminde, satış/kira bedeli üzerinden <strong>%${data.komisyon_orani || '2'} + KDV</strong> oranında hizmet bedeli ödemeyi kabul eder. Bu ücret, tapu devri/sözleşme imzası sırasında peşinen ödenecektir.</p>
+        <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları ${officeName}'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Müşteri, sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması/kiralaması halinde yukarıdaki satış tutarı üzerinden %${data.komisyon_orani || '2'} + KDV komisyon miktarını ${officeName}'e ödemeyi kabul eder.</p>
         <p class="clause"><strong>4. TAPU DEVRİ:</strong> Alıcı ve Satıcı, tapu devri sırasında ${officeName}'e komisyon ücretini ödemeyi peşinen kabul eder. Satışın herhangi bir nedenle gerçekleşmemesi durumunda komisyon iade edilmez.</p>
         <p class="clause"><strong>5. SÖZLEŞME SÜRESİ:</strong> Bu sözleşme <strong>${fmtDate(data.baslangic_tarihi)}</strong> tarihinde başlar ve <strong>${data.yetki_suresi_gun || '90'} gün</strong> süre ile geçerlidir (bitiş: <strong>${sureSon}</strong>). Sözleşme süresi sona erdikten sonra ${data.yetki_suresi_gun || '90'} gün içinde ${officeName}'in aracılığıyla görüşülen bir alıcıya satış gerçekleşirse komisyon ödenir.</p>
         <p class="clause"><strong>6. ANLAŞMAZLIK:</strong> İşbu sözleşmeden doğacak anlaşmazlıklarda Bursa mahkemeleri yetkilidir.</p>
@@ -275,6 +286,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig" style="max-width:130px;"><div class="sig-line">TARİH<br>${today}</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style></head><body>
+      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="document.title='Aracılık Sözleşmesi';window.print()">⬇️ PDF İndir</button></div>
       ${letterhead}
       <h1>ARACILIK SÖZLEŞMESİ</h1>
       <div class="sub">${today}</div>
@@ -286,6 +298,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
 
   // ── Fallback ──────────────────────────────────────────────────────────────
   return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Belge</title><style>${baseStyles}</style></head><body>
+    <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="document.title='Belge';window.print()">⬇️ PDF İndir</button></div>
     ${letterhead}
     <h1>${doc.title || 'BELGE'}</h1>
     <hr class="divider">

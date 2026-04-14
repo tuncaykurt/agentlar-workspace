@@ -330,6 +330,8 @@ export default function SignPage() {
   const [doc, setDoc] = useState<DocInfo | null>(null)
   const [officeName, setOfficeName] = useState('Ambiance Gayrimenkul')
 
+  const [officeLogo, setOfficeLogo] = useState<string | null>(null)
+
   const [tab, setTab] = useState<'draw' | 'type'>('draw')
   const [typedName, setTypedName] = useState('')
   const [agreed, setAgreed] = useState(false)
@@ -348,11 +350,12 @@ export default function SignPage() {
       const res = await fetch(`/api/sign/${token}`)
       if (!res.ok) { setState('error'); return }
 
-      const { sigReq: req, doc: docData, officeName: name } = await res.json()
+      const { sigReq: req, doc: docData, officeName: name, officeLogo: logo } = await res.json()
 
       if (!req) { setState('error'); return }
       setSigReq(req as SignRequest)
       if (name) setOfficeName(name)
+      if (logo) setOfficeLogo(logo)
 
       if (req.status === 'signed') { setState('already_signed'); return }
 
@@ -423,6 +426,9 @@ export default function SignPage() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+          {officeLogo && (
+            <img src={officeLogo} alt={officeName} className="h-14 max-w-[180px] object-contain mx-auto mb-5" />
+          )}
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle size={32} className="text-green-600" />
           </div>
@@ -467,6 +473,9 @@ export default function SignPage() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+          {officeLogo && (
+            <img src={officeLogo} alt={officeName} className="h-14 max-w-[180px] object-contain mx-auto mb-5" />
+          )}
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle size={32} className="text-green-600" />
           </div>
@@ -501,7 +510,10 @@ export default function SignPage() {
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-4 py-3 text-center">
-        <p className="text-xs text-slate-500">{officeName}</p>
+        {officeLogo
+          ? <img src={officeLogo} alt={officeName} className="h-10 max-w-[160px] object-contain mx-auto mb-1" />
+          : <p className="text-xs text-slate-500">{officeName}</p>
+        }
         <p className="text-sm font-semibold text-slate-900">Elektronik İmza</p>
       </div>
 

@@ -30,11 +30,10 @@ export async function GET(
     .eq('id', sigReq.document_id)
     .single()
 
-  const { data: setting } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', 'office_name')
-    .single()
+  const [nameRes, logoRes] = await Promise.all([
+    supabase.from('settings').select('value').eq('key', 'office_name').single(),
+    supabase.from('settings').select('value').eq('key', 'office_logo').single(),
+  ])
 
   // Mark as viewed if pending
   if (sigReq.status === 'pending') {
@@ -47,7 +46,8 @@ export async function GET(
   return NextResponse.json({
     sigReq,
     doc,
-    officeName: setting?.value ? String(setting.value).replace(/^"|"$/g, '') : 'Ambiance Gayrimenkul',
+    officeName: nameRes.data?.value ? String(nameRes.data.value).replace(/^"|"$/g, '') : 'Ambiance Gayrimenkul',
+    officeLogo: logoRes.data?.value ? String(logoRes.data.value).replace(/^"|"$/g, '') : null,
   })
 }
 

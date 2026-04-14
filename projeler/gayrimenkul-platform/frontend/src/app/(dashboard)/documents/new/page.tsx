@@ -369,28 +369,38 @@ function generatePrintHTML(params: {
 
   const styles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { overflow-x: hidden; }
-    body { font-family: 'Times New Roman', Times, serif; max-width: 820px; margin: 0 auto; padding: 32px 20px; color: #111; font-size: 13px; line-height: 1.8; word-break: break-word; }
-    h1 { font-size: 20px; text-align: center; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 6px; }
-    .sub { text-align: center; font-size: 12px; color: #555; margin-bottom: 6px; }
-    .divider { border: none; border-top: 2px solid #111; margin: 12px 0 24px; }
-    h2 { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin: 20px 0 10px; }
+    html { overflow-x: hidden; }
+    body { font-family: 'Times New Roman', Times, serif; max-width: 860px; margin: 0 auto; padding: 32px 28px; color: #111; font-size: 16px; line-height: 1.9; overflow-x: hidden; word-break: break-word; }
+    h1 { font-size: 21px; text-align: center; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 8px; }
+    .sub { text-align: center; font-size: 15px; color: #555; margin-bottom: 6px; }
+    .divider { border: none; border-top: 2px solid #111; margin: 14px 0 22px; }
+    h2 { font-size: 14px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin: 20px 0 10px; }
     .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-    td { padding: 3px 6px; vertical-align: top; word-break: break-word; }
-    td:first-child { font-weight: bold; width: 160px; }
-    p { margin-bottom: 8px; text-align: justify; }
-    .sigs { display: flex; justify-content: space-between; margin-top: 64px; flex-wrap: wrap; gap: 24px; }
-    .sig { text-align: center; min-width: 180px; }
-    .sig-line { border-top: 1px solid #333; padding-top: 8px; margin-top: 48px; font-size: 12px; }
-    .footer { margin-top: 40px; font-size: 10px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 10px; }
-    .print-btn { background: #2563eb; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; margin-bottom: 24px; }
-    @media screen and (max-width: 600px) {
-      body { padding: 16px 14px; font-size: 12px; }
-      h1 { font-size: 16px; letter-spacing: 2px; }
-      td:first-child { width: 120px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; min-width: 0; }
+    td { padding: 5px 8px; vertical-align: top; font-size: 15px; word-break: break-word; }
+    td:first-child { font-weight: bold; width: 170px; }
+    p { margin-bottom: 10px; text-align: justify; font-size: 16px; }
+    .sigs { display: flex; justify-content: space-around; margin-top: 52px; gap: 16px; flex-wrap: wrap; }
+    .sig { text-align: center; flex: 1; min-width: 120px; }
+    .sig-line { border-top: 1px solid #000; padding-top: 8px; font-size: 14px; min-height: 64px; }
+    .footer { margin-top: 40px; font-size: 11px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 10px; }
+    .print-btn { background: #2563eb; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; margin: 0 8px 0 0; }
+    .pdf-btn { background: #16a34a; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    @media screen and (max-width: 640px) {
+      body { font-size: 13px; padding: 16px 12px; }
+      h1 { font-size: 16px; letter-spacing: 1px; }
+      td { font-size: 12px; padding: 3px 5px; }
+      td:first-child { width: auto; min-width: 90px; }
+      .sigs { flex-direction: column; gap: 20px; }
+      .sig { min-width: unset; }
     }
-    @media print { .no-print { display: none !important; } body { padding: 20px; } }
+    @media print {
+      .no-print { display: none !important; }
+      @page { size: A4; margin: 15mm; }
+      body { padding: 0; font-size: 13px; }
+      td { font-size: 12px; }
+      h1 { font-size: 16px; }
+    }
   `
 
   // Reusable party block — uses template_data for extra fields if available
@@ -763,7 +773,8 @@ function generatePrintHTML(params: {
 </head>
 <body>
   <div class="no-print" style="text-align:right;margin-bottom:20px;">
-    <button class="print-btn" onclick="window.print()">🖨️ Yazdır / PDF Kaydet</button>
+    <button class="print-btn" onclick="window.print()">🖨️ Yazdır</button>
+    <button class="pdf-btn" onclick="document.title='Belge Ön İzleme';window.print()">⬇️ PDF İndir</button>
   </div>
   ${docType !== 'authorization' ? `  <div class="letterhead">
     ${CB_LOGO_SVG}
