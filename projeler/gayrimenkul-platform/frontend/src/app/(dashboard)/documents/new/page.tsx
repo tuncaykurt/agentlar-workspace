@@ -1051,8 +1051,10 @@ export default function NewDocumentPage() {
       officeAddress,
       officeLogo,
     })
-    const w = window.open('', '_blank', 'width=900,height=750,scrollbars=yes')
-    if (w) { w.document.write(html); w.document.close(); w.focus() }
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const w = window.open(url, '_blank', 'width=900,height=750,scrollbars=yes')
+    if (w) { w.focus() }
   }
 
   const inp = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
