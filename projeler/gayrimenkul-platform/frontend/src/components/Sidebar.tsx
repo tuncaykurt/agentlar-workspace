@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, Building2, DollarSign,
   MessageSquare, Megaphone, FileText, Share2,
-  UserCircle, Settings, LogOut, BookUser, Menu, X,
+  UserCircle, Settings, LogOut, BookUser, Menu, X, TrendingUp,
 } from 'lucide-react'
 
 const navItems = [
@@ -14,6 +14,7 @@ const navItems = [
   { href: '/crm',            label: 'CRM',          icon: Users },
   { href: '/rehber',         label: 'Rehber',       icon: BookUser },
   { href: '/portfolio',      label: 'Portföy',      icon: Building2 },
+  { href: '/piyasa',         label: 'Piyasa',       icon: TrendingUp },
   { href: '/finance',        label: 'Finans',       icon: DollarSign },
   { href: '/communications', label: 'İletişim',     icon: MessageSquare },
   { href: '/campaigns',      label: 'Kampanyalar',  icon: Megaphone },
