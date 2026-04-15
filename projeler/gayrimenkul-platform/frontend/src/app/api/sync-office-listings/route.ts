@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ scraped: 0, warning: 'İlan bulunamadı' })
   }
 
-  // Upsert her ilan (source_listing_id ile match)
+  // Upsert her ilan → market_listings tablosuna (portföy değil, lead havuzu)
   let inserted = 0
   let updated = 0
   const errors: string[] = []
@@ -203,34 +203,45 @@ export async function POST(req: NextRequest) {
     const mapped = mapItem(raw, officeUrl)
     const payload = {
       ...mapped,
-      status: 'active' as const,
       is_active: true,
       last_seen_at: runStart,
     }
 
     // Var mı bak (source_listing_id + source)
     const { data: existing } = await supabase
-      .from('properties')
+      .from('market_listings')
       .select('id')
       .eq('source', 'sahibinden')
       .eq('source_listing_id', mapped.source_listing_id)
       .maybeSingle()
 
     if (existing?.id) {
-      const { error } = await supabase.from('properties').update(payload).eq('id', existing.id)
+      // Sadece fiyat, başlık ve son görülme zamanını güncelle (iletişim notlarına dokunma)
+      const { error } = await supabase
+        .from('market_listings')
+        .update({
+          title: payload.title,
+          price: payload.price,
+          photos: payload.photos,
+          is_active: true,
+          last_seen_at: runStart,
+        })
+        .eq('id', existing.id)
       if (error) errors.push(`update ${mapped.source_listing_id}: ${error.message}`)
       else updated++
     } else {
-      const { error } = await supabase.from('properties').insert(payload)
+      const { error } = await supabase
+        .from('market_listings')
+        .insert({ ...payload, contact_status: 'new' })
       if (error) errors.push(`insert ${mapped.source_listing_id}: ${error.message}`)
       else inserted++
     }
   }
 
-  // Artık listede olmayanları pasifleştir (bu ofisten gelenler, son taramada görülmeyen)
+  // Bu taramada görülmeyenleri pasifleştir
   const { data: deactivated, error: deactErr } = await supabase
-    .from('properties')
-    .update({ is_active: false, status: 'withdrawn' })
+    .from('market_listings')
+    .update({ is_active: false, contact_status: 'stale' })
     .eq('source', 'sahibinden')
     .eq('office_source_url', officeUrl)
     .or(`last_seen_at.lt.${runStart},last_seen_at.is.null`)
