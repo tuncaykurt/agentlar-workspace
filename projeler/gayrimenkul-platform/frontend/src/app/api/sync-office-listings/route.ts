@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
   const { data: settings } = await supabase
     .from('settings')
     .select('key, value')
-    .in('key', ['office_sahibinden_url', 'office_sync_cron_secret'])
+    .in('key', ['office_sahibinden_url', 'office_sync_cron_secret', 'office_sync_max_items'])
 
   const map: Record<string, string> = {}
   for (const row of settings || []) {
@@ -178,7 +178,10 @@ export async function POST(req: NextRequest) {
   // Apify: mağaza/arama URL'ini tara
   let items: SahibindenItem[] = []
   try {
-    items = await runApifyActor({ startUrls: [officeUrl], maxItems: 500 }, 280)
+    // Her çalışmada max 50 ilan çek (maliyet kontrolü ~$0.30/run)
+    // Daha önce çekilenler source_listing_id ile atlanır
+    const maxItems = parseInt(map.office_sync_max_items || '50', 10) || 50
+    items = await runApifyActor({ startUrls: [officeUrl], maxItems }, 280)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Bilinmeyen'
     await logResult(supabase, runStart, { error: msg, scraped: 0 })
