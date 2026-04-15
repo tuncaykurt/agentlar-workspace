@@ -199,9 +199,17 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
       // fixture_id backend'den geliyor — doğrudan kullan
       const fid = sel.fixture_id;
       const rawDate = fid != null ? fixtureMap[fid] : undefined;
+      // Maçın gerçek tarihini al (UTC → YYYY-MM-DD). Bulunamazsa bugüne düş.
+      let matchDate = today;
+      if (rawDate) {
+        try {
+          const utc = new Date(rawDate.length === 16 ? rawDate + ":00Z" : rawDate);
+          matchDate = utc.toISOString().slice(0, 10);
+        } catch {}
+      }
       return {
         ...sel,
-        match_date:     today,
+        match_date:     matchDate,
         match_datetime: rawDate ? formatMatchDateTime(rawDate) ?? undefined : undefined,
       };
     });
@@ -234,7 +242,15 @@ export default function CombinationsPanel({ analyses, fixtureMap = {} }: Props) 
       // Benzersiz tarihleri topla → her tarih için fixture çek
       const dates = new Set<string>();
       coupons.forEach(c =>
-        c.combo.selections.forEach(s => { if (s.match_date) dates.add(s.match_date); })
+        c.combo.selections.forEach(s => {
+          if (s.match_date) dates.add(s.match_date);
+          // Eski kuponlarda match_date bugüne set edilmiş olabilir — match_datetime'dan
+          // gerçek tarihi de dene (DD.MM.YYYY → YYYY-MM-DD)
+          if (s.match_datetime?.date) {
+            const parts = s.match_datetime.date.split(".");
+            if (parts.length === 3) dates.add(`${parts[2]}-${parts[1]}-${parts[0]}`);
+          }
+        })
       );
       for (const date of dates) {
         try {
