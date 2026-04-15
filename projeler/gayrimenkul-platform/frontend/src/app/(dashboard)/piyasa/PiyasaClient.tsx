@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import {
-  TrendingUp, MapPin, Home, Phone, Mail, Tag,
-  Clock, CheckCircle, XCircle, Star, Search, Filter, Bot
+  TrendingUp, MapPin, Home, Phone, Tag,
+  Clock, Search, Bot
 } from 'lucide-react'
+import VapiCallModal from '@/components/VapiCallModal'
 
 type MarketListing = {
   id: string
@@ -69,6 +70,7 @@ export default function PiyasaClient({
 }) {
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [callTarget, setCallTarget] = useState<MarketListing | null>(null)
 
   const filtered = listings.filter(l => {
     const q = search.toLowerCase()
@@ -81,6 +83,12 @@ export default function PiyasaClient({
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
+      {/* Vapi Arama Modalı */}
+      <VapiCallModal
+        isOpen={!!callTarget}
+        onClose={() => setCallTarget(null)}
+        listing={callTarget as any}
+      />
       {/* Header */}
       <div className="border-b border-slate-700/60 bg-slate-800/50 px-6 py-5">
         <div className="flex items-center justify-between">
@@ -218,13 +226,13 @@ export default function PiyasaClient({
                     {/* Aksiyon butonları */}
                     <div className="flex items-center gap-2 mt-3">
                       {l.seller_phone && (
-                        <a
-                          href={`tel:${l.seller_phone}`}
+                        <button
+                          onClick={() => setCallTarget(l)}
                           className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-xs hover:bg-emerald-500/20 transition-all"
                         >
-                          <Phone size={12} />
-                          Ara
-                        </a>
+                          <Bot size={12} />
+                          Lina ile Ara
+                        </button>
                       )}
                       {l.source_url && (
                         <a
