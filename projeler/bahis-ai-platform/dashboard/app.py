@@ -239,6 +239,10 @@ with tab1:
         analyze_btn = st.button("Analiz Et", type="primary", use_container_width=True)
 
     if analyze_btn:
+        # Önceki analiz sonuçlarını temizle — eski session state karışmasın
+        st.session_state.pop("analyses", None)
+        st.session_state.pop("finished_fixtures", None)
+
         date_str  = selected_date.strftime("%Y-%m-%d")
         pipeline  = MatchPipeline(api, ai_analyzer, season=season)
 
@@ -249,23 +253,30 @@ with tab1:
             st.warning(f"{date_str} tarihinde {league_name}'de maç bulunamadı.")
         else:
             # Maçları duruma göre ayır
-            upcoming_fixtures = [
-                f for f in all_fixtures
-                if f.get("fixture", {}).get("status", {}).get("short", "NS")
-                not in FINISHED_STATUSES | LIVE_STATUSES
-            ]
-            finished_fixtures = [
-                f for f in all_fixtures
-                if f.get("fixture", {}).get("status", {}).get("short", "")
-                in FINISHED_STATUSES
-            ]
+            upcoming_fixtures = []
+            finished_fixtures = []
+            live_fixtures_tmp = []
+            for f in all_fixtures:
+                s = (f.get("fixture", {}).get("status", {}).get("short") or "").upper()
+                if s in FINISHED_STATUSES:
+                    finished_fixtures.append(f)
+                elif s in LIVE_STATUSES:
+                    live_fixtures_tmp.append(f)
+                else:
+                    # NS, TBD, PST ve diğer başlamamış durumlar
+                    upcoming_fixtures.append(f)
 
             # Sonuçlanmış maçları session'a kaydet (Tab 2 için)
             st.session_state["finished_fixtures"] = finished_fixtures
             st.session_state["analysis_date"] = date_str
 
+            info_parts = []
             if finished_fixtures:
-                st.info(f"{len(finished_fixtures)} maç sonuçlanmış — **Sonuçlanmış** sekmesinde görebilirsiniz.")
+                info_parts.append(f"{len(finished_fixtures)} sonuçlanmış (→ Sonuçlanmış sekmesi)")
+            if live_fixtures_tmp:
+                info_parts.append(f"{len(live_fixtures_tmp)} canlı oynanan (→ Canlı Maçlar sekmesi)")
+            if info_parts:
+                st.info("Filtrelendi: " + " · ".join(info_parts))
 
             if not upcoming_fixtures:
                 st.warning(f"{date_str} tarihinde başlamamış {league_name} maçı bulunamadı.")
@@ -296,6 +307,10 @@ with tab1:
     if "analyses" in st.session_state:
         for analysis in st.session_state["analyses"]:
             fix   = analysis["fixture"]
+            # Güvenlik filtresi: eski session state'ten gelen biten/canlı maçları atla
+            status_short = (fix.get("status") or "").upper()
+            if status_short in FINISHED_STATUSES or status_short in LIVE_STATUSES:
+                continue
             stat  = analysis["statistical"]
             ai_r  = analysis["ai_analysis"]
             probs = stat.get("probabilities", {})
