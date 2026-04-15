@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="tr" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+    <title>Railway Servis Alarmı</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;">
+
+    <!-- Wrapper Table for Email Clients -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #0f172a;">
+        <tr>
+            <td align="center" style="padding: 24px 16px;">
+
+                <!-- Main Container -->
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; width: 100%; background-color: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #dc2626, #b91c1c, #991b1b); padding: 36px 32px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    <td>
+                                        <h1 style="margin: 0; font-size: 24px; color: #ffffff; font-weight: 700; letter-spacing: -0.3px; line-height: 1.3;">
+                                            &#128680; Railway Servis Alarm&#305;
+                                        </h1>
+                                        <p style="margin: 12px 0 0; color: #fecaca; font-size: 15px; line-height: 1.5;">
+                                            <span style="font-weight: 700; color: #ffffff;">{{COUNT}} serviste</span> sorun tespit edildi &#8212; acil m&uuml;dahale gerekebilir.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Spacer -->
+                    <tr><td style="height: 8px; background-color: #1e293b;"></td></tr>
+
+                    <!-- Table Header -->
+                    <tr>
+                        <td style="padding: 0 8px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse;">
+                                <tr>
+                                    <td width="40%" style="padding: 14px 24px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; font-weight: 600; border-bottom: 1px solid #334155;">
+                                        Servis
+                                    </td>
+                                    <td width="20%" style="padding: 14px 16px; text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; font-weight: 600; border-bottom: 1px solid #334155;">
+                                        Durum
+                                    </td>
+                                    <td width="40%" style="padding: 14px 24px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; font-weight: 600; border-bottom: 1px solid #334155;">
+                                        Detay
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Service Rows -->
+                    <tr>
+                        <td style="padding: 0 8px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse;">
+                                {{ROWS}}
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Spacer -->
+                    <tr><td style="height: 8px; background-color: #1e293b;"></td></tr>
+
+                    <!-- CTA Button -->
+                    <tr>
+                        <td style="padding: 24px 32px;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td style="background: linear-gradient(135deg, #6366f1, #4f46e5); border-radius: 10px;">
+                                        <a href="https://railway.app/dashboard"
+                                           target="_blank"
+                                           style="display: inline-block; color: #ffffff; text-decoration: none; padding: 14px 32px; font-size: 14px; font-weight: 600; letter-spacing: 0.3px; line-height: 1;">
+                                            Railway Dashboard'u A&#231; &#8594;
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 20px 32px; background-color: #0f172a; border-top: 1px solid #334155; text-align: center;">
+                            <p style="margin: 0; font-size: 12px; color: #475569; line-height: 1.8;">
+                                Kontrol zaman&#305;: {{TIMESTAMP}}<br>
+                                Antigravity Servis &#304;zleyici &#8226; Saatlik Otomatik Kontrol
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+                <!-- End Main Container -->
+
+            </td>
+        </tr>
+    </table>
+    <!-- End Wrapper -->
+
+</body>
+</html>

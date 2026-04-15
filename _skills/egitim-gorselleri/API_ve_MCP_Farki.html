@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity: API ve MCP — Arka Kapılar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #07090E;
+            --surface: rgba(255,255,255,0.03);
+            --border: rgba(255,255,255,0.07);
+            --text: #FFFFFF;
+            --muted: #8896B0;
+            --api: #3b82f6; /* Blue for API */
+            --api-rgb: 59,130,246;
+            --mcp: #a855f7; /* Purple for MCP */
+            --mcp-rgb: 168,85,247;
+            --platform: #f59e0b; /* Amber for Platform */
+            --platform-rgb: 245,158,11;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Outfit',sans-serif; }
+        body { background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+
+        .bg-glow { position:fixed; width:550px; height:550px; border-radius:50%; filter:blur(140px); opacity:0.1; z-index:0; pointer-events:none; animation:float 14s infinite alternate ease-in-out; }
+        .glow-1 { background:var(--api); top:-200px; left:-200px; }
+        .glow-2 { background:var(--mcp); bottom:-200px; right:-200px; animation-delay:-7s; }
+        .bg-grid { position:fixed; inset:0; z-index:0; pointer-events:none; background-image: linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px); background-size:60px 60px; }
+
+        .page { position:relative; z-index:1; max-width:1200px; margin:0 auto; padding:3rem 2rem 5rem; }
+
+        /* HEADER */
+        .header { text-align:center; margin-bottom:4rem; opacity:0; transform:translateY(-20px); animation:fadeDown 1s ease-out forwards; }
+        .chip { display:inline-block; padding:0.5rem 1.2rem; border-radius:100px; background:rgba(255,255,255,0.04); border:1px solid var(--border); font-size:0.82rem; font-weight:600; color:var(--muted); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:1.5rem; }
+        .header h1 { font-size:3.4rem; font-weight:900; line-height:1.1; margin-bottom:1rem; background:linear-gradient(135deg, var(--platform) 0%, var(--api) 50%, var(--mcp) 100%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+        .header p { color:var(--muted); font-size:1.2rem; max-width:700px; margin:0 auto; line-height:1.7; }
+
+        /* KEY MESSAGE */
+        .key-msg {
+            max-width:960px; margin:0 auto 3.5rem; padding:1.5rem 2rem; border-radius:20px;
+            background:linear-gradient(135deg, rgba(var(--api-rgb),0.06), rgba(var(--mcp-rgb),0.06));
+            border:1px solid rgba(255,255,255,0.08); display:flex; align-items:center; gap:1.2rem;
+            opacity:0; transform:translateY(20px); transition:all 0.8s cubic-bezier(0.16,1,0.3,1);
+        }
+        .key-msg.visible { opacity:1; transform:translateY(0); }
+        .key-msg .icon { font-size:2.4rem; flex-shrink:0; }
+        .key-msg p { color:var(--muted); font-size:1.05rem; line-height:1.7; }
+
+        /* SECTION LABEL */
+        .sec-label { display:flex; align-items:center; gap:0.9rem; margin-bottom:2rem; opacity:0; transform:translateY(20px); }
+        .sec-label.visible { opacity:1; transform:translateY(0); transition:all 0.7s ease; }
+        .sec-num { width:46px; height:46px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.15rem; font-weight:700; flex-shrink:0; }
+        .sec-label h2 { font-size:2.1rem; font-weight:700; }
+        .sec-label h2 span { color:var(--muted); font-weight:400; }
+        .sec-label p { color:var(--muted); font-size:1.1rem; margin-top:0.2rem; }
+
+        /* MULTI CARDS */
+        .scenario-grid { display:grid; grid-template-columns:1fr 1fr; gap:2rem; margin-bottom: 2rem; }
+        
+        .c-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 2.5rem 2rem;
+            position: relative; overflow: hidden; transition: all 0.4s ease; opacity:0; transform:translateY(30px);
+        }
+        .c-card.visible { opacity:1; transform:translateY(0); }
+        .c-card::before { content:''; position:absolute; top:0; left:0; right:0; height:6px; z-index:2; }
+        
+        /* THE DOORS */
+        .c-api { border-top-color: var(--api); }
+        .c-api::before { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+        .c-mcp { border-top-color: var(--mcp); }
+        .c-mcp::before { background: linear-gradient(90deg, #a855f7, #d8b4fe); }
+
+        .c-card .door-icon { font-size: 3.5rem; margin-bottom: 1rem; }
+        .c-card h3 { font-size: 1.8rem; font-weight: 800; margin-bottom: 0.5rem; }
+        .c-card .sub { color: var(--muted); font-size: 1.1rem; margin-bottom: 1.5rem; line-height: 1.5; }
+
+        /* Feature Rows inside Cards */
+        .feat-row { display:flex; align-items:flex-start; gap:12px; margin-bottom: 1rem; padding: 1rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; }
+        .feat-row .fi { font-size: 1.5rem; flex-shrink:0; }
+        .feat-row h4 { font-size: 1rem; font-weight: 700; margin-bottom:0.2rem; }
+        .feat-row p { font-size: 0.9rem; color: var(--muted); line-height:1.5; }
+
+        .divider { height:1px; margin:3.5rem 0; background:linear-gradient(to right, transparent, rgba(255,255,255,0.06), transparent); }
+
+        /* FLOWCHART */
+        .orch-flow { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin: 2rem auto 0; padding: 2.5rem 1rem; position: relative; }
+        .flow-node { display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); padding: 1.5rem 1rem; border-radius: 16px; width: 150px; text-align: center; position: relative; z-index: 2; transition: transform 0.3s; }
+        .flow-node .emoji { font-size: 2.6rem; margin-bottom: 0.5rem; }
+        .flow-node .label { font-size: 1rem; font-weight: 800; line-height:1.2; }
+        .flow-node .sub { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+        
+        .node-agent { border-color: rgba(59,130,246,0.5); }
+        .node-target { border-color: rgba(255,255,255,0.05); background: rgba(0,0,0,0.4); opacity: 0.8; }
+        
+        .bridge { display: flex; flex-direction: column; align-items: center; gap:0.5rem;}
+        .bridge-badge { background: rgba(255,255,255,0.05); border: 1px solid; border-radius: 100px; padding: 0.4rem 1rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px; }
+
+        .orchestrator-msg { text-align: center; max-width: 650px; margin: 2rem auto 0; color: var(--muted); font-size: 1.05rem; line-height: 1.6; }
+        .orchestrator-msg strong { color: var(--text); }
+
+        /* SUMMARY */
+        .summary { text-align:center; padding:3rem 2rem; background:linear-gradient(135deg, rgba(var(--api-rgb),0.05), rgba(var(--mcp-rgb),0.05)); border:1px solid rgba(255,255,255,0.1); border-radius:26px; position:relative; overflow:hidden; opacity:0; transform:translateY(30px); transition:all 0.8s cubic-bezier(0.16,1,0.3,1); }
+        .summary.visible { opacity:1; transform:translateY(0); }
+        .summary::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(to right, var(--api), var(--mcp)); }
+        .summary h2 { font-size:2rem; font-weight:800; margin-bottom:1.3rem; }
+        .summary-text { color:var(--muted); font-size:1.12rem; line-height:1.7; max-width:800px; margin:0 auto; }
+        .summary-text strong { color:var(--text); }
+
+        @media (max-width: 900px) {
+            .scenario-grid { grid-template-columns:1fr; }
+            .orch-flow { flex-direction: column; gap: 1.5rem; }
+        }
+
+        /* ANIMATIONS */
+        @keyframes float { 0%{transform:translateY(0) scale(1);} 100%{transform:translateY(-50px) scale(1.08);} }
+        @keyframes fadeDown { to{opacity:1;transform:translateY(0);} }
+    </style>
+</head>
+<body>
+
+<div class="bg-glow glow-1"></div>
+<div class="bg-glow glow-2"></div>
+<div class="bg-grid"></div>
+
+<div class="page">
+    <div class="header">
+        <div class="chip">Antigravity Kavramları — Entegrasyonlar</div>
+        <h1>API ve MCP Farkı</h1>
+        <p>Her ikisi de servislere "Arka Kapıdan" erişmemizi sağlar. Krediyi ve hizmeti aynı harcar. Peki ama aralarındaki temel fark nedir?</p>
+    </div>
+
+    <div class="key-msg" data-reveal>
+        <div class="icon">💡</div>
+        <p>
+            Vitrinden (Platformdan) girmek yerine her zaman <strong>Arka Kapıyı (Kod ve Otomasyonu)</strong> kullanırız. 
+            Ancak arka kapıların çeşitleri vardır. <strong>API</strong> geleneksel arka kapıyken; <strong>MCP</strong>, yeni nesil ve çok daha akıllı bir evrensel adaptördür. İkisi de aynı işe yarar.
+        </p>
+    </div>
+
+    <section>
+        <div class="scenario-grid">
+            
+            <!-- API CARD -->
+            <div class="c-card c-api" data-reveal>
+                <div class="door-icon">🔑</div>
+                <h3 style="color:var(--api)">API (Özel Arka Kapı)</h3>
+                <p class="sub">Tedarikçiyle konuşmak için onun özel dilini öğrenmen veya ona özel bir sipariş formu (Script) yazman gerekir.</p>
+                
+                <div class="feat-row">
+                    <div class="fi">💬</div>
+                    <div>
+                        <h4>Her Servis Kendi Dilindedir</h4>
+                        <p>Kie AI'nin menüsü başkadır, Apollo'nun başkadır. Antigravity'nin API ile anlaşması için "Bu servisin dokümantasyonuna bakıp şu koda göre istek at" demek zorundayız.</p>
+                    </div>
+                </div>
+
+                <div class="feat-row">
+                    <div class="fi">🛠️</div>
+                    <div>
+                        <h4>Kod Yazımı Gerekir</h4>
+                        <p>Genellikle entegrasyon için bir mutfak şefi (geliştirici) tarafından Python veya Node.js ile aracı bir script yazılmış olmalıdır.</p>
+                    </div>
+                </div>
+
+                <div class="feat-row">
+                    <div class="fi">🎯</div>
+                    <div>
+                        <h4>Örnekler</h4>
+                        <p>Kie AI (Video İstekleri), Apollo (Lead Çekme), Hunter.io (Mail Bulma).</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MCP CARD -->
+            <div class="c-card c-mcp" data-reveal>
+                <div class="door-icon">🔌</div>
+                <h3 style="color:var(--mcp)">MCP (Evrensel Priz)</h3>
+                <p class="sub">Tedarikçinin "Aşçı dilinde" standartlaştırılmış bir tepsiyle geldiği, kod yazmadan "Tak-Çalıştır" bağlanan yeni nesil sistem.</p>
+                
+                <div class="feat-row">
+                    <div class="fi">🌐</div>
+                    <div>
+                        <h4>Tek Dünya Dili</h4>
+                        <p>Model Context Protocol (MCP) bir standarttır. GitHub MCP'sini Antigravity'ye bağladığın an, Antigravity hiç kod okumadan "Ah, senin depocu olduğunu ve nasıl dosya çekeceğini standart menünden anladım!" der.</p>
+                    </div>
+                </div>
+
+                <div class="feat-row">
+                    <div class="fi">🧩</div>
+                    <div>
+                        <h4>Tak-Çalıştır Zekası</h4>
+                        <p>Sıfırdan script kodlamaya gerek kalmaz. Sadece MCP sunucusunu başlatırsın, gerisini yapay zekanın kendisi çözer ve o araçları doğal bir uzantısı gibi kullanır.</p>
+                    </div>
+                </div>
+
+                <div class="feat-row">
+                    <div class="fi">🎯</div>
+                    <div>
+                        <h4>Örnekler</h4>
+                        <p>GitHub File Reader/Pusher, Google Workspace (Mail Okuma/Atma), Notion Veritabanı.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- FLOW VISUAL -->
+    <div class="orch-flow" data-reveal>
+        <div class="flow-node node-agent">
+            <div class="emoji">🤖</div>
+            <div class="label" style="color:#fff;">Antigravity</div>
+            <div class="sub">Baş Aşçı</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:4rem;">
+            
+            <!-- API Path -->
+            <div style="display:flex; align-items:center; gap:1rem;">
+                <div class="bridge">
+                    <span class="bridge-badge" style="color:var(--api); border-color:var(--api);">API (Özel Dil)</span>
+                    <span style="color:var(--muted); font-size:1.5rem;">➡️</span>
+                </div>
+                <div class="flow-node node-target">
+                    <div class="emoji">🎥</div>
+                    <div class="label" style="color:#fff;">Kie AI</div>
+                </div>
+            </div>
+
+            <!-- MCP Path -->
+            <div style="display:flex; align-items:center; gap:1rem;">
+                <div class="bridge">
+                    <span class="bridge-badge" style="color:var(--mcp); border-color:var(--mcp);">MCP (Evrensel)</span>
+                    <span style="color:var(--muted); font-size:1.5rem;">➡️</span>
+                </div>
+                <div class="flow-node node-target">
+                    <div class="emoji">🐙</div>
+                    <div class="label" style="color:#fff;">GitHub</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    
+    <p class="orchestrator-msg" data-reveal>
+        Antigravity video yapmak için <strong>Kie AI (API)</strong> kuryesini özel bir dille ararken; kodları okumak için <strong>GitHub (MCP)</strong> evrensel prizine doğrudan kendi zihniyle takılır. Her ikisinin de amacı Antigravity'nin hizmet ağını genişletmektir.
+    </p>
+
+    <div class="divider"></div>
+
+    <div class="summary" data-reveal>
+        <h2>🧩 Büyük Resim</h2>
+        <p class="summary-text">
+            <strong>Platform (Ön Kapı):</strong> İnsanların tıklayarak girdiği yorucu arayüzdür. <br><br>
+            <strong>API (Arka Kapı):</strong> Yapay zekaların içeri girdiği özel kod kapılarıdır. Aynı krediyi harcar ama işleri otomatikleştirir.<br><br>
+            <strong>MCP (Evrensel Adaptör):</strong> Yapay zekanın hiçbir dış kod bilgisine ihtiyaç duymadan, başka araçlara <i>"tak-çalıştır"</i> şeklinde anında uyum sağlaması için geliştirilmiş yepyeni bir "Arka Kapı" standardıdır.<br><br>
+            Patron olarak tek yapman gereken, hangi Arka Kapıyı kullanırsan kullan, sistemin <strong>API Anahtarını/Token'ı</strong> kasanın (<code>master.env</code>) içerisine bırakmaktır.
+        </p>
+    </div>
+
+</div>
+
+<script>
+    const obs = new IntersectionObserver((entries) => {
+        entries.forEach((e, i) => {
+            if (e.isIntersecting) {
+                const siblings = e.target.parentElement.querySelectorAll('[data-reveal]');
+                const idx = Array.from(siblings).indexOf(e.target);
+                e.target.style.transitionDelay = `${idx * 0.12}s`;
+                e.target.classList.add('visible');
+                obs.unobserve(e.target);
+            }
+        });
+    }, { threshold:0.01, rootMargin:'0px 0px 200px 0px' });
+    document.querySelectorAll('[data-reveal]').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>

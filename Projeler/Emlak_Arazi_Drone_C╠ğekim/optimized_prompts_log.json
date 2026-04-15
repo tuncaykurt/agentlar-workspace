@@ -1,0 +1,18 @@
+[
+    {
+        "job_id": "59dfedcb",
+        "target": "\u0130stanbul/Arnavutk\u00f6y",
+        "original_prompt": "This is a drone photograph looking down at a 45-degree angle. Add bright glowing neon cyan boundary lines (#00FFFF) on the ground marking a land parcel of approximately 850.0 square meters in the center of the image. The glowing lines should have a soft luminous halo effect. Everything else in the image stays photorealistic and unchanged.",
+        "improved_prompt": "A high-resolution, photorealistic drone photograph from a 45-degree angle overlooking a suburban area. In the center, a single residential property with a house and yard, approximately 850 square meters in size, is outlined. The boundary is marked by a bright, neon cyan (#00FFFF) line of light that is physically on the ground, perfectly following the contours of the terrain. This line emits a soft, luminous halo, realistically casting a subtle cyan glow onto the adjacent ground, trees, and buildings, seamlessly integrating it into the photo.",
+        "score": 4,
+        "feedback": "The image successfully adds a glowing cyan shape to the center of an aerial photograph. However, it fails on two key aspects of the prompt. Firstly, the glowing line appears as a flat graphical overlay floating above the landscape, rather than being integrated 'on the ground' and conforming to the terrain. Secondly, the outlined area is far too large, covering dozens of properties, completely missing the specified scale of 'approximately 850.0 square meters' (which is the size of a typical single-family plot)."
+    },
+    {
+        "job_id": "5cf62131",
+        "target": "\u0130stanbul/Arnavutk\u00f6y",
+        "original_prompt": "This is a drone photograph looking down at a 45-degree angle. Add bright glowing neon cyan boundary lines (#00FFFF) on the ground marking a land parcel of approximately 23500.0 square meters in the center of the image. The glowing lines should have a soft luminous halo effect. Everything else in the image stays photorealistic and unchanged.",
+        "improved_prompt": "A photorealistic 45-degree angle drone photograph of agricultural fields. A bright, glowing neon cyan (#00FFFF) boundary line is drawn directly on the ground, outlining a 23,500 square meter land parcel in the center. Crucially, the neon line must follow the exact contours of the terrain, dipping into ditches and rising over small hills as if painted on the surface. The line has a soft luminous halo that casts a realistic cyan glow on the adjacent ground, crops, and trees. The underlying landscape remains photorealistic.",
+        "score": 6,
+        "feedback": "The image successfully adds glowing cyan lines to a drone shot as requested. However, the primary flaw is that the lines appear to float as a 2D overlay above the ground rather than conforming to the terrain's contours. For example, the line passes straight over the road and vegetation without dipping or changing, which breaks the realism of it being 'on the ground'."
+    }
+]

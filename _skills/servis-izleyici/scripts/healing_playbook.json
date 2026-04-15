@@ -1,0 +1,220 @@
+{
+  "version": "1.0",
+  "description": "Bilinen hata kalıpları ve otomatik düzeltme aksiyonları",
+  "rate_limits": {
+    "max_redeploy_per_hour": 2,
+    "max_redeploy_per_day": 5,
+    "max_agent_restart_per_hour": 3,
+    "cooldown_minutes": 30
+  },
+  "patterns": [
+    {
+      "id": "railway_crashed",
+      "match": "CRASHED",
+      "context": "railway_status",
+      "action": "redeploy",
+      "description": "Railway servisi crash olmuş — otomatik redeploy",
+      "max_retries": 2,
+      "cooldown_minutes": 30
+    },
+    {
+      "id": "railway_failed",
+      "match": "FAILED",
+      "context": "railway_status",
+      "action": "redeploy",
+      "description": "Railway deployment başarısız — otomatik redeploy",
+      "max_retries": 2,
+      "cooldown_minutes": 30
+    },
+    {
+      "id": "railway_removed",
+      "match": "REMOVED",
+      "context": "railway_status",
+      "action": "alert_only",
+      "description": "Servis kaldırılmış — manuel müdahale gerekli"
+    },
+    {
+      "id": "ssl_transient",
+      "match": "SSL.*Error|SSLError|CERTIFICATE_VERIFY_FAILED|ssl\\.SSLError|EOF occurred in violation of protocol|ssl\\.SSLEOFError",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "Geçici SSL hatası — genellikle kendi kendine düzelir",
+      "wait_minutes": 60
+    },
+    {
+      "id": "invalid_grant",
+      "match": "invalid_grant|Token has been expired|token.*revoked",
+      "context": "railway_log",
+      "action": "alert_only",
+      "description": "OAuth token süresi dolmuş — token.json yenilenmeli"
+    },
+    {
+      "id": "oom_killed",
+      "match": "OOMKilled|out of memory|Cannot allocate memory",
+      "context": "railway_log",
+      "action": "redeploy",
+      "description": "Bellek yetersizliği — redeploy ile temiz başlangıç",
+      "max_retries": 1,
+      "cooldown_minutes": 60
+    },
+    {
+      "id": "rate_limit",
+      "match": "rate.?limit|429|Too Many Requests",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "API rate limit — geçici, kendi kendine düzelir",
+      "wait_minutes": 30
+    },
+    {
+      "id": "agent_not_loaded",
+      "match": "NOT_LOADED|yüklü değil|bulunamadı",
+      "context": "launch_agent",
+      "action": "reload_agent",
+      "description": "LaunchAgent yüklü değil — otomatik yükleme",
+      "max_retries": 3
+    },
+    {
+      "id": "agent_exit_error",
+      "match": "EXIT_ERROR|çıkış kodu",
+      "context": "launch_agent",
+      "action": "restart_agent",
+      "description": "LaunchAgent hatalı çıkış — unload/load ile yeniden başlat",
+      "max_retries": 3
+    },
+    {
+      "id": "stale_agent",
+      "match": "STALE",
+      "context": "launch_agent",
+      "action": "alert_only",
+      "description": "Eski/bozuk LaunchAgent dosyası — manuel temizlik gerekli"
+    },
+    {
+      "id": "connection_error",
+      "match": "ConnectionError|ConnectionRefused|Connection reset|ECONNREFUSED",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "Geçici bağlantı hatası — kendi kendine düzelir",
+      "wait_minutes": 15
+    },
+    {
+      "id": "log_false_positive",
+      "match": "Log dosyasında.*hata|Son 24 saatte.*hata|hata bulundu|Score is exceptionally high|FAILED \\(son deploy",
+      "context": "launch_agent",
+      "action": "ignore_transient",
+      "description": "Log taramasında kendi çıktılarını tekrar yakaladı — false positive, aksiyon gerekmez",
+      "wait_minutes": 60
+    },
+    {
+      "id": "api_transient_connection",
+      "match": "Remote end closed|handshake.*timed out|Connection unexpectedly closed|closed connection without response|timed out|Network is unreachable|okunamadı",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "Geçici API bağlantı hatası — kendi kendine düzelir",
+      "wait_minutes": 30
+    },
+    {
+      "id": "telegram_conflict",
+      "match": "telegram\\.error\\.Conflict|terminated by other getUpdates|only one bot instance",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "Telegram polling çakışması — deploy sırasında eski/yeni instance geçici çakışma, kendi düzelir",
+      "wait_minutes": 15
+    },
+    {
+      "id": "telegram_no_error_handler",
+      "match": "No error handlers are registered.*logging exception",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "Telegram bot error handler eksik logu — geçici, kritik değil",
+      "wait_minutes": 15
+    },
+    {
+      "id": "crm_transient_error",
+      "match": "Lead Aktarım Hatası|Google Sheets okunamadı",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "CRM geçici aktarım hataları — kendi kendine düzelir",
+      "wait_minutes": 30
+    },
+    {
+      "id": "runtime_code_error",
+      "match": "AttributeError|ImportError|ModuleNotFoundError|SyntaxError|NameError|IndentationError",
+      "context": "railway_log",
+      "action": "alert_only",
+      "description": "Kod hatası — redeploy ile çözülmez, kod düzeltilmeli ve tekrar push edilmeli. ÖNCELİKLİ: Bu hata production'ı durdurur!"
+    },
+    {
+      "id": "gemini_model_not_found",
+      "match": "404.*models/gemini.*is not found|models/gemini.*not found|Resource has been exhausted",
+      "context": "railway_log",
+      "action": "alert_only",
+      "description": "Gemini model deprecate olmuş veya bulunamıyor — kod güncellemesi gerekli (model adı değiştirilmeli)"
+    },
+    {
+      "id": "gmail_invalid_scope",
+      "match": "invalid_scope|Bad Request.*scope|scope.*mismatch",
+      "context": "railway_log",
+      "action": "alert_only",
+      "description": "Gmail OAuth scope uyumsuzluğu — koddaki SCOPES token'daki scope'larla eşleşmiyor, kod düzeltilmeli ve Railway env var güncellenmeli"
+    },
+    {
+      "id": "monitoring_failure",
+      "match": "MONITORING_FAILURE|Log sorgusu başarısız|deploymentLogs sorgusu başarısız",
+      "context": "railway_log",
+      "action": "alert_only",
+      "description": "İzleme altyapısı arızası — health check scripti Railway API'den log çekemiyor. GraphQL sorgusu veya API şeması güncellenmiş olabilir."
+    },
+    {
+      "id": "graphql_validation_failed",
+      "match": "GRAPHQL_VALIDATION_FAILED|validation error|Cannot query field|Unknown type|is not a type",
+      "context": "railway_log",
+      "action": "alert_only",
+      "description": "Railway GraphQL şema değişikliği — API sorguları kırılmış. health_check.py güncellenmeli."
+    },
+    {
+      "id": "gmail_api_500",
+      "match": "HttpError 5.. when requesting https://gmail\\.googleapis\\.com",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "Google/Gmail API geçici 5xx sunucu hatası — kendi kendine düzelir",
+      "wait_minutes": 30
+    },
+    {
+      "id": "filename_panic_false_positive",
+      "match": "Kapak.*\\(panic\\)",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "Dosya isminde panic geçmesi nedeniyle false positive log alarmı",
+      "wait_minutes": 60
+    },
+    {
+      "id": "watchdog_critical_log_false_positive",
+      "match": "AkilliWatchdog.*CRITICAL",
+      "context": "railway_log",
+      "action": "ignore_transient",
+      "description": "Watchdog'un kendi CRITICAL uyarı logu false positive olarak algılandı",
+      "wait_minutes": 60
+    },
+    {
+      "id": "missing_ffmpeg",
+      "match": "FileNotFoundError.*ffmpeg|No such file.*ffmpeg|ffmpeg.*not found",
+      "context": "railway_log",
+      "action": "alert_only",
+      "description": "Kritik bağımlılık hatası — ffmpeg sistemde yüklü değil. ÇÖZÜM: nixpacks.toml dosyasına [phases.setup] nixPkgs = ['ffmpeg'] ekle ve config.py'da _check_system_deps(['ffmpeg']) ile fail-fast kontrol ekle. ⚠️ Aptfile/apt.txt ÇALIŞMAZ — Railway Nixpacks builder bu dosyaları YOKSAYAR."
+    },
+    {
+      "id": "missing_system_binary",
+      "match": "FileNotFoundError.*\\b(chromium|wkhtmltopdf|cairo|imagemagick)\\b|shutil\\.which.*returned None",
+      "context": "railway_log",
+      "action": "alert_only",
+      "description": "Sistem bağımlılığı eksik — nixpacks.toml dosyasına [phases.setup] nixPkgs = ['PAKET_ADI'] eklenmeli. Aptfile/apt.txt ÇALIŞMAZ."
+    },
+    {
+      "id": "opslogger_notion_404",
+      "match": "OpsLogger Error.*Notion'a log gönderilemedi: 404",
+      "context": "railway_log",
+      "action": "alert_only",
+      "description": "OpsLogger ayarlarında eksik veya silinmiş Notion veritabanı ID'si (404 Not Found)"
+    }
+  ]
+}

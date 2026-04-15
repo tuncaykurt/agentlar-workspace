@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity: Platform, API ve MCP Analojisi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #07090E;
+            --surface: rgba(255,255,255,0.03);
+            --border: rgba(255,255,255,0.07);
+            --text: #FFFFFF;
+            --muted: #8896B0;
+            --platform: #F59E0B; --platform-rgb: 245,158,11;
+            --api: #3B82F6; --api-rgb: 59,130,246;
+            --mcp: #A855F7; --mcp-rgb: 168,85,247;
+            --kredi: #EC4899; --kredi-rgb: 236,72,153;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Outfit',sans-serif; }
+        body { background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+
+        /* Background effects */
+        .bg-glow {
+            position:fixed; width:550px; height:550px; border-radius:50%;
+            filter:blur(140px); opacity:0.1; z-index:0; pointer-events:none;
+            animation:float 14s infinite alternate ease-in-out;
+        }
+        .glow-1 { background:var(--platform); top:-200px; left:-200px; }
+        .glow-2 { background:var(--mcp); bottom:-200px; right:-200px; animation-delay:-7s; }
+        .bg-grid {
+            position:fixed; inset:0; z-index:0; pointer-events:none;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+            background-size:60px 60px;
+        }
+
+        .page { position:relative; z-index:1; max-width:1200px; margin:0 auto; padding:3rem 2rem 5rem; }
+
+        /* ═══ HEADER ═══ */
+        .header {
+            text-align:center; margin-bottom:4rem;
+            opacity:0; transform:translateY(-20px);
+            animation:fadeDown 1s ease-out forwards;
+        }
+        .chip {
+            display:inline-block; padding:0.5rem 1.2rem; border-radius:100px;
+            background:rgba(255,255,255,0.04); border:1px solid var(--border);
+            font-size:0.82rem; font-weight:600; color:var(--muted);
+            letter-spacing:0.12em; text-transform:uppercase; margin-bottom:1.5rem;
+        }
+        .header h1 {
+            font-size:3.6rem; font-weight:900; line-height:1.1; margin-bottom:1rem;
+            background:linear-gradient(135deg, var(--platform) 0%, var(--api) 50%, var(--mcp) 100%);
+            -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+        }
+        .header p { color:var(--muted); font-size:1.2rem; max-width:800px; margin:0 auto; line-height:1.7; }
+
+        /* ═══ SECTION HEADER ═══ */
+        .sec-label {
+            display:flex; align-items:center; gap:0.9rem;
+            margin-bottom:2rem; opacity:0; transform:translateY(20px);
+        }
+        .sec-label.visible { opacity:1; transform:translateY(0); transition:all 0.7s ease; }
+        .sec-num {
+            width:46px; height:46px; border-radius:14px;
+            display:flex; align-items:center; justify-content:center;
+            font-size:1.15rem; font-weight:700; flex-shrink:0;
+        }
+        .sec-label h2 { font-size:2.1rem; font-weight:700; }
+        .sec-label h2 span { color:var(--muted); font-weight:400; }
+        .sec-label p { color:var(--muted); font-size:1.1rem; margin-top:0.2rem; }
+
+        /* ═══ CHEF CONTEXT (SECTION 1) ═══ */
+        .chef-context {
+            display:flex; gap:3rem; align-items:center; justify-content:center;
+            background:rgba(255,255,255,0.02); border:1px solid var(--border);
+            padding:3.5rem 2.5rem; border-radius:24px; margin-bottom:3rem;
+            backdrop-filter:blur(12px);
+            opacity:0; transform:translateY(30px); transition:all 0.8s ease;
+        }
+        .chef-context.visible { opacity:1; transform:translateY(0); }
+        .chef-box { text-align:center; flex:1; max-width:280px; }
+        .chef-box img { width:100%; border-radius:20px; border:2px solid rgba(255,255,255,0.08); box-shadow:0 10px 40px rgba(0,0,0,0.4); }
+        
+        .flow-split {
+            display:flex; flex-direction:column; gap:2.2rem; align-items:center; justify-content:center;
+        }
+        .split-arrow { font-size:2.4rem; filter:grayscale(1) opacity(0.3); animation:pulseArrow 2s infinite; }
+        .split-arrow.up { transform:translateY(15px) rotate(-15deg); }
+        .split-arrow.down { transform:translateY(-15px) rotate(15deg); }
+        
+        .stores-list { flex:1.2; display:flex; flex-direction:column; gap:1.2rem; }
+        .store-row {
+            display:flex; align-items:center; gap:1.2rem; padding:1.2rem 1.6rem;
+            background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);
+            border-radius:18px; transition:transform 0.3s;
+        }
+        .store-row:hover { transform:translateX(8px); background:rgba(255,255,255,0.05); }
+        .store-row .emoji { font-size:2.6rem; filter:drop-shadow(0 4px 12px rgba(0,0,0,0.4)); flex-shrink:0;}
+        .store-row .info h4 { font-size:1.25rem; font-weight:700; margin-bottom:0.3rem; color:#fff; }
+        .store-row .info p { font-size:0.95rem; color:var(--muted); line-height:1.5; }
+        .store-row .digital { display:inline-block; font-size:0.8rem; padding:0.2rem 0.6rem; background:rgba(255,255,255,0.1); border-radius:8px; margin-top:0.4rem; font-weight:600; color:#fff; }
+
+        /* ═══ TRIPLE LAYOUT (SECTION 2 & 3) ═══ */
+        .triple-row { display:grid; grid-template-columns:repeat(3, 1fr); gap:2rem; margin-bottom:1.5rem; }
+        
+        .example-card {
+            background:var(--surface); border:1px solid var(--border);
+            border-radius:22px; overflow:hidden; position:relative;
+            backdrop-filter:blur(16px);
+            display:flex; flex-direction:column;
+            opacity:0; transform:translateY(30px);
+            transition:all 0.8s cubic-bezier(0.16,1,0.3,1);
+        }
+        .example-card.visible { opacity:1; transform:translateY(0); }
+        .example-card::before {
+            content:''; position:absolute; top:0; left:0; right:0; height:4px;
+            background:var(--accent); z-index:2;
+        }
+        .example-card:hover {
+            transform:translateY(-6px);
+            border-color:rgba(255,255,255,0.12);
+            box-shadow:0 24px 60px rgba(0,0,0,0.5), 0 0 30px rgba(var(--accent-rgb),0.08);
+        }
+
+        .card-photo { position:relative; overflow:hidden; }
+        .card-photo img { width:100%; display:block; aspect-ratio:16/10; object-fit:cover; transition:transform 0.6s ease; }
+        .example-card:hover .card-photo img { transform:scale(1.03); }
+        .card-photo .photo-badge {
+            position:absolute; bottom:12px; left:12px;
+            padding:0.45rem 0.9rem; border-radius:10px;
+            background:rgba(7,9,14,0.85); backdrop-filter:blur(12px);
+            border:1px solid rgba(var(--accent-rgb),0.3);
+            font-size:0.88rem; font-weight:700; color:var(--accent);
+            display:flex; align-items:center; gap:0.35rem; z-index:2;
+        }
+
+        .card-body { padding:1.8rem; display:flex; flex-direction:column; flex:1; }
+        .card-body .huge-title { font-size:2.6rem; font-weight:900; margin-bottom:0.2rem; line-height:1; letter-spacing:1px; text-transform:uppercase; color:var(--accent); }
+        .card-body .sub-title { font-size:1.15rem; font-weight:600; color:#fff; margin-bottom:1.2rem; }
+
+        /* ═══ STEP LIST (ADIM ADIM) ═══ */
+        .step-list { margin-bottom:1.5rem; }
+        .step-list ul { list-style:none; padding-left:0; }
+        .step-list li {
+            position:relative; padding-left:1.2rem; margin-bottom:0.6rem;
+            font-size:0.95rem; color:var(--muted); line-height:1.5;
+        }
+        .step-list li::before {
+            content:"•"; position:absolute; left:0; top:0;
+            color:var(--accent); font-weight:bold; font-size:1.2rem;
+        }
+
+        /* ═══ TICK/CROSS TABLE (KARŞILAŞTIRMA) ═══ */
+        .tick-table {
+            margin-top:auto;
+            display:flex; flex-direction:column; gap:0.6rem;
+            background:rgba(0,0,0,0.3); padding:1rem 1.2rem; border-radius:14px; 
+            border:1px solid rgba(255,255,255,0.05);
+        }
+        .t-row { display:flex; align-items:flex-start; gap:0.8rem; font-size:0.92rem; color:var(--muted); }
+        .t-row b { color:#fff; font-weight:500; }
+        .t-row .ico { font-size:1.15rem; flex-shrink:0; line-height:1.2; }
+
+        /* ═══ DUAL LAYOUT ═══ */
+        .dual-row { display:grid; grid-template-columns:1fr 1fr; gap:2.5rem; margin-bottom:1.5rem; }
+
+        /* ═══ DIVIDER ═══ */
+        .divider { height:1px; margin:4rem 0; background:linear-gradient(to right, transparent, rgba(255,255,255,0.06), transparent); }
+
+        /* ═══ ANIMATIONS ═══ */
+        @keyframes fadeDown { to{opacity:1;transform:translateY(0);} }
+        @keyframes pulseArrow { 0%,100%{transform:translateX(0); opacity:0.3;} 50%{transform:translateX(6px); opacity:0.8;} }
+
+        /* ═══ SMALL VS LIST ═══ */
+        .vs-row { display:flex; flex-direction:column; gap:0.6rem; margin-top:0.8rem; }
+        .vs-item { font-size:0.95rem; color:var(--muted); display:flex; gap:10px; align-items:center; line-height:1.4; padding:0.6rem 0.8rem; border-radius:10px; background:rgba(255,255,255,0.015); border:1px solid rgba(255,255,255,0.03); }
+        .vs-item b { color:var(--text); font-weight:600; display:inline-block; min-width:85px; }
+        .vs-ico { flex-shrink:0; font-size:1.2rem; display:flex; align-items:center; }
+
+        /* ═══ RESPONSIVE ═══ */
+        @media (max-width:980px) {
+            .triple-row { grid-template-columns:1fr; }
+            .chef-context { flex-direction:column; padding:2rem 1.5rem; }
+            .flow-split { flex-direction:row; gap:1.5rem; }
+            .split-arrow { transform:rotate(90deg) !important; }
+            .dual-row { grid-template-columns:1fr; }
+            .header h1 { font-size:2.6rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="bg-glow glow-1"></div>
+<div class="bg-glow glow-2"></div>
+<div class="bg-grid"></div>
+
+<div class="page">
+
+    <!-- ═══════ HEADER ═══════ -->
+    <div class="header">
+        <div class="chip">Antigravity: İhtiyaçlar ve Dağıtım Metaforu</div>
+        <h1>Platform vs API vs MCP</h1>
+        <!-- "Nasıl ürün alınır"dan ziyade "Nasıl erişilir" üzerinden kurgu yapıldı -->
+        <p>Aşçının mutfağına ürünleri taşımak için kullandığı üç farklı çağ.</p>
+    </div>
+
+    <!-- ═══════ 1. AŞÇININ İHTİYACI (ÇOKLU TEDARİK) ═══════ -->
+    <section>
+        <div class="sec-label" data-reveal>
+            <div class="sec-num" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);">1</div>
+            <div>
+                <h2>Çoklu Tedarik <span>— Neden Birden Fazla Dükkan?</span></h2>
+                <p>Bir aşçı tek başına harika bir yemeği (projeyi) nasıl hazırlar? Malzemeleri farklı dükkanlardan toplayarak.</p>
+            </div>
+        </div>
+
+        <div class="chef-context" data-reveal>
+            <!-- 1. Aşçı -->
+            <div class="chef-box">
+                <img src="assets/agent_chef.png" alt="Baş Aşçı">
+            </div>
+            
+            <!-- Oklar -->
+            <div class="flow-split">
+                <div class="split-arrow up">↗️</div>
+                <div class="split-arrow">➡️</div>
+                <div class="split-arrow down">↘️</div>
+            </div>
+
+            <!-- Dükkanlar -->
+            <div class="stores-list">
+                <div class="store-row">
+                    <div class="emoji">🍎</div>
+                    <div class="info">
+                        <h4>Manav <span style="font-weight:400;color:var(--muted);font-size:1rem;">(Meyve Lâzım)</span></h4>
+                        <span class="digital" style="color:var(--platform);">Dijital Karşılığı: Kie AI (Video)</span>
+                    </div>
+                </div>
+                <div class="store-row">
+                    <div class="emoji">🛒</div>
+                    <div class="info">
+                        <h4>Süpermarket <span style="font-weight:400;color:var(--muted);font-size:1rem;">(Makarna Lâzım)</span></h4>
+                        <span class="digital" style="color:var(--api);">Dijital Karşılığı: Apollo (Müşteri Datası)</span>
+                    </div>
+                </div>
+                <div class="store-row">
+                    <div class="emoji">🧀</div>
+                    <div class="info">
+                        <h4>Mandıra <span style="font-weight:400;color:var(--muted);font-size:1rem;">(Peynir Lâzım)</span></h4>
+                        <span class="digital" style="color:var(--mcp);">Dijital Karşılığı: ChatGPT (Metin & Mail)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════ 2. ÜRÜNLERE NASIL ULAŞACAĞIZ? (3 KAPISI) ═══════ -->
+    <section>
+        <div class="sec-label" data-reveal>
+            <div class="sec-num" style="background:rgba(var(--mcp-rgb),0.12);color:var(--mcp);border:1px solid rgba(var(--mcp-rgb),0.25);">2</div>
+            <div>
+                <h2>Erişim Yöntemleri <span>— Malzemeyi Nasıl Taşıyacağız?</span></h2>
+                <p>Aşçı, malzemeleri laboratuvarına taşımak için bu üç farklı erişim yönteminden birini seçer.</p>
+            </div>
+        </div>
+
+        <div class="triple-row">
+            <!-- PLATFORM -->
+            <div class="example-card" data-reveal style="--accent:var(--platform);--accent-rgb:var(--platform-rgb);">
+                <div class="card-photo">
+                    <img src="assets/front_door.png" alt="Ön Kapı">
+                    <div class="photo-badge">🛍️ ÖN KAPI</div>
+                </div>
+                <div class="card-body">
+                    <h2 class="huge-title">PLATFORM</h2>
+                    <div class="sub-title">Bizzat Yürüyüp Alışveriş Yapmak</div>
+                    
+                    <div class="step-list">
+                        <ul>
+                            <li>Şapkayı giy ve web platformuna gidip giriş yap.</li>
+                            <li>Tıklayarak ve sayfaları geçerek ürünü kendin seç.</li>
+                            <li>Çıkan sonucu kendi ellerinle bilgisayara indir.</li>
+                        </ul>
+                    </div>
+
+                    <div class="tick-table">
+                        <div class="t-row"><span class="ico">✅</span> <b>Sürekli Manuel Efor</b></div>
+                        <div class="t-row"><span class="ico">❌</span> <b>Kod & Çırak İhtiyacı</b></div>
+                        <div class="t-row"><span class="ico">❌</span> <b>Otomatik Çalışma</b></div>
+                        <div class="t-row"><span class="ico">❌</span> <b>Evrensel Bağlantı</b></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API -->
+            <div class="example-card" data-reveal style="--accent:var(--api);--accent-rgb:var(--api-rgb);">
+                <div class="card-photo">
+                    <!-- Ön kapı ile tutarlı: back_door -->
+                    <img src="assets/back_door.png" alt="Arka Kapı">
+                    <div class="photo-badge">🔑 ARKA KAPI</div>
+                </div>
+                <div class="card-body">
+                    <h2 class="huge-title">API</h2>
+                    <div class="sub-title">Depo Anahtarı + Çırak Gönderme</div>
+                    
+                    <div class="step-list">
+                        <ul>
+                            <li>Dükkânın arka kapısından Depo Anahtarı (API) alırsın.</li>
+                            <li>Sadece o dükkânın dilini bilen özel Çırak (Kod) yazarsın.</li>
+                            <li>Çırak elinde anahtarla senin yerine gidip taşıma işini otomatik yapar.</li>
+                        </ul>
+                    </div>
+
+                    <div class="tick-table">
+                        <div class="t-row"><span class="ico">❌</span> <b>Sürekli Manuel Efor</b></div>
+                        <div class="t-row"><span class="ico">✅</span> <b>Kod & Çırak İhtiyacı</b></div>
+                        <div class="t-row"><span class="ico">✅</span> <b>Otomatik Çalışma</b></div>
+                        <div class="t-row"><span class="ico">❌</span> <b>Evrensel Bağlantı</b></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MCP -->
+            <div class="example-card" data-reveal style="--accent:var(--mcp);--accent-rgb:var(--mcp-rgb);">
+                <div class="card-photo">
+                    <!-- Tesisat için yeni yüksek detaylı gerçekçi boru/pipeline imajı -->
+                    <img src="assets/mcp_pipeline.png" alt="Bağdaştırıcı">
+                    <div class="photo-badge">🔌 TESİSAT</div>
+                </div>
+                <div class="card-body">
+                    <h2 class="huge-title">MCP</h2>
+                    <div class="sub-title">Evrensel Boru Hattı Döşemek</div>
+                    
+                    <div class="step-list">
+                        <ul>
+                            <li>Mutfağınızla dükkanlar arasına akıllı bir hat döşersiniz.</li>
+                            <li>Siz sadece ihtiyacı belirtin; tesisat geri kalanını zekice halleder.</li>
+                            <li>Her dükkan için ayrı bir kod (çırak) yazmaya gerek kalmaz.</li>
+                        </ul>
+                    </div>
+
+                    <div class="tick-table">
+                        <div class="t-row"><span class="ico">❌</span> <b>Sürekli Manuel Efor</b></div>
+                        <div class="t-row"><span class="ico">❌</span> <b>Kod & Çırak İhtiyacı</b></div>
+                        <div class="t-row"><span class="ico">✅</span> <b>Otomatik Çalışma</b></div>
+                        <div class="t-row"><span class="ico">✅</span> <b>Evrensel Bağlantı</b></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════ 3. ZENGİN ÖRNEKLERİN DİJİTAL DÜNYADAKİ HALİ ═══════ -->
+    <section>
+        <div class="sec-label" data-reveal>
+            <div class="sec-num" style="background:rgba(var(--github-rgb),0.12);color:var(--github);border:1px solid rgba(var(--github-rgb),0.25);">3</div>
+            <div>
+                <h2>Gerçek Uygulama Örnekleri <span>— Sahadaki Karşılıkları</span></h2>
+                <p>Birinci bölümde bahsettiğimiz dükkanlara giderken bu üç yöntemi nasıl kullanıyoruz?</p>
+            </div>
+        </div>
+
+        <div class="triple-row">
+            <!-- Example: Kie AI (Realistic Image) -->
+            <div class="example-card" data-reveal style="--accent:var(--platform);--accent-rgb:var(--platform-rgb);">
+                <div class="card-photo">
+                    <img src="assets/project_youtube.png" alt="Kie AI">
+                    <div class="photo-badge">🎥 Video / Görsel</div>
+                </div>
+                <div class="card-body" style="padding:1.5rem;">
+                    <h3 style="font-size:1.5rem;">Kie AI (Manav)</h3>
+                    <div class="vs-row">
+                        <div class="vs-item"><span class="vs-ico" style="color:var(--platform)">🛍️</span> <div><b style="color:var(--platform);">Platform:</b> Siteye gir, resmi yükle, butona bas, videoyu elle PC'ye indir.</div></div>
+                        <div class="vs-item"><span class="vs-ico" style="color:var(--api)">🔑</span> <div><b style="color:var(--api);">API:</b> Kodlanmış Bot (Çırak) her gün çalışır, videoyu api ile sana teslim eder.</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Example: Apollo (Realistic Image) -->
+            <div class="example-card" data-reveal style="--accent:var(--api);--accent-rgb:var(--api-rgb);">
+                <div class="card-photo">
+                    <img src="assets/lead_search.png" alt="Apollo">
+                    <div class="photo-badge">🥩 Lead Çekimi</div>
+                </div>
+                <div class="card-body" style="padding:1.5rem;">
+                    <h3 style="font-size:1.5rem;">Apollo (Süpermarket)</h3>
+                    <div class="vs-row">
+                        <div class="vs-item"><span class="vs-ico" style="color:var(--platform)">🛍️</span> <div><b style="color:var(--platform);">Platform:</b> Filtre yapıp listeleri Excel üzerinden elle bilgisayara taşıyorsun.</div></div>
+                        <div class="vs-item"><span class="vs-ico" style="color:var(--api)">🔑</span> <div><b style="color:var(--api);">API:</b> Sistem (Apify gibi) elindeki anahtarla JSON formatında binlerce datayı uyuşmazlıksız emer.</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Example: ChatGPT (Realistic Image) -->
+            <div class="example-card" data-reveal style="--accent:var(--mcp);--accent-rgb:var(--mcp-rgb);">
+                <div class="card-photo">
+                    <img src="assets/email_send.png" alt="ChatGPT">
+                    <div class="photo-badge">🤖 Akıl & Karar</div>
+                </div>
+                <div class="card-body" style="padding:1.5rem;">
+                    <h3 style="font-size:1.5rem;">ChatGPT (Mandıra)</h3>
+                    <div class="vs-row">
+                        <div class="vs-item"><span class="vs-ico" style="color:var(--platform)">🛍️</span> <div><b style="color:var(--platform);">Platform:</b> Siteye girip copy-paste yapar, soruyu sorar ve metni kopyalarak mail atarsın.</div></div>
+                        <div class="vs-item"><span class="vs-ico" style="color:var(--api)">🔑</span> <div><b style="color:var(--api);">API:</b> Kendi uygulamana bağlar, yazdığın kod üzerinden metni anında çektirirsin.</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<script>
+    const obs = new IntersectionObserver((entries) => {
+        entries.forEach((e, i) => {
+            if (e.isIntersecting) {
+                const siblings = e.target.parentElement.querySelectorAll('[data-reveal]');
+                const idx = Array.from(siblings).indexOf(e.target);
+                e.target.style.transitionDelay = `${idx * 0.12}s`;
+                e.target.classList.add('visible');
+                obs.unobserve(e.target);
+            }
+        });
+    }, { threshold:0.01, rootMargin:'0px 0px 200px 0px' });
+
+    document.querySelectorAll('[data-reveal]').forEach(el => obs.observe(el));
+
+    document.querySelectorAll('.example-card').forEach(card => {
+        card.addEventListener('mousemove', e => {
+            const r = card.getBoundingClientRect();
+            const x = e.clientX - r.left;
+            const y = e.clientY - r.top;
+            const rx = ((y - r.height/2) / (r.height/2)) * -3;
+            const ry = ((x - r.width/2) / (r.width/2)) * 3;
+            card.style.transform = `perspective(1000px) translateY(-6px) rotateX(${rx}deg) rotateY(${ry}deg)`;
+        });
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = `perspective(1000px) translateY(0) rotateX(0) rotateY(0)`;
+        });
+    });
+</script>
+</body>
+</html>

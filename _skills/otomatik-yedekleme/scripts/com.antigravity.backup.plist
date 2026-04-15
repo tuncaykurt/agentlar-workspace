@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Job tanımlayıcısı -->
+    <key>Label</key>
+    <string>com.antigravity.backup</string>
+
+    <!-- Çalıştırılacak script -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/KULLANICI/Desktop/Antigravity/_skills/otomatik-yedekleme/scripts/backup.sh</string>
+    </array>
+
+    <!-- Her Pazar 03:00 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Stdout log -->
+    <key>StandardOutPath</key>
+    <string>/Users/KULLANICI/Desktop/_backups/launchd_output.log</string>
+
+    <!-- Stderr log -->
+    <key>StandardErrorPath</key>
+    <string>/Users/KULLANICI/Desktop/_backups/launchd_error.log</string>
+</dict>
+</plist>

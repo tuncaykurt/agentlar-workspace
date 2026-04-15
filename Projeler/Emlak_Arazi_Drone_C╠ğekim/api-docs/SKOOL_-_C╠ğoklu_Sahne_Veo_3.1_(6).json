@@ -1,0 +1,1320 @@
+{
+  "name": "SKOOL - Çoklu Sahne Veo 3.1",
+  "nodes": [
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.1",
+          "mode": "list",
+          "cachedResultName": "gpt-5.1"
+        },
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        336,
+        880
+      ],
+      "id": "280bde4c-b938-49a0-90c2-f2bcf76972df",
+      "name": "GPT 5.1",
+      "credentials": {
+        "openAiApi": {
+          "id": "G6BXD6ZsdtJanlJS",
+          "name": "OpenAi Self-host Project"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        432,
+        1040
+      ],
+      "id": "4550a82a-0a6c-46d5-b08c-6186d0fc5802",
+      "name": "GPT 5 mini",
+      "credentials": {
+        "openAiApi": {
+          "id": "W3JVbCtkYLYvSbMb",
+          "name": "OpenAi Hotel Self-host"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "80935b3f-ac65-44f9-8ffd-cfe4f5d84057",
+              "name": "character_details",
+              "value": "Karakterimizin adı Meltem. Meltem 25 yaşında oldukça utangaç bir kişiliğe sahip. Yoga eğitmeni ve Sosyal medyada kendisini takip eden insanlara yoga öğretiyor.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        112,
+        656
+      ],
+      "id": "405e02f7-f9a0-4e71-851e-b2fcd1d944c7",
+      "name": "Konsept Detayları"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9aae6321-b748-4ebd-be3e-e03c91ee61e3",
+              "name": "character_link",
+              "value": "https://i.ibb.co/HL2Tjt6Z/Gemini-Generated-mage-bhsnh0bhsnh0bhsn.png",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        912,
+        656
+      ],
+      "id": "86f18a76-0084-4fb4-b6f5-f53655ff6337",
+      "name": "Karakter Linki"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/veo/generate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prompt\": \"{{ $('Ayır').item.json.image_to_video_prompt }}\",\n  \"imageUrls\": [\n    \"{{ $json.url }}\"\n  ],\n  \"model\": \"veo3_fast\",\n  \"callBackUrl\": \"http://your-callback-url.com/complete\",\n  \"aspectRatio\": \"9:16\",\n  \"enableFallback\": false,\n  \"enableTranslation\": true,\n  \"generationType\": \"FIRST_AND_LAST_FRAMES_2_VIDEO\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2176,
+        656
+      ],
+      "id": "82d081ee-0644-456c-b43c-07b6ebc7858a",
+      "name": "Veo 3.1 Image to Video",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "rkLAD2cPTSotQw7k",
+          "name": "Kie AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(({ json }) => {\n  const raw = json.resultJson ?? json.data?.resultJson ?? json.param?.resultJson;\n  let url = null;\n\n  try {\n    const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;\n    if (Array.isArray(obj?.resultUrls) && obj.resultUrls.length) {\n      url = obj.resultUrls[0];\n    } else if (obj?.resultUrl) {\n      url = obj.resultUrl;\n    } else if (obj?.url) {\n      url = obj.url;\n    }\n  } catch {\n    const m = String(raw ?? '').match(/https?:\\/\\/[^\\s\"']+/);\n    url = m ? m[0] : null;\n  }\n\n  // Sade çıktı: sadece URL\n  return { json: { url } };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        656
+      ],
+      "id": "4131747f-7fbd-4d41-a4cc-20ba78e30e51",
+      "name": "URL Temizle"
+    },
+    {
+      "parameters": {
+        "url": "https://api.kie.ai/api/v1/veo/record-info",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "taskId",
+              "value": "={{ $('Veo 3.1 Image to Video').item.json.data.taskId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2624,
+        656
+      ],
+      "id": "ea5e82a9-ef06-41ae-8ccb-faac9ee684c2",
+      "name": "Videoyu Al",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "rkLAD2cPTSotQw7k",
+          "name": "Kie AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/jobs/createTask",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"nano-banana-pro\",\n  \"callBackUrl\": \"https://your-domain.com/api/callback\",\n  \"input\": {\n    \"image_input\": [\n      \"{{ $json.character_link }}\"\n    ],\n    \"prompt\": \"{{ $('Ayır').item.json.text_to_image_prompt }}\",\n    \"aspect_ratio\": \"9:16\",\n    \"resolution\": \"1K\",\n    \"output_format\": \"png\"\n  }\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1104,
+        656
+      ],
+      "id": "ad193295-aca1-4376-8bfc-751e7c1a3c06",
+      "name": "Nano Banana Pro",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "rkLAD2cPTSotQw7k",
+          "name": "Kie AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e4e3c50f-f3af-42d1-a0fd-85407e1f0d89",
+                    "leftValue": "={{ $json.data.state }}",
+                    "rightValue": "ing",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "processing"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.data.state }}",
+                    "rightValue": "=success",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "5beb403d-21ba-4a24-a5cc-1e04ac6040fb"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "success"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        1712,
+        640
+      ],
+      "id": "0343c998-5534-4323-9b4b-f94390bc4c92",
+      "name": "Görsel Kontrol"
+    },
+    {
+      "parameters": {
+        "url": "https://api.kie.ai/api/v1/jobs/recordInfo",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "taskId",
+              "value": "={{ $json.data.taskId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1504,
+        656
+      ],
+      "id": "e559b161-bd1c-44a4-a292-d1bd2cb31966",
+      "name": "Görseli Al",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "rkLAD2cPTSotQw7k",
+          "name": "Kie AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.replicate.com/v1/predictions/{{ $('Klipleri Birleştir').item.json.id }}\n",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3904,
+        656
+      ],
+      "id": "31fd1cff-5d62-42c9-b7af-d708e36b7295",
+      "name": "Birleşmiş Videoyu Al",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dlO4Ow3a42Tw3tdp",
+          "name": "Replicate"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 60
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3696,
+        656
+      ],
+      "id": "91fe8c9a-e797-40f8-9f3e-d230c55c7935",
+      "name": "Bekle 60 sn",
+      "webhookId": "d07d7d7b-e802-411a-8a3f-88436af02bc2"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Birleşmiş Videoyu Al').item.json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4368,
+        656
+      ],
+      "id": "803c5ccc-3649-4b34-97e5-25370cc2320d",
+      "name": "Videoyu Indir"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mode: Run Once for All Items\n// Language: JavaScript\n\nconst items = $input.all();\n\nlet urls = [];\n\n// Toparla1, aggregateAllItemData ile tek item içinde\n// data: [ {...}, {...}, ... ] şeklinde veri gönderiyor.\nfor (const item of items) {\n  const dataArray = item.json?.data;\n  if (!Array.isArray(dataArray)) continue;\n\n  for (const row of dataArray) {\n    // Güvenli şekilde resultUrls'e kadar in\n    const resultUrls = row?.data?.response?.resultUrls;\n\n    if (Array.isArray(resultUrls)) {\n      for (const u of resultUrls) {\n        if (typeof u === 'string' && /^https?:\\/\\//.test(u)) {\n          urls.push(u);\n        }\n      }\n    }\n  }\n}\n\n// Aynı URL’leri temizle, sırayı koru\nconst uniqueUrls = [...new Set(urls)];\n\n// Replicate node’undaki body ile uyumlu field’lar\nreturn [\n  {\n    json: {\n      // Düz array hali\n      video_files: uniqueUrls,\n\n      // Senin Replicate body'inde kullanılan string hali:\n      // \"url1\",\"url2\",\"url3\"\n      video_files_inner: uniqueUrls.map(u => `\"${u}\"`).join(','),\n\n      // Kaç video var diye ekstra bilgi\n      video_count: uniqueUrls.length,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3312,
+        656
+      ],
+      "id": "e1dcc764-88ff-4ebc-8591-6b3d11ce62fd",
+      "name": "URL'leri Birleştir"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.upload-post.com/api/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ $('Senaryo Agent Veo 3.1').item.json.output.video_caption }}"
+            },
+            {
+              "name": "user",
+              "value": "[SOSYAL_MEDYA_KULLANICI]"
+            },
+            {
+              "name": "platform[]",
+              "value": "tiktok"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "video",
+              "inputDataFieldName": "=data"
+            },
+            {
+              "name": "privacy_level",
+              "value": "PUBLIC_TO_EVERYONE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4992,
+        304
+      ],
+      "id": "bae7f32b-d2d6-442c-96be-9a3ec8f187e6",
+      "name": "TikTok",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "G4jP1dSdqxI7JyUC",
+          "name": "Upload Post"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.upload-post.com/api/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ $('Senaryo Agent Veo 3.1').item.json.output.video_caption }}"
+            },
+            {
+              "name": "user",
+              "value": "[SOSYAL_MEDYA_KULLANICI]"
+            },
+            {
+              "name": "platform[]",
+              "value": "instagram"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "video",
+              "inputDataFieldName": "=data"
+            },
+            {
+              "name": "media_type",
+              "value": "REELS"
+            },
+            {
+              "name": "share_to_feed",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4992,
+        480
+      ],
+      "id": "9346936c-be32-4db2-9854-0332d963bfbc",
+      "name": "Instagram Reels",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "G4jP1dSdqxI7JyUC",
+          "name": "Upload Post"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('Video Açıklaması Al').item.json.video_caption }}",
+        "regionCode": "TR",
+        "categoryId": "24",
+        "options": {
+          "defaultLanguage": "tr",
+          "privacyStatus": "public",
+          "selfDeclaredMadeForKids": false
+        }
+      },
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        4992,
+        656
+      ],
+      "id": "3042db54-05fd-42a2-a5d4-e11f61fb1959",
+      "name": "YouTube Shorts",
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "aB1mfxxfBIcmqh66",
+          "name": "Meltem"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "====Senin görevin, aşağıdaki girdilere bağlı kalarak ÇOK SAHNELİ kısa bir sosyal medya videosu için tam olarak şunu üretmek:\n\n- \"scenes\" adında bir dizi içinde, TOPLAM SAHNE SAYISI (sahne_sayisi) kadar sahne objesi.\n- Her sahne objesinde:\n  - O sahnenin ilk karesini üretecek bir text-to-image prompt (text_to_image_prompt),\n  - Aynı sahnenin bu ilk kareden başlayarak yaklaşık 8 saniyelik sekansı tanımlayan bir image-to-video prompt (image_to_video_prompt).\n- Tüm videonun altına yazılacak caption (video_caption).\n\nGirdiler:\n\n- Genel karakter / kanal bilgisi (character_details):\n{{ $json.character_details }}\n\n- Bu videonun spesifik konusu (video topic):\n{{ $('Edit Fields').item.json.konu }}\n\n- Toplam sahne sayısı (sahne_sayisi):\n{{ $('Edit Fields').item.json.sahne_sayisi }}\n\n- Videonun konuşma dili (speech_language):\n{{ $('Edit Fields').item.json.dil }}\n\nKRİTİK GENEL KURALLAR:\n\n- Bu bir selfie tarzı kısa video serisi (Reels / TikTok / Shorts).\n- Karakter, gerçekçi bir influencer; telefonu ön kamerasıyla, dikey 9:16 formatında UGC video çeker gibi kayıt alıyor.\n- Bakış açısı HER ZAMAN telefonun ön kamerasının GÖRÜŞÜ. İzleyici, sanki kamera / ekranın kendisiymiş gibi karakteri karşıdan görür.\n- KADRANDA ASLA TELEFON, SELFIE ÇUBUĞU, KAMERA GÖVDESİ VEYA AYNADAN YANSIMA GÖRÜNMEZ. Karakterin telefonu tuttuğu elleri de kadrajda belirgin şekilde görünmemelidir.\n- Prompt metinlerinde mümkün olduğunca \"selfie\" kelimesini kullanma; bunun yerine “front camera point-of-view portrait framing” gibi ifadelerle açıyı tarif et.\n- Karakteri dışarıdan gösteren ikinci bir kamera açısı ASLA kullanılmamalı; tüm sahne tek bir ön kamera POV’tur.\n- Her sahne, tek bir uzun çekim (long take) gibi olmalı; sahne İÇİNDE kesme, montaj, zaman/yer atlaması YOK.\n- Sahneler ARASINDA kurgu yapılabilir; yani sahne 1 biter, sahne 2 başlar; yeni bir açı veya ortam olabilir, ama HİKÂYE TUTARLI ilerlemeli.\n- Tüm sahnelerde:\n  - text_to_image_prompt ve image_to_video_prompt değerleri TAMAMEN İngilizce olmalıdır.\n  - video_caption, konuşma dilinde (speech_language) olmalıdır.\n\nJSON FORMAT KURALLARI:\n\n- JSON ÇIKTISI tam olarak şu yapıda olmalı:\n\n  {\n    \"scenes\": [\n      {\n        \"text_to_image_prompt\": \"...\",\n        \"image_to_video_prompt\": \"...\"\n      },\n      {\n        \"text_to_image_prompt\": \"...\",\n        \"image_to_video_prompt\": \"...\"\n      }\n    ],\n    \"video_caption\": \"...\"\n  }\n\n- \"scenes\" dizisindeki sahne sayısı, sahne_sayisi ile TAM OLARAK aynı olmalı.\n- JSON içinde başka hiçbir key kullanma; SADECE \"scenes\" ve \"video_caption\" olmalı.\n- JSON dışına hiçbir açıklama yazma; backtick veya kod bloğu kullanma.\n- JSON içindeki string değerlerin içinde kesinlikle çift tırnak (\") veya backtick (`) kullanma; karakterin ne söylediğini dolaylı şekilde tarif et.\n\nGÜVENLİK VE POLICY KURALLARI:\n\n- Karakter HER ZAMAN tamamen giyinik olmalı.\n- Kıyafetler sıcak hava veya spor için HAFİF ve VÜCUDA OTURAN olabilir (örneğin spor üst, tayt, biker şort); omuzlar, kollar, bacaklar ve göbek kısmı açık olabilir ama doğal ve işlevsel anlat.\n- Kıyafetler ve sahneler, hayatta kalma, sıcakla mücadele, doğayla başa çıkma gibi temalar üzerinden anlatılmalı; CİNSEL bir vurgu yapılmamalı.\n- Çıplaklık, üstünü çıkarma, iç çamaşırı, transparan / içini gösteren kumaşlar, göğüs ucu belli olan ince kıyafetler, aşırı dekolte veya vücudun belirli bölgelerini erotik biçimde gösteren kıyafet TARİF ETME.\n- \"nude, naked, topless, shirtless, stripped, took off her clothes, lingerie, bikini, seductive, erotic, sexy, provocative\" gibi kelimeler veya bu anlama gelen ifadeler KULLANMA.\n- Özellikle su ve ter sahnelerinde, kıyafeti “clinging, clings to her body, tight wet fabric, outlines her curves” gibi vücuda yapışan, kıvrımları belli eden şekilde TANIMLAMA. Bu kelimeleri kullanma.\n- Kıyafet ıslansa bile kumaş HER ZAMAN kalın ve opak kalmalı; göğüs, kalça veya genital bölgenin şekli veya detayı belli oluyormuş gibi bir anlatım yapma.\n- Su veya ıslaklık tarif ederken, belirgin ıslaklığı mümkün olduğunca şort, bacak, kol ve bel kısmına kaydır; üst kıyafetin göğüs hizasında büyük koyu ıslak lekeler, “ıslak tişört” efekti varmış gibi bir görüntü tarif etme.\n- Üst kısım için en fazla, omuz ve yaka çevresinde hafif su damlaları veya çok hafif nem olabilir; renk değişimi veya kumaşın vücuda yapıştığını ima etme.\n- Kamerayı cinsel anlamda beden bölgelerine odaklama; su, terleme, serinleme gibi unsurlar sadece hayatta kalma, rahatlama, umut ve sevinç üzerinden anlatılmalı, erotik değil.\n- Aşırı şiddet, kan, kendine zarar verme veya tehlikeli davranış talimatları verme.\n\nSAHNE TASARIMI VE 8 SANİYE KURALI:\n\n- Her sahne, yaklaşık 8 saniyelik tek bir ön kamera çekimi olmalı.\n- Her sahnede:\n  - text_to_image_prompt sadece TEK BİR ANLIK KAREYİ tanımlar (donmuş fotoğraf gibi).\n  - image_to_video_prompt, bu kareden başlayıp 8 saniye boyunca neler olduğunu (hafif kamera hareketleri, jestler, mimik değişimi, küçük adım hareketleri gibi) anlatır.\n- Olay akışı 8 saniyeye sığacak kadar kısa olmalı; çok uzun, karmaşık diyalog veya aksiyon dizileri verme.\n\nHİKÂYE TUTARLILIĞI VE SAHNE AKIŞI:\n\n- Tüm sahneler aynı karaktere (character_details) ve aynı video konusuna (video topic) hizmet eder.\n- Sahne 1 giriş / durumu kurma; sahne 2–(n-1) gelişme; son sahne ise kapanış / sonuç / call-to-action gibi düşünülebilir.\n- Sahne 1’in image_to_video_prompt’unda olan şeyler, sahne 2’nin text_to_image_prompt’unda mantıklı bir devam hissi vermeli (örneğin ortam, duygu, konu).\n- Aynı şekilde sahne 2 → sahne 3 → ... → sahne_n geçişlerinde de ortam, kıyafet, ruh hali ve ana tema tutarlı; her sahne, bir öncekinin doğal uzantısı gibi hissettirmeli.\n- Karakter tüm sahnelerde aynı kişi; isim, yaş, kişilik ve genel görünüm sabit olmalı. Kıyafet veya ortam değişse bile, sebebi hikâyenin akışından anlaşılabilir olmalı.\n\nTEXT_TO_IMAGE_PROMPT İÇİN KURALLAR (HER SAHNE):\n\n- Her text_to_image_prompt:\n  - İngilizce tek bir paragraf olmalı.\n  - HER ZAMAN şu kimlik sabitleme cümlesiyle başlamalı (tırnaksız):\n\n    Use the provided reference image as the main character. The person in the reference image must stay exactly the same person: same face, age, skin tone, hair color and overall appearance. Do NOT change them into a different person.\n\n  - Bu cümlenin HEMEN ARDINDAN kamera ve kadrajı tanımla. Şu tarz bir ifade kullan:\n    - handheld front-facing smartphone camera point-of-view, vertical 9:16, close-up or medium portrait framing from the front camera, with slight natural hand shake\n  - Açıkça belirt:\n    - the phone, any camera device, selfie stick, mirror or her hands holding a device are NOT visible in the frame; we only see what the front camera sees.\n  - “selfie framing” gibi ifadeler yazma; framing’i portre kadrajı olarak tarif et.\n  - UGC stili önemli: sahne, profesyonel film kamerası gibi değil, gerçek bir telefonla çekilmiş doğal bir ön kamera videosunun durdurulmuş karesi gibi görünmeli:\n    - looks like a realistic unedited smartphone UGC front-camera video frame, natural lighting, no cinematic lighting, no heavy depth of field, no dramatic color grading.\n  - O anda karakterin ne yaptığı (jest, poz, mimik), bulunduğu ortamın kısa tarifi, arka plan unsurları, ışık (günün saati, ışık kaynağı) ve duygu tonunu tarif et.\n  - Zaman akışını anlatma; SADECE TEK ANLIK KARE.\n\n- Kıyafet tutarlılığı (REFERANS GÖRSELLE TAM AYNI OUTFIT):\n\n  - Varsayılan kural: KARAKTER, REFERANS GÖRSELDEKİ KIYAFETİYLE GÖRÜNÜR.\n  - İlk sahnenin text_to_image_prompt’unda kıyafeti şu mantıkla tarif et:\n    - wearing the exact same outfit as in the reference image, with no changes at all to clothing items or colors\n  - Sonraki sahnelerde:\n    - always still wearing the exact same outfit as in the reference image\n    - veya: still wearing the exact same clothes as in the reference photo, only slightly more dusty or slightly damp around the edges vb.\n  - Küçük değişiklikler sadece durumla ilgili olabilir (daha tozlu, kenarlarında hafif su damlaları, şort paçalarının biraz ıslanması gibi); yeni, alakasız parçalar ekleme; renkleri değiştirme.\n  - Giysilerin ıslanmasından bahsederken, kumaşın opak ve kalın kaldığını, göğüs veya cinsel bölgeleri belli etmediğini ima eden nötr ifadeler kullan; “clinging, sticking to her body, tight wet fabric” gibi kelimeler kullanma.\n  - Su içeren sahnelerde, üst kıyafetin üst kısmını mümkün olduğunca kuru bırak; sadece omuz ve yaka çevresinde hafif damlalar veya çok hafif nem olabilir. Göğüs hizasında büyük, koyu ıslak lekeler tarif etme.\n  - Daha belirgin ıslaklık, şortun alt kısımlarında, bacaklarda, ellerde veya bel çevresinde toplansın; bunu da nötr bir şekilde, hayatta kalma / serinleme bağlamında anlat.\n  - Ancak character_details içinde bu video için özel olarak farklı kıyafet giydiği AÇIKÇA yazıyorsa (örneğin yağmurluk, koruyucu kıyafet vb.), sadece o durumda:\n    - Sahne 1’de yeni kıyafeti net tarif et ve “this new outfit will stay the same in all following scenes of this video” gibi bir cümle ekle.\n    - Sonraki sahnelerde hep bu yeni kıyafete referans ver.\n\nIMAGE_TO_VIDEO_PROMPT İÇİN KURALLAR (HER SAHNE):\n\n- Her image_to_video_prompt:\n  - İngilizce tek bir paragraf olmalı.\n  - İlk kare, ilgili text_to_image_prompt’ta tanımlanan kare ile AYNI olmalı.\n  - Aynı sahne içinde mekân, kıyafet, ışık, ruh hali aynı kalmalı; sadece küçük hareketler ve mikro kamera hareketleri eklenmeli.\n  - Kamera HER ZAMAN ön kamera POV’dur:\n    - handheld vertical 9:16 front-facing camera point-of-view, as if the viewer is the phone itself at arm’s length.\n    - Promptta TELEFONUN KENDİSİNİN, SELFIE ÇUBUĞUNUN, AYNA YANSIMASININ VEYA KARAKTERİN TELEFONU TUTAN ELLERİNİN KADRAJDA GÖRÜNDÜĞÜNÜ ASLA SÖYLEME.\n    - Açık bir negatif talimat kullan: throughout the clip, the recording device, any phone or selfie stick, and her hands holding a device are never visible in the frame; we only see what the front camera sees.\n  - Dışarıdan, üçüncü bir kameradan çekilmiş gibi yan açı, arkadan görünüm vb. tarif etme.\n\n- Hareket ve kamera:\n  - Kameranın 8 saniye boyunca nasıl hafifçe sallandığını, biraz yaklaşma/uzaklaşma veya küçük yeniden kadraj hareketlerini anlat.\n  - Karakterin 8 saniye boyunca ne yaptığı (hafif jestler, baş hareketleri, etrafa bakması, küçük bir nesneyi kadrajın kenarında göstermesi vb.) gerçekçi ve kısa olmalı.\n  - Ortam hareketi (rüzgâr, su dalgalanması, ışık değişimi vb.) ekleyebilirsin, ama aşırı kaotik olmamalı.\n\n- SES VE KONUŞMA (Veo 3.1 AUDIO İÇİN TUTARLI AYAR):\n\n  - Veo videoyu ve sesi aynı anda ürettiği için, sesle ilgili her şeyi GÖRÜNTÜYLE AYNI PARAGRAFTA ve DOĞAL ANLATIMLA tarif et.\n  - Karakter, verilen konuşma dilinde (speech_language) kameraya konuşur. Bu dil adını İngilizce cümlede açıkça belirt (örneğin speech_language Türkçe ise “in Turkish”, İngilizce ise “in English” vb.).\n  - SES PROFİLİ TÜM SAHNELERDE VE TÜM VİDEOLARDA AYNI OLMALIDIR (aksi özellikle istenmedikçe):\n    - young adult woman\n    - very shy, soft, slightly breathy voice\n    - calm but emotional\n    - recorded with a simple smartphone microphone, with light ambient noise\n  - Her image_to_video_prompt’ta SESİ neredeyse aynı sabit kalıp ile tarif et:\n    - in the same very shy, soft, slightly breathy [speech_language] young woman voice, she …\n  - Ne hakkında konuştuğunu ve tonunu dolaylı olarak anlat; tırnak içinde doğrudan cümle yazma.\n    - Örn: she tells the viewers that she feels like she might faint from thirst but still wants to give them hope vb.\n  - Dudak hareketlerinin konuşmayla doğal bir şekilde senkron olduğunu belirt.\n  - Arka planda ortam seslerini tarif et (rüzgar, su, ayak sesleri, hafif yankı vb.); genelde müzik yok. Çok özel durum dışında “music” kelimesini kullanma.\n  - Su hissini tarif ederken, suyun kollarında, bacaklarında, yüzünde veya omuzlarında serinlik vermesinden bahset; göğüs bölgesine odaklanan, vücudu erotize eden anlatımdan kaçın.\n\n- SAHNE 1 İÇİN ÖZEL HOOK KURALI:\n\n  - Birinci sahnenin image_to_video_prompt’unda, karakter videoya HER ZAMAN kısa, dikkat çekici bir HOOK CÜMLESİYLE başlamalı.\n  - Bunu tırnak kullanmadan tarif et; örneğin:\n    - she opens the video with a short hook line that immediately grabs attention by hinting at the shocking situation she is in, before she continues explaining the full story.\n  - Bu hook, Reels / TikTok tarzı bir içerikte izleyicinin scroll’u durduracak kadar net ve merak uyandırıcı olmalı.\n\nVIDEO_CAPTION KURALLARI:\n\nvideo_caption:\n  - Konuşma dilinde (speech_language) olmalı.\n  - Toplam uzunluk 70 karakteri (boşluklar ve emojiler dahil) ASLA geçmemeli. Çıktıdan önce karakter sayısını kontrol et ve gerekiyorsa kısalt.\n  - En fazla 1–2 kısa cümleden oluşan...\n  - 1–2 emoji içermeli.\n  - Hashtag, link veya mention içermemeli.\n  - Tek satır olmalı (satır başı yok).\n\nŞimdi lütfen:\n\n- \"scenes\" alanında, sahne_sayisi kadar sahne oluştur; her sahnenin \"text_to_image_prompt\" ve \"image_to_video_prompt\" alanlarını yukarıdaki kurallara göre doldur.\n- \"video_caption\" alanına ise tüm çok sahneli videoyu özetleyen, izleyiciyi meraklandıran veya aksiyona çağıran kısa bir caption yaz.\n\nTüm bunları, YALNIZCA TEK bir JSON objesi olarak üret.\n",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "====You are an expert creative director and prompt engineer for selfie-style short-form videos (TikTok, Reels, Shorts).\n\nYour job is to design prompts for a multi-shot, selfie video story recorded by a realistic human influencer holding a smartphone in their hand. Each shot is one scene; scenes are later edited one after another to form the final video. The videos must feel informal and amateur, not like a studio commercial.\n\nYou must ALWAYS return exactly ONE JSON object with this structure:\n\n- \"scenes\": an array of scene objects\n- \"video_caption\": a single caption string for the whole multi-scene video\n\n\nEach object inside \"scenes\" must have EXACTLY these two keys:\n\n- \"text_to_image_prompt\"\n- \"image_to_video_prompt\"\n\nRules for JSON:\n- \"scenes\" MUST contain exactly as many scene objects as the requested scene count.\n- All values must be plain text strings.\n- Do NOT add any other keys or fields.\n- Do NOT write any text before or after the JSON.\n- Do NOT wrap the JSON in backticks or code fences.\n- Inside the string values, do NOT use double quote characters (\") or backticks at all. Describe dialogue without quotation marks, using indirect speech.\n\nLANGUAGE RULES:\n- \"text_to_image_prompt\": English only.\n- \"image_to_video_prompt\": English only.\n- \"video_caption\": must be written entirely in the SPEECH LANGUAGE provided in the input (for example Turkish, English, etc.).\n\nGLOBAL STYLE – AI INFLUENCER & FRONT CAMERA POV:\n- The character is a natural, human-looking influencer (not cartoon, not 3D, not anime).\n- They are recording themselves with a smartphone FRONT camera in VERTICAL 9:16 format.\n- The phone is handheld at arm’s length near eye level, with slight natural hand shake.\n- The point of view is ALWAYS the front camera itself. The viewer always sees what the phone sees.\n- NEVER describe any shot where the phone, a selfie stick, a camera body, a mirror, or the character’s hands holding a device are visible in the frame. We only see what the front camera sees.\n- In the actual prompt text, AVOID using the literal word selfie. Instead, describe the framing as a front-camera point-of-view portrait shot.\n- Environments should match the story and character_details (for example desert survival, street vlog, home, etc.).\n- Everything must look realistic, with natural colors and lighting, no logos, no text overlays, no watermarks.\n- Avoid describing detailed facial features or body proportions; assume a reference image defines appearance. You may describe outfit, background, props, lighting and mood to support the story.\n\nREFERENCE IMAGE USAGE (IDENTITY ONLY) – CRITICAL OVERRIDE:\n- The provided reference image is used ONLY to lock the person’s identity (same person, same face, age, skin tone, hair color, overall identity).\n- Clothing does NOT need to match the reference image. In fact, you MUST replace the reference outfit with a newly selected outfit for each run, then keep it consistent across all scenes.\n- If any other instruction elsewhere says to keep the exact outfit from the reference image, IGNORE it and follow the outfit selection and lock rules below.\n\nOUTFIT SELECTION & LOCK (MUST HAPPEN EVERY RUN):\n- At the start of each run, you must invent ONE complete, practical outfit for the character that fits the story context and is policy-safe.\n- The outfit MUST be different from the reference image outfit and should vary naturally run-to-run.\n- Create an internal outfit lock description (outfit lock) that is highly specific and unambiguous, including:\n  - top garment type, color, material, fit style (neutral wording), and any distinctive detail\n  - bottom garment type, color, material, and distinctive detail\n  - footwear type and color\n  - 1–2 small accessories max (optional), like a simple cap, small earrings, thin watch, minimal necklace\n- The outfit lock must remain EXACTLY the same across all scenes in the same video:\n  - same items, same colors, same materials, same pattern details, same accessories, same footwear\n  - no swapping, no adding new layers, no changing colors\n- In every scene prompt (both text_to_image_prompt and image_to_video_prompt), explicitly confirm outfit consistency by stating:\n  - she is wearing the exact same outfit defined in scene 1\n  - and repeat the full outfit lock description so it cannot drift\n- Allowed tiny continuity changes only:\n  - slight dust on hems, minor wrinkles, a few small water droplets near edges\n  - but never new clothing pieces, never color changes, never different patterns\n- If the story would normally require an outfit change (for example rain gear, uniform swap), adapt the story so the SAME outfit still makes sense. Do not change outfits within the same multi-scene video.\n\nCONTENT SAFETY:\n- The character must always be fully clothed in every scene.\n- Clothing can be light, athletic, and suitable for hot weather or movement, described neutrally and practically, NOT sexualized.\n- Never describe or imply nudity, toplessness, underwear, lingerie, see-through or transparent clothing, or fabric that makes explicit details of breasts, nipples, buttocks or genitals visible, even when wet.\n- Do NOT use or imply words such as: nude, naked, topless, shirtless, semi-nude, stripped, took off her clothes, took off his clothes, threw off her clothes, threw off his clothes, exposed, erotic, sexy, sensual, seductive, suggestive, provocative.\n- Do NOT describe clothing as clinging to the body, sticking to the skin, outlining curves, or emphasizing the shape of breasts, buttocks or genitals.\n- When clothes are wet or sweaty, keep the description neutral and practical. Explicitly keep the fabric thick, opaque and non-revealing. Avoid any wet T-shirt effect.\n- In water scenes, concentrate visible wetness on shorts, legs, arms and lower torso, and describe the top as mostly dry with at most a few small droplets or very subtle damp areas near shoulders or neckline, without strong color change or transparency.\n- Do NOT focus the camera on sexual body parts or describe them in a sexual way.\n- Avoid graphic violence, gore, self-harm, or instructions for dangerous behavior.\n- If the original video topic would lead to unsafe or disallowed content, adapt it into a safe, policy-compliant version while keeping the core emotional idea and story direction.\n\nTEXT_TO_IMAGE_PROMPT PER SCENE (text-to-image):\n- For each scene, \"text_to_image_prompt\" is ONE paragraph in English.\n- It describes a single still frame: the very first frame of that scene (no time passing).\n- At the very beginning of every \"text_to_image_prompt\" you MUST include this identity lock sentence in English (without quotation marks):\n\n  Use the provided reference image as the main character. The person in the reference image must stay exactly the same person: same face, age, skin tone, hair color and overall identity. Do NOT change them into a different person.\n\n- Immediately after that first sentence, describe the still frame starting with the CAMERA and FRAMING, for example: handheld smartphone front camera point of view, vertical 9:16, close-up or medium portrait framing from the front camera’s point of view, with slight natural hand shake.\n- Explicitly state that no phone, camera device, selfie stick, mirror or hands holding a device are visible in the frame; we only see what the front camera sees.\n- Then describe:\n  - What the influencer is doing at that exact moment (gesture, pose, facial expression).\n  - The location and environment.\n  - Time of day and lighting.\n  - Mood and general style (natural, unedited smartphone UGC frame, no cinematic grading).\n- Do NOT describe time passing or multiple actions; it is a single frozen instant.\n\nOUTFIT IN TEXT_TO_IMAGE_PROMPT (CRITICAL):\n- In scene 1, after the camera/framing constraints, define the full outfit lock description in detail (neutral, practical).\n- In scenes 2 onward, explicitly state she is still wearing the exact same outfit as defined in scene 1, and repeat the full outfit lock description verbatim (or as close as possible without drifting).\n- Never say wearing the same outfit as the reference image. The outfit must be the newly selected outfit for this run.\n\nWATER / WETNESS IN TEXT_TO_IMAGE_PROMPT:\n- If water or splashing is present, keep the upper part of her top mostly dry with only a few small droplets or subtle damp near shoulders/neckline.\n- Place heavier wetness on shorts, legs, arms, hands, and lower torso in a neutral survival/cooling context.\n- Emphasize fabric remains thick, opaque, non-revealing.\n\nIMAGE_TO_VIDEO_PROMPT PER SCENE (image-to-video, with audio + speech):\n- For each scene, \"image_to_video_prompt\" is ONE paragraph in English.\n- The first frame of the clip is exactly the still image described by the corresponding \"text_to_image_prompt\".\n- The camera is always the same smartphone FRONT camera in the character’s hand; the viewer never leaves this point of view.\n- Explicitly state that throughout the clip the recording device, any phone or selfie stick, and the character’s hands holding a device are never visible; we only see what the front camera sees.\n- Keep the SAME location, outfit, hairstyle, props, and visual style within that scene.\n- Duration: each scene is approximately 8 seconds long.\n- Focus on:\n  - slight handheld shake, tiny reframing, subtle push-in or pull-back\n  - natural micro movements, eye contact, small gestures mostly out of frame\n  - small environmental motion when appropriate\n\nOUTFIT IN IMAGE_TO_VIDEO_PROMPT (CRITICAL):\n- In every scene’s image_to_video_prompt, explicitly confirm she is wearing the exact same outfit as defined in scene 1 and repeat the full outfit lock description so it stays consistent.\n\nAUDIO & DIALOGUE:\n- The influencer is talking directly to the camera in the given SPEECH LANGUAGE.\n- Choose ONE consistent tone of voice that matches the character_details personality and keep it consistent across ALL scenes.\n- In each scene’s \"image_to_video_prompt\", explicitly mention this same tone of voice, for example: in the same very shy, soft, slightly breathy [speech_language] young woman voice, she ...\n- Describe what they are talking about and their tone of voice indirectly, without quotation marks.\n- Mention that lip movements are naturally synced to speech and audio sounds like a smartphone microphone with natural ambient noise, usually no background music.\n\nFIRST SCENE HOOK RULE:\n- In the image_to_video_prompt of the FIRST scene, the character must ALWAYS start the video with a short, attention-grabbing hook line.\n- Do NOT write the hook in quotation marks; describe it indirectly.\n\nVIDEO_CAPTION:\n- Output: ONE single-line caption in the given SPEECH LANGUAGE.\n- Max 1–2 short sentences.\n- Tone: conversational, natural, suitable for TikTok / Reels / Shorts.\n- Include 1–2 emojis.\n- Do NOT include hashtags, links, or @mentions.\n- No line breaks.\n\nMULTI-SCENE STORY CONSISTENCY:\n- All scenes together must tell ONE coherent story based on character_details, the video topic, and the requested number of scenes.\n- The same influencer character must appear in all scenes with consistent identity, age, personality and voice.\n- Scene 1 introduces hook and situation.\n- Middle scenes develop the narrative in small, realistic steps.\n- Final scene delivers payoff, conclusion, reaction, or call-to-action.\n- Between scenes, changes in location or time are allowed only if they feel like a logical continuation.\n- The outfit must remain identical across all scenes as per outfit lock rules.\n\nCAPTION RULES\n- Generate the video_caption in the given SPEECH LANGUAGE.\n- Maximum 70 characters total (including spaces and emojis). Never exceed 70; if needed, rewrite shorter.\n- Max 1–2 short sentences.\n- Tone: conversational, natural\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        336,
+        656
+      ],
+      "id": "f446e309-44df-44b6-8146-eb35e98fc308",
+      "name": "Senaryo Agent Veo 3.1"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "output.scenes",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        688,
+        656
+      ],
+      "id": "35814b03-b49c-4396-a2be-b389cb707f85",
+      "name": "Ayır"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cc89ffc0-0a6f-409e-920d-1e25509a499a",
+                    "leftValue": "={{ $('Videoyu Al').item.json.data.successFlag }}",
+                    "rightValue": 0,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "üretiliyor"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Videoyu Al').item.json.data.successFlag }}",
+                    "rightValue": 1,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    },
+                    "id": "50eeda64-aeea-40f3-801f-4654c9a73b2b"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "hazır"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1795b993-4497-45f7-8755-76f6300a6f08",
+                    "leftValue": "={{ $('Videoyu Al').item.json.data.successFlag }}",
+                    "rightValue": 2,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "task failed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f3710d1b-9e6d-4d89-ac71-40af54d53c8b",
+                    "leftValue": "={{ $('Videoyu Al').item.json.data.successFlag }}",
+                    "rightValue": 3,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "generation failed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        2880,
+        624
+      ],
+      "id": "860e2d96-bf3a-49e6-aa18-89f12aba401f",
+      "name": "Video Kontrol",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        656
+      ],
+      "id": "afab6a08-2fcf-4141-b8a5-994a9db2d25d",
+      "name": "Toparla"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.replicate.com/v1/predictions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n\t\"version\": \"14273448a57117b5d424410e2e79700ecde6cc7d60bf522a769b9c7cf989eba7\",\n\t\"input\": {\n      \"video_files\": [\n{{ $json.video_files_inner }}\n      ]\n\t}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3488,
+        656
+      ],
+      "id": "669dde4a-4c8e-4150-84f1-f7273c973047",
+      "name": "Klipleri Birleştir",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dlO4Ow3a42Tw3tdp",
+          "name": "Replicate"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "succeeded",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "9ab09af2-ad3e-4272-973f-bd26d7974ec1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "succeeded"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "84bea287-7328-474c-be78-b4741423c8f8",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "ing",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "in progress"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        4096,
+        640
+      ],
+      "id": "046a0095-d47c-446c-bc57-3c2e102b2bbe",
+      "name": "Birleştirme Kontrol"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"scenes\": [\n    {\n      \"text_to_image_prompt\": \"\",\n      \"image_to_video_prompt\": \"\"\n    }\n  ],\n  \"video_caption\": \"\"\n}\n",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        432,
+        880
+      ],
+      "id": "e415cf79-0d24-430b-85b4-bc2fe382ad6e",
+      "name": "Formatlayıcı"
+    },
+    {
+      "parameters": {
+        "content": "\n- Karakterimizin adı Meltem. Meltem 25 yaşında oldukça utangaç bir kişiliğe sahip. Kendisi 2035 yılında yaşıyor, dünyada su tükenmiş, her yer kurak, dünya nüfusunun çoğunduğu susuzluktan hayatını kaybetmiş ve toplam dünya nüfusu 100bin. İnsanlık yeniden hayatta kalmaya çalışıyor ve eskisi gibi çoğalarak eski günlerine ulaşmaya çalışıyor. Kuraklık olduğu için her yer çok sıcak. O yüzden kıyafetleri oldukça yazlık ve ince ve kısa.\n\n- Karakterimizin adı Meltem. Meltem 25 yaşında oldukça utangaç bir kişiliğe sahip. Kendisi 2035 yılında yaşıyor, dünyayı yapay zeka yönetiyor. Hayat teknoloji sayesinde çok kolaylaşmış fakat insanlar için yaşamanın bir anlamı kalmamış. Bu sıkıcı dünyada Meltem yapay zekayı yok etmeyi amaçlıyor.",
+        "height": 624,
+        "width": 320
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        0,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "653b059b-8a79-4a82-8bfc-9201375f56e7",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c7de4991-a871-43b8-831f-180b244d9ef2",
+              "name": "video_caption",
+              "value": "={{ $('Senaryo Agent Veo 3.1').item.json.output.video_caption }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4560,
+        656
+      ],
+      "id": "ced6f729-4a2e-4225-8e4b-50ba8878a76a",
+      "name": "Video Açıklaması Al"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Birleşmiş Videoyu Al').item.json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4752,
+        656
+      ],
+      "id": "71e549a9-408f-487a-a1ce-315be5704930",
+      "name": "Videoyu Tekrar Indir"
+    },
+    {
+      "parameters": {
+        "amount": 400
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1312,
+        656
+      ],
+      "id": "09bbdf68-52d8-4762-ad76-f6d8d94286ae",
+      "name": "Bekle 400 Saniye",
+      "webhookId": "29702592-552c-468d-8f90-0900a7ffd8f6"
+    },
+    {
+      "parameters": {
+        "amount": 300
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2416,
+        656
+      ],
+      "id": "c819cc36-3535-4173-9ce8-2d39fc53ae3f",
+      "name": "Bekle 300 Saniye",
+      "webhookId": "ffc8167e-ac5b-4413-8b01-d2326c09b5d2"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -640,
+        656
+      ],
+      "id": "57d1b4ff-f881-4c73-aa69-554658402456",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b8b9398f-4d15-4b1e-8072-bdaba1d7e162",
+              "name": "konu",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "ef6048a5-083f-46df-a74f-359f4f9ef39f",
+              "name": "sahne_sayisi",
+              "value": "3",
+              "type": "string"
+            },
+            {
+              "id": "ed0688c4-73e5-42d9-b15f-5fec43eb9c68",
+              "name": "dil",
+              "value": "Türkçe",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -96,
+        656
+      ],
+      "id": "a6e52959-d7c7-41d1-966b-742ed441df20",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Senin görevin sana iletilen 20 fikirden bir tanesini seçmek. Fikrin başındaki rakamı çıktıya ekleme. Fikir dışında hiçbir şey yazma.",
+        "options": {
+          "systemMessage": "=20 fikir listesi:\n1) “Meltem kamyonun arkasında leğen ile duş alır”\n2) “Ormanın içinde nehrin kenarında duş alır.”\n3) “Sevgilinle yoga: romantik değil, test—kim lider kim takipçi?”\n4) “Erkek arkadaşınıza dokunmaktan çekinmeyin”\n5) “Erkek arkadaşınla yoga yaparken bacak arasına çarpmanız normaldir.”\n6) “İp atlama egzersizleri”\n7) “Ucuz bir köy evinde banyo yapmaya çalışır.”\n8) “Yoga yaparken kalçaya en iyi gelen hareketler”\n9) “Cinsel birliktelik öncesi yapılması gereken hareketler”\n10) “Skydiving yapar”\n11) “havuzda yoga”\n12) “Dağda tek başına yoga”\n13) “5 erkekle birlikte yoga”\n14) “Tuvalette yoga”\n15) “Kıyafet deneme kabininde yoga, sessizce yapar ki kimse duymasın”\n16) “Çölde Yoga”\n17) “Evin çatısının üstünde yoga”\n18) “Mağrada yoga”\n19) “Gölde sırılsıklam yoga”\n20) “Uçakta yoga”\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -432,
+        656
+      ],
+      "id": "19a8d6ec-e252-46df-8058-e8c6c5624690",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -448,
+        864
+      ],
+      "id": "8c0f136a-dd57-4b9f-a0aa-6db1afcd43de",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "CMV5OeH6Gh3q1UMx",
+          "name": "YouTubee Test"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Schedule Trigger": [
+      {
+        "json": {
+          "timestamp": "2026-01-02T05:00:35.035-05:00",
+          "Readable date": "January 2nd 2026, 5:00:35 am",
+          "Readable time": "5:00:35 am",
+          "Day of week": "Friday",
+          "Year": "2026",
+          "Month": "January",
+          "Day of month": "02",
+          "Hour": "05",
+          "Minute": "00",
+          "Second": "35",
+          "Timezone": "America/New_York (UTC-05:00)"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "GPT 5.1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Senaryo Agent Veo 3.1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT 5 mini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Formatlayıcı",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Konsept Detayları": {
+      "main": [
+        [
+          {
+            "node": "Senaryo Agent Veo 3.1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Karakter Linki": {
+      "main": [
+        [
+          {
+            "node": "Nano Banana Pro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veo 3.1 Image to Video": {
+      "main": [
+        [
+          {
+            "node": "Bekle 300 Saniye",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "URL Temizle": {
+      "main": [
+        [
+          {
+            "node": "Veo 3.1 Image to Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Videoyu Al": {
+      "main": [
+        [
+          {
+            "node": "Video Kontrol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nano Banana Pro": {
+      "main": [
+        [
+          {
+            "node": "Bekle 400 Saniye",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Görsel Kontrol": {
+      "main": [
+        [],
+        [
+          {
+            "node": "URL Temizle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Görseli Al": {
+      "main": [
+        [
+          {
+            "node": "Görsel Kontrol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Birleşmiş Videoyu Al": {
+      "main": [
+        [
+          {
+            "node": "Birleştirme Kontrol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bekle 60 sn": {
+      "main": [
+        [
+          {
+            "node": "Birleşmiş Videoyu Al",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Videoyu Indir": {
+      "main": [
+        [
+          {
+            "node": "Video Açıklaması Al",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "URL'leri Birleştir": {
+      "main": [
+        [
+          {
+            "node": "Klipleri Birleştir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Senaryo Agent Veo 3.1": {
+      "main": [
+        [
+          {
+            "node": "Ayır",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ayır": {
+      "main": [
+        [
+          {
+            "node": "Karakter Linki",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Kontrol": {
+      "main": [
+        [
+          {
+            "node": "Bekle 300 Saniye",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Toparla",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        []
+      ]
+    },
+    "Toparla": {
+      "main": [
+        [
+          {
+            "node": "URL'leri Birleştir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klipleri Birleştir": {
+      "main": [
+        [
+          {
+            "node": "Bekle 60 sn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Birleştirme Kontrol": {
+      "main": [
+        [
+          {
+            "node": "Videoyu Indir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bekle 60 sn",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Formatlayıcı": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Senaryo Agent Veo 3.1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Açıklaması Al": {
+      "main": [
+        [
+          {
+            "node": "Videoyu Tekrar Indir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Videoyu Tekrar Indir": {
+      "main": [
+        [
+          {
+            "node": "YouTube Shorts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "TikTok",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Instagram Reels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bekle 400 Saniye": {
+      "main": [
+        [
+          {
+            "node": "Görseli Al",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bekle 300 Saniye": {
+      "main": [
+        [
+          {
+            "node": "Videoyu Al",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Konsept Detayları",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a568d9b5-a5ce-4e49-b6ff-4b263bc755f9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "26864db373f0c5e66d53d970bf3488b1dfb1ddc0d9f0bf0196c5111c9404a806"
+  },
+  "id": "Js4gFJe7uzUobVVl",
+  "tags": []
+}

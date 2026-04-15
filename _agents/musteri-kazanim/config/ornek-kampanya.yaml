@@ -1,0 +1,81 @@
+# ═══════════════════════════════════════════════════
+# 📋 ÖRNEK KAMPANYA ŞABLONu
+# ═══════════════════════════════════════════════════
+# Bu dosyayı kopyalayarak yeni kampanyalar oluşturabilirsin.
+# Kopyala → config/{kampanya-adi}.yaml olarak kaydet → parametreleri doldur.
+#
+# Referans: _agents/musteri-kazanim/AGENT.md
+# ═══════════════════════════════════════════════════
+
+# --- 🏷️ KAMPANYA BİLGİLERİ ---
+kampanya_adi: "ornek-kampanya-2026"
+aciklama: "Kısa kampanya açıklaması — neyi hedefliyoruz?"
+hedef_tip: "influencer"       # influencer | b2b_sirket | ugc_creator | yerel_isletme | topluluk
+durum: "draft"                # draft | active | paused | completed
+
+# --- 🎯 HEDEF KİTLE (ICP — Ideal Customer Profile) ---
+icp:
+  platform: ["instagram"]     # instagram | tiktok | youtube | linkedin | google_maps | skool
+  bolge: "Türkiye"
+  dil: ["TR"]
+
+  # ── Influencer / Creator parametreleri ──
+  minimum_takipci: 10000
+  maksimum_takipci: 5000000
+  nis: []                     # Örnek: ["lifestyle", "teknoloji", "eğlence", "müzik"]
+  icerik_dili: ["TR"]
+
+  # ── B2B parametreleri (hedef_tip: b2b_sirket ise) ──
+  sirket_buyuklugu: ""        # "10-500" çalışan sayısı
+  hedef_pozisyonlar: []       # ["CEO", "CTO", "Marketing Director", "Growth Lead"]
+  sektor: []                  # ["SaaS", "E-ticaret", "Fintech"]
+
+  # ── UGC Creator parametreleri ──
+  min_icerik_sayisi: 50
+  icerik_turu: []             # ["ugc", "product_review", "unboxing"]
+
+# --- 🔍 ARAMA KRİTERLERİ ---
+arama:
+  anahtar_kelimeler: []       # ["etkinlik istanbul", "festival türkiye"]
+  hashtag_listesi: []         # ["#istanbuletkinlik", "#festivalturkiye"]
+  rakip_hesaplar: []          # ["@rakip1", "@rakip2"] → takipçilerini tara
+  max_lead_sayisi: 100
+
+# --- 📧 OUTREACH AYARLARI ---
+outreach:
+  gonderen_email: ""          # Kampanya gönderen adresi (Gmail)
+  sablon_dili: "TR"           # TR | EN | IT
+  sablon_dosyasi: ""          # templates/email-tr.md (boşsa otomatik dil'e göre seçilir)
+  deger_onerisi: ""           # Kampanyaya özel değer önerisi metni
+  cta: ""                     # Eylem çağrısı metni (ör: "Kısa bir görüşme ayarlayalım mı?")
+  dry_run: true               # İlk çalıştırmada true → inceledikten sonra false yap
+
+  # ── Kişiselleştirme bilgileri ──
+  gonderici_adi: ""           # Gönderici kişi adı
+  ekstra_bilgi: ""            # Ek bilgi (etkinlik adı, marka bilgisi vb.)
+
+# --- ⏱️ SEQUENCE AYARLARI ---
+sequence:
+  profil: "influencer"        # saas | eticaret | kurumsal | ajans | influencer | ugc | ozel
+  toplam_adim: 3              # Max email sayısı per lead
+  bekleme_suresi_acilmadi: 5  # Açılmazsa kaç gün bekle
+  bekleme_suresi_cevaplanmadi: 3  # Açılıp cevaplanmazsa kaç gün bekle
+  gunluk_gonderim_limiti: 50  # Günlük max gönderim
+  gonderim_araligi: 5         # İki mail arası bekleme (dakika)
+  gonderim_saatleri: "09:00-17:00"  # Gönderim penceresi
+  gonderim_gunleri: ["Pzt", "Sal", "Car", "Per", "Cum"]
+  saat_dilimi: "UTC+3"        # Varsayılan: Türkiye
+
+# --- 📁 DOSYA YOLLARI ---
+# {kampanya_adi} otomatik olarak kampanya adıyla değiştirilir
+dosyalar:
+  ham_cikti: "data/{kampanya_adi}_raw.json"
+  zenginlestirilmis: "data/{kampanya_adi}_enriched.json"
+  mesajlar: "data/{kampanya_adi}_messages.json"
+  log: "data/{kampanya_adi}_log.csv"
+  takip: "data/{kampanya_adi}_takip.csv"
+
+# --- 🔑 API KAYNAKLARI ---
+# API anahtarları bu dosyaya YAZILMAZ!
+# Şuradan okunur: _knowledge/api-anahtarlari.md veya environment variables
+# Gerekli: APIFY_TOKEN, HUNTER_API_KEY, APOLLO_API_KEY, Gmail credentials

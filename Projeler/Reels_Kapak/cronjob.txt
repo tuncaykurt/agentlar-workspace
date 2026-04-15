@@ -1,0 +1,5 @@
+# Short Video Kapak Otomasyonu - Cron Job
+# Her gün sabah 9, öğlen 15 ve akşam 21'de çalışır
+# Log dosyası tarih ve saat ile tutulur
+
+0 9,15,21 * * * cd /Users/[SOSYAL_MEDYA_KULLANICI]/Desktop/Antigravity/Projeler/short-video-kapak && /Users/[SOSYAL_MEDYA_KULLANICI]/Desktop/Antigravity/Projeler/short-video-kapak/venv/bin/python main.py >> run.log 2>&1

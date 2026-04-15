@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Seedance 2.0 — Video Analysis Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { 
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0a0a0a; color: #e0e0e0; padding: 20px; 
+  }
+  h1 { 
+    text-align: center; color: #fff; margin-bottom: 30px; 
+    font-size: 28px; letter-spacing: 1px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1400px; margin: 0 auto; }
+  .card {
+    background: #1a1a2e; border-radius: 16px; overflow: hidden;
+    border: 1px solid #2a2a4a; transition: transform 0.2s;
+  }
+  .card:hover { transform: translateY(-4px); border-color: #667eea; }
+  .card-header {
+    padding: 16px 20px; background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%);
+    border-bottom: 1px solid #2a2a4a;
+  }
+  .card-header h3 { color: #667eea; font-size: 16px; margin-bottom: 4px; }
+  .card-header .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; margin-right: 6px;
+  }
+  .badge-success { background: #1a4a2e; color: #4ade80; }
+  .badge-info { background: #1a2a4e; color: #60a5fa; }
+  .badge-audio { background: #4a1a4e; color: #c084fc; }
+  .video-container { padding: 12px; }
+  video { width: 100%; border-radius: 8px; background: #000; }
+  .meta { padding: 12px 20px 16px; font-size: 13px; line-height: 1.8; }
+  .meta span { color: #9ca3af; }
+  .meta strong { color: #fff; }
+  .full-width { grid-column: 1 / -1; }
+  .controls { text-align: center; padding: 10px; }
+  .controls button {
+    background: #667eea; color: #fff; border: none; padding: 6px 16px;
+    border-radius: 8px; cursor: pointer; margin: 0 4px; font-size: 12px;
+  }
+  .controls button:hover { background: #764ba2; }
+  .summary {
+    max-width: 1400px; margin: 0 auto 30px; padding: 20px;
+    background: #1a1a2e; border-radius: 16px; border: 1px solid #2a2a4a;
+  }
+  .summary table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .summary th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #2a2a4a; color: #667eea; }
+  .summary td { padding: 8px 12px; border-bottom: 1px solid #1a2a4a; }
+  .status-ok { color: #4ade80; }
+  .status-warn { color: #fbbf24; }
+</style>
+</head>
+<body>
+
+<h1>🎬 Seedance 2.0 — Video Production Test Analysis</h1>
+
+<div class="summary">
+  <table>
+    <tr>
+      <th>Test</th><th>Senaryo</th><th>Çözünürlük</th><th>Ratio</th><th>FPS</th><th>Süre</th><th>Audio</th><th>Boyut</th><th>Durum</th>
+    </tr>
+    <tr>
+      <td>Test 1</td><td>Text-to-Video</td><td>864×496</td><td>16:9</td><td>24</td><td>4.04s</td><td>❌</td><td>0.63 MB</td><td class="status-ok">✅ PASS</td>
+    </tr>
+    <tr>
+      <td>Test 2</td><td>Image-to-Video (First Frame)</td><td>864×496</td><td>16:9</td><td>24</td><td>4.04s</td><td>❌</td><td>0.50 MB</td><td class="status-ok">✅ PASS</td>
+    </tr>
+    <tr>
+      <td>Test 3</td><td>Multimodal Reference</td><td>864×496</td><td>16:9</td><td>24</td><td>4.04s</td><td>❌</td><td>1.58 MB</td><td class="status-ok">✅ PASS</td>
+    </tr>
+    <tr>
+      <td>Test 4</td><td>Native Audio</td><td>864×496</td><td>16:9</td><td>24</td><td>4.06s</td><td>🔊</td><td>1.10 MB</td><td class="status-ok">✅ PASS</td>
+    </tr>
+    <tr>
+      <td>Test 5</td><td>First + Last Frame</td><td>864×496</td><td>16:9</td><td>24</td><td>4.04s</td><td>❌</td><td>1.15 MB</td><td class="status-ok">✅ PASS</td>
+    </tr>
+    <tr>
+      <td>Test 7</td><td>Return Last Frame</td><td>864×496</td><td>16:9</td><td>24</td><td>4.04s</td><td>❌</td><td>1.62 MB</td><td class="status-warn">⚠️ PARTIAL</td>
+    </tr>
+    <tr>
+      <td>Test 8</td><td>9:16 Reels Format</td><td>496×864</td><td>9:16</td><td>24</td><td>4.04s</td><td>❌</td><td>0.83 MB</td><td class="status-ok">✅ PASS</td>
+    </tr>
+  </table>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Test 1 — Text-to-Video</h3>
+      <span class="badge badge-success">✅ OK</span><span class="badge badge-info">16:9</span>
+      <p style="color:#9ca3af;font-size:12px;margin-top:4px">Pure prompt, no reference image</p>
+    </div>
+    <div class="video-container">
+      <video controls preload="metadata">
+        <source src="test1_text_to_video.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="controls">
+      <button onclick="this.closest('.card').querySelector('video').currentTime=0">⏮ First</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.max(0,v.currentTime-1/24)">◀ Prev Frame</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.min(v.duration,v.currentTime+1/24)">Next Frame ▶</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=v.duration">Last ⏭</button>
+    </div>
+    <div class="meta">
+      <span>Çözünürlük:</span> <strong>864×496</strong> &nbsp;|&nbsp;
+      <span>Ratio:</span> <strong>16:9</strong> &nbsp;|&nbsp;
+      <span>FPS:</span> <strong>24</strong> &nbsp;|&nbsp;
+      <span>Frames:</span> <strong>97</strong>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Test 2 — Image-to-Video (First Frame)</h3>
+      <span class="badge badge-success">✅ OK</span><span class="badge badge-info">16:9</span>
+      <p style="color:#9ca3af;font-size:12px;margin-top:4px">Reference image as first frame</p>
+    </div>
+    <div class="video-container">
+      <video controls preload="metadata">
+        <source src="test2_image_to_video.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="controls">
+      <button onclick="this.closest('.card').querySelector('video').currentTime=0">⏮ First</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.max(0,v.currentTime-1/24)">◀ Prev Frame</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.min(v.duration,v.currentTime+1/24)">Next Frame ▶</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=v.duration">Last ⏭</button>
+    </div>
+    <div class="meta">
+      <span>Çözünürlük:</span> <strong>864×496</strong> &nbsp;|&nbsp;
+      <span>Ratio:</span> <strong>16:9</strong> &nbsp;|&nbsp;
+      <span>FPS:</span> <strong>24</strong> &nbsp;|&nbsp;
+      <span>Frames:</span> <strong>97</strong>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Test 3 — Multimodal Reference</h3>
+      <span class="badge badge-success">✅ OK</span><span class="badge badge-info">16:9</span>
+      <p style="color:#9ca3af;font-size:12px;margin-top:4px">Reference image + prompt guidance</p>
+    </div>
+    <div class="video-container">
+      <video controls preload="metadata">
+        <source src="test3_multimodal_ref.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="controls">
+      <button onclick="this.closest('.card').querySelector('video').currentTime=0">⏮ First</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.max(0,v.currentTime-1/24)">◀ Prev Frame</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.min(v.duration,v.currentTime+1/24)">Next Frame ▶</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=v.duration">Last ⏭</button>
+    </div>
+    <div class="meta">
+      <span>Çözünürlük:</span> <strong>864×496</strong> &nbsp;|&nbsp;
+      <span>Ratio:</span> <strong>16:9</strong> &nbsp;|&nbsp;
+      <span>FPS:</span> <strong>24</strong> &nbsp;|&nbsp;
+      <span>Frames:</span> <strong>97</strong>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Test 4 — Native Audio</h3>
+      <span class="badge badge-success">✅ OK</span><span class="badge badge-audio">🔊 Audio</span>
+      <p style="color:#9ca3af;font-size:12px;margin-top:4px">Video with embedded AAC audio</p>
+    </div>
+    <div class="video-container">
+      <video controls preload="metadata">
+        <source src="test4_native_audio.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="controls">
+      <button onclick="this.closest('.card').querySelector('video').currentTime=0">⏮ First</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.max(0,v.currentTime-1/24)">◀ Prev Frame</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.min(v.duration,v.currentTime+1/24)">Next Frame ▶</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=v.duration">Last ⏭</button>
+    </div>
+    <div class="meta">
+      <span>Çözünürlük:</span> <strong>864×496</strong> &nbsp;|&nbsp;
+      <span>Ratio:</span> <strong>16:9</strong> &nbsp;|&nbsp;
+      <span>FPS:</span> <strong>24</strong> &nbsp;|&nbsp;
+      <span>Frames:</span> <strong>97</strong>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Test 5 — First + Last Frame</h3>
+      <span class="badge badge-success">✅ OK</span><span class="badge badge-info">16:9</span>
+      <p style="color:#9ca3af;font-size:12px;margin-top:4px">Controlled start and end frames</p>
+    </div>
+    <div class="video-container">
+      <video controls preload="metadata">
+        <source src="test5_first_last_frame.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="controls">
+      <button onclick="this.closest('.card').querySelector('video').currentTime=0">⏮ First</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.max(0,v.currentTime-1/24)">◀ Prev Frame</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.min(v.duration,v.currentTime+1/24)">Next Frame ▶</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=v.duration">Last ⏭</button>
+    </div>
+    <div class="meta">
+      <span>Çözünürlük:</span> <strong>864×496</strong> &nbsp;|&nbsp;
+      <span>Ratio:</span> <strong>16:9</strong> &nbsp;|&nbsp;
+      <span>FPS:</span> <strong>24</strong> &nbsp;|&nbsp;
+      <span>Frames:</span> <strong>97</strong>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Test 7 — Return Last Frame</h3>
+      <span class="badge badge-success">✅ OK</span><span class="badge badge-info">16:9</span>
+      <p style="color:#9ca3af;font-size:12px;margin-top:4px">return_last_frame: true</p>
+    </div>
+    <div class="video-container">
+      <video controls preload="metadata">
+        <source src="test7_return_last_frame.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="controls">
+      <button onclick="this.closest('.card').querySelector('video').currentTime=0">⏮ First</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.max(0,v.currentTime-1/24)">◀ Prev Frame</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.min(v.duration,v.currentTime+1/24)">Next Frame ▶</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=v.duration">Last ⏭</button>
+    </div>
+    <div class="meta">
+      <span>Çözünürlük:</span> <strong>864×496</strong> &nbsp;|&nbsp;
+      <span>Ratio:</span> <strong>16:9</strong> &nbsp;|&nbsp;
+      <span>FPS:</span> <strong>24</strong> &nbsp;|&nbsp;
+      <span>Frames:</span> <strong>97</strong>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Test 8 — 9:16 Reels Format</h3>
+      <span class="badge badge-success">✅ OK</span><span class="badge badge-info">9:16</span>
+      <p style="color:#9ca3af;font-size:12px;margin-top:4px">Portrait aspect ratio for Reels/Stories</p>
+    </div>
+    <div class="video-container">
+      <video controls preload="metadata">
+        <source src="test8_reels_916.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="controls">
+      <button onclick="this.closest('.card').querySelector('video').currentTime=0">⏮ First</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.max(0,v.currentTime-1/24)">◀ Prev Frame</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=Math.min(v.duration,v.currentTime+1/24)">Next Frame ▶</button>
+      <button onclick="var v=this.closest('.card').querySelector('video');v.currentTime=v.duration">Last ⏭</button>
+    </div>
+    <div class="meta">
+      <span>Çözünürlük:</span> <strong>496×864</strong> &nbsp;|&nbsp;
+      <span>Ratio:</span> <strong>9:16</strong> &nbsp;|&nbsp;
+      <span>FPS:</span> <strong>24</strong> &nbsp;|&nbsp;
+      <span>Frames:</span> <strong>97</strong>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Frame-by-frame analysis: capture first and last frames
+document.querySelectorAll('video').forEach(v => {
+  v.addEventListener('loadedmetadata', () => {
+    // Auto-pause on first frame
+    v.currentTime = 0;
+  });
+});
+</script>
+
+</body>
+</html>

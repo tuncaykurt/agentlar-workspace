@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity: Test vs Yayın — Restoran Analojisi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #07090E;
+            --surface: rgba(255,255,255,0.03);
+            --border: rgba(255,255,255,0.07);
+            --text: #FFFFFF;
+            --muted: #8896B0;
+            --test: #10B981;
+            --test-rgb: 16,185,129;
+            --prod: #A855F7;
+            --prod-rgb: 168,85,247;
+            --github: #3B82F6;
+            --github-rgb: 59,130,246;
+            --railway: #A855F7;
+            --railway-rgb: 168,85,247;
+            --amber: #F59E0B;
+            --amber-rgb: 245,158,11;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Outfit',sans-serif; }
+        body { background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+
+        /* Background effects */
+        .bg-glow {
+            position:fixed; width:550px; height:550px; border-radius:50%;
+            filter:blur(140px); opacity:0.1; z-index:0; pointer-events:none;
+            animation:float 14s infinite alternate ease-in-out;
+        }
+        .glow-1 { background:var(--test); top:-200px; left:-200px; }
+        .glow-2 { background:var(--prod); bottom:-200px; right:-200px; animation-delay:-7s; }
+        .bg-grid {
+            position:fixed; inset:0; z-index:0; pointer-events:none;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+            background-size:60px 60px;
+        }
+
+        .page { position:relative; z-index:1; max-width:1200px; margin:0 auto; padding:3rem 2rem 5rem; }
+
+        /* ═══ HEADER ═══ */
+        .header {
+            text-align:center; margin-bottom:4rem;
+            opacity:0; transform:translateY(-20px);
+            animation:fadeDown 1s ease-out forwards;
+        }
+        .chip {
+            display:inline-block; padding:0.5rem 1.2rem; border-radius:100px;
+            background:rgba(255,255,255,0.04); border:1px solid var(--border);
+            font-size:0.82rem; font-weight:600; color:var(--muted);
+            letter-spacing:0.12em; text-transform:uppercase; margin-bottom:1.5rem;
+        }
+        .header h1 {
+            font-size:3.4rem; font-weight:900; line-height:1.1; margin-bottom:1rem;
+            background:linear-gradient(135deg, #10b981 0%, #3b82f6 40%, #a855f7 70%, #f59e0b 100%);
+            -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+        }
+        .header p { color:var(--muted); font-size:1.2rem; max-width:700px; margin:0 auto; line-height:1.7; }
+
+        /* ═══ KEY MESSAGE ═══ */
+        .key-msg {
+            max-width:960px; margin:0 auto 3.5rem; padding:1.5rem 2rem;
+            border-radius:20px;
+            background:linear-gradient(135deg, rgba(var(--test-rgb),0.06), rgba(var(--prod-rgb),0.06));
+            border:1px solid rgba(255,255,255,0.08);
+            display:flex; align-items:center; gap:1.2rem;
+            opacity:0; transform:translateY(20px);
+            transition:all 0.8s cubic-bezier(0.16,1,0.3,1);
+        }
+        .key-msg.visible { opacity:1; transform:translateY(0); }
+        .key-msg .icon { font-size:2.4rem; flex-shrink:0; }
+        .key-msg p { color:var(--muted); font-size:1.05rem; line-height:1.7; }
+        .hl-green { color:var(--test); font-weight:700; }
+        .hl-purple { color:var(--prod); font-weight:700; }
+
+        /* ═══ SECTION HEADER ═══ */
+        .sec-label {
+            display:flex; align-items:center; gap:0.9rem;
+            margin-bottom:2rem; opacity:0; transform:translateY(20px);
+        }
+        .sec-label.visible { opacity:1; transform:translateY(0); transition:all 0.7s ease; }
+        .sec-num {
+            width:46px; height:46px; border-radius:14px;
+            display:flex; align-items:center; justify-content:center;
+            font-size:1.15rem; font-weight:700; flex-shrink:0;
+        }
+        .sec-label h2 { font-size:2.1rem; font-weight:700; }
+        .sec-label h2 span { color:var(--muted); font-weight:400; }
+        .sec-label p { color:var(--muted); font-size:1.1rem; margin-top:0.2rem; }
+
+        /* ═══ DUAL EXAMPLE ROW ═══ */
+        .dual-row {
+            display:grid; grid-template-columns:1fr 1fr; gap:2.5rem;
+            margin-bottom:1.5rem;
+        }
+        .example-card {
+            background:var(--surface); border:1px solid var(--border);
+            border-radius:22px; overflow:hidden; position:relative;
+            backdrop-filter:blur(16px);
+            opacity:0; transform:translateY(30px);
+            transition:all 0.8s cubic-bezier(0.16,1,0.3,1);
+        }
+        .example-card.visible { opacity:1; transform:translateY(0); }
+        .example-card::before {
+            content:''; position:absolute; top:0; left:0; right:0; height:3px;
+            background:var(--accent); z-index:2;
+        }
+        .example-card:hover {
+            transform:translateY(-6px);
+            border-color:rgba(255,255,255,0.12);
+            box-shadow:0 24px 60px rgba(0,0,0,0.5), 0 0 30px rgba(var(--accent-rgb),0.08);
+        }
+
+        /* Photo inside card */
+        .card-photo { position:relative; overflow:hidden; }
+        .card-photo img { width:100%; display:block; aspect-ratio:16/10; object-fit:cover; transition:transform 0.6s ease; }
+        .example-card:hover .card-photo img { transform:scale(1.03); }
+        .card-photo .photo-badge {
+            position:absolute; bottom:12px; left:12px;
+            padding:0.45rem 0.9rem; border-radius:10px;
+            background:rgba(7,9,14,0.85); backdrop-filter:blur(12px);
+            border:1px solid rgba(var(--accent-rgb),0.3);
+            font-size:0.88rem; font-weight:700; color:var(--accent);
+            display:flex; align-items:center; gap:0.35rem; z-index:2;
+        }
+
+        /* Text inside card */
+        .card-body { padding:1.6rem 1.8rem; }
+        .card-body h3 { font-size:1.45rem; font-weight:700; margin-bottom:0.5rem; }
+        .card-body .subtitle { color:var(--muted); font-size:1.02rem; line-height:1.7; margin-bottom:1rem; }
+
+        /* Info items inside card */
+        .info-list { display:flex; flex-direction:column; gap:0.4rem; }
+        .info-row {
+            display:flex; align-items:center; gap:0.7rem;
+            padding:0.65rem 0.8rem; border-radius:10px;
+            background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.04);
+            transition:all 0.3s ease; cursor:default;
+        }
+        .info-row:hover {
+            background:rgba(var(--accent-rgb),0.08);
+            border-color:rgba(var(--accent-rgb),0.2);
+            transform:translateX(4px);
+        }
+        .info-ico {
+            width:36px; height:36px; border-radius:8px;
+            background:rgba(var(--accent-rgb),0.12); display:flex;
+            align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0;
+        }
+        .info-row .ir-name { font-weight:600; font-size:1rem; }
+        .info-row .ir-desc { font-size:0.88rem; color:var(--muted); }
+
+        /* Status pills */
+        .status-pill {
+            display:inline-flex; align-items:center; gap:6px;
+            padding:0.4rem 1rem; border-radius:100px;
+            font-size:0.82rem; font-weight:700; text-transform:uppercase;
+            letter-spacing:0.5px;
+        }
+        .status-pill::before {
+            content:''; width:7px; height:7px; border-radius:50%;
+            background:currentColor;
+        }
+        .status-pill.safe {
+            background:rgba(var(--test-rgb),0.1); color:var(--test);
+            border:1px solid rgba(var(--test-rgb),0.25);
+        }
+        .status-pill.safe::before { animation:pulse 2s infinite; }
+        .status-pill.critical {
+            background:rgba(239,68,68,0.1); color:#ef4444;
+            border:1px solid rgba(239,68,68,0.25);
+        }
+
+        /* ═══ DIVIDER ═══ */
+        .divider {
+            height:1px; margin:3.5rem 0;
+            background:linear-gradient(to right, transparent, rgba(255,255,255,0.06), transparent);
+        }
+
+        /* ═══ SCENARIO SECTION ═══ */
+        .scenario-grid {
+            display:grid; grid-template-columns:1fr 1fr; gap:1.2rem;
+            margin-top:1rem;
+        }
+        .scenario-card {
+            padding:1.4rem 1.5rem; border-radius:16px;
+            border:1px solid var(--border); background:var(--surface);
+            transition:all 0.3s ease; cursor:default;
+            opacity:0; transform:translateY(20px);
+            transition:all 0.8s cubic-bezier(0.16,1,0.3,1);
+        }
+        .scenario-card.visible { opacity:1; transform:translateY(0); }
+        .scenario-card:hover { transform:translateY(-4px); border-color:rgba(255,255,255,0.12); }
+        .scenario-card h4 { font-size:1.1rem; font-weight:700; margin-bottom:0.4rem; }
+        .scenario-card p { font-size:0.92rem; color:var(--muted); line-height:1.6; margin-bottom:0.8rem; }
+        .scenario-verdict {
+            display:inline-flex; align-items:center; gap:0.4rem;
+            font-size:0.85rem; font-weight:700; padding:0.3rem 0.8rem;
+            border-radius:8px;
+        }
+        .verdict-test { color:var(--test); background:rgba(var(--test-rgb),0.08); }
+        .verdict-prod { color:var(--prod); background:rgba(var(--prod-rgb),0.08); }
+
+        /* ═══ DEPLOY PIPELINE (3 STEP) ═══ */
+        .pipeline {
+            display:flex; align-items:stretch; justify-content:center;
+            gap:0; margin-top:2rem;
+        }
+        .pipe-step {
+            flex:1; max-width:340px; padding:2rem 1.6rem;
+            border-radius:22px; border:1px solid var(--border);
+            text-align:center; position:relative;
+            background:var(--surface);
+            opacity:0; transform:translateY(30px);
+            transition:all 0.8s cubic-bezier(0.16,1,0.3,1);
+        }
+        .pipe-step.visible { opacity:1; transform:translateY(0); }
+        .pipe-step::before {
+            content:''; position:absolute; top:0; left:0; right:0; height:3px;
+            border-radius:22px 22px 0 0;
+        }
+        .pipe-step:hover {
+            transform:translateY(-6px);
+            box-shadow:0 16px 50px rgba(0,0,0,0.4);
+        }
+        .pipe-step .step-num {
+            width:40px; height:40px; border-radius:50%;
+            display:inline-flex; align-items:center; justify-content:center;
+            font-size:0.9rem; font-weight:800; margin-bottom:1rem;
+        }
+        .pipe-step .step-photo { width:100%; border-radius:14px; overflow:hidden; margin-bottom:1rem; }
+        .pipe-step .step-photo img { width:100%; display:block; aspect-ratio:16/10; object-fit:cover; transition:transform 0.5s ease; }
+        .pipe-step:hover .step-photo img { transform:scale(1.04); }
+        .pipe-step h4 { font-size:1.15rem; font-weight:800; margin-bottom:0.3rem; }
+        .pipe-step .step-sub { font-size:1rem; color:var(--muted); margin-bottom:0.7rem; }
+        .pipe-step .step-detail {
+            font-size:0.9rem; color:var(--muted); line-height:1.6;
+            padding:0.9rem 1rem; border-radius:12px;
+            background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);
+            text-align:left;
+        }
+        .pipe-step .step-detail strong { color:var(--text); }
+
+        /* Step colors */
+        .pipe-local { background:linear-gradient(180deg, rgba(var(--test-rgb),0.05) 0%, var(--bg) 40%); }
+        .pipe-local::before { background:linear-gradient(90deg, #10b981, #34d399); }
+        .pipe-local .step-num { background:rgba(var(--test-rgb),0.15); color:var(--test); border:1.5px solid rgba(var(--test-rgb),0.3); }
+        .pipe-local h4 { color:var(--test); }
+
+        .pipe-github { background:linear-gradient(180deg, rgba(var(--github-rgb),0.05) 0%, var(--bg) 40%); }
+        .pipe-github::before { background:linear-gradient(90deg, #3b82f6, #60a5fa); }
+        .pipe-github .step-num { background:rgba(var(--github-rgb),0.15); color:var(--github); border:1.5px solid rgba(var(--github-rgb),0.3); }
+        .pipe-github h4 { color:var(--github); }
+
+        .pipe-railway { background:linear-gradient(180deg, rgba(var(--prod-rgb),0.05) 0%, var(--bg) 40%); }
+        .pipe-railway::before { background:linear-gradient(90deg, #a855f7, #c084fc); }
+        .pipe-railway .step-num { background:rgba(var(--prod-rgb),0.15); color:var(--prod); border:1.5px solid rgba(var(--prod-rgb),0.3); }
+        .pipe-railway h4 { color:var(--prod); }
+
+        /* Pipeline connector */
+        .pipe-connector {
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            width:70px; flex-shrink:0; gap:4px;
+        }
+        .pipe-connector .conn-arrow {
+            font-size:1.8rem; font-weight:300;
+            animation:arrowPulse 2s ease-in-out infinite;
+        }
+        .pipe-connector .conn-label {
+            font-size:0.65rem; font-weight:700; text-transform:uppercase;
+            letter-spacing:1px; white-space:nowrap;
+        }
+        @keyframes arrowPulse {
+            0%, 100% { opacity:0.4; transform:translateX(0); }
+            50% { opacity:1; transform:translateX(5px); }
+        }
+
+        /* ═══ ANALOGY BRIDGE ═══ */
+        .analogy-bridge {
+            margin-top:1.5rem; padding:1.6rem 2rem;
+            border-radius:18px;
+            background:linear-gradient(135deg, rgba(var(--test-rgb),0.04), rgba(var(--github-rgb),0.04), rgba(var(--prod-rgb),0.04));
+            border:1px solid rgba(255,255,255,0.07);
+            opacity:0; transform:translateY(20px);
+            transition:all 0.8s cubic-bezier(0.16,1,0.3,1);
+        }
+        .analogy-bridge.visible { opacity:1; transform:translateY(0); }
+        .analogy-row {
+            display:grid; grid-template-columns:1fr auto 1fr; gap:1rem;
+            align-items:center; padding:0.6rem 0;
+        }
+        .analogy-row + .analogy-row { border-top:1px solid rgba(255,255,255,0.04); }
+        .analogy-real { text-align:right; font-size:1rem; font-weight:600; }
+        .analogy-real .sub { font-size:0.82rem; color:var(--muted); font-weight:400; display:block; }
+        .analogy-eq { font-size:1.5rem; font-weight:300; color:var(--muted); text-align:center; }
+        .analogy-tech { font-size:1rem; font-weight:700; }
+        .analogy-tech .sub { font-size:0.82rem; color:var(--muted); font-weight:400; display:block; }
+
+        /* ═══ SUMMARY ═══ */
+        .summary {
+            text-align:center; padding:3rem 2rem;
+            background:linear-gradient(135deg, rgba(var(--test-rgb),0.05), rgba(var(--github-rgb),0.04), rgba(var(--prod-rgb),0.05));
+            border:1px solid rgba(255,255,255,0.1); border-radius:26px;
+            position:relative; overflow:hidden;
+            opacity:0; transform:translateY(30px);
+            transition:all 0.8s cubic-bezier(0.16,1,0.3,1);
+        }
+        .summary.visible { opacity:1; transform:translateY(0); }
+        .summary::before {
+            content:''; position:absolute; top:0; left:0; right:0; height:4px;
+            background:linear-gradient(to right, var(--test), var(--github), var(--prod));
+        }
+        .summary h2 {
+            font-size:2rem; font-weight:800; margin-bottom:1.3rem;
+            background:linear-gradient(to right, #fff, #a5b4fc);
+            -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+        }
+        .formula { display:flex; align-items:center; justify-content:center; gap:0.6rem; flex-wrap:wrap; margin-bottom:2rem; }
+        .formula .pill {
+            padding:0.6rem 1.1rem; border-radius:12px; font-weight:600; font-size:1rem;
+            border:1px solid; transition:all 0.3s ease; cursor:default;
+        }
+        .formula .pill:hover { transform:scale(1.1); }
+        .formula .op { font-size:1.3rem; font-weight:300; color:var(--muted); }
+        .formula .eq { font-size:1.5rem; font-weight:800; }
+        .summary-text {
+            color:var(--muted); font-size:1.12rem; line-height:1.7; max-width:750px; margin:0 auto;
+        }
+        .summary-text strong { color:var(--text); }
+
+        /* ═══ NEW TEXT OPTIMIZATION STYLES ═══ */
+        .vs-row { display:flex; flex-direction:column; gap:0.6rem; margin-top:0.8rem; }
+        .vs-item { font-size: 0.95rem; color: var(--muted); display:flex; gap:8px; align-items:flex-start; line-height:1.4; }
+        .vs-item b { color: var(--text); font-weight: 500; }
+        .vs-ico { flex-shrink:0; font-size:1.1rem; }
+
+        /* ═══ ORCHESTRATOR FLOW ═══ */
+        .orch-flow {
+            display: flex; align-items: center; justify-content: center; gap: 1.5rem;
+            margin: 2.5rem auto 0; padding: 2rem 1rem; position: relative;
+        }
+        .flow-node {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+            padding: 1.2rem 1rem; border-radius: 16px; width: 150px; text-align: center;
+            position: relative; z-index: 2; transition: transform 0.3s;
+        }
+        .flow-node .emoji { font-size: 2.4rem; margin-bottom: 0.5rem; }
+        .flow-node .label { font-size: 0.95rem; font-weight: 700; color: #fff; line-height:1.2; }
+        .flow-node .sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.3rem; }
+        
+        .node-user { border-color: rgba(16,185,129,0.3); box-shadow: 0 0 20px rgba(16,185,129,0.1); }
+        .node-ag { border-color: rgba(59,130,246,0.6); box-shadow: 0 0 40px rgba(59,130,246,0.25); background: rgba(59,130,246,0.1); transform: scale(1.1); }
+        .node-target { border-color: rgba(255,255,255,0.05); background: rgba(0,0,0,0.4); opacity: 0.7; }
+        
+        .flow-targets { display: flex; flex-direction: column; gap: 1rem; }
+        .flow-arrow, .flow-split { font-size: 1.5rem; color: var(--muted); opacity: 0.5; animation: arrowPulse 2s infinite; display:flex;}
+        .flow-split { flex-direction: column; gap: 2.5rem; }
+
+        .cross-badge {
+            position: absolute; top: -14px; right: -20px;
+            background: #ef4444; color: #fff; font-size: 0.7rem; font-weight: 800;
+            padding: 0.25rem 0.6rem; border-radius: 100px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); pointer-events: none; white-space: nowrap; z-index: 3;
+        }
+
+        .orchestrator-msg {
+            text-align: center; max-width: 600px; margin: 1.5rem auto 0;
+            color: var(--muted); font-size: 1.05rem; line-height: 1.6;
+        }
+        .orchestrator-msg strong { color: var(--text); }
+
+        @media (max-width: 768px) {
+            .orch-flow { flex-direction: column; gap: 1.5rem; }
+            .flow-split { flex-direction: row; gap: 3rem; margin: -0.5rem 0; }
+            .flow-split > div:nth-child(1) { transform: translateY(10px) rotate(45deg); display:inline-block; }
+            .flow-split > div:nth-child(2) { transform: translateY(10px) rotate(135deg); display:inline-block; }
+            .flow-arrow { transform: rotate(90deg); }
+            .flow-targets { flex-direction: row; }
+            .cross-badge { right: auto; left: 50%; transform: translateX(-50%); font-size: 0.65rem; }
+        }
+
+        /* ═══ ANIMATIONS ═══ */
+        @keyframes float { 0%{transform:translateY(0) scale(1);} 100%{transform:translateY(-50px) scale(1.08);} }
+        @keyframes fadeDown { to{opacity:1;transform:translateY(0);} }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+        /* ═══ RESPONSIVE ═══ */
+        @media (max-width:900px) {
+            .dual-row { grid-template-columns:1fr; }
+            .scenario-grid { grid-template-columns:1fr; }
+            .pipeline { flex-direction:column; align-items:center; }
+            .pipe-step { max-width:100%; }
+            .pipe-connector {
+                width:auto; height:50px; flex-direction:row; gap:8px;
+            }
+            .pipe-connector .conn-arrow {
+                transform:rotate(90deg);
+                animation:arrowPulseMobile 2s ease-in-out infinite;
+            }
+            .analogy-row { grid-template-columns:1fr; gap:0.3rem; text-align:center; }
+            .analogy-real { text-align:center; }
+            .header h1 { font-size:2.4rem; }
+        }
+        @keyframes arrowPulseMobile {
+            0%, 100% { opacity:0.4; transform:rotate(90deg) translateX(0); }
+            50% { opacity:1; transform:rotate(90deg) translateX(5px); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="bg-glow glow-1"></div>
+<div class="bg-glow glow-2"></div>
+<div class="bg-grid"></div>
+
+<div class="page">
+
+    <!-- ═══════ HEADER ═══════ -->
+    <div class="header">
+        <div class="chip">Antigravity Kavramları — Restoran Analojisi</div>
+        <h1>Test vs Yayın</h1>
+        <p>İki ortam arasındaki farkı anlamak için bir restoranın
+           mutfağına ve servis alanına bakalım. Prova yapmak vs sahneye çıkmak.</p>
+    </div>
+
+    <!-- ═══════ KEY MESSAGE ═══════ -->
+    <div class="key-msg" data-reveal>
+        <div class="icon">🍳</div>
+        <p>
+            Bunu şöyle düşün: <span class="hl-green">Test ortamı</span> = Restoran mutfağında yemeği <strong>deniyorsun</strong>, tadına bakıyorsun — sadece sen görüyorsun.
+            <span class="hl-purple">Yayın ortamı</span> = Yemeği tabağa koyup <strong>müşteriye servis ediyorsun (Servis Alanı)</strong> — artık herkes görüyor, restoran 7/24 açık.
+        </p>
+    </div>
+
+    <!-- ═══════ 1. İKİ ORTAM ═══════ -->
+    <section>
+        <div class="sec-label" data-reveal>
+            <div class="sec-num" style="background:rgba(var(--test-rgb),0.12);color:var(--test);border:1px solid rgba(var(--test-rgb),0.25);">1</div>
+            <div>
+                <h2>İki Ortam <span>— Mutfak vs Servis Alanı</span></h2>
+                <p>Her restoranda iki alan vardır: arka taraf (mutfak) ve ön taraf (müşteri servis alanı / vitrin).</p>
+            </div>
+        </div>
+
+        <div class="dual-row">
+            <!-- TEST = MUTFAK -->
+            <div class="example-card" data-reveal style="--accent:var(--test);--accent-rgb:var(--test-rgb);">
+                <div class="card-photo">
+                    <img src="assets/test_kitchen.png" alt="Aşçı mutfakta yemek deniyor">
+                    <div class="photo-badge">🏠 TEST ORTAMI</div>
+                </div>
+                <div class="card-body">
+                    <h3>🧪 Mutfak — Test Ortamı</h3>
+                    <div class="subtitle">Yemeklerin denendiği, tadına bakıldığı, hata yapmanın serbest olduğu yer. Müşteriler burayı görmez.</div>
+                    <div class="info-list">
+                        <div class="info-row">
+                            <div class="info-ico">💻</div>
+                            <div><div class="ir-name">Dosyalar Sende</div><div class="ir-desc">Proje bilgisayarının içinde, sadece sen erişiyorsun</div></div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-ico">🧑‍🍳</div>
+                            <div><div class="ir-name">Denemek Serbest</div><div class="ir-desc">Hata yap, düzelt, tekrar dene — kimse etkilenmez</div></div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-ico">🔌</div>
+                            <div><div class="ir-name">Sen Aktifken Çalışır</div><div class="ir-desc">Bilgisayarını kapattığında mutfak da kapanır</div></div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-ico">✅</div>
+                            <div><div class="ir-name">Çoğu İş İçin Yeterli</div><div class="ir-desc">Lead bulma, e-posta, veri analizi — hepsi burada yapılabilir</div></div>
+                        </div>
+                    </div>
+                    <div style="margin-top:1rem;text-align:center;">
+                        <span class="status-pill safe">Çoğu proje burada kalabilir</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PRODUCTION = SERVIS ALANI -->
+            <div class="example-card" data-reveal style="--accent:var(--prod);--accent-rgb:var(--prod-rgb);">
+                <div class="card-photo">
+                    <img src="assets/production_restaurant.png" alt="Restoranın servis alanı, müşterilere servis">
+                    <div class="photo-badge">☁️ YAYIN ORTAMI</div>
+                </div>
+                <div class="card-body">
+                    <h3>🚀 Servis Alanı — Yayın Ortamı</h3>
+                    <div class="subtitle">Yemekler tabağa konmuş, müşterilere servis ediliyor. Restoran 7/24 açık — gece yarısı bile sipariş gelebilir.</div>
+                    <div class="info-list">
+                        <div class="info-row">
+                            <div class="info-ico">☁️</div>
+                            <div><div class="ir-name">Dosyalar Bulutta</div><div class="ir-desc">Proje bir sunucuya aktarılmış, her yerden erişilebilir</div></div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-ico">🔄</div>
+                            <div><div class="ir-name">7/24 Açık Restoran</div><div class="ir-desc">Sen uyurken bile sipariş alır, mesaj cevaplar</div></div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-ico">📡</div>
+                            <div><div class="ir-name">Dış Dünyaya Açık</div><div class="ir-desc">Instagram, WhatsApp gibi platformlar her an ulaşabilir</div></div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-ico">💰</div>
+                            <div><div class="ir-name">Ek Maliyet Olabilir</div><div class="ir-desc">Sunucu kirası, domain — restoranın kira ve elektrik gideri gibi</div></div>
+                        </div>
+                    </div>
+                    <div style="margin-top:1rem;text-align:center;">
+                        <span class="status-pill critical">Sadece gerektiğinde geçilir</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════ 2. HANGİ İŞ NEREDE YAPILIR? ═══════ -->
+    <section>
+        <div class="sec-label" data-reveal>
+            <div class="sec-num" style="background:rgba(var(--amber-rgb),0.12);color:var(--amber);border:1px solid rgba(var(--amber-rgb),0.25);">2</div>
+            <div>
+                <h2>Aynı Tarif, Farklı Kullanım <span>— Mutfak mı, Servis Alanı mı?</span></h2>
+                <p>Aynı otomasyon projesi duruma göre hem mutfakta kalabilir hem de servis alanına çıkabilir.</p>
+            </div>
+        </div>
+
+        <div class="scenario-grid">
+            <div class="scenario-card" data-reveal>
+                <h4>🔍 Müşteri Bulma</h4>
+                <div class="vs-row">
+                    <div class="vs-item"><span class="vs-ico">🧪</span> <div><b style="color:var(--test);">Mutfak:</b> Tek seferlik liste oluşturma</div></div>
+                    <div class="vs-item"><span class="vs-ico">🚀</span> <div><b style="color:var(--prod);">Servis:</b> Her gün kendi kendine lead toplayan bot</div></div>
+                </div>
+            </div>
+
+            <div class="scenario-card" data-reveal>
+                <h4>📧 E-posta Gönderme</h4>
+                <div class="vs-row">
+                    <div class="vs-item"><span class="vs-ico">🧪</span> <div><b style="color:var(--test);">Mutfak:</b> Sadece 1 kez manuel e-posta gönderimi</div></div>
+                    <div class="vs-item"><span class="vs-ico">🚀</span> <div><b style="color:var(--prod);">Servis:</b> Mailleri 7/24 okuyup analiz eden AI sekreteri</div></div>
+                </div>
+            </div>
+        </div>
+        
+        <br>
+        <div class="sec-label" data-reveal style="margin-top: 1.5rem;">
+            <div>
+                <h2>Devamlı Serviste <span>(Yayında) Olması Gerekenler</span></h2>
+                <p>Aşağıdaki işler kesintiye uğrayamaz; bu yüzden durmaksızın çalışmalıdır.</p>
+            </div>
+        </div>
+        
+        <div class="scenario-grid">
+            <div class="scenario-card" data-reveal style="border-left: 3px solid var(--prod); padding: 1.2rem;">
+                <h4 style="margin:0;display:flex;align-items:center;gap:12px;">💬 <span>Instagram / WhatsApp Botu <span style="display:block;font-size:0.8rem;color:var(--muted);font-weight:400;margin-top:2px;">Müşteri her saniye yazabilir</span></span></h4>
+            </div>
+            <div class="scenario-card" data-reveal style="border-left: 3px solid var(--prod); padding: 1.2rem;">
+                <h4 style="margin:0;display:flex;align-items:center;gap:12px;">🌐 <span>Web Sitesi (Dashboard, API) <span style="display:block;font-size:0.8rem;color:var(--muted);font-weight:400;margin-top:2px;">Tüm internetten erişilebilir olmalı</span></span></h4>
+            </div>
+            <div class="scenario-card" data-reveal style="border-left: 3px solid var(--prod); padding: 1.2rem;">
+                <h4 style="margin:0;display:flex;align-items:center;gap:12px;">📢 <span>Satış / Ekip Bildirimleri <span style="display:block;font-size:0.8rem;color:var(--muted);font-weight:400;margin-top:2px;">Olay anında (örn. Stripe) uyarı yollamalı</span></span></h4>
+            </div>
+            <div class="scenario-card" data-reveal style="border-left: 3px solid var(--prod); padding: 1.2rem;">
+                <h4 style="margin:0;display:flex;align-items:center;gap:12px;">⏱️ <span>Zamanlanmış İçerikler <span style="display:block;font-size:0.8rem;color:var(--muted);font-weight:400;margin-top:2px;">Her gün belirli bir saatte post atmalı</span></span></h4>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════ 3. YAYIN SÜRECİ — DEPLOY PIPELINE ═══════ -->
+    <section>
+        <div class="sec-label" data-reveal>
+            <div class="sec-num" style="background:rgba(var(--github-rgb),0.12);color:var(--github);border:1px solid rgba(var(--github-rgb),0.25);">3</div>
+            <div>
+                <h2>Yayın Süreci <span>— Mutfaktan Servis Alanına 3 Adım</span></h2>
+                <p>Projeyi yayına almak istediğinde, yemek mutfaktan servise şu 3 adımla geçer.</p>
+            </div>
+        </div>
+
+        <div class="pipeline">
+            <!-- STEP 1: LOKAL (MUTFAK) -->
+            <div class="pipe-step pipe-local" data-reveal>
+                <div class="step-num">1</div>
+                <div class="step-photo">
+                    <img src="assets/test_kitchen.png" alt="Mutfak — Lokal Ortam">
+                </div>
+                <h4>💻 Mutfak (Lokal)</h4>
+                <p class="step-sub">Yemeğin piştiği yer</p>
+                <div class="step-detail">
+                    Proje dosyaları <strong>senin bilgisayarında</strong> duruyor. Antigravity ile geliştirdin, test ettin, her şey çalışıyor. Yemek hazır — ama henüz müşteriye çıkmadı.
+                </div>
+            </div>
+
+            <!-- CONNECTOR 1→2 -->
+            <div class="pipe-connector">
+                <span class="conn-label" style="color:var(--github);">tarif defterine yaz</span>
+                <span class="conn-arrow" style="color:var(--github);">→</span>
+            </div>
+
+            <!-- STEP 2: GITHUB (TARİF DEFTERİ) -->
+            <div class="pipe-step pipe-github" data-reveal>
+                <div class="step-num">2</div>
+                <div class="step-photo">
+                    <img src="assets/recipe_github.png" alt="Tarif Defteri — GitHub">
+                </div>
+                <h4>🐙 Tarif Defteri (GitHub)</h4>
+                <p class="step-sub">Tariflerin saklandığı yer</p>
+                <div class="step-detail">
+                    Yemek tarifini (kodunu) <strong>merkezi bir deftere</strong> yazıyorsun. Böylece tarif kaybolmaz, başkaları da görebilir. Google Drive gibi — ama kodlar için. <strong>git push</strong> = tarifi deftere yaz.
+                </div>
+            </div>
+
+            <!-- CONNECTOR 2→3 -->
+            <div class="pipe-connector">
+                <span class="conn-label" style="color:var(--prod);">servise çıkar</span>
+                <span class="conn-arrow" style="color:var(--prod);">→</span>
+            </div>
+
+            <!-- STEP 3: RAILWAY (SERVİS) -->
+            <div class="pipe-step pipe-railway" data-reveal>
+                <div class="step-num">3</div>
+                <div class="step-photo">
+                    <img src="assets/railway_service.png" alt="Servis — Railway">
+                </div>
+                <h4>🚂 Servis Hattı (Railway)</h4>
+                <p class="step-sub">Yemeğin müşteriye ulaştığı yer</p>
+                <div class="step-detail">
+                    Railway, tarif defterindeki (GitHub) tarifleri alıp <strong>7/24 pişirip servis eder</strong>. Yeni tarif yazıldığında otomatik güncellenir. Sen mutfağı kapatsan bile — servis alanı hep açıktır!
+                </div>
+            </div>
+        </div>
+
+        <!-- ANALOGY BRIDGE TABLE -->
+        <div class="dual-row" style="margin-top: 1.5rem; margin-bottom: 0;">
+            <!-- Group 1: Ortamlar -->
+            <div class="analogy-bridge" data-reveal style="margin-top: 0; background:none;">
+                <div style="text-align:center; margin-bottom:1rem;">
+                    <h3 style="font-size:1.2rem; font-weight:700;">🧩 Kavramlar (Ortamlar)</h3>
+                </div>
+                <div class="analogy-row">
+                    <div class="analogy-real">
+                        👨‍🍳 Mutfak
+                        <span class="sub">Yemek dene, tat</span>
+                    </div>
+                    <div class="analogy-eq">=</div>
+                    <div class="analogy-tech" style="color:var(--test);">
+                        💻 Test Ortamı
+                        <span class="sub">Lokalde çalışır, ekip görür</span>
+                    </div>
+                </div>
+                <div class="analogy-row">
+                    <div class="analogy-real">
+                        🍽️ Servis Alanı
+                        <span class="sub">Müşterinin gördüğü, yediği yer</span>
+                    </div>
+                    <div class="analogy-eq">=</div>
+                    <div class="analogy-tech" style="color:var(--prod);">
+                        🚀 Yayın Ortamı
+                        <span class="sub">Canlıda ve 7/24 herkese açık</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Group 2: Araçlar -->
+            <div class="analogy-bridge" data-reveal style="margin-top: 0; background:none;">
+                <div style="text-align:center; margin-bottom:1rem;">
+                    <h3 style="font-size:1.2rem; font-weight:700;">🛠️ Araçlar ve Platformlar</h3>
+                </div>
+                <div class="analogy-row">
+                    <div class="analogy-real">
+                        Bilgisayarın
+                        <span class="sub">İşi yaptığın alan</span>
+                    </div>
+                    <div class="analogy-eq">=</div>
+                    <div class="analogy-tech" style="color:var(--test);">
+                        💻 Lokal
+                        <span class="sub">Dosyaların olduğu yer</span>
+                    </div>
+                </div>
+                <div class="analogy-row">
+                    <div class="analogy-real">
+                        📋 Tarif Defteri
+                        <span class="sub">Tarifleri yaz, sakla</span>
+                    </div>
+                    <div class="analogy-eq">=</div>
+                    <div class="analogy-tech" style="color:var(--github);">
+                        🐙 GitHub
+                        <span class="sub">Kodların versiyon deposu</span>
+                    </div>
+                </div>
+                <div class="analogy-row">
+                    <div class="analogy-real">
+                        🚂 Servis Hattı
+                        <span class="sub">Yemeğin sürekli çıktığı yer</span>
+                    </div>
+                    <div class="analogy-eq">=</div>
+                    <div class="analogy-tech" style="color:var(--prod);">
+                        🚂 Railway
+                        <span class="sub">Kodu 7/24 çalıştıran sunucu</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="orch-flow" data-reveal>
+            <!-- USER -->
+            <div class="flow-node node-user">
+                <div class="emoji">👤</div>
+                <div class="label">Sen</div>
+                <div class="sub">(Vizyoner)</div>
+            </div>
+            
+            <div class="flow-arrow">➡️</div>
+            
+            <!-- ANTIGRAVITY -->
+            <div class="flow-node node-ag">
+                <div class="emoji">🤖</div>
+                <div class="label" style="font-size:1.1rem;">Antigravity</div>
+                <div class="sub">Orkestratör</div>
+            </div>
+            
+            <div class="flow-split">
+                <div>↗️</div>
+                <div>↘️</div>
+            </div>
+            
+            <!-- PLATFORMS -->
+            <div class="flow-targets">
+                <div class="flow-node node-target">
+                    <div class="cross-badge">❌ Sen Girmezsin</div>
+                    <div class="emoji">🐙</div>
+                    <div class="label" style="color:var(--github);">GitHub</div>
+                    <div class="sub">Tarif defteri</div>
+                </div>
+                <div class="flow-node node-target">
+                    <div class="cross-badge">❌ Uğraşmazsın</div>
+                    <div class="emoji">🚂</div>
+                    <div class="label" style="color:var(--prod);">Railway</div>
+                    <div class="sub">Servis hattı</div>
+                </div>
+            </div>
+        </div>
+
+        <p class="orchestrator-msg" data-reveal>
+            <strong>Özetle:</strong> Senin tek muhatabın Antigravity'dir. O kodları <strong>senin adına GitHub'a gönderir</strong> ve <strong>Railway ile yayına alır.</strong> Senin manuel bir arayüze girip düğmelere basmana gerek yoktur!
+        </p>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ═══════ SUMMARY ═══════ -->
+    <div class="summary" data-reveal>
+        <h2>🧩 Büyük Resim</h2>
+        <div class="formula">
+            <div class="pill" style="background:rgba(var(--test-rgb),0.1);color:var(--test);border-color:rgba(var(--test-rgb),0.3);">🧪 Mutfak (Test)</div>
+            <span class="op">→</span>
+            <div class="pill" style="background:rgba(var(--github-rgb),0.1);color:var(--github);border-color:rgba(var(--github-rgb),0.3);">📋 Tarif Defteri (GitHub)</div>
+            <span class="op">→</span>
+            <div class="pill" style="background:rgba(var(--prod-rgb),0.12);color:var(--prod);border-color:rgba(var(--prod-rgb),0.3);font-weight:700;">🍽️ Servis Alanı (Railway)</div>
+        </div>
+        <p class="summary-text">
+            Her proje <strong>mutfakta</strong> (test ortamında) başlar. Tek seferlik, saniyelik işlerde proje orada kalabilir.<br><br>
+            Fakat projenin <strong>7/24 ayakta</strong> durması gerekiyorsa, kesintisiz bir sistem isteniyorsa (otomatik mesajlar, siteler vb.) tarifini <strong>GitHub'a</strong> yazar, <strong>Railway</strong> aracılığıyla servis alanına (yayın ortamına) çıkarırsın.<br><br>
+            <strong>Antigravity</strong> tüm bu süreci senin için yönetir. Karar tamamen <strong>projenin ihtiyacına</strong> bağlıdır. ✨
+        </p>
+    </div>
+
+</div>
+
+<script>
+    // Scroll reveal
+    const obs = new IntersectionObserver((entries) => {
+        entries.forEach((e, i) => {
+            if (e.isIntersecting) {
+                const siblings = e.target.parentElement.querySelectorAll('[data-reveal]');
+                const idx = Array.from(siblings).indexOf(e.target);
+                e.target.style.transitionDelay = `${idx * 0.12}s`;
+                e.target.classList.add('visible');
+                obs.unobserve(e.target);
+            }
+        });
+    }, { threshold:0.01, rootMargin:'0px 0px 200px 0px' });
+
+    document.querySelectorAll('[data-reveal]').forEach(el => obs.observe(el));
+
+    // 3D tilt on hover
+    document.querySelectorAll('.example-card, .pipe-step').forEach(card => {
+        card.addEventListener('mousemove', e => {
+            const r = card.getBoundingClientRect();
+            const x = e.clientX - r.left;
+            const y = e.clientY - r.top;
+            const rx = ((y - r.height/2) / (r.height/2)) * -3;
+            const ry = ((x - r.width/2) / (r.width/2)) * 3;
+            card.style.transform = `perspective(1000px) translateY(-6px) rotateX(${rx}deg) rotateY(${ry}deg)`;
+        });
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = `perspective(1000px) translateY(0) rotateX(0) rotateY(0)`;
+        });
+    });
+</script>
+</body>
+</html>

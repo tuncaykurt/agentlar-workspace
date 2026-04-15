@@ -1,0 +1,8 @@
+.env
+config.env
+used_users.json
+__pycache__/
+*.pyc
+.venv/
+venv/
+.railway-bin/

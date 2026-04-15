@@ -1,0 +1,30 @@
+# Ortam ve credentials
+.env
+token.json
+credentials.json
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Outputs (kullanıcının kendi kişisel görselleri)
+outputs/
+ham-fotolar/
+feedback/begendigim/
+feedback/begenmediklerim/
+
+# Assets kalıcı olarak Git'te tutulmalı
+!assets/
+!assets/cutouts/
+!assets/cutouts/*
+
+# macOS
+.DS_Store
+
+# Logs
+run.log
+*.log
+cutout_temp.png
+.myenv/

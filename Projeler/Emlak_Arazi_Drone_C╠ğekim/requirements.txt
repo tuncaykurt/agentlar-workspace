@@ -1,0 +1,4 @@
+requests==2.31.0
+python-dotenv==1.0.1
+Pillow==10.4.0
+google-generativeai==0.7.0

@@ -1,0 +1,97 @@
+"""
+Borsa API key yönetimi ve bakiye sorgulama.
+Auth kaldırıldı — tek kullanıcı "default".
+"""
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+from exchange.exchange_factory import fetch_balance_for, SUPPORTED_EXCHANGES
+from core.redis_client import get_redis
+import json
+
+router = APIRouter(prefix="/exchanges", tags=["exchanges"])
+
+DEFAULT_USER = "default"
+
+
+class ExchangeKeysRequest(BaseModel):
+    exchange: str
+    api_key: str
+    secret: str
+    passphrase: Optional[str] = ""
+
+
+@router.get("/")
+async def list_exchanges():
+    redis = get_redis()
+    result = []
+    for name, cfg in SUPPORTED_EXCHANGES.items():
+        raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{name}")
+        result.append({
+            "exchange": name,
+            "label": cfg["label"],
+            "connected": raw is not None,
+            "needs_passphrase": cfg["needs_passphrase"],
+        })
+    return result
+
+
+@router.post("/save")
+async def save_keys(data: ExchangeKeysRequest):
+    if data.exchange not in SUPPORTED_EXCHANGES:
+        raise HTTPException(400, f"Desteklenmeyen borsa. Desteklenenler: {list(SUPPORTED_EXCHANGES)}")
+
+    redis = get_redis()
+    keys = {
+        "api_key": data.api_key,
+        "secret": data.secret,
+        "passphrase": data.passphrase or "",
+    }
+    await redis.set(f"exchange_keys:{DEFAULT_USER}:{data.exchange}", json.dumps(keys))
+    return {"status": "ok", "exchange": data.exchange}
+
+
+@router.delete("/{exchange}")
+async def delete_keys(exchange: str):
+    redis = get_redis()
+    await redis.delete(f"exchange_keys:{DEFAULT_USER}:{exchange}")
+    return {"status": "deleted", "exchange": exchange}
+
+
+@router.post("/{exchange}/test")
+async def test_connection(exchange: str):
+    redis = get_redis()
+    raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{exchange}")
+    if not raw:
+        raise HTTPException(404, f"{exchange} için API key bulunamadı.")
+
+    keys = json.loads(raw)
+    try:
+        balance = await fetch_balance_for(
+            exchange,
+            keys["api_key"],
+            keys["secret"],
+            keys.get("passphrase", ""),
+        )
+        return {"status": "ok", "exchange": exchange, "balance": balance}
+    except Exception as e:
+        raise HTTPException(400, f"Bağlantı hatası: {str(e)}")
+
+
+@router.get("/{exchange}/balance")
+async def get_balance(exchange: str):
+    redis = get_redis()
+    raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{exchange}")
+    if not raw:
+        raise HTTPException(404, f"{exchange} için API key bulunamadı")
+
+    keys = json.loads(raw)
+    try:
+        return await fetch_balance_for(
+            exchange,
+            keys["api_key"],
+            keys["secret"],
+            keys.get("passphrase", ""),
+        )
+    except Exception as e:
+        raise HTTPException(400, f"Bakiye alınamadı: {str(e)}")
