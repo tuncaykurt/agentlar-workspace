@@ -98,8 +98,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
     .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 14px; min-width: 0; }
     table td { padding: 5px 8px; vertical-align: top; font-size: 15px; word-break: break-word; }
-    .sigs { display: flex; justify-content: space-around; margin-top: 52px; gap: 16px; flex-wrap: wrap; }
-    .sig { text-align: center; flex: 1; min-width: 120px; }
+    .sigs { display: flex; justify-content: space-around; margin-top: 52px; gap: 16px; flex-wrap: wrap; page-break-inside: avoid; }
+    .sig { text-align: center; flex: 1; min-width: 120px; page-break-inside: avoid; }
     .sig-line { border-top: 1px solid #000; padding-top: 8px; font-size: 14px; min-height: 64px; }
     p { font-size: 16px; }
     @media screen and (max-width: 640px) {

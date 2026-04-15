@@ -56,7 +56,8 @@ function firstLetter(name: string) {
 function encodeQP(str: string): string {
   const bytes = new TextEncoder().encode(str)
   let out = ''
-  for (const b of bytes) {
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i]
     if ((b >= 0x20 && b <= 0x7e && b !== 0x3d) || b === 0x09) {
       out += String.fromCharCode(b)
     } else {

@@ -123,7 +123,7 @@ export async function POST(
   // 5. Check if all signature requests for this document are signed
   const { data: allRequests } = await supabase
     .from('signature_requests')
-    .select('status')
+    .select('id, status, signer_name, signer_phone')
     .eq('document_id', sigReq.document_id)
 
   const allSigned = (allRequests || []).every(r => r.status === 'signed')
@@ -143,7 +143,7 @@ export async function POST(
       .eq('signature_status', 'draft')
   }
 
-  // 6. Send WA notification to consultant
+  // 6. Send WA notification to consultant and signers
   try {
     // Get document + consultant info
     const { data: doc } = await supabase
@@ -152,48 +152,68 @@ export async function POST(
       .eq('id', sigReq.document_id)
       .single()
 
-    // Use env vars (same as /api/whatsapp/send route)
+    // Use env vars
     const evoUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '') || null
     const evoKey = process.env.EVOLUTION_API_KEY || null
 
     type ConsultantWA = { id: string; full_name: string; phone: string; wa_instance: string }
-    const consultant = doc?.consultant as ConsultantWA | null
+    const rawConsultant = doc?.consultant
+    const consultant = (Array.isArray(rawConsultant) ? rawConsultant[0] : rawConsultant) as unknown as ConsultantWA | null
+    const evolutionInstance = consultant?.wa_instance || process.env.EVOLUTION_INSTANCE || ''
 
-    if (consultant?.phone && consultant?.wa_instance && evoUrl && evoKey) {
-      // Normalize phone: strip non-digits, convert 05... → 905...
-      let phone = consultant.phone.replace(/\D/g, '')
-      if (phone.startsWith('0')) phone = '90' + phone.slice(1)
-      else if (!phone.startsWith('90') && phone.length === 10) phone = '90' + phone
-
+    if (evolutionInstance && evoUrl && evoKey) {
       const docTitle = doc?.title || 'Belge'
       const signerInfo = `${sigReq.signer_name}${sigReq.signer_role ? ` (${sigReq.signer_role})` : ''}`
 
-      let msg: string
-      if (allSigned) {
-        msg = `✅ *${docTitle}*\n\nTüm taraflar belgeyi imzaladı! 🎉\n\nSon imzalayan: ${signerInfo}`
-      } else {
-        msg = `✍️ *${docTitle}*\n\n${signerInfo} belgeyi imzaladı.\n\nDiğer imzalar bekleniyor.`
+      // Helper to send message safely
+      const sendWaMsg = async (targetPhone: string, text: string) => {
+        let p = targetPhone.replace(/\D/g, '')
+        if (p.startsWith('0')) p = '90' + p.slice(1)
+        else if (!p.startsWith('90') && p.length === 10) p = '90' + p
+        if (p.length < 10) return
+        
+        await fetch(`${evoUrl}/message/sendText/${evolutionInstance}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
+          body: JSON.stringify({ number: p, text }),
+        }).catch(err => console.error('[sign] WA fetch err:', err))
       }
 
-      const waRes = await fetch(`${evoUrl}/message/sendText/${consultant.wa_instance}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': evoKey },
-        body: JSON.stringify({ number: phone, text: msg }),
-      })
-      // Log failure to console for debugging (does not affect response)
-      if (!waRes.ok) {
-        console.error('[sign] WA notification failed:', waRes.status, await waRes.text().catch(() => ''))
+      // --- Notify Consultant ---
+      if (consultant?.phone) {
+        let msg = allSigned 
+          ? `✅ *${docTitle}*\n\nTüm taraflar belgeyi imzaladı! 🎉\n\nSon imzalayan: ${signerInfo}`
+          : `✍️ *${docTitle}*\n\n${signerInfo} belgeyi imzaladı.\n\nDiğer imzalar bekleniyor.`
+        await sendWaMsg(consultant.phone, msg)
       }
+
+      // --- Notify Current Signer ---
+      if (sigReq.signer_phone) {
+        let sMsg = allSigned
+          ? `✅ *${docTitle}*\n\nSayın ${sigReq.signer_name}, imza işleminiz başarıyla tamamlandı! Belge tüm taraflarca sağlandı. 🎉\nBildirimdeki linke tekrar tıklayarak PDF kopyasını görüntüleyebilir ve indirebilirsiniz.`
+          : `✍️ *${docTitle}*\n\nSayın ${sigReq.signer_name}, imzanız başarıyla sistemimize kaydedildi! Teşekkür ederiz.\nTüm taraflar imzaladığında size bir bilgilendirme daha göndereceğiz.`
+        await sendWaMsg(sigReq.signer_phone, sMsg)
+      }
+
+      // --- Notify OTHER Signers if all are completed ---
+      if (allSigned && allRequests && allRequests.length > 1) {
+        for (const req of allRequests) {
+          if (req.id !== sigReq.id && req.signer_phone) {
+             const oMsg = `✅ *${docTitle}*\n\nSayın ${req.signer_name}, daha önce imzaladığınız belge tüm taraflarca da imzalanarak tamamlanmıştır! 🎉\nSize gönderilen linke tekrar tıklayarak belgenin PDF kopyasını görüntüleyebilir ve indirebilirsiniz.`
+             await sendWaMsg(req.signer_phone, oMsg)
+          }
+        }
+      }
+
     } else {
-      console.warn('[sign] WA notification skipped — missing:', {
-        phone: !!consultant?.phone,
-        wa_instance: !!consultant?.wa_instance,
+      console.warn('[sign] WA notification skipped — missing API configs:', {
+        evolutionInstance: !!evolutionInstance,
         evoUrl: !!evoUrl,
         evoKey: !!evoKey,
       })
     }
-  } catch {
-    // Notification failure must not block the response
+  } catch (e) {
+    console.error('[sign] WA TryCatch error:', e)
   }
 
   return NextResponse.json({ success: true, allSigned })

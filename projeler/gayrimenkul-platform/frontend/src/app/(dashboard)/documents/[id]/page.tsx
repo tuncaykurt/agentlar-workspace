@@ -14,9 +14,11 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DocRow = Document & {
-  client?: { id: string; full_name: string; salutation?: string; phone?: string; email?: string } | null
-  property?: { id: string; title: string; city?: string; district?: string } | null
+  client?: { id: string; full_name: string; salutation?: string; phone?: string; email?: string; address?: string } | null
+  property?: { id: string; title: string; city?: string; district?: string; address?: string; property_type?: string } | null
   consultant?: { id: string; full_name: string; phone?: string } | null
+  notes?: string | null
+  template_data?: Record<string, any> | null
 }
 
 type SigRequest = {
@@ -536,15 +538,19 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
       body { padding: 0; font-size: 13px; }
       td { font-size: 12px; }
       h1 { font-size: 16px; }
+      .sigs { break-inside: avoid; page-break-inside: avoid; display: flex !important; flex-wrap: wrap; }
+      .sig { break-inside: avoid; page-break-inside: avoid; }
+      .auth-sigs { break-inside: avoid; page-break-inside: avoid; display: flex !important; flex-wrap: wrap; }
+      .auth-sig { break-inside: avoid; page-break-inside: avoid; }
     }
   `
 
-  const cRow = (label: string, c?: { full_name: string; salutation?: string; phone?: string; email?: string } | null) => `
+  const cRow = (label: string, c?: { full_name: string; salutation?: string; phone?: string; email?: string } | null, tc?: string, addr?: string) => `
     <tr><td>${label}:</td><td>${clientName(c)}</td></tr>
     <tr><td>Telefon:</td><td>${c?.phone || '_______________'}</td></tr>
     <tr><td>E-posta:</td><td>${c?.email || '_______________'}</td></tr>
-    <tr><td>TC / Vergi No:</td><td>_______________</td></tr>
-    <tr><td>Adres:</td><td>_______________</td></tr>
+    <tr><td>TC / Vergi No:</td><td>${tc || '_______________'}</td></tr>
+    <tr><td>Adres:</td><td>${addr || '_______________'}</td></tr>
   `
 
   const prop = doc.property
@@ -564,14 +570,14 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
   const propAddr = [doc.property?.address, doc.property?.district, doc.property?.city].filter(Boolean).join(', ') || '___'
   const stBAuth = `
     <style>
-      .auth-table{width:100%;border-collapse:collapse;margin-bottom:0;font-size:11px;}
-      .auth-table td{border:1px solid #000;padding:3px 6px;vertical-align:middle;}
-      .sec-title{background:#e0e0e0;font-weight:bold;font-size:11px;padding:3px 6px;border:1px solid #000;border-bottom:none;text-transform:uppercase;}
+      .auth-table{width:100%;border-collapse:collapse;margin-bottom:0;font-size:12px;}
+      .auth-table td{border:1px solid #000;padding:6px 8px;vertical-align:middle;}
+      .sec-title{background:#e0e0e0;font-weight:bold;font-size:12px;padding:6px 8px;border:1px solid #000;border-bottom:none;text-transform:uppercase;}
       .clause{font-size:10.5px;line-height:1.65;margin-bottom:5px;text-align:justify;}
-      .auth-sigs{display:flex;justify-content:space-between;margin-top:36px;gap:20px;width:100%;}
+      .auth-sigs{display:flex;justify-content:space-between;margin-top:24px;gap:20px;width:100%;}
       .auth-sig{text-align:center;flex:1;}
       .auth-sig-label{font-size:11px;font-weight:bold;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;}
-      .auth-sig-box{border-top:2px solid #333;padding-top:8px;min-height:75px;font-size:11px;}
+      .auth-sig-box{border-top:2px solid #333;padding-top:8px;min-height:60px;font-size:11px;}
     </style>`
 
   const templates: Record<string, { title: string; body: string; sigs: string }> = {
@@ -709,8 +715,14 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     rental_contract: {
       title: 'GAYRİMENKUL KİRA SÖZLEŞMESİ',
       body: `
-        <h2>1. Kiraya Veren</h2><table>${cRow('Kiraya Veren', doc.client)}</table>
-        <h2>2. Kiracı</h2><table><tr><td>Kiracı:</td><td>${secondName}</td></tr><tr><td>TC / Vergi No:</td><td>_______________</td></tr></table>
+        <h2>1. Kiraya Veren</h2><table>${cRow('Kiraya Veren', doc.client, data.main_tc_no as string, data.main_address as string)}</table>
+        <h2>2. Kiracı</h2>
+        <table>
+          <tr><td>Ad Soyad:</td><td>${secondName}</td></tr>
+          <tr><td>TC / Vergi No:</td><td>${data.second_tc_no || '_______________'}</td></tr>
+          <tr><td>Adres:</td><td>${data.second_address || '_______________'}</td></tr>
+          <tr><td>Telefon:</td><td>${data.second_client_phone || '_______________'}</td></tr>
+        </table>
         <h2>3. Taşınmaz</h2><table>${propRows}</table>
         <h2>4. Kira Şartları</h2>
         <table>
@@ -731,7 +743,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     offer_letter: {
       title: 'GAYRİMENKUL ALIM TEKLİF MEKTUBU',
       body: `
-        <h2>1. Teklif Eden</h2><table>${cRow('Alıcı', doc.client)}</table>
+        <h2>1. Teklif Eden</h2><table>${cRow('Alıcı', doc.client, data.main_tc_no as string, data.main_address as string)}</table>
         <h2>2. Mülk</h2><table>${propRows}</table>
         <h2>3. Teklif</h2>
         <table>
