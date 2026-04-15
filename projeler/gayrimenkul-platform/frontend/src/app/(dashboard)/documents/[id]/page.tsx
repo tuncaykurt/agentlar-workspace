@@ -506,17 +506,29 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     .letterhead img { max-height: 80px; max-width: 220px; object-fit: contain; flex-shrink: 0; }
     .letterhead-text { text-align: right; font-size: 12px; color: #444; line-height: 1.8; }
     @media screen and (max-width: 640px) {
-      body { font-size: 13px; padding: 16px 12px; }
-      h1 { font-size: 16px; letter-spacing: 1px; }
-      td { font-size: 12px; padding: 3px 5px; }
+      body { font-size: 16px; padding: 20px 16px; line-height: 1.85; }
+      h1 { font-size: 19px; letter-spacing: 2px; margin-bottom: 6px; }
+      td { font-size: 14px; padding: 6px 8px; }
       td:first-child { width: auto; min-width: 90px; }
       .letterhead { flex-direction: column; }
-      .letterhead-text { text-align: left; font-size: 11px; }
-      .sigs { flex-direction: column; align-items: center; gap: 20px; }
+      .letterhead-text { text-align: left; font-size: 12px; }
+      .sigs { flex-direction: column; align-items: center; gap: 24px; }
       .sig { min-width: unset; width: 100%; max-width: 280px; }
-      .auth-table td { font-size: 11px; padding: 3px 4px; }
-      .kira-tbl td { font-size: 12px; }
+      .sig-line { font-size: 13px; }
+      .auth-table td { font-size: 13px; padding: 5px 6px; }
+      .kira-tbl td { font-size: 14px; padding: 6px 8px; }
       .kira-tbl td:first-child { width: auto; white-space: normal; }
+      .sec-title { font-size: 14px; padding: 6px 10px; }
+      .clause { font-size: 15px; line-height: 1.75; }
+      .print-btn, .pdf-btn { font-size: 13px; padding: 10px 18px; }
+    }
+    @media screen and (max-width: 400px) {
+      body { padding: 16px 12px; font-size: 15px; }
+      h1 { font-size: 17px; letter-spacing: 1px; }
+      td { font-size: 13px; padding: 5px 6px; }
+      .auth-table td { font-size: 12px; padding: 4px 5px; }
+      .kira-tbl td { font-size: 13px; }
+      .clause { font-size: 14px; }
     }
     @media print {
       .no-print { display: none !important; }
@@ -655,7 +667,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     sales_contract: {
       title: 'GAYRİMENKUL SATIŞ SÖZLEŞMESİ',
       body: `
-        <table style="margin-bottom:16px;font-size:12px;">
+        <table style="margin-bottom:16px;font-size:15px;">
           <tr>
             <td style="font-weight:bold;width:130px;white-space:nowrap;padding:4px 6px;">SATICI</td>
             <td style="padding:4px 6px;">${clientName(doc.client)}${data.main_tc_no ? ' &bull; TC: ' + data.main_tc_no : ''}${doc.client?.phone ? ' &bull; Tel: ' + doc.client.phone : ''}${(data.main_address || doc.client?.address) ? '<br><span style="color:#555;">' + (data.main_address || doc.client?.address) + '</span>' : ''}</td>
@@ -666,7 +678,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
           </tr>
           ${prop || data.ada ? `<tr><td style="font-weight:bold;padding:4px 6px;">TAŞINMAZ</td><td style="padding:4px 6px;">${prop ? [prop.title, prop.city, prop.district].filter(Boolean).join(' — ') : ''}${data.ada ? ' &bull; Ada: ' + data.ada + (data.parsel ? ' / Parsel: ' + data.parsel : '') + (data.pafta ? ' / Pafta: ' + data.pafta : '') : ''}</td></tr>` : ''}
         </table>
-        <div style="line-height:1.9;font-size:12px;">
+        <div style="line-height:1.9;font-size:15px;">
           <p style="margin-bottom:12px;text-align:justify;">
             <strong>1-</strong> ALICI ile SATICI yukarıda bahsi geçen gayrimenkulün satışı hususunda aşağıdaki şartlarla anlaşmayı kabul eder. SATICI, sahibi bulunduğu veya satmaya yetkili olduğu bu mülkün satışını <strong>${m(data.satis_bedeli as string)} (${numToWords(data.satis_bedeli as string)})</strong> olarak kabul etmiştir. Satış bedeline mahsuben ALICI'dan <strong>${m(data.kapora as string)}</strong> kaparo olarak alınmıştır.${data.hizmet_tapuda ? ` Hizmet bedelinin kalan <strong>${m(data.hizmet_tapuda as string)}</strong> Tapu işlemleri sırasında alınacaktır.` : ''} Satış bedelinin <strong>${m(data.pesin_odenen as string)}</strong> peşinen ödenmiş olup, geri kalanı da <strong>${m(data.tapuda_odenecek as string)}</strong> tapuda ödenecektir.
           </p>

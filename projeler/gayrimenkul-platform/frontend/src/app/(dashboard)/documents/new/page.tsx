@@ -387,12 +387,29 @@ function generatePrintHTML(params: {
     .print-btn { background: #2563eb; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; margin: 0 8px 0 0; }
     .pdf-btn { background: #16a34a; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; }
     @media screen and (max-width: 640px) {
-      body { font-size: 13px; padding: 16px 12px; }
-      h1 { font-size: 16px; letter-spacing: 1px; }
-      td { font-size: 12px; padding: 3px 5px; }
+      body { font-size: 16px; padding: 20px 16px; line-height: 1.85; }
+      h1 { font-size: 19px; letter-spacing: 2px; margin-bottom: 6px; }
+      td { font-size: 14px; padding: 6px 8px; }
       td:first-child { width: auto; min-width: 90px; }
-      .sigs { flex-direction: column; gap: 20px; }
-      .sig { min-width: unset; }
+      .letterhead { flex-direction: column; }
+      .letterhead-text { text-align: left; font-size: 12px; }
+      .sigs { flex-direction: column; align-items: center; gap: 24px; }
+      .sig { min-width: unset; width: 100%; max-width: 280px; }
+      .sig-line { font-size: 13px; }
+      .auth-table td { font-size: 13px; padding: 5px 6px; }
+      .kira-tbl td { font-size: 14px; padding: 6px 8px; }
+      .kira-tbl td:first-child { width: auto; white-space: normal; }
+      .sec-title { font-size: 14px; padding: 6px 10px; }
+      .clause { font-size: 15px; line-height: 1.75; }
+      .print-btn, .pdf-btn { font-size: 13px; padding: 10px 18px; }
+    }
+    @media screen and (max-width: 400px) {
+      body { padding: 16px 12px; font-size: 15px; }
+      h1 { font-size: 17px; letter-spacing: 1px; }
+      td { font-size: 13px; padding: 5px 6px; }
+      .auth-table td { font-size: 12px; padding: 4px 5px; }
+      .kira-tbl td { font-size: 13px; }
+      .clause { font-size: 14px; }
     }
     @media print {
       .no-print { display: none !important; }
@@ -592,7 +609,7 @@ function generatePrintHTML(params: {
     sales_contract: {
       title: 'GAYRİMENKUL SATIŞ SÖZLEŞMESİ',
       body: `
-        <table style="margin-bottom:16px;font-size:12px;">
+        <table style="margin-bottom:16px;font-size:15px;">
           <tr>
             <td style="font-weight:bold;width:130px;white-space:nowrap;padding:4px 6px;">SATICI</td>
             <td style="padding:4px 6px;">${clientName(mainClient)}${templateData.main_tc_no ? ' &bull; TC: ' + templateData.main_tc_no : ''}${mainClient?.phone ? ' &bull; Tel: ' + mainClient.phone : ''}${(templateData.main_address || mainClient?.address) ? '<br><span style="color:#555;">' + (templateData.main_address || mainClient?.address) + '</span>' : ''}</td>
@@ -603,7 +620,7 @@ function generatePrintHTML(params: {
           </tr>
           ${property || templateData.ada ? `<tr><td style="font-weight:bold;padding:4px 6px;">TAŞINMAZ</td><td style="padding:4px 6px;">${property ? [property.title, property.address, property.district, property.city].filter(Boolean).join(' — ') : ''}${templateData.ada ? ' &bull; Ada: ' + templateData.ada + (templateData.parsel ? ' / Parsel: ' + templateData.parsel : '') + (templateData.pafta ? ' / Pafta: ' + templateData.pafta : '') : ''}</td></tr>` : ''}
         </table>
-        <div style="line-height:1.9;font-size:12px;">
+        <div style="line-height:1.9;font-size:15px;">
           <p style="margin-bottom:12px;text-align:justify;">
             <strong>1-</strong> ALICI ile SATICI yukarıda bahsi geçen gayrimenkulün satışı hususunda aşağıdaki şartlarla anlaşmayı kabul eder. SATICI, sahibi bulunduğu veya satmaya yetkili olduğu bu mülkün satışını <strong>${money(templateData.satis_bedeli as string)} (${numToWords(templateData.satis_bedeli as string)})</strong> olarak kabul etmiştir. Satış bedeline mahsuben ALICI'dan <strong>${money(templateData.kapora as string)}</strong> kaparo olarak alınmıştır.${templateData.hizmet_tapuda ? ` Hizmet bedelinin kalan <strong>${money(templateData.hizmet_tapuda as string)}</strong> Tapu işlemleri sırasında alınacaktır.` : ''} Satış bedelinin <strong>${money(templateData.pesin_odenen as string)}</strong> peşinen ödenmiş olup, geri kalanı da <strong>${money(templateData.tapuda_odenecek as string)}</strong> tapuda ödenecektir.
           </p>
