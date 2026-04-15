@@ -105,8 +105,6 @@ function mapItem(item: SahibindenItem, officeUrl: string) {
       const h = pick(['Isıtma', 'Isıtma Tipi'])
       return h ? String(h) : null
     })(),
-    deposit: parseNumber(pick(['Depozito (TL)', 'Depozito'])),
-    dues: parseNumber(pick(['Aidat (TL)', 'Aidat'])),
     features: Array.isArray(item.features) ? item.features : [],
     photos: Array.isArray(item.images) ? item.images.slice(0, 30) : [],
     source: 'sahibinden' as const,
