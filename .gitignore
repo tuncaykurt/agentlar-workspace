@@ -1,29 +1,20 @@
-# API Key ve Credential dosyaları
+# Environment variables - NEVER commit these
 .env
-.env.*
-!.env.example
-credentials.env
-token.json
-credentials.json
-_knowledge/credentials/
+.env.local
+.env.production
 
-# Antigravity hassas dosyalar
-_knowledge/api-anahtarlari.md
-
-# macOS
-.DS_Store
-
-# Python
-__pycache__/
-*.pyc
-venv/
-.venv/
-
-# Node.js
+# Dependencies
 node_modules/
 
-# IDE
-.cursor/
-.vscode/
+# Build outputs
+.vercel/
+dist/
+build/
+.next/
 
-_temp_repo/
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
