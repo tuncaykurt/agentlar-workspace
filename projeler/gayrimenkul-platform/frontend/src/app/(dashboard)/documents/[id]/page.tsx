@@ -907,8 +907,10 @@ export default function DocumentDetailPage() {
       .order('created_at', { ascending: true })
     const sigs = (freshSigs as SigRequest[]) || sigRequests
     const html = buildPrintHTML(doc, officeName, sigs, officeAddress, officeLogo)
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close(); w.focus() }
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const w = window.open(url, '_blank')
+    if (w) { w.focus() }
   }
 
   if (loading) {
