@@ -103,14 +103,28 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
     .sig-line { border-top: 1px solid #000; padding-top: 8px; font-size: 14px; min-height: 64px; }
     p { font-size: 16px; }
     @media screen and (max-width: 640px) {
-      body { font-size: 13px; padding: 16px 12px; }
-      h1 { font-size: 16px; letter-spacing: 1px; }
-      table td { font-size: 12px; padding: 3px 5px; }
-      .sigs { flex-direction: column; gap: 20px; }
+      body { font-size: 16px; padding: 20px 16px; line-height: 1.85; }
+      h1 { font-size: 19px; letter-spacing: 2px; margin-bottom: 6px; }
+      .sub { font-size: 14px; }
+      table td { font-size: 14px; padding: 6px 8px; }
+      .sigs { flex-direction: column; gap: 24px; }
       .sig { min-width: unset; }
-      .auth-tbl td { font-size: 11px; padding: 3px 4px; }
-      .kira-tbl td { font-size: 12px; }
+      .sig-line { font-size: 13px; }
+      .auth-tbl td { font-size: 13px; padding: 5px 6px; }
+      .kira-tbl td { font-size: 14px; padding: 6px 8px; }
       .kira-tbl td:first-child { width: auto; white-space: normal; }
+      .sec-title { font-size: 14px; padding: 6px 10px; }
+      .clause { font-size: 15px; line-height: 1.75; }
+      .print-bar { justify-content: center; }
+      .print-btn, .pdf-btn { font-size: 13px; padding: 10px 18px; }
+    }
+    @media screen and (max-width: 400px) {
+      body { padding: 16px 12px; font-size: 15px; }
+      h1 { font-size: 17px; letter-spacing: 1px; }
+      table td { font-size: 13px; padding: 5px 6px; }
+      .auth-tbl td { font-size: 12px; padding: 4px 5px; }
+      .kira-tbl td { font-size: 13px; }
+      .clause { font-size: 14px; }
     }
     .print-bar { display: flex; gap: 10px; justify-content: flex-end; margin-bottom: 20px; }
     .print-btn { background: #2563eb; color: #fff; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
@@ -139,7 +153,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
         </tr>
         ${prop || data.ada ? `<tr><td style="font-weight:bold;padding:4px 6px;">TAŞINMAZ</td><td style="padding:4px 6px;">${prop ? [prop.title, prop.city, prop.district].filter(Boolean).join(' — ') : ''}${data.ada ? ' &bull; Ada: ' + data.ada + (data.parsel ? ' / Parsel: ' + data.parsel : '') + (data.pafta ? ' / Pafta: ' + data.pafta : '') : ''}</td></tr>` : ''}
       </table>
-      <div style="line-height:1.9;font-size:12px;">
+      <div style="line-height:1.9;font-size:15px;">
         <p style="margin-bottom:12px;text-align:justify;"><strong>1-</strong> ALICI ile SATICI yukarıda bahsi geçen gayrimenkulün satışı hususunda aşağıdaki şartlarla anlaşmayı kabul eder. SATICI, sahibi bulunduğu veya satmaya yetkili olduğu bu mülkün satışını <strong>${money(data.satis_bedeli)} (${numToWords(data.satis_bedeli)})</strong> olarak kabul etmiştir. Satış bedeline mahsuben ALICI'dan <strong>${money(data.kapora)}</strong> kaparo olarak alınmıştır.${data.hizmet_tapuda ? ` Hizmet bedelinin kalan <strong>${money(data.hizmet_tapuda)}</strong> Tapu işlemleri sırasında alınacaktır.` : ''} Satış bedelinin <strong>${money(data.pesin_odenen)}</strong> peşinen ödenmiş olup, geri kalanı da <strong>${money(data.tapuda_odenecek)}</strong> tapuda ödenecektir.</p>
         <p style="margin-bottom:12px;text-align:justify;"><strong>2-</strong> Bu anlaşma imzalandıktan sonra, Borçlar Kanununun ilgili maddesine göre taraflardan ALICI gayrimenkulü almaktan vazgeçtiği takdirde verdiği kaporayı geri almayacaktır.</p>
         <p style="margin-bottom:12px;text-align:justify;"><strong>3-</strong> ALICI ve SATICI kendilerine bu anlaşmayı sağlayan <strong>Coldwell Banker Ambiance Gayrimenkul</strong>'e işbu sözleşmenin imzalanmasıyla yukarıdaki satış bedeli üzerinden <strong>(%${data.komisyon_alici || '2'} + %${data.komisyon_satici || '2'}) + KDV</strong> komisyon ücretini hiçbir ihtara ve ihbara gerek kalmadan ödemeyi peşinen kabul ve taahhüt eder.</p>
