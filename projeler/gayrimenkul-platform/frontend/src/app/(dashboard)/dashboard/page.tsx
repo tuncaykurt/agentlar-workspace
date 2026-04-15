@@ -18,6 +18,7 @@ export default async function DashboardPage() {
     .from('properties')
     .select('client_id')
     .eq('status', 'active')
+    .eq('is_active', true)
     .not('client_id', 'is', null)
 
   const uniqueOwnerIds = new Set(activeProps?.map(p => p.client_id) || [])
@@ -28,6 +29,7 @@ export default async function DashboardPage() {
     .from('properties')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'active')
+    .eq('is_active', true)
 
   // 3. Bu Ay Komisyon
   const startOfMonth = new Date()
