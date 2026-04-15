@@ -338,6 +338,16 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS address TEXT;
   },
 
   {
+    id: '009_property_deposit_dues_field',
+    sql: `
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS deposit NUMERIC(15,2);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS dues NUMERIC(10,2);
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS source_listing_id TEXT;
+DO $$ BEGIN ALTER TYPE property_type ADD VALUE IF NOT EXISTS 'field'; EXCEPTION WHEN duplicate_object THEN null; END $$;
+    `,
+  },
+
+  {
     id: '008b_office_settings_ambiance',
     sql: `
 INSERT INTO settings (key, value, description) VALUES

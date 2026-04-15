@@ -17,6 +17,7 @@ const propertyTypes: { value: PropertyType; label: string }[] = [
   { value: 'commercial', label: 'İşyeri' },
   { value: 'office', label: 'Ofis' },
   { value: 'shop', label: 'Dükkan' },
+  { value: 'warehouse', label: 'Depo' },
   { value: 'detached_house', label: 'Müstakil Ev' },
   { value: 'field', label: 'Tarla' },
 ]
@@ -28,11 +29,15 @@ interface FormData {
   description: string
   price: string
   currency: string
+  deposit: string
+  dues: string
   property_type: PropertyType
   city: string
   district: string
   neighborhood: string
   address: string
+  latitude: string
+  longitude: string
   m2_gross: string
   m2_net: string
   room_count: string
@@ -44,15 +49,19 @@ interface FormData {
   features: string[]
   photos: string[]
   source_url: string
+  source_listing_id: string
   source: ListingSource
 }
 
 const emptyForm: FormData = {
   title: '', description: '', price: '', currency: 'TRY',
+  deposit: '', dues: '',
   property_type: 'apartment', city: '', district: '', neighborhood: '',
-  address: '', m2_gross: '', m2_net: '', room_count: '',
+  address: '', latitude: '', longitude: '',
+  m2_gross: '', m2_net: '', room_count: '',
   bathroom_count: '', floor: '', total_floors: '', age: '',
-  heating_type: '', features: [], photos: [], source_url: '', source: 'manual',
+  heating_type: '', features: [], photos: [],
+  source_url: '', source_listing_id: '', source: 'manual',
 }
 
 function detectPlatform(url: string): ListingSource {
@@ -95,17 +104,23 @@ export default function NewPropertyPage() {
       const filtered = Object.fromEntries(
         Object.entries(data).filter(([, v]) => v !== null && v !== undefined && v !== '')
       )
+      const toStr = (v: unknown) => (v == null || v === '' ? '' : String(v))
       setForm({
         ...emptyForm,
         ...filtered,
-        price: filtered.price != null ? String(filtered.price) : '',
-        m2_gross: filtered.m2_gross != null ? String(filtered.m2_gross) : '',
-        m2_net: filtered.m2_net != null ? String(filtered.m2_net) : '',
-        bathroom_count: filtered.bathroom_count != null ? String(filtered.bathroom_count) : '',
-        floor: filtered.floor != null ? String(filtered.floor) : '',
-        total_floors: filtered.total_floors != null ? String(filtered.total_floors) : '',
-        age: filtered.age != null ? String(filtered.age) : '',
+        price: toStr(filtered.price),
+        deposit: toStr(filtered.deposit),
+        dues: toStr(filtered.dues),
+        m2_gross: toStr(filtered.m2_gross),
+        m2_net: toStr(filtered.m2_net),
+        bathroom_count: toStr(filtered.bathroom_count),
+        floor: toStr(filtered.floor),
+        total_floors: toStr(filtered.total_floors),
+        age: toStr(filtered.age),
+        latitude: toStr(filtered.latitude),
+        longitude: toStr(filtered.longitude),
         source_url: url.trim(),
+        source_listing_id: toStr(filtered.source_listing_id),
         source: detectPlatform(url.trim()),
         features: Array.isArray(data.features) ? data.features : [],
         photos: Array.isArray(data.photos) ? data.photos : [],
@@ -146,11 +161,15 @@ export default function NewPropertyPage() {
       description: form.description.trim() || null,
       price: form.price ? Number(form.price) : null,
       currency: form.currency,
+      deposit: form.deposit ? Number(form.deposit) : null,
+      dues: form.dues ? Number(form.dues) : null,
       property_type: form.property_type,
       city: form.city.trim() || null,
       district: form.district.trim() || null,
       neighborhood: form.neighborhood.trim() || null,
       address: form.address.trim() || null,
+      latitude: form.latitude ? Number(form.latitude) : null,
+      longitude: form.longitude ? Number(form.longitude) : null,
       m2_gross: form.m2_gross ? Number(form.m2_gross) : null,
       m2_net: form.m2_net ? Number(form.m2_net) : null,
       room_count: form.room_count.trim() || null,
@@ -163,6 +182,7 @@ export default function NewPropertyPage() {
       photos: form.photos.length > 0 ? form.photos : null,
       source: form.source,
       source_url: form.source_url || null,
+      source_listing_id: form.source_listing_id || null,
       assigned_consultant_id: consultant?.id || null,
       status: 'active',
     }
@@ -200,8 +220,8 @@ export default function NewPropertyPage() {
         </div>
         <p className="text-xs text-slate-500 mb-3 flex items-center gap-1">
           <Info size={11} />
-          Sahibinden, CB.com.tr, Hepsiemlak, Emlakjet, Zingat desteklenmektedir.
-          AI ile otomatik parse edilir.
+          Sahibinden (Apify ile tam detay), Hepsiemlak, Emlakjet, Zingat, CB.com.tr desteklenir.
+          Fotoğraflar, konum, tüm öznitelikler otomatik çekilir.
         </p>
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -316,6 +336,7 @@ export default function NewPropertyPage() {
           </h2>
           <div className="flex gap-3">
             <div className="flex-1">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Fiyat</label>
               <input
                 type="number"
                 value={form.price}
@@ -324,15 +345,40 @@ export default function NewPropertyPage() {
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <select
-              value={form.currency}
-              onChange={e => set('currency', e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="TRY">₺ TRY</option>
-              <option value="USD">$ USD</option>
-              <option value="EUR">€ EUR</option>
-            </select>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Para Birimi</label>
+              <select
+                value={form.currency}
+                onChange={e => set('currency', e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="TRY">₺ TRY</option>
+                <option value="USD">$ USD</option>
+                <option value="EUR">€ EUR</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Depozito (TL)</label>
+              <input
+                type="number"
+                value={form.deposit}
+                onChange={e => set('deposit', e.target.value)}
+                placeholder="16.000"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Aidat (TL)</label>
+              <input
+                type="number"
+                value={form.dues}
+                onChange={e => set('dues', e.target.value)}
+                placeholder="500"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
         </div>
 
@@ -364,6 +410,36 @@ export default function NewPropertyPage() {
               placeholder="Moda Cad. No:15 D:8"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Enlem (Latitude)</label>
+              <input
+                value={form.latitude}
+                onChange={e => set('latitude', e.target.value)}
+                placeholder="40.1937"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Boylam (Longitude)</label>
+              <input
+                value={form.longitude}
+                onChange={e => set('longitude', e.target.value)}
+                placeholder="29.0697"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          {form.latitude && form.longitude && (
+            <a
+              href={`https://www.google.com/maps?q=${form.latitude},${form.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-2"
+            >
+              <MapPin size={11} /> Haritada gör
+            </a>
+          )}
         </div>
 
         {/* Detaylar */}

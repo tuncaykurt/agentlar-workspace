@@ -103,10 +103,13 @@ export interface Property {
   total_floors?: number
   age?: number
   heating_type?: string
+  deposit?: number
+  dues?: number
   features: string[]
   photos: string[]
   source: ListingSource
   source_url?: string
+  source_listing_id?: string
   assigned_consultant_id?: string
   seller_client_id?: string
   view_count: number
