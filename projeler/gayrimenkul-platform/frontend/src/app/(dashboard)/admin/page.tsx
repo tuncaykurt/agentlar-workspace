@@ -21,6 +21,7 @@ type SettingKey =
   | 'n8n_url' | 'n8n_api_key'
   | 'smtp_host' | 'smtp_port' | 'smtp_user' | 'smtp_pass' | 'smtp_from_name'
   | 'openrouter_api_key'
+  | 'office_sahibinden_url' | 'office_sync_cron_secret'
 
 type SettingMeta = {
   key: SettingKey
@@ -74,6 +75,15 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; s
     settings: [
       { key: 'n8n_url',     label: 'n8n URL',     type: 'url',      placeholder: 'https://n8n.sirketiniz.com', desc: 'n8n sunucusunun adresi' },
       { key: 'n8n_api_key', label: 'n8n API Key', type: 'password', placeholder: 'n8n_api_xxx...',             desc: 'n8n → Settings → API → Create API Key' },
+    ],
+  },
+  {
+    title: 'Sahibinden Ofis Senkronizasyonu',
+    icon: Building2,
+    color: 'orange',
+    settings: [
+      { key: 'office_sahibinden_url',    label: 'Sahibinden Mağaza/Liste URL', type: 'url',      placeholder: 'https://www.sahibinden.com/magaza/xyz-emlak', desc: 'Ofise ait tüm ilanları içeren sayfa (mağaza veya arama URL\'i)' },
+      { key: 'office_sync_cron_secret',  label: 'Cron Secret',                 type: 'password', placeholder: 'rastgele-uzun-bir-string',                    desc: 'Coolify Scheduled Task bu secret ile isteği doğrulayacak' },
     ],
   },
   {

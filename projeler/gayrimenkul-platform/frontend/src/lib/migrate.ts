@@ -348,6 +348,23 @@ DO $$ BEGIN ALTER TYPE property_type ADD VALUE IF NOT EXISTS 'field'; EXCEPTION 
   },
 
   {
+    id: '010_office_sync',
+    sql: `
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+ALTER TABLE properties ADD COLUMN IF NOT EXISTS office_source_url TEXT;
+CREATE INDEX IF NOT EXISTS idx_properties_source_listing_id ON properties(source_listing_id);
+CREATE INDEX IF NOT EXISTS idx_properties_last_seen ON properties(last_seen_at);
+
+INSERT INTO settings (key, value, description) VALUES
+  ('office_sahibinden_url', '""', 'Ofis Sahibinden mağaza/ilan listesi URL (günlük senkronizasyon için)'),
+  ('office_sync_cron_secret', '""', 'Cron endpoint auth secret (x-cron-secret header)'),
+  ('office_sync_last_run', '""', 'Son senkronizasyon zamanı (otomatik güncellenir)'),
+  ('office_sync_last_result', '""', 'Son senkron sonucu (otomatik güncellenir)')
+ON CONFLICT (key) DO NOTHING;
+    `,
+  },
+
+  {
     id: '008b_office_settings_ambiance',
     sql: `
 INSERT INTO settings (key, value, description) VALUES
