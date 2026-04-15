@@ -145,26 +145,19 @@ export async function POST(
 
   // 6. Send WA notification to consultant
   try {
-    // Get document + consultant info (include instance key for auth)
+    // Get document + consultant info
     const { data: doc } = await supabase
       .from('documents')
-      .select('id, title, consultant:consultants(id, full_name, phone, wa_instance, evolution_instance_key)')
+      .select('id, title, consultant:consultants(id, full_name, phone, wa_instance)')
       .eq('id', sigReq.document_id)
       .single()
 
-    // Get Evolution API settings
-    const [evoUrlRes, evoKeyRes] = await Promise.all([
-      supabase.from('settings').select('value').eq('key', 'evolution_api_url').single(),
-      supabase.from('settings').select('value').eq('key', 'evolution_api_key').single(),
-    ])
+    // Use env vars (same as /api/whatsapp/send route)
+    const evoUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '') || null
+    const evoKey = process.env.EVOLUTION_API_KEY || null
 
-    type ConsultantWA = { id: string; full_name: string; phone: string; wa_instance: string; evolution_instance_key?: string }
+    type ConsultantWA = { id: string; full_name: string; phone: string; wa_instance: string }
     const consultant = doc?.consultant as ConsultantWA | null
-    const evoUrl = evoUrlRes.data?.value ? String(evoUrlRes.data.value).replace(/^"|"$/g, '').replace(/\/$/, '') : null
-    // Prefer per-instance key, fall back to global key
-    const evoKey = consultant?.evolution_instance_key
-      ? String(consultant.evolution_instance_key).replace(/^"|"$/g, '')
-      : evoKeyRes.data?.value ? String(evoKeyRes.data.value).replace(/^"|"$/g, '') : null
 
     if (consultant?.phone && consultant?.wa_instance && evoUrl && evoKey) {
       // Normalize phone: strip non-digits, convert 05... → 905...
