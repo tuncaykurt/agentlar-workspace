@@ -4,7 +4,7 @@
 -- JSON syntax: tek tırnak dışarıda, çift tırnak içeride
 -- =====================================================
 
--- Ofis adı
+-- Ofis adı (Metin olduğu için çift tırnak + tek tırnak doğru)
 INSERT INTO settings (key, value, description)
 VALUES (
   'office_name',
@@ -12,36 +12,33 @@ VALUES (
   'Ofis adı'
 )
 ON CONFLICT (key) DO UPDATE
-  SET value = '"Ambiance Gayrimenkul"'::jsonb,
+  SET value = EXCLUDED.value,
       updated_at = now();
 
--- Ofis logosu (varsayılan boş)
+-- Ofis logosu (Boş metin)
 INSERT INTO settings (key, value, description)
 VALUES (
   'office_logo_url',
   '""'::jsonb,
-  'Ofis logo URL (Supabase Storage)'
+  'Ofis logo URL'
 )
-ON CONFLICT (key) DO UPDATE
-  SET value = EXCLUDED.value,
-      updated_at = now();
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
 
--- Ofis WhatsApp karşılama şablonu
+-- Ofis WhatsApp (Metin olduğu için çift tırnak şart)
 INSERT INTO settings (key, value, description)
 VALUES (
   'whatsapp_welcome_template',
   '"Merhaba {name}, Ambiance Gayrimenkul ekibine hoş geldiniz! Size nasıl yardımcı olabiliriz?"'::jsonb,
-  'WhatsApp karşılama mesaj şablonu'
+  'WhatsApp karşılama'
 )
-ON CONFLICT (key) DO UPDATE
-  SET value = EXCLUDED.value,
-      updated_at = now();
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
 
--- Varsayılan ofis komisyon oranı
+-- Komisyon Oranı (SAYI olduğu için tırnaksız veya metin formatında olmalı)
+-- En garantisi budur:
 INSERT INTO settings (key, value, description)
 VALUES (
   'office_commission_rate',
-  '3.0'::jsonb,
+  '3.0'::jsonb, -- JSON'da sayı tırnaksız yazılırsa direkt sayı olarak işlenir
   'Varsayılan ofis komisyon oranı (%)'
 )
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
