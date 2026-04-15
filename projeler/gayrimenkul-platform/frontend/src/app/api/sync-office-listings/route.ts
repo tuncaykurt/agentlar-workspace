@@ -270,15 +270,16 @@ export async function GET(req: NextRequest) {
 }
 
 async function logResult(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
   runAt: string,
   result: Record<string, unknown>,
 ) {
   await supabase.from('settings').upsert(
     [
-      { key: 'office_sync_last_run', value: runAt, updated_at: new Date().toISOString() },
-      { key: 'office_sync_last_result', value: result, updated_at: new Date().toISOString() },
-    ],
+      { key: 'office_sync_last_run', value: runAt as unknown, updated_at: new Date().toISOString() },
+      { key: 'office_sync_last_result', value: result as unknown, updated_at: new Date().toISOString() },
+    ] as Array<{ key: string; value: unknown; updated_at: string }>,
     { onConflict: 'key' },
   )
 }

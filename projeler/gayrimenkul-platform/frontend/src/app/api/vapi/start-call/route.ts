@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
+}
 
 const VAPI_BASE = 'https://api.vapi.ai'
 const VAPI_KEY = process.env.VAPI_PRIVATE_KEY!
@@ -11,9 +18,7 @@ const LINA_ASSISTANT_ID = 'd7871696-4562-4e40-8937-951c6f2c882b'
 const OUTBOUND_PHONE_ID = '2ab0aeea-700c-4f78-82d5-766eb02a301e'
 
 export async function POST(req: NextRequest) {
-  const supabase = createRouteHandlerClient({ cookies })
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Yetkisiz' }, { status: 401 })
+  const supabase = getSupabase()
 
   const body = await req.json()
   const { listingId, phoneNumber, sellerName, propertyTitle, price, city, district } = body
@@ -83,7 +88,6 @@ Görevin:
       .update({
         contact_status: 'contacted',
         contacted_at: new Date().toISOString(),
-        contacted_by_id: user.id,
         contact_notes: (call.id ? `Vapi call: ${call.id}` : ''),
       })
       .eq('id', listingId)
