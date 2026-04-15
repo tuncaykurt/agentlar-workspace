@@ -215,6 +215,7 @@ export default function CRMPage() {
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<LeadStatus | 'all'>('all')
   const [filterType, setFilterType] = useState<ClientType | 'all'>('all')
+  const [stats, setStats] = useState({ total: 0, newLead: 0, negotiating: 0, won: 0 })
 
   // VCF import state
   const [showImport, setShowImport] = useState(false)
@@ -228,6 +229,31 @@ export default function CRMPage() {
     fetchClients()
   }, [filterStatus, filterType])
 
+  useEffect(() => {
+    fetchStats()
+  }, [])
+
+  async function fetchStats() {
+    const supabase = createClient()
+    const base = () => supabase
+      .from('clients')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+
+    const [total, newLead, negotiating, won] = await Promise.all([
+      base(),
+      base().eq('lead_status', 'new'),
+      base().eq('lead_status', 'negotiating'),
+      base().eq('lead_status', 'won'),
+    ])
+    setStats({
+      total: total.count || 0,
+      newLead: newLead.count || 0,
+      negotiating: negotiating.count || 0,
+      won: won.count || 0,
+    })
+  }
+
   async function fetchClients() {
     const supabase = createClient()
     let query = supabase
@@ -235,6 +261,7 @@ export default function CRMPage() {
       .select('*, consultant:consultants(full_name)')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
+      .range(0, 9999)
 
     if (filterStatus !== 'all') query = query.eq('lead_status', filterStatus)
     if (filterType !== 'all') query = query.eq('client_type', filterType)
@@ -361,10 +388,10 @@ export default function CRMPage() {
       {/* Özet Kartlar */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Toplam', value: clients.length, icon: Users, color: 'blue' },
-          { label: 'Yeni Lead', value: clients.filter(c => c.lead_status === 'new').length, icon: TrendingUp, color: 'purple' },
-          { label: 'Müzakere', value: clients.filter(c => c.lead_status === 'negotiating').length, icon: Clock, color: 'orange' },
-          { label: 'Kazanılan', value: clients.filter(c => c.lead_status === 'won').length, icon: CheckCircle, color: 'green' },
+          { label: 'Toplam', value: stats.total, icon: Users, color: 'blue' },
+          { label: 'Yeni Lead', value: stats.newLead, icon: TrendingUp, color: 'purple' },
+          { label: 'Müzakere', value: stats.negotiating, icon: Clock, color: 'orange' },
+          { label: 'Kazanılan', value: stats.won, icon: CheckCircle, color: 'green' },
         ].map((s) => {
           const Icon = s.icon
           return (
