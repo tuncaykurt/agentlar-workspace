@@ -745,7 +745,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>${cfg.title}</title>
   <style>${styles}</style>
-  <script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm}@media print{body{zoom:0.68}}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}</script>
+  <script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm 5mm}@media print{body{zoom:0.7}}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}</script>
 </head>
 <body>
   <div class="no-print" style="text-align:right;margin-bottom:20px;">
@@ -895,7 +895,7 @@ export default function DocumentDetailPage() {
       .order('created_at', { ascending: true })
     const sigs = (freshSigs as SigRequest[]) || sigRequests
     const html = buildPrintHTML(doc, officeName, sigs, officeAddress, officeLogo)
-    const w = window.open('', '_blank', 'width=900,height=750,scrollbars=yes')
+    const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close(); w.focus() }
   }
 

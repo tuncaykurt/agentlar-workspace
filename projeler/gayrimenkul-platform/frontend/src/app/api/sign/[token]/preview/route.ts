@@ -123,7 +123,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       h1 { font-size: 16px; }
     }`
 
-  const jsBlock = `<script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm}@media print{body{zoom:0.68}}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}<\/script>`
+  const jsBlock = `<script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm 5mm}@media print{body{zoom:0.7}}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}<\/script>`
 
   // ── Sales contract ────────────────────────────────────────────────────────
   if (doc.doc_type === 'sales_contract') {
