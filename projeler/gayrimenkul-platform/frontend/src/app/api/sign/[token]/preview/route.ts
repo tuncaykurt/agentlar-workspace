@@ -24,20 +24,20 @@ function numToWords(v: string | null | undefined): string {
   if (!v) return '___'
   const n = parseInt(String(v).replace(/[^0-9]/g, ''))
   if (isNaN(n) || n === 0) return 'sıfır'
-  const ones = ['', 'bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz']
-  const tens = ['', 'on', 'yirmi', 'otuz', 'kırk', 'elli', 'altmış', 'yetmiş', 'seksen', 'doksan']
+  const ones = ['','bir','iki','üç','dört','beş','altı','yedi','sekiz','dokuz']
+  const tens = ['','on','yirmi','otuz','kırk','elli','altmış','yetmiş','seksen','doksan']
   const cvt3 = (x: number): string => {
     if (x === 0) return ''
     let r = ''
-    if (x >= 100) { r += (x >= 200 ? ones[Math.floor(x / 100)] : '') + 'yüz'; x %= 100 }
-    if (x >= 10) { r += tens[Math.floor(x / 10)]; x %= 10 }
+    if (x >= 100) { r += (x >= 200 ? ones[Math.floor(x/100)] : '') + 'yüz'; x %= 100 }
+    if (x >= 10) { r += tens[Math.floor(x/10)]; x %= 10 }
     if (x > 0) r += ones[x]
     return r
   }
   let x = n, r = ''
-  if (x >= 1000000000) { r += cvt3(Math.floor(x / 1000000000)) + 'milyar'; x %= 1000000000 }
-  if (x >= 1000000) { r += cvt3(Math.floor(x / 1000000)) + 'milyon'; x %= 1000000 }
-  if (x >= 1000) { const t = Math.floor(x / 1000); r += (t === 1 ? '' : cvt3(t)) + 'bin'; x %= 1000 }
+  if (x >= 1000000000) { r += cvt3(Math.floor(x/1000000000)) + 'milyar'; x %= 1000000000 }
+  if (x >= 1000000) { r += cvt3(Math.floor(x/1000000)) + 'milyon'; x %= 1000000 }
+  if (x >= 1000) { const t = Math.floor(x/1000); r += (t === 1 ? '' : cvt3(t)) + 'bin'; x %= 1000 }
   return r + cvt3(x)
 }
 
@@ -78,8 +78,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #ccc;">
       <div style="flex:0 0 auto;">
         ${officeLogo
-      ? `<img src="${officeLogo}" style="max-height:80px;max-width:220px;object-fit:contain;display:block;" />`
-      : `<div style="font-weight:bold;font-size:16px;color:#111;">${officeName}</div>`}
+          ? `<img src="${officeLogo}" style="max-height:80px;max-width:220px;object-fit:contain;display:block;" />`
+          : `<div style="font-weight:bold;font-size:16px;color:#111;">${officeName}</div>`}
       </div>
       <div style="text-align:right;font-size:12px;color:#333;line-height:1.8;max-width:300px;">
         <div style="font-weight:bold;font-size:13px;color:#111;">${officeLegalName}</div>
@@ -98,8 +98,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
     .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 14px; min-width: 0; }
     table td { padding: 5px 8px; vertical-align: top; font-size: 15px; word-break: break-word; }
-    .sigs { display: flex; justify-content: space-around; margin-top: 52px; gap: 16px; flex-wrap: wrap; }
-    .sig { text-align: center; flex: 1; min-width: 120px; }
+    .sigs { display: flex; justify-content: space-around; margin-top: 52px; gap: 16px; flex-wrap: wrap; page-break-inside: avoid; }
+    .sig { text-align: center; flex: 1; min-width: 120px; page-break-inside: avoid; }
     .sig-line { border-top: 1px solid #000; padding-top: 8px; font-size: 14px; min-height: 64px; }
     p { font-size: 16px; }
     @media screen and (max-width: 640px) {
@@ -157,7 +157,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
         <p style="margin-bottom:12px;text-align:justify;"><strong>1-</strong> ALICI ile SATICI yukarıda bahsi geçen gayrimenkulün satışı hususunda aşağıdaki şartlarla anlaşmayı kabul eder. SATICI, sahibi bulunduğu veya satmaya yetkili olduğu bu mülkün satışını <strong>${money(data.satis_bedeli)} (${numToWords(data.satis_bedeli)})</strong> olarak kabul etmiştir. Satış bedeline mahsuben ALICI'dan <strong>${money(data.kapora)}</strong> kaparo olarak alınmıştır.${data.hizmet_tapuda ? ` Hizmet bedelinin kalan <strong>${money(data.hizmet_tapuda)}</strong> Tapu işlemleri sırasında alınacaktır.` : ''} Satış bedelinin <strong>${money(data.pesin_odenen)}</strong> peşinen ödenmiş olup, geri kalanı da <strong>${money(data.tapuda_odenecek)}</strong> tapuda ödenecektir.</p>
         <p style="margin-bottom:12px;text-align:justify;"><strong>2-</strong> Bu anlaşma imzalandıktan sonra, Borçlar Kanununun ilgili maddesine göre taraflardan ALICI gayrimenkulü almaktan vazgeçtiği takdirde verdiği kaporayı geri almayacaktır.</p>
         <p style="margin-bottom:12px;text-align:justify;"><strong>3-</strong> ALICI ve SATICI kendilerine bu anlaşmayı sağlayan <strong>Coldwell Banker Ambiance Gayrimenkul</strong>'e işbu sözleşmenin imzalanmasıyla yukarıdaki satış bedeli üzerinden <strong>(%${data.komisyon_alici || '2'} + %${data.komisyon_satici || '2'}) + KDV</strong> komisyon ücretini hiçbir ihtara ve ihbara gerek kalmadan ödemeyi peşinen kabul ve taahhüt eder.</p>
-        <p style="margin-bottom:12px;text-align:justify;"><strong>4-</strong> ALICI ve SATICI'nın her biri, daha sonra alım ve/veya satımdan vazgeçerlerse veya Coldwell Banker Ambiance Gayrimenkul'ün dışında gelişen herhangi bir nedenle tapudaki satışı gerçekleştiremezseler; vazgeçen ve/veya satışa engel çıkartan taraf hem kendi ödeyeceği, hem de diğer tarafın ödeyeceği komisyon ücretinin tamamını <strong>(% ${(parseFloat(String(data.komisyon_alici || 2)) + parseFloat(String(data.komisyon_satici || 2))).toFixed(0)} + KDV)</strong> Coldwell Banker Ambiance Gayrimenkul'a ödemeyi peşinen kabul ve taahhüt eder.</p>
+        <p style="margin-bottom:12px;text-align:justify;"><strong>4-</strong> ALICI ve SATICI'nın her biri, daha sonra alım ve/veya satımdan vazgeçerlerse veya Coldwell Banker Ambiance Gayrimenkul'ün dışında gelişen herhangi bir nedenle tapudaki satışı gerçekleştiremezseler; vazgeçen ve/veya satışa engel çıkartan taraf hem kendi ödeyeceği, hem de diğer tarafın ödeyeceği komisyon ücretinin tamamını <strong>(% ${(parseFloat(String(data.komisyon_alici||2))+parseFloat(String(data.komisyon_satici||2))).toFixed(0)} + KDV)</strong> Coldwell Banker Ambiance Gayrimenkul'a ödemeyi peşinen kabul ve taahhüt eder.</p>
         <p style="margin-bottom:12px;text-align:justify;"><strong>5-</strong> Satıştan vazgeçen ve/veya satışa engel çıkartan tarafın diğer tarafa ödeyeceği ceza miktarı <strong>${money(data.ceza_miktari)}</strong>'dir.</p>
         <p style="margin-bottom:12px;text-align:justify;"><strong>6-</strong> Dijital olarak tanzim edilen işbu sözleşme yukarıdaki hükümler ve sözleşmeye eklenecek ekleri (var ise) ile birlikte geçerli olmak üzere taraflarca kayıtsız, şartsız kabul edilmiş olup, sözleşmeden doğacak ihtilaflarda merci T.C. Bursa mahkeme ve icra daireleri yetkilidir.</p>
         ${data.ozel_sartlar ? `<p style="margin-bottom:12px;text-align:justify;"><strong>EK MADDE:</strong> ${data.ozel_sartlar}</p>` : ''}
@@ -183,7 +183,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
   // ── Rental contract ───────────────────────────────────────────────────────
   if (doc.doc_type === 'rental_contract') {
     const aylik = data.aylik_kira
-    const yillik = aylik ? String(parseFloat(String(aylik).replace(/[^0-9.]/g, '')) * 12) : null
+    const yillik = aylik ? String(parseFloat(String(aylik).replace(/[^0-9.]/g,''))*12) : null
 
     const body = `
       <style>
@@ -245,12 +245,12 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sec-title">GAYRİMENKULE AİT BİLGİLER</div>
       <div class="tbl-wrap"><table class="auth-tbl">
         <tr>
-          <td style="text-align:center;">${chk(propType === 'apartment')} Apt. Dairesi</td>
-          <td style="text-align:center;">${chk(propType === 'detached_house')} Müstakil Ev</td>
-          <td style="text-align:center;">${chk(propType === 'villa')} Villa</td>
-          <td style="text-align:center;">${chk(propType === 'commercial' || propType === 'office')} İşyeri</td>
-          <td style="text-align:center;">${chk(propType === 'shop')} Dükkan</td>
-          <td style="text-align:center;">${chk(propType === 'land')} Arsa</td>
+          <td style="text-align:center;">${chk(propType==='apartment')} Apt. Dairesi</td>
+          <td style="text-align:center;">${chk(propType==='detached_house')} Müstakil Ev</td>
+          <td style="text-align:center;">${chk(propType==='villa')} Villa</td>
+          <td style="text-align:center;">${chk(propType==='commercial'||propType==='office')} İşyeri</td>
+          <td style="text-align:center;">${chk(propType==='shop')} Dükkan</td>
+          <td style="text-align:center;">${chk(propType==='land')} Arsa</td>
           <td style="text-align:center;">${chk(!Object.keys(typeMap).includes(propType))} Diğer</td>
         </tr>
         <tr><td colspan="7">Adresi: ${[prop?.address, prop?.district, prop?.city].filter(Boolean).join(', ') || '___'}</td></tr>

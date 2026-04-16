@@ -42,27 +42,27 @@ type TemplateData = Record<string, string | null | undefined>
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const sigStatusConfig: Record<SignatureStatus, { label: string; color: string; icon: React.ElementType }> = {
-  draft: { label: 'Taslak', color: 'bg-slate-100 text-slate-600', icon: FileText },
-  sent: { label: 'Gönderildi', color: 'bg-blue-100 text-blue-700', icon: Clock },
-  viewed: { label: 'Görüldü', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-  signed: { label: 'İmzalandı', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  declined: { label: 'Reddedildi', color: 'bg-red-100 text-red-700', icon: XCircle },
-  expired: { label: 'Süresi Doldu', color: 'bg-orange-100 text-orange-700', icon: AlertCircle },
+  draft:    { label: 'Taslak',       color: 'bg-slate-100 text-slate-600',   icon: FileText },
+  sent:     { label: 'Gönderildi',   color: 'bg-blue-100 text-blue-700',     icon: Clock },
+  viewed:   { label: 'Görüldü',      color: 'bg-yellow-100 text-yellow-700', icon: Clock },
+  signed:   { label: 'İmzalandı',    color: 'bg-green-100 text-green-700',   icon: CheckCircle },
+  declined: { label: 'Reddedildi',   color: 'bg-red-100 text-red-700',       icon: XCircle },
+  expired:  { label: 'Süresi Doldu', color: 'bg-orange-100 text-orange-700', icon: AlertCircle },
 }
 
 const reqStatusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  pending: { label: 'Bekliyor', color: 'bg-slate-100 text-slate-600', icon: Clock },
-  viewed: { label: 'Görüldü', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-  signed: { label: 'İmzalandı', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  declined: { label: 'Reddedildi', color: 'bg-red-100 text-red-700', icon: XCircle },
+  pending: { label: 'Bekliyor',    color: 'bg-slate-100 text-slate-600',   icon: Clock },
+  viewed:  { label: 'Görüldü',     color: 'bg-yellow-100 text-yellow-700', icon: Clock },
+  signed:  { label: 'İmzalandı',   color: 'bg-green-100 text-green-700',   icon: CheckCircle },
+  declined:{ label: 'Reddedildi',  color: 'bg-red-100 text-red-700',       icon: XCircle },
 }
 
 const docTypeLabels: Record<string, string> = {
-  authorization: 'Yetki Belgesi',
-  sales_contract: 'Satış Sözleşmesi',
+  authorization:   'Yetki Belgesi',
+  sales_contract:  'Satış Sözleşmesi',
   rental_contract: 'Kira Sözleşmesi',
-  offer_letter: 'Teklif Mektubu',
-  other: 'Diğer',
+  offer_letter:    'Teklif Mektubu',
+  other:           'Diğer',
 }
 
 const STATUS_OPTIONS: SignatureStatus[] = ['draft', 'sent', 'viewed', 'signed', 'declined', 'expired']
@@ -153,12 +153,12 @@ function AddSignerModal({
 
   const mainLabel =
     doc.doc_type === 'authorization' ? 'Mülk Sahibi' :
-      doc.doc_type === 'sales_contract' ? 'Satıcı' :
-        doc.doc_type === 'rental_contract' ? 'Kiraya Veren' : 'Alıcı'
+    doc.doc_type === 'sales_contract' ? 'Satıcı' :
+    doc.doc_type === 'rental_contract' ? 'Kiraya Veren' : 'Alıcı'
 
   const secondLabel =
     doc.doc_type === 'sales_contract' ? 'Alıcı' :
-      doc.doc_type === 'rental_contract' ? 'Kiracı' : 'Diğer Taraf'
+    doc.doc_type === 'rental_contract' ? 'Kiracı' : 'Diğer Taraf'
 
   const hasSecond = doc.doc_type !== 'authorization'
 
@@ -465,20 +465,20 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     if (!v) return '___'
     const n = parseInt(String(v).replace(/[^0-9]/g, ''))
     if (isNaN(n) || n === 0) return 'sıfır'
-    const ones = ['', 'bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz']
-    const tens = ['', 'on', 'yirmi', 'otuz', 'kırk', 'elli', 'altmış', 'yetmiş', 'seksen', 'doksan']
+    const ones = ['','bir','iki','üç','dört','beş','altı','yedi','sekiz','dokuz']
+    const tens = ['','on','yirmi','otuz','kırk','elli','altmış','yetmiş','seksen','doksan']
     const cvt3 = (x: number): string => {
       if (x === 0) return ''
       let r = ''
-      if (x >= 100) { r += (x >= 200 ? ones[Math.floor(x / 100)] : '') + 'yüz'; x %= 100 }
-      if (x >= 10) { r += tens[Math.floor(x / 10)]; x %= 10 }
+      if (x >= 100) { r += (x >= 200 ? ones[Math.floor(x/100)] : '') + 'yüz'; x %= 100 }
+      if (x >= 10) { r += tens[Math.floor(x/10)]; x %= 10 }
       if (x > 0) r += ones[x]
       return r
     }
     let x = n, r = ''
-    if (x >= 1000000000) { r += cvt3(Math.floor(x / 1000000000)) + 'milyar'; x %= 1000000000 }
-    if (x >= 1000000) { r += cvt3(Math.floor(x / 1000000)) + 'milyon'; x %= 1000000 }
-    if (x >= 1000) { const t = Math.floor(x / 1000); r += (t === 1 ? '' : cvt3(t)) + 'bin'; x %= 1000 }
+    if (x >= 1000000000) { r += cvt3(Math.floor(x/1000000000)) + 'milyar'; x %= 1000000000 }
+    if (x >= 1000000) { r += cvt3(Math.floor(x/1000000)) + 'milyon'; x %= 1000000 }
+    if (x >= 1000) { const t = Math.floor(x/1000); r += (t === 1 ? '' : cvt3(t)) + 'bin'; x %= 1000 }
     return r + cvt3(x)
   }
 
@@ -538,15 +538,19 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
       body { padding: 0; font-size: 13px; }
       td { font-size: 12px; }
       h1 { font-size: 16px; }
+      .sigs { break-inside: avoid; page-break-inside: avoid; display: flex !important; flex-wrap: wrap; }
+      .sig { break-inside: avoid; page-break-inside: avoid; }
+      .auth-sigs { break-inside: avoid; page-break-inside: avoid; display: flex !important; flex-wrap: wrap; }
+      .auth-sig { break-inside: avoid; page-break-inside: avoid; }
     }
   `
 
-  const cRow = (label: string, c?: { full_name: string; salutation?: string; phone?: string; email?: string } | null) => `
+  const cRow = (label: string, c?: { full_name: string; salutation?: string; phone?: string; email?: string } | null, tc?: string, addr?: string) => `
     <tr><td>${label}:</td><td>${clientName(c)}</td></tr>
     <tr><td>Telefon:</td><td>${c?.phone || '_______________'}</td></tr>
     <tr><td>E-posta:</td><td>${c?.email || '_______________'}</td></tr>
-    <tr><td>TC / Vergi No:</td><td>_______________</td></tr>
-    <tr><td>Adres:</td><td>_______________</td></tr>
+    <tr><td>TC / Vergi No:</td><td>${tc || '_______________'}</td></tr>
+    <tr><td>Adres:</td><td>${addr || '_______________'}</td></tr>
   `
 
   const prop = doc.property
@@ -560,20 +564,20 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
   // Authorization helpers (reuse in template)
   const chk = (c: boolean) => c ? '&#9745;' : '&#9744;'
   const sureSon = (() => {
-    try { const d = new Date(data.baslangic_tarihi as string || new Date()); d.setDate(d.getDate() + parseInt(String(data.yetki_suresi_gun || '90'))); return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' }) } catch { return '___' }
+    try { const d = new Date(data.baslangic_tarihi as string || new Date()); d.setDate(d.getDate() + parseInt(String(data.yetki_suresi_gun || '90'))); return d.toLocaleDateString('tr-TR', { day:'2-digit', month:'long', year:'numeric' }) } catch { return '___' }
   })()
   const propType = (data.mulk_tipi as string) || doc.property?.property_type || ''
   const propAddr = [doc.property?.address, doc.property?.district, doc.property?.city].filter(Boolean).join(', ') || '___'
   const stBAuth = `
     <style>
-      .auth-table{width:100%;border-collapse:collapse;margin-bottom:0;font-size:11px;}
-      .auth-table td{border:1px solid #000;padding:3px 6px;vertical-align:middle;}
-      .sec-title{background:#e0e0e0;font-weight:bold;font-size:11px;padding:3px 6px;border:1px solid #000;border-bottom:none;text-transform:uppercase;}
+      .auth-table{width:100%;border-collapse:collapse;margin-bottom:0;font-size:12px;}
+      .auth-table td{border:1px solid #000;padding:6px 8px;vertical-align:middle;}
+      .sec-title{background:#e0e0e0;font-weight:bold;font-size:12px;padding:6px 8px;border:1px solid #000;border-bottom:none;text-transform:uppercase;}
       .clause{font-size:10.5px;line-height:1.65;margin-bottom:5px;text-align:justify;}
-      .auth-sigs{display:flex;justify-content:space-between;margin-top:36px;gap:20px;width:100%;}
+      .auth-sigs{display:flex;justify-content:space-between;margin-top:24px;gap:20px;width:100%;}
       .auth-sig{text-align:center;flex:1;}
       .auth-sig-label{font-size:11px;font-weight:bold;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;}
-      .auth-sig-box{border-top:2px solid #333;padding-top:8px;min-height:75px;font-size:11px;}
+      .auth-sig-box{border-top:2px solid #333;padding-top:8px;min-height:60px;font-size:11px;}
     </style>`
 
   const templates: Record<string, { title: string; body: string; sigs: string }> = {
@@ -608,13 +612,13 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
         <div class="sec-title" style="margin-top:6px;">GAYRİMENKULE AİT BİLGİLER</div>
         <div class="tbl-scroll"><table class="auth-table">
           <tr>
-            <td style="text-align:center;">${chk(propType === 'detached_house')} Ev</td>
-            <td style="text-align:center;">${chk(propType === 'apartment')} Apt. Dairesi</td>
-            <td style="text-align:center;">${chk(['commercial', 'office'].includes(propType))} İşyeri</td>
-            <td style="text-align:center;">${chk(propType === 'shop')} Dükkan</td>
-            <td style="text-align:center;">${chk(propType === 'villa')} Villa</td>
-            <td style="text-align:center;">${chk(propType === 'land')} Arsa</td>
-            <td style="text-align:center;">${chk(!['detached_house', 'apartment', 'commercial', 'office', 'shop', 'villa', 'land'].includes(propType))} Diğer</td>
+            <td style="text-align:center;">${chk(propType==='detached_house')} Ev</td>
+            <td style="text-align:center;">${chk(propType==='apartment')} Apt. Dairesi</td>
+            <td style="text-align:center;">${chk(['commercial','office'].includes(propType))} İşyeri</td>
+            <td style="text-align:center;">${chk(propType==='shop')} Dükkan</td>
+            <td style="text-align:center;">${chk(propType==='villa')} Villa</td>
+            <td style="text-align:center;">${chk(propType==='land')} Arsa</td>
+            <td style="text-align:center;">${chk(!['detached_house','apartment','commercial','office','shop','villa','land'].includes(propType))} Diğer</td>
           </tr>
           <tr><td colspan="2" style="font-weight:bold;">Adresi</td><td colspan="5">${propAddr}</td></tr>
           <tr><td style="font-weight:bold;">Mahallesi</td><td colspan="2">${(data.mahalle as string) || '_______________'}</td><td style="font-weight:bold;">İlçesi</td><td>${(data.ilce as string) || doc.property?.district || '___'}</td><td style="font-weight:bold;">İli</td><td>${(data.il as string) || doc.property?.city || '___'}</td></tr>
@@ -691,7 +695,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
             <strong>3-</strong> ALICI ve SATICI kendilerine bu anlaşmayı sağlayan <strong>Coldwell Banker Ambiance Gayrimenkul</strong>'e işbu sözleşmenin imzalanmasıyla yukarıdaki satış bedeli üzerinden <strong>(%${data.komisyon_alici || '2'} + %${data.komisyon_satici || '2'}) + KDV</strong> komisyon ücretini hiçbir ihtara ve ihbara gerek kalmadan ödemeyi peşinen kabul ve taahhüt eder.
           </p>
           <p style="margin-bottom:12px;text-align:justify;">
-            <strong>4-</strong> ALICI ve SATICI'nın her biri, daha sonra alım ve/veya satımdan vazgeçerlerse veya Coldwell Banker Ambiance Gayrimenkul'ün dışında gelişen herhangi bir nedenle tapudaki satışı gerçekleştiremezseler; vazgeçen ve/veya satışa engel çıkartan taraf hem kendi ödeyeceği, hem de diğer tarafın ödeyeceği komisyon ücretinin tamamını <strong>(% ${(parseFloat(String(data.komisyon_alici || 2)) + parseFloat(String(data.komisyon_satici || 2))).toFixed(0)} + KDV)</strong> Coldwell Banker Ambiance Gayrimenkul'a ödemeyi peşinen kabul ve taahhüt eder.
+            <strong>4-</strong> ALICI ve SATICI'nın her biri, daha sonra alım ve/veya satımdan vazgeçerlerse veya Coldwell Banker Ambiance Gayrimenkul'ün dışında gelişen herhangi bir nedenle tapudaki satışı gerçekleştiremezseler; vazgeçen ve/veya satışa engel çıkartan taraf hem kendi ödeyeceği, hem de diğer tarafın ödeyeceği komisyon ücretinin tamamını <strong>(% ${(parseFloat(String(data.komisyon_alici||2))+parseFloat(String(data.komisyon_satici||2))).toFixed(0)} + KDV)</strong> Coldwell Banker Ambiance Gayrimenkul'a ödemeyi peşinen kabul ve taahhüt eder.
           </p>
           <p style="margin-bottom:12px;text-align:justify;">
             <strong>5-</strong> Satıştan vazgeçen ve/veya satışa engel çıkartan tarafın diğer tarafa ödeyeceği ceza miktarı <strong>${m(data.ceza_miktari as string)}</strong>'dir.
@@ -711,8 +715,14 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     rental_contract: {
       title: 'GAYRİMENKUL KİRA SÖZLEŞMESİ',
       body: `
-        <h2>1. Kiraya Veren</h2><table>${cRow('Kiraya Veren', doc.client)}</table>
-        <h2>2. Kiracı</h2><table><tr><td>Kiracı:</td><td>${secondName}</td></tr><tr><td>TC / Vergi No:</td><td>_______________</td></tr></table>
+        <h2>1. Kiraya Veren</h2><table>${cRow('Kiraya Veren', doc.client, data.main_tc_no as string, data.main_address as string)}</table>
+        <h2>2. Kiracı</h2>
+        <table>
+          <tr><td>Ad Soyad:</td><td>${secondName}</td></tr>
+          <tr><td>TC / Vergi No:</td><td>${data.second_tc_no || '_______________'}</td></tr>
+          <tr><td>Adres:</td><td>${data.second_address || '_______________'}</td></tr>
+          <tr><td>Telefon:</td><td>${data.second_client_phone || '_______________'}</td></tr>
+        </table>
         <h2>3. Taşınmaz</h2><table>${propRows}</table>
         <h2>4. Kira Şartları</h2>
         <table>
@@ -733,7 +743,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     offer_letter: {
       title: 'GAYRİMENKUL ALIM TEKLİF MEKTUBU',
       body: `
-        <h2>1. Teklif Eden</h2><table>${cRow('Alıcı', doc.client)}</table>
+        <h2>1. Teklif Eden</h2><table>${cRow('Alıcı', doc.client, data.main_tc_no as string, data.main_address as string)}</table>
         <h2>2. Mülk</h2><table>${propRows}</table>
         <h2>3. Teklif</h2>
         <table>
@@ -764,7 +774,7 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
 <body>
   <div class="no-print" style="text-align:right;margin-bottom:20px;">
     <button class="print-btn" onclick="window.print()">🖨️ Yazdır</button>
-    <button class="pdf-btn" onclick="pdfDownload('${doc.title || 'Belge'}','${doc.doc_type}')">⬇️ PDF İndir</button>
+    <button class="pdf-btn" onclick="pdfDownload('${doc.title||'Belge'}','${doc.doc_type}')">⬇️ PDF İndir</button>
   </div>
   ${doc.doc_type !== 'authorization' ? `  <div class="letterhead">
     ${CB_LOGO_SVG}
@@ -983,8 +993,8 @@ export default function DocumentDetailPage() {
                 <div>
                   <p className="text-xs text-slate-500 mb-0.5">
                     {doc.doc_type === 'authorization' ? 'Mülk Sahibi' :
-                      doc.doc_type === 'sales_contract' ? 'Satıcı' :
-                        doc.doc_type === 'rental_contract' ? 'Kiraya Veren' : 'Alıcı'}
+                     doc.doc_type === 'sales_contract' ? 'Satıcı' :
+                     doc.doc_type === 'rental_contract' ? 'Kiraya Veren' : 'Alıcı'}
                   </p>
                   <Link href={`/crm/${doc.client.id}`} className="text-sm font-medium text-blue-600 hover:underline">
                     {doc.client.salutation ? doc.client.salutation + ' ' : ''}{doc.client.full_name}
@@ -999,7 +1009,7 @@ export default function DocumentDetailPage() {
                 <div>
                   <p className="text-xs text-slate-500 mb-0.5">
                     {doc.doc_type === 'sales_contract' ? 'Alıcı' :
-                      doc.doc_type === 'rental_contract' ? 'Kiracı' : 'Diğer Taraf'}
+                     doc.doc_type === 'rental_contract' ? 'Kiracı' : 'Diğer Taraf'}
                   </p>
                   {templateData.second_client_id ? (
                     <Link href={`/crm/${templateData.second_client_id}`} className="text-sm font-medium text-blue-600 hover:underline">

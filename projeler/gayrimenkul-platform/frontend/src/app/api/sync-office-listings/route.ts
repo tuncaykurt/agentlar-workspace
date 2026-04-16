@@ -105,8 +105,6 @@ function mapItem(item: SahibindenItem, officeUrl: string) {
       const h = pick(['Isıtma', 'Isıtma Tipi'])
       return h ? String(h) : null
     })(),
-    deposit: parseNumber(pick(['Depozito (TL)', 'Depozito'])),
-    dues: parseNumber(pick(['Aidat (TL)', 'Aidat'])),
     features: Array.isArray(item.features) ? item.features : [],
     photos: Array.isArray(item.images) ? item.images.slice(0, 30) : [],
     source: 'sahibinden' as const,
@@ -149,7 +147,7 @@ export async function POST(req: NextRequest) {
   const { data: settings } = await supabase
     .from('settings')
     .select('key, value')
-    .in('key', ['office_sahibinden_url', 'office_sync_cron_secret'])
+    .in('key', ['office_sahibinden_url', 'office_sync_cron_secret', 'office_sync_max_items'])
 
   const map: Record<string, string> = {}
   for (const row of settings || []) {
@@ -178,7 +176,10 @@ export async function POST(req: NextRequest) {
   // Apify: mağaza/arama URL'ini tara
   let items: SahibindenItem[] = []
   try {
-    items = await runApifyActor({ startUrls: [officeUrl], maxItems: 500 }, 280)
+    // Her çalışmada max 50 ilan çek (maliyet kontrolü ~$0.30/run)
+    // Daha önce çekilenler source_listing_id ile atlanır
+    const maxItems = parseInt(map.office_sync_max_items || '50', 10) || 50
+    items = await runApifyActor({ startUrls: [officeUrl], maxItems }, 280)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Bilinmeyen'
     await logResult(supabase, runStart, { error: msg, scraped: 0 })
@@ -190,7 +191,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ scraped: 0, warning: 'İlan bulunamadı' })
   }
 
-  // Upsert her ilan (source_listing_id ile match)
+  // Upsert her ilan → market_listings tablosuna (portföy değil, lead havuzu)
   let inserted = 0
   let updated = 0
   const errors: string[] = []
@@ -200,34 +201,45 @@ export async function POST(req: NextRequest) {
     const mapped = mapItem(raw, officeUrl)
     const payload = {
       ...mapped,
-      status: 'active' as const,
       is_active: true,
       last_seen_at: runStart,
     }
 
     // Var mı bak (source_listing_id + source)
     const { data: existing } = await supabase
-      .from('properties')
+      .from('market_listings')
       .select('id')
       .eq('source', 'sahibinden')
       .eq('source_listing_id', mapped.source_listing_id)
       .maybeSingle()
 
     if (existing?.id) {
-      const { error } = await supabase.from('properties').update(payload).eq('id', existing.id)
+      // Sadece fiyat, başlık ve son görülme zamanını güncelle (iletişim notlarına dokunma)
+      const { error } = await supabase
+        .from('market_listings')
+        .update({
+          title: payload.title,
+          price: payload.price,
+          photos: payload.photos,
+          is_active: true,
+          last_seen_at: runStart,
+        })
+        .eq('id', existing.id)
       if (error) errors.push(`update ${mapped.source_listing_id}: ${error.message}`)
       else updated++
     } else {
-      const { error } = await supabase.from('properties').insert(payload)
+      const { error } = await supabase
+        .from('market_listings')
+        .insert({ ...payload, contact_status: 'new' })
       if (error) errors.push(`insert ${mapped.source_listing_id}: ${error.message}`)
       else inserted++
     }
   }
 
-  // Artık listede olmayanları pasifleştir (bu ofisten gelenler, son taramada görülmeyen)
+  // Bu taramada görülmeyenleri pasifleştir
   const { data: deactivated, error: deactErr } = await supabase
-    .from('properties')
-    .update({ is_active: false, status: 'withdrawn' })
+    .from('market_listings')
+    .update({ is_active: false, contact_status: 'stale' })
     .eq('source', 'sahibinden')
     .eq('office_source_url', officeUrl)
     .or(`last_seen_at.lt.${runStart},last_seen_at.is.null`)
@@ -256,15 +268,16 @@ export async function GET(req: NextRequest) {
 }
 
 async function logResult(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
   runAt: string,
   result: Record<string, unknown>,
 ) {
   await supabase.from('settings').upsert(
     [
-      { key: 'office_sync_last_run', value: runAt, updated_at: new Date().toISOString() },
-      { key: 'office_sync_last_result', value: result, updated_at: new Date().toISOString() },
-    ],
+      { key: 'office_sync_last_run', value: runAt as unknown, updated_at: new Date().toISOString() },
+      { key: 'office_sync_last_result', value: result as unknown, updated_at: new Date().toISOString() },
+    ] as Array<{ key: string; value: unknown; updated_at: string }>,
     { onConflict: 'key' },
   )
 }

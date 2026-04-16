@@ -369,8 +369,8 @@ ON CONFLICT (key) DO NOTHING;
     sql: `
 INSERT INTO settings (key, value, description) VALUES
   ('office_name', '"Ambiance Gayrimenkul"', 'Ofis adı'),
-  ('office_address', '"Ahmet Yesevi Mah. Hudut Sok. Central Balat Sitesi 1/C\\nNilüfer / BURSA"'::jsonb, 'Ofis adresi'),
-  ('office_logo', '""'::jsonb, 'Logo URL (Supabase Storage veya CDN)')
+  ('office_address', '"Ahmet Yesevi Mah. Hudut Sok. Central Balat Sitesi 1/C\nNilüfer / BURSA"', 'Ofis adresi'),
+  ('office_logo', '""', 'Logo URL (Supabase Storage veya CDN)')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
     `,
   },
