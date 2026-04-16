@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const VAPI_BASE = 'https://api.vapi.ai'
-const VAPI_KEY = process.env.VAPI_PRIVATE_KEY!
+const VAPI_KEY = process.env.VAPI_PRIVATE_KEY || process.env.VAPI_API_KEY || ''
 
 export async function GET(
   _req: NextRequest,

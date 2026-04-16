@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const VAPI_API_KEY = process.env.VAPI_API_KEY || ''
+const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY || process.env.VAPI_API_KEY || ''
 
 /**
  * Aktif bir Vapi aramasına anlık mesaj/talimat gönder.

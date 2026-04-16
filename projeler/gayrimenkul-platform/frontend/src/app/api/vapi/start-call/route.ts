@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+const VAPI_BASE = 'https://api.vapi.ai'
+const VAPI_KEY = process.env.VAPI_PRIVATE_KEY || process.env.VAPI_API_KEY || ''
+
+// Lina asistanı — mevcut "Giden arama Lina"
+const LINA_ASSISTANT_ID = 'd7871696-4562-4e40-8937-951c6f2c882b'
+// Giden arama numarası (netgsm_giden)
+const OUTBOUND_PHONE_ID = process.env.VAPI_PHONE_NUMBER_ID || '2ab0aeea-700c-4f78-82d5-766eb02a301e'
+
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,22 +17,17 @@ function getSupabase() {
   )
 }
 
-const VAPI_BASE = 'https://api.vapi.ai'
-const VAPI_KEY = process.env.VAPI_PRIVATE_KEY!
-
-// Lina asistanı — mevcut "Giden arama Lina"
-const LINA_ASSISTANT_ID = 'd7871696-4562-4e40-8937-951c6f2c882b'
-// Giden arama numarası (netgsm_giden)
-const OUTBOUND_PHONE_ID = '2ab0aeea-700c-4f78-82d5-766eb02a301e'
-
 export async function POST(req: NextRequest) {
-  const supabase = getSupabase()
+  if (!VAPI_KEY) {
+    return NextResponse.json({ error: 'VAPI_PRIVATE_KEY ayarlanmamış' }, { status: 500 })
+  }
 
+  const supabase = getSupabase()
   const body = await req.json()
   const { listingId, phoneNumber, sellerName, propertyTitle, price, city, district } = body
 
-  if (!listingId || !phoneNumber) {
-    return NextResponse.json({ error: 'listingId ve phoneNumber zorunlu' }, { status: 400 })
+  if (!phoneNumber) {
+    return NextResponse.json({ error: 'phoneNumber zorunlu' }, { status: 400 })
   }
 
   // Türk telefon numarasını +90 formatına çevir
@@ -33,7 +36,6 @@ export async function POST(req: NextRequest) {
   if (!phone.startsWith('90')) phone = '90' + phone
   phone = '+' + phone
 
-  // Mülk sahibine özel sistem prompt override
   const propertyContext = `
 Sen CB Ambiance Gayrimenkul ofisinin dijital asistanı Lina'sın.
 Şu anda ${sellerName || 'bir mülk sahibi'} ile konuşuyorsun.
@@ -45,6 +47,8 @@ Görevin:
 3. CB Ambiance'ın geniş portföyünü ve profesyonel hizmetini vurgula
 4. Yetki sözleşmesi için randevu almaya çalış
 5. Cevap olumsuzsa teşekkür et ve vedalaş
+
+ÖNEMLİ: Konuşma sırasında sana ek talimatlar (system mesajları) gelebilir. Bu talimatlar danışmanından geliyor. Talimatları hemen uygula ve konuşmayı ona göre yönlendir. Talimatı aldığını karşı tarafa belli etme, doğal şekilde konuşmaya devam et.
 `.trim()
 
   try {
@@ -70,7 +74,7 @@ Görevin:
               }
             ],
           },
-          firstMessage: `Merhabalar ${sellerName ? sellerName + ' hanım/bey' : ''}, ben CB Ambiance Gayrimenkul'ün dijital asistanını Lina. Sahibinden'deki mülkünüzle ilgili kısa bir bilgi vermek için arıyorum. Uygun musunuz?`,
+          firstMessage: `Merhabalar ${sellerName ? sellerName + ' hanım/bey' : ''}, ben CB Ambiance Gayrimenkul'ün dijital asistanı Lina. Sahibinden'deki mülkünüzle ilgili kısa bir bilgi vermek için arıyorum. Uygun musunuz?`,
         },
       }),
     })
@@ -83,14 +87,16 @@ Görevin:
     const call = await vapiRes.json()
 
     // market_listings'i güncelle — contacted
-    await supabase
-      .from('market_listings')
-      .update({
-        contact_status: 'contacted',
-        contacted_at: new Date().toISOString(),
-        contact_notes: (call.id ? `Vapi call: ${call.id}` : ''),
-      })
-      .eq('id', listingId)
+    if (listingId) {
+      await supabase
+        .from('market_listings')
+        .update({
+          contact_status: 'contacted',
+          contacted_at: new Date().toISOString(),
+          contact_notes: (call.id ? `Vapi call: ${call.id}` : ''),
+        })
+        .eq('id', listingId)
+    }
 
     return NextResponse.json({
       callId: call.id,

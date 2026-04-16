@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const VAPI_API_KEY = process.env.VAPI_API_KEY || ''
-const VAPI_PHONE_NUMBER_ID = process.env.VAPI_PHONE_NUMBER_ID || ''
+const VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY || process.env.VAPI_API_KEY || ''
+const VAPI_PHONE_NUMBER_ID = process.env.VAPI_PHONE_NUMBER_ID || '2ab0aeea-700c-4f78-82d5-766eb02a301e'
 
 export async function POST(req: NextRequest) {
   try {
