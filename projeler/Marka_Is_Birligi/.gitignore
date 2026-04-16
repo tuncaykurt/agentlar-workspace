@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+data/
+!data/.gitkeep
+token.json
+credentials.json
+venv/
+.venv/
+*.pyc
+.DS_Store

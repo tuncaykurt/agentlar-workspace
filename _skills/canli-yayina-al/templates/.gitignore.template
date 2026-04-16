@@ -1,0 +1,49 @@
+# Secrets
+.env
+*.env
+config.env
+token.json
+token.pickle
+credentials.json
+service-account.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+.nuxt/
+dist/
+
+# System
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+
+# Railway
+.railway-bin/
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs
+*.log
+logs/
+
+# Data (hassas olabilir)
+*.csv
+*.sqlite
+*.db

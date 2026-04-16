@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teknoloji Şirketi Tanıtım</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #040d1f;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    canvas {
+      position: fixed;
+      top: 0; left: 0;
+      z-index: 0;
+    }
+
+    #scene {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+    }
+
+    #inovasyon {
+      font-size: 96px;
+      font-weight: 900;
+      letter-spacing: 18px;
+      color: #fff;
+      text-transform: uppercase;
+      opacity: 0;
+      transform: scale(0.3);
+      text-shadow:
+        0 0 20px #4fc3f7,
+        0 0 60px #0288d1,
+        0 0 120px #01579b;
+      transition: none;
+      will-change: transform, opacity, filter;
+    }
+
+    #tagline {
+      font-size: 26px;
+      font-weight: 300;
+      letter-spacing: 4px;
+      color: #90caf9;
+      min-height: 40px;
+      text-shadow: 0 0 12px #42a5f5;
+    }
+
+    #cursor {
+      display: inline-block;
+      width: 2px;
+      height: 28px;
+      background: #90caf9;
+      margin-left: 3px;
+      vertical-align: middle;
+      animation: blink 0.7s step-end infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    #logo-wrap {
+      margin-top: 20px;
+      opacity: 0;
+    }
+
+    .geo-shape {
+      width: 90px;
+      height: 90px;
+      position: relative;
+      animation: spin 6s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    /* Hexagon made of layered divs */
+    .hex {
+      position: absolute;
+      width: 90px;
+      height: 90px;
+      top: 0; left: 0;
+    }
+
+    .hex svg {
+      width: 100%;
+      height: 100%;
+      filter: drop-shadow(0 0 12px #4fc3f7) drop-shadow(0 0 30px #0288d1);
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+
+<div id="scene">
+  <div id="inovasyon">İNOVASYON</div>
+  <div id="tagline"><span id="typed"></span><span id="cursor"></span></div>
+  <div id="logo-wrap">
+    <div class="geo-shape">
+      <div class="hex">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <!-- Outer hexagon -->
+          <polygon points="50,4 93,27 93,73 50,96 7,73 7,27"
+            fill="none" stroke="#4fc3f7" stroke-width="2.5" opacity="1"/>
+          <!-- Middle rotated hexagon -->
+          <polygon points="50,15 84,33 84,67 50,85 16,67 16,33"
+            fill="none" stroke="#0288d1" stroke-width="1.5" opacity="0.8"
+            transform="rotate(30 50 50)"/>
+          <!-- Inner triangle -->
+          <polygon points="50,25 74,68 26,68"
+            fill="none" stroke="#81d4fa" stroke-width="2" opacity="0.9"/>
+          <!-- Center dot -->
+          <circle cx="50" cy="50" r="5" fill="#4fc3f7" opacity="0.9"/>
+          <!-- Connecting lines -->
+          <line x1="50" y1="4"  x2="50" y2="25" stroke="#4fc3f7" stroke-width="1" opacity="0.5"/>
+          <line x1="93" y1="27" x2="74" y2="38" stroke="#4fc3f7" stroke-width="1" opacity="0.5"/>
+          <line x1="93" y1="73" x2="74" y2="62" stroke="#4fc3f7" stroke-width="1" opacity="0.5"/>
+          <line x1="50" y1="96" x2="50" y2="75" stroke="#4fc3f7" stroke-width="1" opacity="0.5"/>
+          <line x1="7"  y1="73" x2="26" y2="62" stroke="#4fc3f7" stroke-width="1" opacity="0.5"/>
+          <line x1="7"  y1="27" x2="26" y2="38" stroke="#4fc3f7" stroke-width="1" opacity="0.5"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Particles ──────────────────────────────────────────────────
+const canvas = document.getElementById('particles');
+const ctx    = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+const PARTICLE_COUNT = 180;
+const particles = [];
+
+function randBetween(a, b) { return a + Math.random() * (b - a); }
+
+class Particle {
+  constructor() { this.reset(true); }
+  reset(initial = false) {
+    this.x   = randBetween(0, W);
+    this.y   = initial ? randBetween(0, H) : H + 10;
+    this.r   = randBetween(0.8, 2.8);
+    this.vx  = randBetween(-0.3, 0.3);
+    this.vy  = randBetween(-0.6, -0.2);
+    this.alpha = randBetween(0.3, 0.9);
+    this.color = Math.random() < 0.5 ? '#4fc3f7' : '#81d4fa';
+    this.pulse = randBetween(0, Math.PI * 2);
+    this.pulseSpeed = randBetween(0.02, 0.05);
+    // connection radius
+    this.cr  = randBetween(80, 140);
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.pulse += this.pulseSpeed;
+    if (this.y < -10 || this.x < -10 || this.x > W + 10) this.reset();
+  }
+  draw() {
+    const a = this.alpha * (0.7 + 0.3 * Math.sin(this.pulse));
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = this.color;
+    ctx.shadowBlur  = 8;
+    ctx.shadowColor = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
+
+function drawConnections() {
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = (particles[i].cr + particles[j].cr) / 2;
+      if (dist < maxDist) {
+        const alpha = (1 - dist / maxDist) * 0.18;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = '#4fc3f7';
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x, particles[i].y);
+        ctx.lineTo(particles[j].x, particles[j].y);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+}
+
+function animateParticles() {
+  ctx.clearRect(0, 0, W, H);
+  drawConnections();
+  particles.forEach(p => { p.update(); p.draw(); });
+  requestAnimationFrame(animateParticles);
+}
+animateParticles();
+
+// ── İNOVASYON text animation ───────────────────────────────────
+const inoEl  = document.getElementById('inovasyon');
+const typedEl = document.getElementById('typed');
+const logoWrap = document.getElementById('logo-wrap');
+
+const taglineText = 'Geleceği Bugün İnşa Ediyoruz';
+
+function easeOutElastic(t) {
+  const c4 = (2 * Math.PI) / 3;
+  return t === 0 ? 0 : t === 1 ? 1
+    : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+}
+
+function animateInovasyon() {
+  const duration = 1200; // ms
+  const start = performance.now();
+  inoEl.style.opacity = '1';
+
+  function step(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const ease = easeOutElastic(t);
+    const scale = 0.3 + ease * 0.7;
+    const glow  = ease * 1;
+
+    inoEl.style.transform = `scale(${scale})`;
+    inoEl.style.filter    = `brightness(${0.4 + glow * 0.8}) blur(${(1 - ease) * 6}px)`;
+
+    if (t < 1) { requestAnimationFrame(step); }
+    else {
+      inoEl.style.transform = 'scale(1)';
+      inoEl.style.filter    = 'brightness(1) blur(0px)';
+      startTyping();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+function startTyping() {
+  let i = 0;
+  const interval = setInterval(() => {
+    typedEl.textContent += taglineText[i];
+    i++;
+    if (i >= taglineText.length) {
+      clearInterval(interval);
+      setTimeout(showLogo, 800);
+    }
+  }, 60);
+}
+
+function showLogo() {
+  logoWrap.style.transition = 'opacity 1.2s ease';
+  logoWrap.style.opacity    = '1';
+  // Pulse glow on the shape
+  logoWrap.querySelectorAll('polygon, circle, line').forEach(el => {
+    el.style.animation = 'none';
+  });
+}
+
+// Start after short delay
+setTimeout(animateInovasyon, 600);
+</script>
+</body>
+</html>

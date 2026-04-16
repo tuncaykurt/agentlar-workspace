@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    expose:
+      - "8000"
+    environment:
+      - CORS_ORIGINS=https://bahis-ai.yapayzekaotomasyon.cloud,http://localhost:3000
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=https://bahis-ai-api.yapayzekaotomasyon.cloud
+    expose:
+      - "3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=https://bahis-ai-api.yapayzekaotomasyon.cloud
+    restart: unless-stopped

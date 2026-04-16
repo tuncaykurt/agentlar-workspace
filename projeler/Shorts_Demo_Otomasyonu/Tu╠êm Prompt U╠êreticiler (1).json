@@ -1,0 +1,985 @@
+{
+  "name": "Tüm Prompt Üreticiler",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        288,
+        -336
+      ],
+      "id": "fb4d5cc6-3a91-4184-8a46-67c7edbaa26b",
+      "name": "Think1"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\",\n      \"description\": \"A short, exciting, descriptive, simplistic YouTube Shorts title\"\n    },\n    \"description\": {\n      \"type\": \"string\",\n      \"description\": \"1–3 sentences summarizing the crazy water event\"\n    },\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"A detailed AI video generation prompt\"\n    }\n  },\n  \"required\": [\"title\", \"description\", \"prompt\"]\n}\n",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        384,
+        -336
+      ],
+      "id": "563dc218-a745-44d0-9b52-bbf262b2ae41",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate a prompt for {{ $json.randomNumber }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are an AI that generates random video prompts for short-form content.\n\nYour ONLY output must strictly follow this JSON structure:\n\n{\n  \"title\": \"Kısa, çarpıcı, anlaşılır Türkçe başlık\",\n  \"description\": \"Türkçe, 1–3 cümlelik özet\",\n  \"prompt\": \"English-only AI video generation prompt\"\n}\n\nHard rules:\n- Output JSON only. No extra keys, comments, or trailing text.\n- \"title\" MUST be in Turkish (short, eye-catching, simple).\n- \"description\" MUST be in Turkish (1–3 sentences, olayın kısa özeti).\n- \"prompt\" MUST be written in English ONLY.\n- In the English prompt, you MUST clearly instruct: \n  * all spoken dialogue in the video is in Turkish,\n  * use natural, everyday Istanbul Turkish,\n  * short lines (≈6–10 words), emotionally engaging,\n  * avoid heavy slang and profanity unless the scenario inherently requires it.\n  Example directive to include (English): \n  \"All spoken dialogue must be in Turkish. Use natural, everyday Istanbul Turkish with short, emotionally engaging lines.\"\n- Every prompt must describe a BODYCAM video.\n- Never repeat a video idea consecutively; always rotate types.\n- Never break JSON format. Never add extra text or explanations outside the JSON.\n\nPrimary Video Types (pick one at random each time):\n1. Firefighter rescues someone in a flood\n2. Dog stealing meat from Costco and being chased by a cop\n3. Cat stealing fish from a grocery store and being chased by a cop; an old man trips while chasing\n4. Dog gets pulled over for driving, then drives off at the end\n5. Cat gets pulled over for driving, then drives off at the end\n6. Kid driving a car, gets pulled over, says “fuck off”, then runs from the cop\n\nPrompt guidance (still write in English):\n- Concise but vivid camera description (bodycam, handheld, POV details, environment, time of day, weather, pacing).\n- Character(s), setting, key beats, and emotional tone.\n- Action choreography suitable for a 9–20s vertical short.\n- Audio: specify \"Turkish dialogue only\", realistic SFX, ambient noise; music style if helpful.\n- Visual clarity: lighting, motion, depth, focal length cues; avoid text overlays unless essential.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        192,
+        -544
+      ],
+      "id": "8f9b861d-f0ba-4318-ad48-1510209b6961",
+      "name": "Prompt Üretici - Türkçe",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const min = 1; // minimum value\nconst max = 7; // maximum value\nconst randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;\nreturn [{ json: { randomNumber } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        64
+      ],
+      "id": "49aeb614-bec9-4653-90e6-072145d7c838",
+      "name": "Random"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        992,
+        272
+      ],
+      "id": "7b676e17-3629-4ddb-994c-9bd706ed67f5",
+      "name": "Think"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "={\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\",\n      \"description\": \"A short, exciting, descriptive, simplistic YouTube Shorts title\"\n    },\n    \"description\": {\n      \"type\": \"string\",\n      \"description\": \"1–3 sentences summarizing the crazy water event\"\n    },\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"A detailed AI video generation prompt\"\n    }\n  },\n  \"required\": [\"title\", \"description\", \"prompt\"]\n}\n",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1088,
+        272
+      ],
+      "id": "90633045-7781-4e0c-98b9-14dad2322a1d",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        992,
+        864
+      ],
+      "id": "ea40ce6a-2745-4803-9cd7-d76cab356dc0",
+      "name": "Think2"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "={\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\",\n      \"description\": \"A short, exciting, descriptive, simplistic YouTube Shorts title\"\n    },\n    \"description\": {\n      \"type\": \"string\",\n      \"description\": \"1–3 sentences summarizing the crazy water event\"\n    },\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"A detailed AI video generation prompt\"\n    }\n  },\n  \"required\": [\"title\", \"description\", \"prompt\"]\n}\n",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1120,
+        864
+      ],
+      "id": "7e774ce1-905d-444d-8cfd-baadf2a708b9",
+      "name": "Structured Output Parser2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const min = 1; // minimum value\nconst max = 7; // maximum value\nconst randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;\nreturn [{ json: { randomNumber } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        672
+      ],
+      "id": "039f424a-0e2d-459c-b475-90faae8ac846",
+      "name": "Random1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const min = 1; // minimum value\nconst max = 6; // maximum value\nconst randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;\nreturn [{ json: { randomNumber } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -544
+      ],
+      "id": "d9d78230-3f77-4b26-a3d8-ad8c2213288c",
+      "name": "Random2"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        192,
+        -160
+      ],
+      "id": "476952ad-672e-4472-a5a9-bf79ef55d5d6",
+      "name": "ChatGPT 4.1",
+      "credentials": {
+        "openAiApi": {
+          "id": "CMV5OeH6Gh3q1UMx",
+          "name": "YouTubee Test"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        896,
+        1040
+      ],
+      "id": "e2364afd-f8a7-4dbc-b6bf-086eff7d442c",
+      "name": "ChatGPT",
+      "credentials": {
+        "openAiApi": {
+          "id": "CMV5OeH6Gh3q1UMx",
+          "name": "YouTubee Test"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        896,
+        448
+      ],
+      "id": "1745617f-4f9d-469e-9934-44915b609e16",
+      "name": "ChatGPT_4.1",
+      "credentials": {
+        "openAiApi": {
+          "id": "CMV5OeH6Gh3q1UMx",
+          "name": "YouTubee Test"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# İngilizce - Ev İçi Kamera\n",
+        "height": 576,
+        "width": 688,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        688,
+        592
+      ],
+      "typeVersion": 1,
+      "id": "af9355f8-73eb-4876-99e7-315f22f26788",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "# İngilizce - Kapı Güvenlik Kamerası\n",
+        "height": 576,
+        "width": 688,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        688,
+        -16
+      ],
+      "typeVersion": 1,
+      "id": "fdcd9b04-28ef-48cf-a379-97e99c85ee62",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const min = 1; // minimum value\nconst max = 6; // maximum value\nconst randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;\nreturn [{ json: { randomNumber } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -528
+      ],
+      "id": "7cf60147-4441-469f-8ea6-651ff9aa5715",
+      "name": "Sayı Üret"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate a prompt for {{ $json.randomNumber }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are an AI that generates random video prompts for short form content.  \nYour ONLY output must strictly follow this JSON structure:  \n\n{\n  \"title\": \"Exciting, descriptive, simplistic title here\",\n  \"description\": \"Short, few sentence description based on the story\",\n  \"prompt\": \"AI video generation prompt here\"\n}\n\nGuidelines:\n- The \"title\" must be short, eye-catching, and easy to understand.  \n- The \"description\" should be 1–3 sentences summarizing the crazy event in a fun, engaging way.  \n- The \"prompt\" must be a detailed AI video generation prompt describing the scene from the primary video types below. Every prompt needs to be a bodycam video. Always choose a random one.\n- Never break JSON format. Never add extra text or explanation outside the JSON.  \n- Never repeat a video, always cycle through them.\n\nPrimary Video Types: \n\n1. Firefighter rescues someone in a flood\n\n2. Dog stealing meat from costco and being chased by a cop\n\n3. Cat stealing fish from grocery store and is chased by a cop, an old man trips trying to chase the cat\n\n4. Dog being pulled over for driving, then driving off at the end\n\n5. Cat being pulled over for driving, then driving off at the end\n\n6. Kid driving car, getting pulled over, and then saying \"fuck off\" and then running off from the cop"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -528
+      ],
+      "id": "178124f1-5c91-4dee-899d-23af755b1074",
+      "name": "Prompt Üretici - İngilizce",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        976,
+        -320
+      ],
+      "id": "664b975f-9aff-4c86-8841-1aad0684cad5",
+      "name": "Think3"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\",\n      \"description\": \"A short, exciting, descriptive, simplistic YouTube Shorts title\"\n    },\n    \"description\": {\n      \"type\": \"string\",\n      \"description\": \"1–3 sentences summarizing the crazy water event\"\n    },\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"A detailed AI video generation prompt\"\n    }\n  },\n  \"required\": [\"title\", \"description\", \"prompt\"]\n}\n",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1072,
+        -320
+      ],
+      "id": "734f8f61-1efb-4e41-bf1c-0cd2e46ca84c",
+      "name": "Structured Output Parser3"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        -160
+      ],
+      "id": "31df56bc-d14b-4e2c-a66f-f426d9847a13",
+      "name": "ChatGPT 4.",
+      "credentials": {
+        "openAiApi": {
+          "id": "q1peVe72XjiVV2bt",
+          "name": "Test Youtubeee"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# İngilizce - Vücut Kamerası\n",
+        "height": 576,
+        "width": 688,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        688,
+        -624
+      ],
+      "typeVersion": 1,
+      "id": "87da9f54-88e0-4127-a4a7-642af09995c9",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "# Türkçe - Vücut Kamerası\n",
+        "height": 576,
+        "width": 688,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -32,
+        -624
+      ],
+      "typeVersion": 1,
+      "id": "801333fc-a895-474a-a583-af2b3bdecee4",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## Örnek\n@[youtube](x2T4BvMwDkc)\n",
+        "height": 400,
+        "width": 608,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1392,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "b95efd3b-f92f-4fea-8453-2649ad9624a3",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Örnek\n@[youtube](KQS0HPlV5Zk)\n",
+        "height": 400,
+        "width": 608,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1408,
+        -528
+      ],
+      "typeVersion": 1,
+      "id": "3b4ba512-9625-48e5-8828-156734759781",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate a prompt for {{ $json.randomNumber }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are an AI that generates random video prompts for short form content.  \nYour ONLY output must strictly follow this JSON structure:  \n\n{\n  \"title\": \"Exciting, descriptive, simplistic title here\",\n  \"description\": \"Short, few sentence description based on the story\",\n  \"prompt\": \"AI video generation prompt here\"\n}\n\nGuidelines:\n- The \"title\" must be short, eye-catching, and easy to understand.  \n- The \"description\" should be 1–3 sentences summarizing the crazy event in a fun, engaging way.  \n- The \"prompt\" must be a detailed AI video generation prompt describing the scene from the primary video types below. Every prompt needs to be a ring camera video. Always choose a random one.\n- Never break JSON format. Never add extra text or explanation outside the JSON.  \n- Never repeat a video, always cycle through them.\n- Don't use night vision descriptions. Just normal video.\n\nPrimary Video Types: \n\n1. Ring camera video of a man sleeping on his porch with a black bear sniffing him, he wakes up and the black bear runs away\n\n2. Ring camera video of a kid feeding a crocodile at the front door, the mom comes in at the last second and brings the kid inside\n\n3. Ring camera video of a baby being approached by a crocodile, after a few seconds a cat comes in and scares off the crocodile, then the mom grabs the baby\n\n4. Ring camera video of a kid feeding a lion a steak on the porch at night\n\n5. Ring camera video of a bear charging towards a baby, then a cat jumps in the way and hisses at the bear, scaring it off\n\n6. Ring camera video on a farm, an eagle swoops down at a cat when a goat runs in to scare off the eagle\n\n7. Ring camera video of a porch with a monkey screaming and holding on to the door, theres a tornado in the background and the monkey tries to hold on but is eventually pulled away into the air by the tornado\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        896,
+        64
+      ],
+      "id": "f0f04de8-0553-4a60-848a-50f900522921",
+      "name": "Prompt Üreticisi - İngilizce",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate a prompt for {{ $json.randomNumber }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are an AI that generates random video prompts for short form content.  \nYour ONLY output must strictly follow this JSON structure:  \n\n{\n  \"title\": \"Exciting, descriptive, simplistic title here\",\n  \"description\": \"Short, few sentence description based on the story\",\n  \"prompt\": \"AI video generation prompt here\"\n}\n\nGuidelines:\n- The \"title\" must be short, eye-catching, and easy to understand.  \n- The \"description\" should be 1–3 sentences summarizing the crazy event in a fun, engaging way.  \n- The \"prompt\" must be a detailed AI video generation prompt describing the scene from the primary video types below. Always choose a random one.\n- Never break JSON format. Never add extra text or explanation outside the JSON.  \n- Never repeat a video, always cycle through them.\n\nPrimary Video Types: \n\n1. Home camera video of a baby in a onesie curiously climbing up to a high open window when a dog comes up from behind and grabs the baby and pulls it down from the window backward to the floor to stop the baby from falling out. After this, the mom comes rushing in to check what happened.\n\n2. Grocery store footage of a man jumping while pushing his shopping cart, then losing control and knocking over all of the shelves in the store\n\n3. Home camera video of a person and their dog and cat, there is a big mess on the floor and the cat is meowing and pointing at the dog, the dog looks guilty and the owner is listening to the cat\n\n4. Home camera video of a man on the toilet, when suddenly an animal smashes through the bathroom window and runs around inside, chaotic\n\n5. A kid is curiously playing near an electrical outlet which zaps when touched, when a dog comes over and pulls the kid away, the parents come in afterward\n\n6. low quality wobbly smartphone footage of a dinner table with lots of people, when suddenly a cat jumps from a balcony in the home onto the chandelier and swings from it, when the chandelier falls onto the table\n\n7. Low quality steady smartphone footage of a couple being married and about to cut a massive wedding cake with a dog looking at it, when suddenly before they cut the cake the dog jumps up and bites the cake and everyone freaks out\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        896,
+        672
+      ],
+      "id": "eb392a9a-98e5-4ca9-a541-53ec041acd76",
+      "name": "Prompt Üreticisi İngilizce",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const min = 1; // minimum value\nconst max = 7; // maximum value\nconst randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;\nreturn [{ json: { randomNumber } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        64
+      ],
+      "id": "a88bf802-b356-422c-8ad5-fdf66e35ad0f",
+      "name": "Random3"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        272,
+        272
+      ],
+      "id": "bbac176b-818e-4d86-94df-7d860028716e",
+      "name": "Think4"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "={\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\",\n      \"description\": \"A short, exciting, descriptive, simplistic YouTube Shorts title\"\n    },\n    \"description\": {\n      \"type\": \"string\",\n      \"description\": \"1–3 sentences summarizing the crazy water event\"\n    },\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"A detailed AI video generation prompt\"\n    }\n  },\n  \"required\": [\"title\", \"description\", \"prompt\"]\n}\n",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        368,
+        272
+      ],
+      "id": "c4cc65df-d9f6-48d6-a7cd-f448c5637405",
+      "name": "Structured Output Parser4"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        272,
+        864
+      ],
+      "id": "6d55c45e-b3d6-4500-9e13-475914c958d6",
+      "name": "Think5"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "={\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\",\n      \"description\": \"A short, exciting, descriptive, simplistic YouTube Shorts title\"\n    },\n    \"description\": {\n      \"type\": \"string\",\n      \"description\": \"1–3 sentences summarizing the crazy water event\"\n    },\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"A detailed AI video generation prompt\"\n    }\n  },\n  \"required\": [\"title\", \"description\", \"prompt\"]\n}\n",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        864
+      ],
+      "id": "673a045f-2fec-47ba-98d9-daa09acaf50c",
+      "name": "Structured Output Parser5"
+    },
+    {
+      "parameters": {
+        "jsCode": "const min = 1; // minimum value\nconst max = 7; // maximum value\nconst randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;\nreturn [{ json: { randomNumber } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        672
+      ],
+      "id": "fc351c8f-abcf-46f6-b530-ca784c614d09",
+      "name": "Random4"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        176,
+        1040
+      ],
+      "id": "a54324cd-f9d6-411a-bac2-8fbfea64c6cb",
+      "name": "ChatGPT1",
+      "credentials": {
+        "openAiApi": {
+          "id": "CMV5OeH6Gh3q1UMx",
+          "name": "YouTubee Test"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        176,
+        448
+      ],
+      "id": "a732d5b9-ec33-4268-a98c-67f8c7bee6af",
+      "name": "ChatGPT_4.",
+      "credentials": {
+        "openAiApi": {
+          "id": "CMV5OeH6Gh3q1UMx",
+          "name": "YouTubee Test"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# Türkçe - Ev İçi Kamera\n",
+        "height": 576,
+        "width": 688,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -32,
+        592
+      ],
+      "typeVersion": 1,
+      "id": "00d67b99-8bc5-4ab4-92b6-30688318fd0a",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "# Türkçe - Kapı Güvenlik Kamerası\n",
+        "height": 576,
+        "width": 688,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -32,
+        -16
+      ],
+      "typeVersion": 1,
+      "id": "68f2f84a-c549-4c41-a4fb-c18140ac5362",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate a prompt for {{ $json.randomNumber }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are an AI that generates random video prompts for short form content.\nYour ONLY output must strictly follow this JSON structure:\n\n{\n  \"title\": \"Exciting, descriptive, simplistic title here\",\n  \"description\": \"Short, few sentence description based on the story\",\n  \"prompt\": \"AI video generation prompt here\"\n}\n\nGuidelines:\n- The \"title\" must be short, eye-catching, and easy to understand.\n- The \"description\" should be 1–3 sentences summarizing the crazy event in a fun, engaging way.\n- The \"prompt\" must be a detailed AI video generation prompt describing the scene from the primary video types below. Every prompt needs to be a ring camera video. Always choose a random one.\n- The \"prompt\" MUST be written in ENGLISH ONLY.\n- Inside the English prompt, you MUST clearly instruct:\n  \"All spoken dialogue must be in Turkish. Use natural, everyday Istanbul Turkish with short (≈6–10 words), emotionally engaging lines. Avoid heavy slang and profanity unless the scenario inherently requires it.\"\n- Never break JSON format. Never add extra text or explanation outside the JSON.\n- Never repeat a video, always cycle through them.\n- Don't use night vision descriptions. Just normal video.\n\nPrimary Video Types:\n1. Ring camera video of a man sleeping on his porch with a black bear sniffing him, he wakes up and the black bear runs away\n2. Ring camera video of a kid feeding a crocodile at the front door, the mom comes in at the last second and brings the kid inside\n3. Ring camera video of a baby being approached by a crocodile, after a few seconds a cat comes in and scares off the crocodile, then the mom grabs the baby\n4. Ring camera video of a kid feeding a lion a steak on the porch at night\n5. Ring camera video of a bear charging towards a baby, then a cat jumps in the way and hisses at the bear, scaring it off\n6. Ring camera video on a farm, an eagle swoops down at a cat when a goat runs in to scare off the eagle\n7. Ring camera video of a porch with a monkey screaming and holding on to the door, theres a tornado in the background and the monkey tries to hold on but is eventually pulled away into the air by the tornado\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        176,
+        64
+      ],
+      "id": "1ec30d4c-ccd7-4942-afde-be6a0b2d0201",
+      "name": "Prompt Üreticisi - Türkçe",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate a prompt for {{ $json.randomNumber }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are an AI that generates random video prompts for short form content.\nYour ONLY output must strictly follow this JSON structure:\n\n{\n  \"title\": \"Exciting, descriptive, simplistic title here\",\n  \"description\": \"Short, few sentence description based on the story\",\n  \"prompt\": \"AI video generation prompt here\"\n}\n\nGuidelines:\n- The \"title\" must be short, eye-catching, and easy to understand.\n- The \"description\" should be 1–3 sentences summarizing the crazy event in a fun, engaging way.\n- The \"prompt\" must be a detailed AI video generation prompt describing the scene from the primary video types below. Always choose a random one.\n- The \"prompt\" MUST be written in ENGLISH ONLY.\n- Inside the English prompt, you MUST clearly instruct:\n  \"All spoken dialogue must be in Turkish. Use natural, everyday Istanbul Turkish with short (≈6–10 words), emotionally engaging lines. Avoid heavy slang and profanity unless the scenario inherently requires it.\"\n- Never break JSON format. Never add extra text or explanation outside the JSON.\n- Never repeat a video, always cycle through them.\n\nPrimary Video Types:\n1. Home camera video of a baby in a onesie curiously climbing up to a high open window when a dog comes up from behind and grabs the baby and pulls it down from the window backward to the floor to stop the baby from falling out. After this, the mom comes rushing in to check what happened.\n2. Grocery store footage of a man jumping while pushing his shopping cart, then losing control and knocking over all of the shelves in the store\n3. Home camera video of a person and their dog and cat, there is a big mess on the floor and the cat is meowing and pointing at the dog, the dog looks guilty and the owner is listening to the cat\n4. Home camera video of a man on the toilet, when suddenly an animal smashes through the bathroom window and runs around inside, chaotic\n5. A kid is curiously playing near an electrical outlet which zaps when touched, when a dog comes over and pulls the kid away, the parents come in afterward\n6. low quality wobbly smartphone footage of a dinner table with lots of people, when suddenly a cat jumps from a balcony in the home onto the chandelier and swings from it, when the chandelier falls onto the table\n7. Low quality steady smartphone footage of a couple being married and about to cut a massive wedding cake with a dog looking at it, when suddenly before they cut the cake the dog jumps up and bites the cake and everyone freaks out\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        176,
+        672
+      ],
+      "id": "4cab7d35-0168-4877-941f-5d59aa36dfdd",
+      "name": "Prompt Üreticisi Türkçe",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Not\n\nAşağıdaki prompt üreticiler İngilizce prompt üretmektedir. Fakat video içerisindeki karakterler Türkçe dilinde konuşmaktadır. Bunun sebebi Sora 2'nin İngilizce promptlarda en iyi performansı vermesi.\n\n",
+        "height": 176,
+        "width": 480
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        80,
+        -1008
+      ],
+      "typeVersion": 1,
+      "id": "86448946-20b9-4613-9edf-cce8efab0698",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "## Not\n\nKarakterler Türkçe konuşmaya başladığında performans ister istemez düşüyor. Yani sağdaki prompt üreticilerle ilerleyerek tamamen İngilizce videolar yapmanız önerilir.\n",
+        "height": 176,
+        "width": 480
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        80,
+        -816
+      ],
+      "typeVersion": 1,
+      "id": "3f5d5254-4efe-4709-94b2-4945ee280ef4",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "## Örnek\n@[youtube](XjpnqKMrNTM)\n",
+        "height": 400,
+        "width": 608,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1392,
+        688
+      ],
+      "typeVersion": 1,
+      "id": "dbd1311c-d1cf-418c-bdfc-8b52cd5103f4",
+      "name": "Sticky Note10"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Think1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prompt Üretici - Türkçe",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Prompt Üretici - Türkçe",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random": {
+      "main": [
+        [
+          {
+            "node": "Prompt Üreticisi - İngilizce",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prompt Üreticisi - İngilizce",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Prompt Üreticisi - İngilizce",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prompt Üreticisi İngilizce",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser2": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Prompt Üreticisi İngilizce",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random1": {
+      "main": [
+        [
+          {
+            "node": "Prompt Üreticisi İngilizce",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random2": {
+      "main": [
+        [
+          {
+            "node": "Prompt Üretici - Türkçe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ChatGPT 4.1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Prompt Üretici - Türkçe",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ChatGPT_4.1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Prompt Üreticisi - İngilizce",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ChatGPT": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Prompt Üreticisi İngilizce",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sayı Üret": {
+      "main": [
+        [
+          {
+            "node": "Prompt Üretici - İngilizce",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think3": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prompt Üretici - İngilizce",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser3": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Prompt Üretici - İngilizce",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ChatGPT 4.": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Prompt Üretici - İngilizce",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser3",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt Üreticisi İngilizce": {
+      "main": [
+        []
+      ]
+    },
+    "Random3": {
+      "main": [
+        [
+          {
+            "node": "Prompt Üreticisi - Türkçe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think4": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prompt Üreticisi - Türkçe",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser4": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Prompt Üreticisi - Türkçe",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think5": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prompt Üreticisi Türkçe",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser5": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Prompt Üreticisi Türkçe",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random4": {
+      "main": [
+        [
+          {
+            "node": "Prompt Üreticisi Türkçe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ChatGPT1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Prompt Üreticisi Türkçe",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser5",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ChatGPT_4.": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Prompt Üreticisi - Türkçe",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser4",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c138d62e-5972-435c-b3fd-747ceb7b5690",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "26864db373f0c5e66d53d970bf3488b1dfb1ddc0d9f0bf0196c5111c9404a806"
+  },
+  "id": "FzIEBYNuOnc1XM30",
+  "tags": []
+}

@@ -1,0 +1,17 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+master.env
+google-service-account.json
+token.json
+credentials.json
+.DS_Store
+typeless5/frames/
+typeless5/annotated_v3/
+*.jpg
+*.mp4
+*.mov
+*.avi
+output/

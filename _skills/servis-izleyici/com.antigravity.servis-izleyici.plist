@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.antigravity.servis-izleyici</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/Frameworks/Python.framework/Versions/3.13/bin/python3</string>
+        <string>/Users/KULLANICI/Desktop/Antigravity/_skills/servis-izleyici/scripts/health_check.py</string>
+        <string>--check-up</string>
+        <string>--auto-heal</string>
+    </array>
+    
+    <!-- Her saat başı çalıştır -->
+    <key>StartInterval</key>
+    <integer>3600</integer>
+    
+    <!-- Log dosyaları -->
+    <key>StandardOutPath</key>
+    <string>/tmp/antigravity_health_check.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/antigravity_health_check_error.log</string>
+    
+    <!-- Çalışma dizini -->
+    <key>WorkingDirectory</key>
+    <string>/Users/KULLANICI/Desktop/Antigravity</string>
+</dict>
+</plist>

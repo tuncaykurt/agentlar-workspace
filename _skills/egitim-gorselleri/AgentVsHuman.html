@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hikaye: İnsanlardan AI Ajanlarına</title>
+
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --bg-color: #050a14;
+            --container-bg: rgba(15, 23, 42, 0.6);
+            --card-bg: rgba(30, 41, 59, 0.4);
+
+            --neon-blue: #00f0ff;
+            --neon-purple: #8a2be2;
+            --neon-green: #00ff66;
+            --neon-orange: #ff6b00;
+            --neon-pink: #ff00ff;
+            --neon-red: #ff3333;
+
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Ambient floating elements */
+        .ambient-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            z-index: -1;
+            opacity: 0.5;
+            animation: pulse 8s infinite alternate ease-in-out;
+        }
+
+        .orb-1 {
+            width: 400px;
+            height: 400px;
+            background: rgba(0, 240, 255, 0.15);
+            top: 10%;
+            left: -100px;
+        }
+
+        .orb-2 {
+            width: 500px;
+            height: 500px;
+            background: rgba(138, 43, 226, 0.15);
+            bottom: 10%;
+            right: -150px;
+            animation-delay: -3s;
+        }
+
+        .orb-3 {
+            width: 300px;
+            height: 300px;
+            background: rgba(255, 107, 0, 0.1);
+            top: 50%;
+            left: 30%;
+            animation-delay: -1s;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1) translateY(0);
+                opacity: 0.3;
+            }
+
+            100% {
+                transform: scale(1.2) translateY(-20px);
+                opacity: 0.6;
+            }
+        }
+
+        /* Narrative Layout */
+        .story-section {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 80px 20px;
+            position: relative;
+        }
+
+        .story-connector {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 100px;
+            background: linear-gradient(to bottom, var(--theme-color) 0%, transparent 100%);
+            z-index: 0;
+        }
+
+        .story-header {
+            text-align: center;
+            margin-bottom: 50px;
+            max-width: 900px;
+        }
+
+        .story-tag {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--theme-color);
+            color: var(--theme-color);
+        }
+
+        .story-title {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            background: linear-gradient(90deg, #fff, var(--theme-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1.1;
+        }
+
+        .story-desc {
+            font-size: 1.3rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin: 0 auto;
+            max-width: 800px;
+        }
+
+        /* BÖLÜM 1: İNSAN ÇAĞI */
+        #section-human {
+            --theme-color: var(--neon-red);
+        }
+
+        .traditional-diagram {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+            width: 100%;
+            max-width: 1000px;
+            background: rgba(255, 51, 51, 0.03);
+            border: 1px solid rgba(255, 51, 51, 0.1);
+            border-radius: 30px;
+            padding: 50px;
+            backdrop-filter: blur(10px);
+        }
+
+        .diagram-core {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .diagram-row {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+
+        .human-node {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid var(--neon-red);
+            border-radius: 20px;
+            padding: 25px;
+            width: 250px;
+            text-align: center;
+            position: relative;
+        }
+
+        .human-icon {
+            font-size: 2.5rem;
+            color: var(--text-main);
+            margin-bottom: 15px;
+        }
+
+        .human-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+
+        .human-tools {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .h-tool {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .bottleneck-badge {
+            margin-top: 20px;
+            background: rgba(255, 51, 51, 0.05);
+            border: 1px dashed var(--neon-red);
+            padding: 25px 35px;
+            border-radius: 20px;
+            color: #ff9999;
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            width: 100%;
+            max-width: 700px;
+        }
+
+        .bottleneck-badge ul {
+            margin-left: 20px;
+            line-height: 1.8;
+            font-size: 1.05rem;
+            color: #f8fafc;
+        }
+
+        .bottleneck-badge li b {
+            color: var(--neon-red);
+        }
+
+        /* BÖLÜM 2: GELİŞİM (TOOLS) */
+        #section-ai-transition {
+            --theme-color: var(--neon-blue);
+        }
+
+        .tools-showcase {
+            position: relative;
+            max-width: 1000px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .tools-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .tool-badge {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 15px 30px;
+            border-radius: 30px;
+            font-size: 1.2rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .tool-badge:hover {
+            background: rgba(0, 240, 255, 0.1);
+            transform: scale(1.05);
+            border-color: var(--neon-blue);
+            color: white;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2), 0 0 15px rgba(0, 240, 255, 0.2);
+        }
+
+        .infinite-tools-fade {
+            margin-top: 30px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.2);
+            text-align: center;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: pulse-fade 3s infinite;
+        }
+
+        @keyframes pulse-fade {
+
+            0%,
+            100% {
+                opacity: 0.3;
+            }
+
+            50% {
+                opacity: 0.8;
+            }
+        }
+
+        .ai-brain {
+            margin: 40px 0;
+            width: 150px;
+            height: 150px;
+            background: radial-gradient(circle, rgba(0, 240, 255, 0.2) 0%, transparent 70%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            color: var(--neon-blue);
+            text-shadow: 0 0 30px var(--neon-blue);
+            position: relative;
+        }
+
+        .ai-brain::after {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
+            border: 2px dashed rgba(0, 240, 255, 0.5);
+            border-radius: 50%;
+            animation: spin 10s linear infinite;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* BÖLÜM 3: SENARYOLAR */
+        #section-scenarios {
+            --theme-color: var(--neon-purple);
+            padding-top: 40px;
+            padding-bottom: 150px;
+        }
+
+        .scenarios-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 40px;
+        }
+
+        .scenario-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+        }
+
+        .scenario-card:nth-child(1) {
+            --sc-color: #00f0ff;
+        }
+
+        .scenario-card:nth-child(2) {
+            --sc-color: #ff00ff;
+        }
+
+        .scenario-card:nth-child(3) {
+            --sc-color: #00ff66;
+        }
+
+        .scenario-card:nth-child(4) {
+            --sc-color: #ff6b00;
+        }
+
+        .scenario-card:nth-child(5) {
+            --sc-color: #ffd700;
+        }
+
+        .scenario-card:nth-child(6) {
+            --sc-color: #ff3333;
+        }
+
+        .scenario-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--sc-color);
+            opacity: 0.8;
+        }
+
+        .scenario-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .sc-header {
+            padding: 30px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.03), transparent);
+            min-height: 140px;
+        }
+
+        .sc-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--sc-color);
+            color: var(--sc-color);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+        }
+
+        .sc-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: white;
+            line-height: 1.3;
+        }
+
+        .sc-body {
+            padding: 30px;
+            flex-grow: 1;
+        }
+
+        .workflow {
+            position: relative;
+            height: 100%;
+        }
+
+        .workflow::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            bottom: 20px;
+            left: 19px;
+            width: 2px;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 50%, var(--sc-color) 100%);
+            z-index: 1;
+        }
+
+        .step {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .step:last-child {
+            margin-bottom: 0;
+        }
+
+        .step-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-color);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            color: white;
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+
+        .step:hover .step-icon {
+            border-color: var(--sc-color);
+            color: var(--sc-color);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            transform: scale(1.1);
+        }
+
+        .step-content {
+            padding-top: 6px;
+        }
+
+        .step-tool {
+            font-size: 0.85rem;
+            color: var(--sc-color);
+            font-weight: 700;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .step-desc {
+            font-size: 1rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .step.final-step .step-icon {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--sc-color);
+            color: var(--sc-color);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Scroll Hint */
+        .scroll-down {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: var(--text-muted);
+            font-size: 2rem;
+            animation: bounce 2s infinite;
+            opacity: 0.5;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            20%,
+            50%,
+            80%,
+            100% {
+                transform: translateY(0) translateX(-50%);
+            }
+
+            40% {
+                transform: translateY(-15px) translateX(-50%);
+            }
+
+            60% {
+                transform: translateY(-7px) translateX(-50%);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .story-title {
+                font-size: 2.5rem;
+            }
+
+            .diagram-row {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .human-node {
+                width: 100%;
+                max-width: 300px;
+            }
+
+            .scenarios-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+
+    <!-- BÖLÜM 1: İNSAN ÇAĞI -->
+    <section id="section-human" class="story-section">
+        <div class="story-header" style="animation: fadeInUp 1s ease-out;">
+            <div class="story-tag">Bölüm 1: Başlangıç</div>
+            <h1 class="story-title">Manuel Çalışma Çağı</h1>
+            <p class="story-desc">Şirketlerin dijital dünyada iş yapabilmek için birçok araca ihtiyacı var.
+                Bugüne kadar, bu araçları kullanması için her birinin başına <b>bir insan</b> oturtmak zorundaydık.</p>
+        </div>
+
+        <div class="traditional-diagram" style="animation: fadeInUp 1s ease-out 0.3s backwards;">
+            <div class="diagram-core">Şirketin İhtiyaç Duyduğu Dijital Araçlar</div>
+            <div class="diagram-row">
+
+                <div class="human-node">
+                    <div class="human-icon"><i class="fas fa-user-tie"></i></div>
+                    <div class="human-title">Satış Temsilcisi</div>
+                    <div class="human-tools">
+                        <div class="h-tool"><i class="fab fa-linkedin" style="color: #0077b5;"></i> LinkedIn</div>
+                        <div class="h-tool"><i class="fas fa-envelope" style="color: #ea4335;"></i> Gmail</div>
+                        <div class="h-tool"><i class="fas fa-bullseye" style="color: #f39c12;"></i> Apollo</div>
+                    </div>
+                </div>
+
+                <div class="human-node">
+                    <div class="human-icon"><i class="fas fa-headset"></i></div>
+                    <div class="human-title">Müşteri İlişkileri</div>
+                    <div class="human-tools">
+                        <div class="h-tool"><i class="fab fa-instagram" style="color: #E1306C;"></i> Instagram DM</div>
+                        <div class="h-tool"><i class="fab fa-whatsapp" style="color: #25D366;"></i> WhatsApp</div>
+                        <div class="h-tool"><i class="fas fa-database" style="color: #00f0ff;"></i> CRM</div>
+                    </div>
+                </div>
+
+                <div class="human-node">
+                    <div class="human-icon"><i class="fas fa-user-edit"></i></div>
+                    <div class="human-title">Sosyal Medya Uzm.</div>
+                    <div class="human-tools">
+                        <div class="h-tool"><i class="fas fa-video" style="color: #8a2be2;"></i> CapCut / Kie</div>
+                        <div class="h-tool"><i class="fab fa-tiktok" style="color: #fff;"></i> TikTok</div>
+                        <div class="h-tool"><i class="fas fa-shopping-cart" style="color: #95bf47;"></i> Shopify</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="bottleneck-badge">
+                <div style="font-size: 2rem;"><i class="fas fa-exclamation-triangle"></i></div>
+                <div>
+                    <div style="font-weight: 800; font-size: 1.2rem; margin-bottom: 10px; color: var(--neon-red);">
+                        Mevcut Yapıdaki Sorunlar:</div>
+                    <ul>
+                        <li><b>Mesai Sınırı:</b> Sadece belirli saatlerde çalışma ve yorulma.</li>
+                        <li><b>Maliyet:</b> Maaş, sigorta ve ofis giderleri.</li>
+                        <li><b>İnsan Hatası:</b> Gözden kaçan detaylar ve duygusal kararlar.</li>
+                        <li><b>Büyüme Zorluğu:</b> İşler arttığında sürekli yeni insan bulma zorunluluğu.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="scroll-down"><i class="fas fa-chevron-down"></i></div>
+        <div class="story-connector"></div>
+    </section>
+
+    <!-- BÖLÜM 2: AI DEVRİMİ -->
+    <section id="section-ai-transition" class="story-section">
+        <div class="story-header">
+            <div class="story-tag">Bölüm 2: Gelişim</div>
+            <h1 class="story-title">İnsansızlaşma</h1>
+            <p class="story-desc">Artık kurallar değişti. Araçları insanların kullanmasına gerek yok.
+                <b>Antigravity</b>, internetteki tüm bu sistemlere anında bağlanıp işlemleri tek başına yapabilir.
+            </p>
+        </div>
+
+        <div class="ai-brain">
+            <i class="fas fa-robot"></i>
+        </div>
+
+        <div class="diagram-core" style="color: var(--text-muted); font-size: 1.2rem; margin-bottom: 20px;">Yapay
+            Zekanın Otonom Yönettiği Platformlar</div>
+
+        <div class="tools-showcase">
+            <div class="tools-grid">
+                <div class="tool-badge"><i class="fab fa-google" style="color: #4285F4;"></i> Google Maps</div>
+                <div class="tool-badge"><i class="fab fa-linkedin" style="color: #0077b5;"></i> LinkedIn</div>
+                <div class="tool-badge"><i class="fas fa-search-location" style="color: #ff6b6b;"></i> Hunter.io</div>
+                <div class="tool-badge"><i class="fas fa-bullseye" style="color: #f39c12;"></i> Apollo</div>
+                <div class="tool-badge"><i class="fas fa-envelope" style="color: #ea4335;"></i> Gmail</div>
+                <div class="tool-badge"><i class="fab fa-instagram" style="color: #E1306C;"></i> Instagram</div>
+                <div class="tool-badge"><i class="fab fa-whatsapp" style="color: #25D366;"></i> WhatsApp</div>
+                <div class="tool-badge"><i class="fab fa-tiktok" style="color: #fff;"></i> TikTok</div>
+                <div class="tool-badge"><i class="fas fa-database" style="color: #00f0ff;"></i> CRM Sistemleri</div>
+                <div class="tool-badge"><i class="fas fa-store" style="color: #95bf47;"></i> E-Ticaret Siteleri</div>
+                <div class="tool-badge"><i class="fas fa-video" style="color: #8a2be2;"></i> Analiz Araçları</div>
+                <div class="tool-badge"><i class="fas fa-calendar-alt" style="color: #4285F4;"></i> Takvimler</div>
+                <div class="tool-badge"><i class="fas fa-cube" style="color: #fff;"></i> Notion</div>
+                <div class="tool-badge"><i class="fas fa-chart-line" style="color: #00ff66;"></i> Muhasebe Programları
+                </div>
+            </div>
+
+            <div class="infinite-tools-fade">
+                <i class="fas fa-plus"></i> Sınırsız Sayıda Diğer Entegrasyon...
+            </div>
+        </div>
+
+        <div class="scroll-down"><i class="fas fa-chevron-down"></i></div>
+        <div class="story-connector"></div>
+    </section>
+
+    <!-- BÖLÜM 3: SENARYOLAR -->
+    <section id="section-scenarios" class="story-section" style="min-height: auto;">
+        <div class="story-header">
+            <div class="story-tag">Bölüm 3: Sonuç</div>
+            <h1 class="story-title">Yeni Nesil Personellerimiz</h1>
+            <p class="story-desc">Bu yetenekler birleştiğinde; şirketlerin işleyişi uyumayan, yorulmayan ve hata
+                yapmayan
+                sistemlere dönüşüyor. İşte bazı örnekler:</p>
+        </div>
+
+        <div class="scenarios-container">
+
+            <!-- SENARYO 1: B2B Satış -->
+            <div class="scenario-card">
+                <div class="sc-header">
+                    <div class="sc-badge"><i class="fas fa-building" style="margin-right: 5px;"></i> Satış / B2B</div>
+                    <h3 class="sc-title">Otomatik Satış Makinesi</h3>
+                </div>
+                <div class="sc-body">
+                    <div class="workflow">
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-map-marked-alt"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Google Maps & LinkedIn</div>
+                                <div class="step-desc">Haritadan müşterileri bulur ve yetkili kişiyi tespit eder.</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-search"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Hunter.io & Apollo</div>
+                                <div class="step-desc">E-postayı doğrular ve markaya özel satış metni yazar.</div>
+                            </div>
+                        </div>
+                        <div class="step final-step">
+                            <div class="step-icon"><i class="fas fa-paper-plane"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Gmail & Müşteri Takip (CRM)</div>
+                                <div class="step-desc">Mesajı gönderip sisteme kaydeder. Cevap gelmezse takip mesajı
+                                    atar.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SENARYO 2: E-Ticaret -->
+            <div class="scenario-card">
+                <div class="sc-header">
+                    <div class="sc-badge"><i class="fas fa-shopping-bag" style="margin-right: 5px;"></i> E-Ticaret /
+                        Perakende</div>
+                    <h3 class="sc-title">Otomatik İçerik Fabrikası</h3>
+                </div>
+                <div class="sc-body">
+                    <div class="workflow">
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-globe"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Web Siteniz</div>
+                                <div class="step-desc">Sitenize eklenen yeni ürünleri fark edip görsellerini alır.</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-magic"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">AI Video Araçları</div>
+                                <div class="step-desc">Fotoğrafları yapay zeka ile canlandırıp dikkat çekici kısa
+                                    videolara dönüştürür.</div>
+                            </div>
+                        </div>
+                        <div class="step final-step">
+                            <div class="step-icon"><i class="fab fa-instagram"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Instagram & TikTok</div>
+                                <div class="step-desc">Güzel bir metin ve müzikle videoyu en uygun saatte kendi başına
+                                    paylaşır.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SENARYO 3: Müşteri Hizmetleri -->
+            <div class="scenario-card">
+                <div class="sc-header">
+                    <div class="sc-badge"><i class="fas fa-headset" style="margin-right: 5px;"></i> İletişim / Müşteri
+                    </div>
+                    <h3 class="sc-title">7/24 Müşteri Hizmetleri</h3>
+                </div>
+                <div class="sc-body">
+                    <div class="workflow">
+                        <div class="step">
+                            <div class="step-icon"><i class="far fa-comments"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Instagram, WhatsApp & TikTok</div>
+                                <div class="step-desc">Gelen tüm mesajlara ve yorumlara anında cevap verir.</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-brain"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">İhtiyaç Analizi</div>
+                                <div class="step-desc">Müşterinin tam olarak ne istediğini ve sorularını anlar.</div>
+                            </div>
+                        </div>
+                        <div class="step final-step">
+                            <div class="step-icon"><i class="far fa-calendar-check"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Takvim & Müşteri Takip</div>
+                                <div class="step-desc">Karşılıklı konuşmaya göre satışı bitirir veya randevu alıp ekibe
+                                    haber verir.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SENARYO 4: Muhasebe Raporlama -->
+            <div class="scenario-card">
+                <div class="sc-header">
+                    <div class="sc-badge"><i class="fas fa-chart-line" style="margin-right: 5px;"></i> Finans / Yönetim
+                    </div>
+                    <h3 class="sc-title">Muhasebe Analizi ve Raporlama</h3>
+                </div>
+                <div class="sc-body">
+                    <div class="workflow">
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Banka & Faturalar</div>
+                                <div class="step-desc">Fişleri ve karışık banka dökümlerini okur, bilgileri düzenler.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-check-double"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Kontrol & Kayıt</div>
+                                <div class="step-desc">Hataları bulur ve bilgileri muhasebe programına yazar.</div>
+                            </div>
+                        </div>
+                        <div class="step final-step">
+                            <div class="step-icon"><i class="fab fa-whatsapp"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Özet Rapor</div>
+                                <div class="step-desc">Gelir, gider ve kâr durumunu basitçe özetleyip WhatsApp'tan
+                                    gönderir.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SENARYO 5: Doküman ve Sunum -->
+            <div class="scenario-card">
+                <div class="sc-header">
+                    <div class="sc-badge"><i class="fas fa-file-alt" style="margin-right: 5px;"></i> B2B / Proje</div>
+                    <h3 class="sc-title">Sunum, Teklif ve Doküman Hazırlayıcı</h3>
+                </div>
+                <div class="sc-body">
+                    <div class="workflow">
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-pen-nib"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Ses ve Toplantı Notları</div>
+                                <div class="step-desc">Müşteri görüşmelerindeki notları ve istekleri düzenler.</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-layer-group"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Tasarım & Yazı</div>
+                                <div class="step-desc">Şirketin yapısına uygun, görselli bir teklif dosyası veya sunum
+                                    hazırlar.</div>
+                            </div>
+                        </div>
+                        <div class="step final-step">
+                            <div class="step-icon"><i class="fas fa-paper-plane"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">E-posta & Dosya Deposu</div>
+                                <div class="step-desc">Hazırlanan teklifi kaydeder ve güzel bir dille müşteriye iletir.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SENARYO 6: Web Site İnşası -->
+            <div class="scenario-card">
+                <div class="sc-header">
+                    <div class="sc-badge"><i class="fas fa-code" style="margin-right: 5px;"></i> Teknoloji / Ürün</div>
+                    <h3 class="sc-title">Profesyonel Web Sitesi İnşası</h3>
+                </div>
+                <div class="sc-body">
+                    <div class="workflow">
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-lightbulb"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Site Taslağı</div>
+                                <div class="step-desc">Müşterinin kısa bir lafından ne istediğini anlar ve şık bir ön
+                                    plan çizer.</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon"><i class="fas fa-laptop-code"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Hazırlık & Kodlama</div>
+                                <div class="step-desc">Tüm sayfaları, menüleri ve kodları sıfırdan kendi başına yazar.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="step final-step">
+                            <div class="step-icon"><i class="fas fa-rocket"></i></div>
+                            <div class="step-content">
+                                <div class="step-tool">Canlıya Alma</div>
+                                <div class="step-desc">Web sitesini anında internete açar ve çalışan bir adres verir.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+</body>
+
+</html>

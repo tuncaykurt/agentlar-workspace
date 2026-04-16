@@ -1,0 +1,116 @@
+# ═══════════════════════════════════════════════════════════════
+# 🎬 Örnek Marka — İçerik Üretim Agent Konfigürasyonu
+# ═══════════════════════════════════════════════════════════════
+# Agent: _agents/icerik-uretim/AGENT.md
+# Amaç: Markanız için içerik üretim pipeline'ının varsayılan
+#        ayarlarını tanımlar. Bu dosyayı kopyalayıp doldurun.
+# ═══════════════════════════════════════════════════════════════
+
+# ── Marka Profili ──────────────────────────────────────────────
+marka:
+  isim: "MARKA_ADINIZ"
+  unvan: "Marka unvanı veya sloganı"
+  platformlar:
+    instagram: "@hesap_adi"
+    tiktok: "@hesap_adi"
+    youtube: "Kanal Adı"
+  web_sitesi: null  # https://orneksite.com
+
+# ── Dil ve Ton Kuralları ──────────────────────────────────────
+dil:
+  ana_dil: "Türkçe"
+  teknik_terimler: "Sektöre özel teknik terimler orijinal dilinde bırakılır"
+  para_birimi:
+    birincil: "USD"
+    ikincil: "TRY"  # Parantez içinde verilir
+
+ton:
+  stil: "samimi-profesyonel"   # samimi | profesyonel | kurumsal | samimi-profesyonel
+  aciklama: >
+    Markanızın konuşma tonunu buraya açıklayın. Nasıl bir üslup kullanılmalı?
+    Hangi kelimeler tercih edilmeli? Hangi ton kaçınılmalı?
+  cumle_uzunlugu: "kisa"  # Video scriptleri için kısa cümleler önerilir
+  hikaye_payoff: true  # Her scriptin sonunda izleyiciye somut bir değer sunulmalı
+
+# ── Hedef Kitle ────────────────────────────────────────────────
+hedef_kitle:
+  tanim: "Hedef kitlenizin kısa açıklaması"
+  yas_araligi: "25-45"
+  gelir_profili: "orta-üst"
+  ilgi_alanlari:
+    - "İlgi alanı 1"
+    - "İlgi alanı 2"
+    - "İlgi alanı 3"
+  agri_noktalari:
+    - "Hedef kitlenizin yaşadığı sorun 1"
+    - "Hedef kitlenizin yaşadığı sorun 2"
+
+# ── İçerik Kategorileri ───────────────────────────────────────
+icerik_turleri:
+  # Kendi sektörünüze göre kategoriler tanımlayın
+  bilgilendirme:
+    aciklama: "Sektörünüzle ilgili bilgilendirici içerikler"
+    format: "Hook → Script → Tablo → CTA"
+    workflow: "_agents/icerik-uretim/workflows/script-yaz.md"
+
+  hesaplama:
+    aciklama: "Rakamlarla desteklenmiş somut senaryolar"
+    format: "Hook → Hesaplama → Tablo → Net Sonuç → CTA"
+    workflow: "_agents/icerik-uretim/workflows/hesaplama-scripti.md"
+
+  ilham_uyarlama:
+    aciklama: "Rakip videolardan ilham alarak orijinal script üretimi"
+    format: "Kaynak analiz + farklılaştırılmış yeni script"
+    workflow: "_agents/icerik-uretim/workflows/ilham-al.md"
+
+# ── Hesaplama Metrikleri (Sektöre Özel) ───────────────────────
+# Kendi sektörünüzün parametrelerini buraya ekleyin
+hesaplama_metrikleri:
+  # Örnek: Gayrimenkul
+  # deger_artisi: 0.08        # Yıllık %8
+  # kira_roi: 0.07            # Yıllık %7
+  # Örnek: E-ticaret
+  # ortalama_kar_marji: 0.30  # %30
+  # iade_orani: 0.05          # %5
+
+# ── Marka Kuralları (Kesin Yasak ve Zorunluluklar) ────────────
+kurallar:
+  yasaklar:
+    - "Kesin kazanırsınız"
+    - "Garantili getiri"
+    - "Risk yok"
+    - "Hemen alın"
+    - "Son fırsat (gerçek değilse)"
+    - "Abartılı ve temelsiz vaatler"
+
+  zorunluluklar:
+    - "Her scriptte CTA (Call to Action) olmalı"
+    - "Hesaplama içeriklerinde tablo zorunlu"
+    - "Rakam içeriyorsa kaynak gösterilmeli"
+
+  format_yapisi:
+    hook: "1-2 cümle — dikkat çekici açılış"
+    script: "Akıcı paragraflar veya soru-cevap formatı"
+    tablo: "Avantaj/Dezavantaj veya hesaplama tablosu"
+    cta: "Soru veya takip çağrısı"
+
+# ── Skill ve Tool Referansları ────────────────────────────────
+skills:
+  video_uretim: "_skills/kie-ai-video-production/SKILL.md"
+  rakip_analiz: "_skills/rakip-analiz/SKILL.md"
+
+# ── Rakip Listesi ─────────────────────────────────────────────
+rakipler:
+  platformlar:
+    - "Instagram"
+    - "TikTok"
+    - "YouTube"
+  # Kendi rakiplerinizi buraya ekleyin
+  hesaplar: []
+
+# ── API Anahtarları ───────────────────────────────────────────
+api:
+  kaynak: "_knowledge/api-anahtarlari.md"
+  gerekli_anahtarlar:
+    - "Kie AI API Key (video üretimi)"
+    - "Apify Token (rakip analizi için — opsiyonel)"

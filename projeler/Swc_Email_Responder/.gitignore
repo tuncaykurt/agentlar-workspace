@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
+# Local utility scripts with hardcoded creds (not needed on Railway)
+auth_and_read_sheet.py
+
+# Credentials & Tokens (ASLA push edilmemeli!)
+token.pickle
+token_sheets.pickle
+*.pickle
+credentials.json
+
+# Büyük analiz dosyaları
+history_analysis.json
+
+# Cron / Local scheduling
+setup_cron.sh
+cron_log.txt
+cron_error.txt
+
+# Eski yedekler
+_eski_auth/
+
+# OS
+.DS_Store
+
+# Environment
+.env
+*.env

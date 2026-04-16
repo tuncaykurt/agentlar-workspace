@@ -1,0 +1,29 @@
+# API Key ve Credential dosyaları
+.env
+.env.*
+!.env.example
+credentials.env
+token.json
+credentials.json
+_knowledge/credentials/
+
+# Antigravity hassas dosyalar
+_knowledge/api-anahtarlari.md
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Node.js
+node_modules/
+
+# IDE
+.cursor/
+.vscode/
+
+_temp_repo/

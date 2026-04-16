@@ -1,0 +1,1532 @@
+{
+  "generated_at": "2026-03-22T21:59:43.171883",
+  "threshold": 45,
+  "summary": {
+    "total_published": 37,
+    "previously_processed": 0,
+    "newly_assessed": 37,
+    "above_threshold": 36,
+    "below_threshold": 1,
+    "drive_inaccessible": 1
+  },
+  "new_videos": [
+    {
+      "name": "Skywork",
+      "page_id": "09b95514-0a32-8289-a6b3-017e04be73b0",
+      "score": 100,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "6 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "6 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "14 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Skywork\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-08"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/u/0/folders/1EvKD1HNySTJgJmaljpp7wON_W411p9ee",
+      "publish_date": "2026-02-08",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Emergent 26 - Clawdbot",
+      "page_id": "0e395514-0a32-83a8-925d-01a6f771b08f",
+      "score": 100,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "8 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "8 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "15 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Emergent 26 - Clawdbot\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-09"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1AbE1AC6-4r34JvAYijLpEkVDN6ubhL3w",
+      "publish_date": "2026-02-09",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Nim 16 - VDay",
+      "page_id": "10595514-0a32-8334-b597-01db955b0a44",
+      "score": 100,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "5 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "5 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "8 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Nim 16 - VDay\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-07"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/18lmrJ4mbJWubG2U87IIEg2Hfn6sW6XQf",
+      "publish_date": "2026-02-07",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Creati 6",
+      "page_id": "5a195514-0a32-828a-9d01-01eee9f75469",
+      "score": 100,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "7 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "7 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "13 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Creati 6\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-03"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1SJUF6IR8JN7NWN905IJViYiOhhNVwwnZ",
+      "publish_date": "2026-02-03",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Abacus 5",
+      "page_id": "9d195514-0a32-8369-adea-01820431045b",
+      "score": 100,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "7 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "7 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "11 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Abacus 5\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-18"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1-7ZAIsfywXmufdZ9lH_MIe4f9uIIuSxW",
+      "publish_date": "2026-02-18",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Abacus 4",
+      "page_id": "a7695514-0a32-8270-a9af-816795aa789b",
+      "score": 100,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "5 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "5 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "9 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Abacus 4\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-01-30"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1ugZhjOWw4t48QIuy5X6pvBctRK6zemjB",
+      "publish_date": "2026-01-30",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Emergent 28 Duolingo",
+      "page_id": "b1c95514-0a32-8213-a57a-010aba1ae758",
+      "score": 100,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "7 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "7 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "16 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Emergent 28 Duolingo\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-03-06"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1RRksLzoEqL97zTLw6nRKOSrUo5WfV7P6",
+      "publish_date": "2026-03-06",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Printify 8",
+      "page_id": "10e95514-0a32-823a-bdcc-81a5d8e044c6",
+      "score": 95,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "3 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "3 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "9 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Printify 8\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-14"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/17Sed1ndLqLZJ3dM9j57G_D4IcjIPsop7",
+      "publish_date": "2026-02-14",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Nim 17 - Templates",
+      "page_id": "61595514-0a32-82e9-bd92-81e29dc760b8",
+      "score": 95,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "3 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "3 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "11 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Nim 17 - Templates\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-01"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/15FHDh3rqFHZZsCNP1wn0AFoKJRhfxXp4",
+      "publish_date": "2026-02-01",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Kimi 3",
+      "page_id": "71895514-0a32-83b6-b1a1-81e5f2b893c1",
+      "score": 95,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "4 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "4 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "18 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Kimi 3\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-05"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1owvIkVTsmXtU6ZqGLdV03DCfiW2yxkdm",
+      "publish_date": "2026-02-05",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Verdent 2",
+      "page_id": "e2395514-0a32-8368-bf07-8145eee24b93",
+      "score": 95,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "3 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "3 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "12 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Verdent 2\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-03-19"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1pjy40TO4MydyqaVAiOu2TcgqEbOMgPsi",
+      "publish_date": "2026-03-19",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Morpara",
+      "page_id": "ebd95514-0a32-836d-85b7-817766e30826",
+      "score": 95,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "3 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "3 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "10 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Morpara\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-03-16"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1Fhw6YPpqCnqZlRzyfXehP3idB28sHIfE",
+      "publish_date": "2026-03-16",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Mureka",
+      "page_id": "95e95514-0a32-8217-b10f-810ef3a4862b",
+      "score": 92,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "3 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "3 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "7 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Mureka\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-06"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/139DD5VBqNs8iUbrDRGW7bmu9Vorge7Fi",
+      "publish_date": "2026-02-06",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Emergent 27",
+      "page_id": "c5495514-0a32-8248-b6f0-010dd8513a23",
+      "score": 92,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "3 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "3 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "6 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Emergent 27\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-02"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1Xgm8mAba_8b1EvXTcux5PD9iEoZaa48Z",
+      "publish_date": "2026-02-02",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Genspark",
+      "page_id": "77995514-0a32-8331-9f16-019a74ec1522",
+      "score": 90,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "10 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "10 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "16 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Genspark\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1qZdLLqTWcra2Q1ZD0M7LroY1BMCM1PB-",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Emergent Campaign 29 Falcı",
+      "page_id": "a4c95514-0a32-83fd-a79c-81b9fc5c53c0",
+      "score": 90,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "11 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "11 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "16 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Emergent Campaign 29 Falcı\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/14evKagVYwTpltl5EppQQA4gytFO0D3Zg",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Kimi 2",
+      "page_id": "b6b95514-0a32-830f-b751-814235f72bb1",
+      "score": 87,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "5 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "5 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "6 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Kimi 2\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1aSpVsU6kGQpLj_mH2_pvhp-KmDfM064C",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Kimi 4",
+      "page_id": "42695514-0a32-83e6-bb95-01a8f6e108a1",
+      "score": 85,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "4 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "4 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "11 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Kimi 4\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/13ubkDWixeC5glSrshF-zfSZwwNkLbACR",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Nim 18 x Kling",
+      "page_id": "97f95514-0a32-8365-a4e1-8147703660e1",
+      "score": 85,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "4 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "4 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "8 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Nim 18 x Kling\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1KOTqP1tWkxkXnKkxRRxMDKX7ifiYc1eH",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Dzine",
+      "page_id": "99395514-0a32-8315-a3cb-016c288d1939",
+      "score": 85,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "5 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "5 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "22 dosya"
+        },
+        "name": {
+          "pts": 5,
+          "max": 10,
+          "note": "\"Dzine\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/129uPxvpECVW0IliAm3jxlG3jZuf5QcIr",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Dokie",
+      "page_id": "a3c95514-0a32-83df-b3e6-01040d620d81",
+      "score": 85,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "7 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 15,
+          "max": 15,
+          "note": "7 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "13 dosya"
+        },
+        "name": {
+          "pts": 5,
+          "max": 10,
+          "note": "\"Dokie\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1ajpgLWj_FoWY3bSvoqr9zxdn2gWU7h1O",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Typeless 2",
+      "page_id": "0ff95514-0a32-8263-84ce-019f6944e09d",
+      "score": 82,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "3 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "3 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "5 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Typeless 2\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1cVl9O7ah6AunVozfDOg26PCyXCjpernT",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Meshy 4",
+      "page_id": "72095514-0a32-838d-9472-81fcbce0ea51",
+      "score": 82,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 40,
+          "max": 40,
+          "note": "3 ekran kaydı (mükemmel)"
+        },
+        "volume": {
+          "pts": 10,
+          "max": 15,
+          "note": "3 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "6 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Meshy 4\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1sKtd5bALqJXwt-cpT3AlkWzKwJkNck6_",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Printify 7",
+      "page_id": "53095514-0a32-82dc-b02b-81e2136c0f9d",
+      "score": 72,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "2 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 5,
+          "max": 15,
+          "note": "2 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "6 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Printify 7\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-27"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1nfO-iMqlAy3dU6Ve-01Vs89LO9OeCZp_",
+      "publish_date": "2026-02-27",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Blink New",
+      "page_id": "89295514-0a32-8381-a3f2-8174df4575c5",
+      "score": 72,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "2 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 5,
+          "max": 15,
+          "note": "2 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "5 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Blink New\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-03"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1Lh4SuNgOKbop3qRTcV1sGhll3iLrewbJ",
+      "publish_date": "2026-02-03",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Tripo 3D",
+      "page_id": "92c95514-0a32-8219-9d22-81cd7c20fa11",
+      "score": 72,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "2 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 5,
+          "max": 15,
+          "note": "2 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "6 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Tripo 3D\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-04"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1MpwE00pAu0AltEQ4dRbC7UXX71K1y_7W",
+      "publish_date": "2026-02-04",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Verdent",
+      "page_id": "a1995514-0a32-8238-bc7e-010621c97e51",
+      "score": 72,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "2 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 5,
+          "max": 15,
+          "note": "2 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "5 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Verdent\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-11"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/18s0xjG4UICOJUO2M7-2RnCfn7QNDcPl9",
+      "publish_date": "2026-02-11",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Blink New 2",
+      "page_id": "1e995514-0a32-82c3-89ae-817b3e3d6ced",
+      "score": 70,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "1 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 0,
+          "max": 15,
+          "note": "1 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "11 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Blink New 2\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-03-04"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1zJC2CdwyyvEIGhu893idbPMkpyKPIwEf",
+      "publish_date": "2026-03-04",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "kovduğu için para kazanıyorum",
+      "page_id": "5e395514-0a32-83c4-84be-013058a19336",
+      "score": 70,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "1 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 0,
+          "max": 15,
+          "note": "1 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "12 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"kovduğu için para kazanıyorum\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-03-17"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1PgonP-Z3wvUyyRxM2H1GPT14AXiPb0MM",
+      "publish_date": "2026-03-17",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Arcads",
+      "page_id": "53095514-0a32-823e-83b0-81e4114b6494",
+      "score": 67,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "1 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 0,
+          "max": 15,
+          "note": "1 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "4 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Arcads\""
+        },
+        "date": {
+          "pts": 10,
+          "max": 10,
+          "note": "2026-02-10"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1hP9C9MItcvp6chRbMsEuRADzirlcVkZN",
+      "publish_date": "2026-02-10",
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Emergent 25",
+      "page_id": "19595514-0a32-8300-a9b4-81ee8239b89b",
+      "score": 62,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "2 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 5,
+          "max": 15,
+          "note": "2 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "5 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Emergent 25\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1htMRnXY2bg72kDTAk7xboNSGgWqHjSLU",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Abacus 6",
+      "page_id": "a1995514-0a32-82da-875b-81354256d292",
+      "score": 60,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "1 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 0,
+          "max": 15,
+          "note": "1 kayıt hacmi"
+        },
+        "files": {
+          "pts": 10,
+          "max": 10,
+          "note": "8 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Abacus 6\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1mCx7FF5LZPbOGRJ7R2B6yvyb6wQqQvjx",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "YouTube - Testimonial Mustafa",
+      "page_id": "50595514-0a32-8335-bc1d-01b2c309bcdc",
+      "score": 57,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "1 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 0,
+          "max": 15,
+          "note": "1 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "5 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"YouTube - Testimonial Mustafa\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1Gb51W_GwlTgtzO6giL-WMxCqEV9qLaA8",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Emergent 24 - Restoran",
+      "page_id": "5a795514-0a32-8323-9fc5-01e3e91b7267",
+      "score": 57,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "1 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 0,
+          "max": 15,
+          "note": "1 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "5 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Emergent 24 - Restoran\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1OfcIOeY3LL1W8zpgBqLQ4QnzeaKZ5Waf",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "eSIMio 12 Ramazan Bayramı",
+      "page_id": "b0b95514-0a32-838a-bbf1-0172bfc450a4",
+      "score": 57,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "1 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 0,
+          "max": 15,
+          "note": "1 kayıt hacmi"
+        },
+        "files": {
+          "pts": 7,
+          "max": 10,
+          "note": "7 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"eSIMio 12 Ramazan Bayramı\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1ZZazj6RLoGaovBMwlrFOKJrErN756Ysa",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "Form Satış 1",
+      "page_id": "5c295514-0a32-8308-b4e9-011fb229519f",
+      "score": 54,
+      "breakdown": {
+        "drive_link": {
+          "pts": 15,
+          "max": 15,
+          "note": "✓ link var"
+        },
+        "screen_recs": {
+          "pts": 25,
+          "max": 40,
+          "note": "1 ekran kaydı (yeterli)"
+        },
+        "volume": {
+          "pts": 0,
+          "max": 15,
+          "note": "1 kayıt hacmi"
+        },
+        "files": {
+          "pts": 4,
+          "max": 10,
+          "note": "2 dosya"
+        },
+        "name": {
+          "pts": 10,
+          "max": 10,
+          "note": "\"Form Satış 1\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "https://drive.google.com/drive/folders/1Taf4CwdaDoLulMfPDFEELwf6rNshqcvy",
+      "publish_date": null,
+      "drive_accessible": true,
+      "above_threshold": true
+    },
+    {
+      "name": "",
+      "page_id": "55795514-0a32-82ce-9d87-01eb92f273b4",
+      "score": 0,
+      "breakdown": {
+        "drive_link": {
+          "pts": 0,
+          "max": 15,
+          "note": "✗ link yok"
+        },
+        "screen_recs": {
+          "pts": 0,
+          "max": 40,
+          "note": "Drive erişimi yok"
+        },
+        "volume": {
+          "pts": 0,
+          "max": 15,
+          "note": "—"
+        },
+        "files": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        },
+        "name": {
+          "pts": 0,
+          "max": 10,
+          "note": "\"\""
+        },
+        "date": {
+          "pts": 0,
+          "max": 10,
+          "note": "—"
+        }
+      },
+      "drive_url": "",
+      "publish_date": null,
+      "drive_accessible": false,
+      "above_threshold": false
+    }
+  ],
+  "processed_videos": []
+}

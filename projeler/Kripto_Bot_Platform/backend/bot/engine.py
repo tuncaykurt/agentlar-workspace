@@ -1,0 +1,418 @@
+"""
+AI Destekli Bot Engine
+Akış:
+1. Teknik indikatörler → sinyal tespiti
+2. DeepSeek → hızlı filtre
+3. Claude → derin analiz + SL/TP hesaplama
+4. Risk manager → pozisyon büyüklüğü
+5. Executor → işlem aç
+"""
+import asyncio
+from datetime import datetime
+from bot.risk_manager import RiskManager
+from ai.indicators import calculate_all, generate_signal, volume_change_pct
+from ai.openrouter import quick_filter, deep_analysis
+from ai.market_context import collect_full_context
+from core.redis_client import get_redis
+import json
+
+
+class BotEngine:
+    def __init__(self, bot_config: dict, exchange_client):
+        self.config = bot_config
+        self.exchange = exchange_client
+        self.running = False
+        self.paper_trades: list = []
+        self.signal_history: list = []
+
+        self.risk = RiskManager(
+            balance=bot_config.get("initial_balance", 1000),
+            risk_per_trade=bot_config.get("risk_per_trade", 0.01),
+            max_daily_loss=bot_config.get("max_daily_loss", 0.05),
+            leverage=bot_config.get("leverage", 3),
+        )
+
+    async def run(self):
+        self.running = True
+        redis = get_redis()
+        symbol = self.config["symbol"]
+        strategy = self.config.get("strategy", "ema_cross")
+        print(f"[Bot {self.config['name']}] Başlatıldı — {symbol} | Strateji: {strategy}")
+
+        while self.running:
+            try:
+                if self.risk.killed:
+                    await self._alert("🔴 Kill switch aktif — günlük kayıp limitine ulaşıldı.")
+                    break
+
+                # ── Grid Bot Stratejisi ───────────────────────────────
+                if strategy == "grid_bot":
+                    await self._run_grid_cycle(redis, symbol)
+                    await asyncio.sleep(10)   # 10sn'de bir fiyat kontrolü
+                    continue
+
+                # ── Özel Sinyal Stratejisi ────────────────────────────
+                if strategy == "custom_signal":
+                    await self._run_custom_signal_cycle(redis, symbol)
+                    await asyncio.sleep(30)   # 30sn'de bir kontrol
+                    continue
+
+                # 1. Veri çek (1s mum)
+                ohlcv = await self.exchange.get_ohlcv(symbol, "1h", 100)
+                if len(ohlcv) < 60:
+                    await asyncio.sleep(60)
+                    continue
+
+                # 2. Teknik indikatörler
+                ind = calculate_all(ohlcv)
+                signal = generate_signal(ind)
+                close = ind.get("close", 0)
+
+                ai_result = None
+
+                if signal:
+                    print(f"[Bot] Teknik sinyal: {signal} @ {close}")
+
+                    # 3. Tüm piyasa bağlamını paralel topla
+                    funding = await self._get_funding(symbol)
+                    vol_chg = volume_change_pct(ohlcv)
+                    full_ctx = await collect_full_context(self.exchange, symbol)
+
+                    filter_result = await quick_filter(
+                        symbol=symbol,
+                        side=signal,
+                        price=close,
+                        rsi=ind["rsi"],
+                        macd_hist=ind["macd_hist"],
+                        funding_rate=funding,
+                        volume_change_pct=vol_chg,
+                        fear_greed=full_ctx.get("fear_greed"),
+                        order_book=full_ctx.get("order_book"),
+                        mtf=full_ctx.get("mtf"),
+                    )
+
+                    print(f"[Bot] DeepSeek filtre: {filter_result}")
+
+                    # DeepSeek bilgi amaçlı, Claude her zaman çalışır
+                    print(f"[Bot] DeepSeek skoru: {filter_result.get('strength')}/10 — {filter_result.get('reason')}")
+
+                    # 4. Claude derin analiz — tüm verilerle
+                    ai_result = await deep_analysis(
+                        symbol=symbol,
+                        side=signal,
+                        price=close,
+                        candles=ohlcv,
+                        indicators=ind,
+                        market_context={
+                            "funding_rate": funding,
+                            "volume_change": vol_chg,
+                        },
+                        full_context=full_ctx,
+                    )
+
+                    print(f"[Bot] Claude analiz: confidence={ai_result.get('confidence')} approved={ai_result.get('approved')}")
+
+                    # 5. Minimum güven skoru kontrolü
+                    min_confidence = self.config.get("min_confidence", 60)
+                    if ai_result.get("approved") and ai_result.get("confidence", 0) >= min_confidence:
+                        stop_loss = ai_result.get("stop_loss") or self.risk.atr_stop_loss(
+                            close, ind["atr"], signal
+                        )
+                        qty = self.risk.position_size(close, stop_loss)
+
+                        if qty > 0:
+                            await self._execute(signal, close, qty, stop_loss, ai_result)
+                    else:
+                        reason = ai_result.get("analysis", "Güven skoru yetersiz")
+                        print(f"[Bot] Sinyal reddedildi: {reason}")
+
+                # Durumu Redis'e yaz
+                status_data = {
+                    "name": self.config["name"],
+                    "symbol": symbol,
+                    "signal": signal,
+                    "price": close,
+                    "indicators": {
+                        "rsi": ind.get("rsi"),
+                        "ema9": ind.get("ema9"),
+                        "ema21": ind.get("ema21"),
+                        "macd_hist": ind.get("macd_hist"),
+                    },
+                    "ai_result": ai_result,
+                    "risk": self.risk.status(),
+                    "signal_history": self.signal_history[-5:],
+                    "ts": datetime.utcnow().isoformat(),
+                }
+                await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
+
+                await asyncio.sleep(300)  # 5 dakikada bir kontrol
+
+            except Exception as e:
+                print(f"[Bot {self.config['name']}] Hata: {e}")
+                await self._alert(f"⚠️ Bot hatası: {e}")
+                await asyncio.sleep(60)
+
+    async def _execute(self, side: str, price: float, qty: float, stop_loss: float, ai_result: dict):
+        paper = self.config.get("paper_mode", True)
+        mode = "📝 PAPER" if paper else "🟢 CANLI"
+        confidence = ai_result.get("confidence", 0)
+        take_profit = ai_result.get("take_profit")
+        analysis = ai_result.get("analysis", "")
+
+        trade = {
+            "side": side,
+            "entry": price,
+            "qty": qty,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "confidence": confidence,
+            "analysis": analysis,
+            "ts": datetime.utcnow().isoformat(),
+        }
+
+        if paper:
+            self.paper_trades.append(trade)
+        else:
+            await self.exchange.set_leverage(self.config["symbol"], self.risk.leverage)
+            await self.exchange.place_order(self.config["symbol"], side, qty, "market")
+
+        self.signal_history.append(trade)
+
+        msg = (
+            f"{mode} | {'🟢 LONG' if side == 'buy' else '🔴 SHORT'} | "
+            f"{self.config['symbol'].replace('/USDT:USDT', '')} @ ${price:,.2f}\n"
+            f"Miktar: {qty} | SL: ${stop_loss:,.2f}"
+            + (f" | TP: ${take_profit:,.2f}" if take_profit else "") +
+            f"\nAI Güven: %{confidence} | {analysis}"
+        )
+        print(f"[Bot] {msg}")
+        await self._alert(msg)
+
+    async def _get_funding(self, symbol: str) -> float:
+        try:
+            return await self.exchange.get_funding_rate(symbol)
+        except:
+            return 0.0
+
+    def _calc_atr(self, ohlcv: list, period: int = 14) -> float:
+        if len(ohlcv) < period + 1:
+            return 0.01
+        highs  = [c[2] for c in ohlcv[-period:]]
+        lows   = [c[3] for c in ohlcv[-period:]]
+        closes = [c[4] for c in ohlcv[-period:]]
+        trs = [max(h - l, abs(h - c), abs(l - c))
+               for h, l, c in zip(highs, lows, closes)]
+        return sum(trs) / len(trs)
+
+    async def _alert(self, message: str):
+        from core.config import settings
+        if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID:
+            import httpx
+            url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+            async with httpx.AsyncClient() as client:
+                await client.post(url, json={
+                    "chat_id": settings.TELEGRAM_CHAT_ID,
+                    "text": message,
+                })
+
+    async def _run_grid_cycle(self, redis, symbol: str):
+        """
+        Grid Bot döngüsü:
+        - İlk çalışmada grid seviyelerini başlatır
+        - Her döngüde anlık fiyatı kontrol eder
+        - Uygun grid seviyesinde AL/SAT sinyali üretir
+        """
+        from bot.strategies.grid import GridStrategy
+
+        # Grid strategy instance'ını bot başına sakla (memory'de)
+        if not hasattr(self, "_grid"):
+            params = self.config.get("params", self.config.get("strategy_params", {}))
+            self._grid = GridStrategy(params)
+
+        # Anlık fiyatı al
+        try:
+            ticker = await self.exchange.exchange.fetch_ticker(symbol)
+            price = float(ticker["last"])
+        except Exception as e:
+            print(f"[Grid] Fiyat alınamadı: {e}")
+            return
+
+        # İlk çalışmada grid'i başlat
+        if not self._grid.initialized:
+            self._grid.initialize(price)
+
+        # Sinyal kontrolü
+        signal = self._grid.generate_signal(price)
+
+        grid_status = self._grid.status()
+
+        if signal == "stop_loss":
+            await self._alert(f"⛔ Grid Bot STOP LOSS — {symbol} @ ${price:.2f}")
+            self.running = False
+            return
+
+        if signal in ("buy", "sell"):
+            qty = self._grid.per_grid_usdt / price   # grid başına USDT → coin miktarı
+            if qty > 0:
+                ai_result = {
+                    "approved": True,
+                    "confidence": 80,
+                    "stop_loss": price * 0.95 if signal == "buy" else price * 1.05,
+                    "take_profit": None,
+                    "analysis": f"Grid seviyesi — {'AL' if signal == 'buy' else 'SAT'} @ ${price:.2f}",
+                }
+                await self._execute(signal, price, qty, ai_result["stop_loss"], ai_result)
+
+        # Durum Redis'e yaz
+        status_data = {
+            "name": self.config["name"],
+            "symbol": symbol,
+            "signal": signal,
+            "price": price,
+            "grid": grid_status,
+            "risk": self.risk.status(),
+            "ts": datetime.utcnow().isoformat(),
+        }
+        await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
+
+    async def _run_custom_signal_cycle(self, redis, symbol: str):
+        """
+        Özel Sinyal Stratejisi:
+        Frontend'den Redis'e yazılan buy/sell sinyallerini okur ve işlem açar.
+        Gelişmiş ayarlar: signal_mode, position_action, TP/SL, trailing stop
+        """
+        key = f"custom_signal:{symbol.replace('/', '_').replace(':', '_')}"
+        raw = await redis.get(key)
+        if not raw:
+            return
+
+        import json
+        sig = json.loads(raw)
+
+        # Timestamp kontrolü
+        last_ts_key = f"bot:{self.config['id']}:last_custom_signal_ts"
+        last_ts = await redis.get(last_ts_key)
+        if last_ts and last_ts.decode() == sig.get("ts", ""):
+            return
+
+        signal_type = sig.get("type")   # "buy" | "sell"
+        price       = sig.get("price", 0)
+        source      = sig.get("source", "Özel İndikatör")
+        reason      = sig.get("reason", "")
+
+        if signal_type not in ("buy", "sell"):
+            return
+
+        # Bot parametrelerini al
+        params = self.config.get("params", {})
+        signal_mode = params.get("signal_mode", "normal")
+        position_action = params.get("position_action", "close_and_open")
+        take_profit_pct = params.get("take_profit_pct", 0)
+        stop_loss_pct = params.get("stop_loss_pct", 0)
+        trailing_stop_pct = params.get("trailing_stop_pct", 0)
+        max_position_hours = params.get("max_position_hours", 0)
+
+        # Sinyal moduna göre yönü belirle
+        if signal_mode == "inverse":
+            signal_type = "sell" if signal_type == "buy" else "buy"
+        elif signal_mode == "buy_only" and signal_type == "sell":
+            return  # Short sinyallerini görmezden gel
+        elif signal_mode == "sell_only" and signal_type == "buy":
+            return  # Long sinyallerini görmezden gel
+
+        print(f"[Bot {self.config['name']}] Özel sinyal: {signal_type} @ {price} — {source}: {reason}")
+
+        # Mevcut pozisyon kontrolü
+        current_position = await self._get_current_position(symbol)
+        
+        # Pozisyon yönetimi
+        if current_position:
+            if position_action == "close_only":
+                # Sadece kapat
+                if (current_position["side"] == "long" and signal_type == "sell") or \
+                   (current_position["side"] == "short" and signal_type == "buy"):
+                    await self._close_position(symbol, current_position)
+                return
+            elif position_action == "reverse":
+                # Ters çevir
+                await self._close_position(symbol, current_position)
+            elif position_action == "add":
+                # Hedge - ters yönde pozisyon aç
+                pass
+            else:  # close_and_open
+                # Kapat ve yeni aç (eğer ters yöndeyse)
+                if (current_position["side"] == "long" and signal_type == "sell") or \
+                   (current_position["side"] == "short" and signal_type == "buy"):
+                    await self._close_position(symbol, current_position)
+                elif current_position["side"] == ("long" if signal_type == "buy" else "short"):
+                    return  # Aynı yönde pozisyon var, işlem yapma
+
+        # TP/SL hesapla
+        take_profit = None
+        stop_loss = None
+        
+        if take_profit_pct > 0:
+            tp_multiplier = 1 + (take_profit_pct / 100) if signal_type == "buy" else 1 - (take_profit_pct / 100)
+            take_profit = price * tp_multiplier
+            
+        if stop_loss_pct > 0:
+            sl_multiplier = 1 - (stop_loss_pct / 100) if signal_type == "buy" else 1 + (stop_loss_pct / 100)
+            stop_loss = price * sl_multiplier
+        else:
+            atr_approx = price * 0.01
+            stop_loss = self.risk.atr_stop_loss(price, atr_approx, signal_type)
+
+        qty = self.risk.position_size(price, stop_loss)
+
+        if qty > 0:
+            ai_result = {
+                "approved": True,
+                "confidence": 75,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "analysis": f"{source} — {reason}",
+            }
+            await self._execute(signal_type, price, qty, stop_loss, ai_result)
+
+        # Status'u Redis'e yaz (frontend görebilsin)
+        status_data = {
+            "signal": signal_type,
+            "price": price,
+            "risk": {
+                "balance": self.risk.balance,
+                "daily_pnl": self.risk.daily_pnl,
+                "daily_pnl_pct": self.risk.daily_pnl_pct,
+                "killed": self.risk.killed,
+            },
+        }
+        await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
+
+        await redis.set(last_ts_key, sig.get("ts", ""), ex=600)
+
+    async def _get_current_position(self, symbol: str):
+        """Mevcut pozisyonu döndür"""
+        try:
+            positions = await self.exchange.fetch_positions([symbol])
+            for pos in positions:
+                if float(pos.get("contracts", 0)) != 0:
+                    return {
+                        "side": "long" if pos["side"] == "long" else "short",
+                        "size": float(pos["contracts"]),
+                        "entry": float(pos["entryPrice"]),
+                    }
+        except:
+            pass
+        return None
+
+    async def _close_position(self, symbol: str, position: dict):
+        """Mevcut pozisyonu kapat"""
+        try:
+            side = "sell" if position["side"] == "long" else "buy"
+            await self.exchange.place_order(symbol, side, position["size"], "market")
+            print(f"[Bot {self.config['name']}] Pozisyon kapatıldı: {position['side']} @ {position['entry']}")
+        except Exception as e:
+            print(f"[Bot {self.config['name']}] Pozisyon kapatma hatası: {e}")
+
+    def stop(self):
+        self.running = False
+        print(f"[Bot {self.config['name']}] Durduruldu.")

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity: Gerçek Hayattan AI Kavramları</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #060810;
+            --surface: rgba(255,255,255,0.03);
+            --border: rgba(255,255,255,0.07);
+            --text: #FFFFFF;
+            --muted: #8896B0;
+            --agent: #3B82F6;
+            --skill: #F59E0B;
+            --knowledge: #A855F7;
+            --workflow: #10B981;
+            --project: #EC4899;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Outfit',sans-serif; }
+        body {
+            background: var(--bg); color: var(--text);
+            min-height: 100vh; overflow-x: hidden;
+        }
+        body::before {
+            content:''; position:fixed; inset:0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+            background-size:60px 60px; pointer-events:none; z-index:0;
+        }
+        .page { position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:3rem 2rem 5rem; }
+
+        /* ══════ HEADER ══════ */
+        .header { text-align:center; margin-bottom:4rem; }
+        .chip {
+            display:inline-block; padding:0.45rem 1.1rem; border-radius:100px;
+            background:rgba(255,255,255,0.04); border:1px solid var(--border);
+            font-size:0.72rem; font-weight:600; color:var(--muted);
+            letter-spacing:0.12em; text-transform:uppercase; margin-bottom:1.2rem;
+        }
+        .header h1 {
+            font-size:3.2rem; font-weight:900; line-height:1.12; margin-bottom:1rem;
+            background:linear-gradient(135deg, #fff 20%, #f59e0b 55%, #a855f7 100%);
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+        }
+        .header p { color:var(--muted); font-size:1.05rem; max-width:580px; margin:0 auto; line-height:1.7; }
+
+        /* ══════ CONCEPT SECTION ══════ */
+        .concept {
+            margin-bottom:5rem;
+            opacity:0; transform:translateY(40px);
+            transition:all 0.9s cubic-bezier(0.16,1,0.3,1);
+        }
+        .concept.visible { opacity:1; transform:translateY(0); }
+
+        /* Section label */
+        .concept-label {
+            display:inline-flex; align-items:center; gap:0.5rem;
+            padding:0.5rem 1rem; border-radius:12px;
+            font-size:0.72rem; font-weight:700;
+            text-transform:uppercase; letter-spacing:0.1em;
+            margin-bottom:1.5rem;
+        }
+        .concept-label .num {
+            width:22px; height:22px; border-radius:50%;
+            display:flex; align-items:center; justify-content:center;
+            font-size:0.65rem; font-weight:800;
+        }
+
+        /* Text + image row */
+        .concept-row {
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:2.5rem;
+            align-items:center;
+        }
+        .concept-row.reverse { direction:rtl; }
+        .concept-row.reverse > * { direction:ltr; }
+
+        /* Text block */
+        .concept-text h2 {
+            font-size:2rem; font-weight:800; line-height:1.2; margin-bottom:0.8rem;
+        }
+        .concept-text .subtitle {
+            font-size:1.1rem; color:var(--muted); line-height:1.7; margin-bottom:1.3rem;
+        }
+        .concept-text .analogy {
+            padding:1rem 1.2rem; border-radius:14px;
+            border:1px solid var(--border);
+            background:rgba(255,255,255,0.02);
+        }
+        .concept-text .analogy-header {
+            display:flex; align-items:center; gap:0.4rem;
+            font-size:0.75rem; font-weight:700; color:var(--muted);
+            text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.6rem;
+        }
+        .concept-text .analogy p {
+            font-size:0.92rem; color:rgba(255,255,255,0.75); line-height:1.65;
+        }
+        .concept-text .analogy strong { color:var(--text); }
+
+        /* Photo card */
+        .concept-photo {
+            border-radius:20px; overflow:hidden;
+            border:1px solid var(--border);
+            box-shadow:0 20px 60px rgba(0,0,0,0.5);
+            transition:all 0.5s cubic-bezier(0.16,1,0.3,1);
+            position:relative;
+        }
+        .concept-photo:hover {
+            transform:translateY(-6px) scale(1.01);
+            box-shadow:0 30px 80px rgba(0,0,0,0.6);
+        }
+        .concept-photo img { width:100%; display:block; }
+        .concept-photo .photo-caption {
+            position:absolute; bottom:0; left:0; right:0;
+            padding:1.8rem 1.2rem 1rem;
+            background:linear-gradient(to top, rgba(6,8,16,0.95), transparent);
+            font-size:0.82rem; color:var(--muted); font-style:italic;
+        }
+
+        /* Skill dual photos */
+        .skill-duo {
+            display:grid; grid-template-columns:1fr 1fr;
+            gap:1.2rem;
+        }
+        .skill-duo .skill-item {
+            border-radius:16px; overflow:hidden;
+            border:1px solid rgba(245,158,11,0.15);
+            box-shadow:0 12px 40px rgba(0,0,0,0.4);
+            transition:all 0.4s ease;
+            position:relative;
+        }
+        .skill-duo .skill-item:hover {
+            transform:translateY(-4px);
+            border-color:rgba(245,158,11,0.35);
+            box-shadow:0 16px 50px rgba(245,158,11,0.08);
+        }
+        .skill-duo .skill-item img { width:100%; display:block; aspect-ratio:1; object-fit:cover; }
+        .skill-tag {
+            position:absolute; bottom:12px; left:12px;
+            padding:0.4rem 0.8rem; border-radius:8px;
+            background:rgba(6,8,16,0.85); backdrop-filter:blur(10px);
+            border:1px solid rgba(245,158,11,0.25);
+            font-size:0.78rem; font-weight:700; color:var(--skill);
+        }
+
+        /* Workflow arrow row */
+        .workflow-visual {
+            margin-top:1.5rem;
+        }
+        .workflow-visual .wf-photo {
+            border-radius:16px; overflow:hidden;
+            border:1px solid rgba(16,185,129,0.15);
+            box-shadow:0 12px 40px rgba(0,0,0,0.4);
+            transition:all 0.4s ease;
+            position:relative;
+        }
+        .workflow-visual .wf-photo:hover {
+            border-color:rgba(16,185,129,0.35);
+        }
+        .workflow-visual .wf-photo img { width:100%; display:block; }
+
+        .workflow-steps {
+            display:flex; justify-content:center; gap:0; margin-top:1.5rem;
+            flex-wrap:wrap;
+        }
+        .wf-step {
+            display:flex; align-items:center; gap:0;
+        }
+        .wf-step .step-box {
+            padding:0.6rem 1.1rem; border-radius:10px;
+            background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);
+            font-size:0.85rem; font-weight:700; color:var(--workflow);
+            white-space:nowrap;
+            transition:all 0.3s ease;
+        }
+        .wf-step .step-box:hover {
+            background:rgba(16,185,129,0.15);
+            transform:scale(1.05);
+        }
+        .wf-step .arrow {
+            font-size:1.2rem; color:rgba(16,185,129,0.35); padding:0 0.4rem;
+        }
+
+        /* ══════ DIVIDER ══════ */
+        .divider {
+            height:1px; margin:1rem 0 3rem;
+            background:linear-gradient(to right, transparent, rgba(255,255,255,0.06), transparent);
+        }
+
+        /* ══════ SUMMARY ══════ */
+        .summary {
+            text-align:center; padding:3.5rem 2rem;
+            background:linear-gradient(135deg, rgba(59,130,246,0.04), rgba(168,85,247,0.04), rgba(245,158,11,0.04));
+            border:1px solid var(--border); border-radius:24px;
+            opacity:0; transform:translateY(30px);
+            transition:all 0.9s cubic-bezier(0.16,1,0.3,1);
+        }
+        .summary.visible { opacity:1; transform:translateY(0); }
+        .summary h2 {
+            font-size:2.2rem; font-weight:800; margin-bottom:1.2rem;
+            background:linear-gradient(to right, #fff, #a5b4fc);
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+        }
+        .summary .subtitle { color:var(--muted); font-size:1rem; margin-bottom:2rem; line-height:1.7; }
+
+        .formula { display:flex; align-items:center; justify-content:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:2.5rem; }
+        .formula .pill {
+            padding:0.6rem 1.15rem; border-radius:12px; font-weight:700; font-size:0.88rem;
+            border:1px solid; transition:all 0.3s ease; cursor:default;
+        }
+        .formula .pill:hover { transform:scale(1.12); }
+        .formula .op { font-size:1.3rem; font-weight:300; color:var(--muted); }
+        .formula .eq { font-size:1.5rem; font-weight:800; }
+
+        .summary-grid {
+            display:grid; grid-template-columns:repeat(5, 1fr); gap:1rem; margin-top:2rem;
+        }
+        .summary-item {
+            padding:1rem; border-radius:14px; border:1px solid var(--border);
+            background:rgba(255,255,255,0.02);
+            transition:all 0.3s ease;
+        }
+        .summary-item:hover { transform:translateY(-4px); }
+        .summary-item .si-emoji { font-size:1.6rem; margin-bottom:0.5rem; }
+        .summary-item .si-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.35rem; }
+        .summary-item .si-text { font-size:0.78rem; color:var(--muted); line-height:1.5; }
+
+        /* ══════ RESPONSIVE ══════ */
+        @media (max-width:768px) {
+            .concept-row, .concept-row.reverse { grid-template-columns:1fr; direction:ltr; }
+            .header h1 { font-size:2.2rem; }
+            .summary-grid { grid-template-columns:repeat(2,1fr); }
+            .workflow-steps { gap:0.3rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <!-- ═══ HEADER ═══ -->
+    <div class="header concept visible">
+        <div class="chip">Antigravity Kavramları — Gerçek Hayattan</div>
+        <h1>AI'ı Anlaman İçin<br>Mutfağa Bak</h1>
+        <p>Her kavram, ayrı bir fotoğrafla anlatılıyor. Çünkü her kavram, gerçek hayatta farklı bir şey.</p>
+    </div>
+
+    <!-- ═══ 1. AGENT ═══ -->
+    <div class="concept" id="agent">
+        <div class="concept-label" style="background:rgba(59,130,246,0.08); color:var(--agent); border:1px solid rgba(59,130,246,0.15);">
+            <div class="num" style="background:var(--agent); color:#fff;">1</div>
+            AGENT — Kişinin Kendisi
+        </div>
+        <div class="concept-row">
+            <div class="concept-text">
+                <h2 style="color:var(--agent);">Agent Nedir?</h2>
+                <div class="subtitle">İşi yapan kişidir. Becerileri, bilgisi ve iş akışını bir araya getirerek görevi tamamlar.</div>
+                <div class="analogy">
+                    <div class="analogy-header">👨‍🍳 Mutfakta Karşılığı</div>
+                    <p><strong>Aşçının kendisi.</strong> Mutfaktaki her şeyi koordine eden kişi. Hangi bıçağı kullanacağını, ateşi nasıl ayarlayacağını, tarife ne zaman bakacağını bilen; tüm sürecin merkezindeki insan.</p>
+                </div>
+            </div>
+            <div class="concept-photo">
+                <img src="assets/agent_chef.png" alt="Profesyonel aşçı mutfağın merkezinde özgüvenle duruyor">
+                <div class="photo-caption">Kolları kavuşturmuş, mutfağının merkezinde duran aşçı — tıpkı AI Agent gibi tüm sürecin merkezinde.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ═══ 2. SKILLS ═══ -->
+    <div class="concept" id="skills">
+        <div class="concept-label" style="background:rgba(245,158,11,0.08); color:var(--skill); border:1px solid rgba(245,158,11,0.15);">
+            <div class="num" style="background:var(--skill); color:#fff;">2</div>
+            SKILLS — Kişinin Becerileri
+        </div>
+        <div class="concept-row reverse">
+            <div class="concept-text">
+                <h2 style="color:var(--skill);">Skill Nedir?</h2>
+                <div class="subtitle">Kişinin sahip olduğu belirli yeteneklerdir. Bir kez öğrenilir, her yerde kullanılır. Farklı projelerde tekrar tekrar devreye girer.</div>
+                <div class="analogy">
+                    <div class="analogy-header">🔪 Mutfakta Karşılığı</div>
+                    <p><strong>Bıçak tekniği</strong> bir beceridir — domates doğrarken de, et keserken de kullanılır. <strong>Ocak & ateş kontrolü</strong> başka bir beceri — kızartma, buğulama, sotele hepsinde lazım. Her ikisi de bir kez öğrenilir ve her tarife uygulanır.</p>
+                </div>
+            </div>
+            <div class="skill-duo">
+                <div class="skill-item">
+                    <img src="assets/skill_knife.png" alt="Profesyonel bıçak tekniğiyle domates dilimleniyor">
+                    <div class="skill-tag">🔪 Bıçak Tekniği</div>
+                </div>
+                <div class="skill-item">
+                    <img src="assets/skill_stove.png" alt="Alevli wok'ta yemek pişiriliyor">
+                    <div class="skill-tag">🔥 Ocak Kontrolü</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ═══ 3. KNOWLEDGE ═══ -->
+    <div class="concept" id="knowledge">
+        <div class="concept-label" style="background:rgba(168,85,247,0.08); color:var(--knowledge); border:1px solid rgba(168,85,247,0.15);">
+            <div class="num" style="background:var(--knowledge); color:#fff;">3</div>
+            KNOWLEDGE — İşletmeyi Tanıma Bilgisi
+        </div>
+        <div class="concept-row">
+            <div class="concept-text">
+                <h2 style="color:var(--knowledge);">Knowledge Nedir?</h2>
+                <div class="subtitle">Kişinin çalıştığı işletmeyi, kuralları ve erişim bilgilerini (API Key'ler) tanımasıdır. Beceri olmadan bilgi yetmez; bilgi olmadan beceri havada kalır.</div>
+                <div class="analogy">
+                    <div class="analogy-header">📖 Mutfakta Karşılığı</div>
+                    <p><strong>Tarif kitabı</strong> — restoranın menüsü, porsiyonlar, kurallar. Ayrıca <strong>depo şifresi</strong> — malzeme deposuna girebilmen için sana verilen anahtar. Dijital dünyada buna <strong>API Key</strong> deniyor: bir servise bağlanabilmen için gereken şifre.</p>
+                </div>
+            </div>
+            <div class="concept-photo" style="border-color:rgba(168,85,247,0.15);">
+                <img src="assets/knowledge_recipe.png" alt="Üzerinde kilit olan eski tarif kitabı">
+                <div class="photo-caption">Tarif kitabı (Knowledge) + üzerindeki kilit (API Key) = İşletmenin sırları ve erişim anahtarı</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ═══ 4. WORKFLOW ═══ -->
+    <div class="concept" id="workflow">
+        <div class="concept-label" style="background:rgba(16,185,129,0.08); color:var(--workflow); border:1px solid rgba(16,185,129,0.15);">
+            <div class="num" style="background:var(--workflow); color:#fff;">4</div>
+            WORKFLOW — İş Süreci
+        </div>
+        <div class="concept-row reverse">
+            <div class="concept-text">
+                <h2 style="color:var(--workflow);">Workflow Nedir?</h2>
+                <div class="subtitle">Becerilerin hangi sırayla kullanıldığını belirleyen iş akışıdır. Aşçı rastgele çalışmaz — belirli bir sırayı takip eder.</div>
+                <div class="analogy">
+                    <div class="analogy-header">🔄 Mutfakta Karşılığı</div>
+                    <p>Önce <strong>tarife bak</strong>, sonra <strong>malzemeleri doğra</strong>, daha sonra <strong>pişir</strong> ve en son <strong>servis et</strong>. Bu sıralamayı değiştirirsen yemek olmaz — tıpkı AI'ın da iş sürecini sırasıyla takip etmesi gerektiği gibi.</p>
+                </div>
+            </div>
+            <div class="workflow-visual">
+                <div class="wf-photo" style="margin-bottom:0;">
+                    <img src="assets/workflow_steps.png" alt="Mutfakta soldan sağa iş akışı: ham malzeme → doğrama → pişirme">
+                </div>
+            </div>
+        </div>
+        <!-- Workflow step indicators -->
+        <div class="workflow-steps">
+            <div class="wf-step">
+                <div class="step-box">📖 Tarife Bak</div>
+                <span class="arrow">→</span>
+            </div>
+            <div class="wf-step">
+                <div class="step-box">🔪 Doğra</div>
+                <span class="arrow">→</span>
+            </div>
+            <div class="wf-step">
+                <div class="step-box">🔥 Pişir</div>
+                <span class="arrow">→</span>
+            </div>
+            <div class="wf-step">
+                <div class="step-box">🍽️ Servis Et</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ═══ 5. PROJECT ═══ -->
+    <div class="concept" id="project">
+        <div class="concept-label" style="background:rgba(236,72,153,0.08); color:var(--project); border:1px solid rgba(236,72,153,0.15);">
+            <div class="num" style="background:var(--project); color:#fff;">5</div>
+            PROJECT — Tüm Bunları Kapsayan Yapı
+        </div>
+        <div class="concept-row">
+            <div class="concept-text">
+                <h2 style="color:var(--project);">Project Nedir?</h2>
+                <div class="subtitle">Projenin kendisi — tüm kavramların bir araya gelerek somut bir sonuç üretmesidir. Agent, becerileriyle, bilgisiyle ve iş akışıyla bir hedefe ulaşır.</div>
+                <div class="analogy">
+                    <div class="analogy-header">🍽️ Mutfakta Karşılığı</div>
+                    <p><strong>20 kişilik akşam yemeği.</strong> Aşçı (Agent) + bıçak ve ocak becerisi (Skills) + tarif kitabı ve depo erişimi (Knowledge) + adım adım hazırlık süreci (Workflow) = masada duran o muhteşem tabak.</p>
+                </div>
+            </div>
+            <div class="concept-photo" style="border-color:rgba(236,72,153,0.15);">
+                <img src="assets/project_dish.png" alt="Michelin yıldızlı restoran kalitesinde tabak sunumu">
+                <div class="photo-caption">Son ürün: Tüm bilgi, beceri ve sürecin birleştiği nokta — servise hazır tabak.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="divider" style="margin-top:3rem;"></div>
+
+    <!-- ═══ SUMMARY ═══ -->
+    <div class="summary" id="summary">
+        <h2>🧩 Büyük Resim</h2>
+        <div class="subtitle">Tüm kavramlar tek bir formülde birleşiyor:</div>
+
+        <div class="formula">
+            <div class="pill" style="background:rgba(59,130,246,0.1);color:var(--agent);border-color:rgba(59,130,246,0.3);">🤖 Agent</div>
+            <span class="op">+</span>
+            <div class="pill" style="background:rgba(245,158,11,0.1);color:var(--skill);border-color:rgba(245,158,11,0.3);">⚡ Skills</div>
+            <span class="op">+</span>
+            <div class="pill" style="background:rgba(168,85,247,0.1);color:var(--knowledge);border-color:rgba(168,85,247,0.3);">📖 Knowledge</div>
+            <span class="op">+</span>
+            <div class="pill" style="background:rgba(16,185,129,0.1);color:var(--workflow);border-color:rgba(16,185,129,0.3);">🔄 Workflow</div>
+            <span class="eq">=</span>
+            <div class="pill" style="background:rgba(236,72,153,0.12);color:var(--project);border-color:rgba(236,72,153,0.3);">🚀 Project</div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-item">
+                <div class="si-emoji">👨‍🍳</div>
+                <div class="si-label" style="color:var(--agent);">Agent</div>
+                <div class="si-text">Aşçının kendisi — işi yapan kişi</div>
+            </div>
+            <div class="summary-item">
+                <div class="si-emoji">🔪🔥</div>
+                <div class="si-label" style="color:var(--skill);">Skills</div>
+                <div class="si-text">Bıçak tekniği, ocak kontrolü — öğrenilmiş yetenekler</div>
+            </div>
+            <div class="summary-item">
+                <div class="si-emoji">📖🔑</div>
+                <div class="si-label" style="color:var(--knowledge);">Knowledge</div>
+                <div class="si-text">Tarif kitabı + depo şifresi (API Key)</div>
+            </div>
+            <div class="summary-item">
+                <div class="si-emoji">🔄</div>
+                <div class="si-label" style="color:var(--workflow);">Workflow</div>
+                <div class="si-text">Tarife bak → Doğra → Pişir → Servis et</div>
+            </div>
+            <div class="summary-item">
+                <div class="si-emoji">🍽️</div>
+                <div class="si-label" style="color:var(--project);">Project</div>
+                <div class="si-text">20 kişilik akşam yemeği — somut sonuç</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // Scroll reveal
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+            if (e.isIntersecting) e.target.classList.add('visible');
+        });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.concept, .summary').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>

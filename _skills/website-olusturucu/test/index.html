@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura Timepieces</title>
+
+    <!-- Google Fonts for Midnight Luxe: Inter, Playfair Display, JetBrains Mono -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- GSAP + ScrollTrigger -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'brand-primary': '#0D0D12',
+                        'brand-accent': '#C9A84C',
+                        'brand-bg': '#FAF8F5',
+                        'brand-text': '#2A2A35',
+                        'brand-surface': '#FFFFFF',
+                    },
+                    fontFamily: {
+                        'heading': ['Inter', 'sans-serif'],
+                        'drama': ['Playfair Display', 'serif'],
+                        'mono': ['JetBrains Mono', 'monospace'],
+                        'body': ['Inter', 'sans-serif'],
+                    },
+                    borderRadius: {
+                        'card': '2rem',
+                        'pill': '3rem',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Custom CSS for Noise and Specifics -->
+    <style>
+        /* Noise Overlay */
+        .noise-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.05;
+        }
+
+        .noise-overlay svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Fixed Design Rules */
+        .feature-card {
+            background: var(--brand-surface, #FFFFFF);
+            border: 1px solid rgba(13, 13, 18, 0.10);
+            /* border color from preset */
+            border-radius: 2rem;
+            padding: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+            overflow: hidden;
+        }
+
+        body {
+            background-color: #FAF8F5;
+            /* brand-bg */
+            color: #2A2A35;
+            /* brand-text */
+        }
+
+        /* Navbar States */
+        .navbar-transparent {
+            background: transparent;
+            border: 1px solid transparent;
+        }
+
+        .navbar-scrolled {
+            background: rgba(250, 248, 245, 0.6);
+            /* brand-bg */
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(13, 13, 18, 0.10);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+        }
+
+        /* WhatsApp Pulse */
+        #whatsapp-float {
+            animation: wp-pulse 2s infinite;
+        }
+
+        @keyframes wp-pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 4px 15px rgba(37, 211, 102, 0.3);
+            }
+
+            50% {
+                box-shadow: 0 4px 30px rgba(37, 211, 102, 0.6);
+            }
+        }
+    </style>
+</head>
+
+<body class="font-body antialiased relative">
+    <!-- Noise Overlay -->
+    <div class="noise-overlay">
+        <svg width="100%" height="100%">
+            <filter id="noise">
+                <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" />
+            </filter>
+            <rect width="100%" height="100%" filter="url(#noise)" opacity="0.5" />
+        </svg>
+    </div>
+
+    <!-- Navbar -->
+    <nav id="navbar"
+        class="fixed top-4 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 navbar-transparent w-auto">
+        <div class="flex items-center justify-between px-6 py-3 rounded-pill gap-16">
+            <a href="#" class="font-heading font-bold text-lg text-brand-text">Aura</a>
+
+            <div
+                class="hidden md:flex items-center gap-8 font-mono text-sm uppercase tracking-widest text-brand-text/70">
+                <a href="#features" class="hover:-translate-y-px transition-transform">Koleksiyon</a>
+                <a href="#process" class="hover:-translate-y-px transition-transform">Mirası</a>
+                <a href="#cta" class="hover:-translate-y-px transition-transform">Danışmanlık</a>
+            </div>
+
+            <a href="#cta"
+                class="relative overflow-hidden bg-brand-primary text-brand-accent px-5 py-2.5 rounded-pill font-heading font-semibold text-sm hover:scale-[1.03] transition-transform duration-300">
+                <span class="relative z-10">Bize Ulaşın</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero"
+        class="relative min-h-screen flex items-end pb-20 pl-8 md:pl-16 bg-brand-primary overflow-hidden">
+        <!-- Unsplash Image Background (Dark Marble / Luxury) -->
+        <img src="https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=1200&q=80" alt="Luxury Watch Detail"
+            class="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay">
+
+        <!-- Gradient Overlay -->
+        <div class="absolute inset-0 bg-gradient-to-t from-brand-primary via-brand-primary/70 to-transparent"></div>
+
+        <!-- Content -->
+        <div class="relative z-10 text-brand-bg max-w-4xl pt-32">
+            <h1
+                class="hero-line-1 font-heading font-bold text-2xl md:text-3xl lg:text-4xl text-brand-bg/90 tracking-tight">
+                Excellence meets</h1>
+            <h2
+                class="hero-line-2 font-drama italic text-5xl md:text-7xl lg:text-8xl text-brand-accent leading-none mt-2">
+                Precision.</h2>
+            <p
+                class="hero-subtitle font-mono text-xs uppercase tracking-widest opacity-60 mt-6 max-w-sm leading-relaxed">
+                Usta zanaatkarların elinden çıkan ikonik zaman makineleri. Sadece özel üyelerimize.
+            </p>
+            <a href="#cta"
+                class="hero-cta inline-flex items-center gap-2 mt-8 bg-brand-accent text-brand-primary px-6 py-3 rounded-pill font-heading font-bold hover:scale-[1.03] transition-transform duration-300">
+                Koleksiyonu İncele
+            </a>
+
+            <div class="hero-stats flex gap-8 mt-12 border-t border-brand-accent/20 pt-6">
+                <div>
+                    <span class="font-mono text-2xl font-bold text-brand-accent">1924</span>
+                    <span class="block text-xs font-mono uppercase tracking-widest opacity-60 mt-1">Kuruluş</span>
+                </div>
+                <div>
+                    <span class="font-mono text-2xl font-bold text-brand-accent">50</span>
+                    <span class="block text-xs font-mono uppercase tracking-widest opacity-60 mt-1">Limitli
+                        Üretim</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust Bar -->
+    <section class="py-8 bg-brand-primary border-b border-brand-bg/10">
+        <div class="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div>
+                <span class="text-3xl font-heading font-bold text-brand-bg" data-count="300">0</span><span
+                    class="text-brand-accent">+</span>
+                <p class="text-[0.65rem] font-mono uppercase tracking-widest text-brand-bg/50 mt-1">El Yapımı Parça</p>
+            </div>
+            <div>
+                <span class="text-3xl font-heading font-bold text-brand-bg" data-count="1200">0</span><span
+                    class="text-brand-accent"> Saat</span>
+                <p class="text-[0.65rem] font-mono uppercase tracking-widest text-brand-bg/50 mt-1">İşçilik</p>
+            </div>
+            <div>
+                <span class="text-3xl font-heading font-bold text-brand-bg">12</span>
+                <p class="text-[0.65rem] font-mono uppercase tracking-widest text-brand-bg/50 mt-1">Ödüllü Usta</p>
+            </div>
+            <div>
+                <span class="text-3xl font-heading font-bold text-brand-accent">Ömür Boyu</span>
+                <p class="text-[0.65rem] font-mono uppercase tracking-widest text-brand-bg/50 mt-1">Garanti Süresi</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="py-24 px-6 bg-brand-bg">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="font-heading font-bold text-brand-text text-3xl md:text-5xl mb-4">Ustalığın İmzası</h2>
+            <p class="font-body text-brand-text/60 max-w-xl mb-16">Her bir detay, yüzyıllık bir mirasın titizlikle
+                işlenmiş bir yansımasıdır.</p>
+
+            <div class="grid md:grid-cols-3 gap-6">
+                <!-- Card 1 -->
+                <div class="feature-card">
+                    <div
+                        class="w-10 h-10 mb-6 rounded-full bg-brand-accent/20 flex items-center justify-center text-brand-accent">
+                        <i data-lucide="circle-dashed"></i>
+                    </div>
+                    <h3 class="font-heading font-bold text-xl mb-3">Tourbillon Hassasiyeti</h3>
+                    <p class="font-body text-sm text-brand-text/70">Gerçek yerçekimini yenerek zamanı saf bir şekilde
+                        ölçün. Sadece saniyeler değil, saliseler önemlidir.</p>
+                </div>
+                <!-- Card 2: Telemetry Typewriter -->
+                <div class="feature-card min-h-[300px] flex flex-col p-4">
+                    <div
+                        class="bg-brand-primary text-brand-surface rounded-xl p-4 mb-6 flex-1 border border-brand-primary/20 shadow-inner relative overflow-hidden">
+                        <!-- Live Badge -->
+                        <div class="absolute top-4 right-4 flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-brand-accent animate-pulse"></span>
+                            <span class="font-mono text-[0.65rem] uppercase tracking-widest text-brand-surface/60">Canlı
+                                Bağlantı</span>
+                        </div>
+
+                        <div class="font-mono text-xs leading-relaxed mt-6">
+                            <span class="text-brand-accent">> </span>
+                            <span id="typewriter-text"></span><span
+                                class="animate-pulse bg-brand-accent w-1.5 h-3 inline-block align-middle ml-1"></span>
+                        </div>
+                    </div>
+
+                    <h3 class="font-heading font-bold text-xl px-2 mb-2">Safir Kristal Kasa</h3>
+                    <p class="font-body text-sm px-2 text-brand-text/70 mb-2">Elmas kadar sert, su kadar berrak.
+                        Çizilmelere karşı ömür boyu dirençli ve göz alıcı bir şeffaflık.</p>
+                </div>
+                <!-- Card 3 -->
+                <div class="feature-card">
+                    <div
+                        class="w-10 h-10 mb-6 rounded-full bg-brand-accent/20 flex items-center justify-center text-brand-accent">
+                        <i data-lucide="award"></i>
+                    </div>
+                    <h3 class="font-heading font-bold text-xl mb-3">El Yapımı Deri Kayış</h3>
+                    <p class="font-body text-sm text-brand-text/70">İtalyan zanaatkarlar tarafından 120 saatte işlenen,
+                        sizin teninizle bütünleşen organik yapı.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Philosophy -->
+    <section
+        class="philosophy-section relative py-32 bg-brand-primary text-brand-bg overflow-hidden flex items-center justify-center">
+        <div class="absolute inset-0 opacity-20">
+            <img src="https://images.unsplash.com/photo-1492707892479-7bc8d5a4ee93?w=1200&q=80" alt="Texture"
+                class="w-full h-full object-cover grayscale mix-blend-overlay">
+        </div>
+        <div class="relative z-10 max-w-4xl mx-auto px-6 text-center">
+            <p class="font-heading text-lg md:text-xl opacity-60 mb-6">Çoğu saat üreticisi odaklanır: Seri üretim ve
+                trendler.</p>
+            <h2 class="font-drama italic text-5xl md:text-7xl leading-tight">Bizim odağımız: <span
+                    class="text-brand-accent philosophy-word inline-block">Miras,</span> <span
+                    class="philosophy-word inline-block">Kalıcılık</span> ve <span
+                    class="philosophy-word inline-block">Kusursuzluk.</span></h2>
+        </div>
+    </section>
+
+    <!-- Conversion Section -->
+    <section id="cta" class="py-32 px-6 bg-brand-bg">
+        <div class="max-w-md mx-auto bg-brand-surface border border-brand-primary/10 rounded-card p-8 shadow-sm">
+            <h3 class="font-heading font-bold text-2xl mb-2 text-brand-primary">Özel Gösterim</h3>
+            <p class="font-body text-sm text-brand-text/60 mb-8">Koleksiyonu sadece birebir özel danışmanlık
+                seanslarında sunuyoruz. İlgileniyorsanız yerinizi ayırtın.</p>
+
+            <form action="#" onsubmit="event.preventDefault();" class="space-y-4">
+                <input type="text" placeholder="Adınız Soyadınız"
+                    class="w-full px-4 py-3 rounded-xl bg-brand-bg border border-brand-primary/10 font-body text-sm focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent transition-all">
+                <input type="email" placeholder="Kurumsal E-posta"
+                    class="w-full px-4 py-3 rounded-xl bg-brand-bg border border-brand-primary/10 font-body text-sm focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent transition-all">
+                <button
+                    class="w-full bg-brand-accent text-brand-primary py-4 rounded-xl font-heading font-bold text-sm tracking-wide hover:scale-[1.02] hover:bg-brand-primary hover:text-brand-accent transition-all duration-300">
+                    Davetiye Talep Et
+                </button>
+            </form>
+            <p class="text-xs font-mono text-brand-text/30 mt-6 text-center">Sınırlı kontenjan (Son 3 kişi)</p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-brand-primary text-brand-bg rounded-t-[4rem] pb-8 pt-16 px-6">
+        <div class="max-w-6xl mx-auto grid md:grid-cols-4 gap-12 mb-16">
+            <div>
+                <h3 class="font-heading font-bold text-xl text-brand-accent mb-4">Aura</h3>
+                <p class="font-body text-sm opacity-60">Zamanın efendilerine özel tasarımlar.</p>
+            </div>
+            <div>
+                <h4 class="font-mono text-xs uppercase tracking-widest opacity-40 mb-4">Koleksiyon</h4>
+                <div class="flex flex-col gap-2 font-body text-sm text-brand-bg/70">
+                    <a href="#" class="hover:text-brand-accent transition-colors">Odyssey II</a>
+                    <a href="#" class="hover:text-brand-accent transition-colors">Nocturne</a>
+                    <a href="#" class="hover:text-brand-accent transition-colors">Chronos</a>
+                </div>
+            </div>
+            <div>
+                <h4 class="font-mono text-xs uppercase tracking-widest opacity-40 mb-4">Kurumsal</h4>
+                <div class="flex flex-col gap-2 font-body text-sm text-brand-bg/70">
+                    <a href="#" class="hover:text-brand-accent transition-colors">Tarihçe</a>
+                    <a href="#" class="hover:text-brand-accent transition-colors">Atölye</a>
+                    <a href="#" class="hover:text-brand-accent transition-colors">İletişim</a>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center justify-between border-t border-brand-bg/10 pt-6 max-w-6xl mx-auto">
+            <p class="text-[0.65rem] font-mono opacity-40 uppercase tracking-widest">© 2025 Aura Timepieces. Tüm hakları
+                saklıdır.</p>
+        </div>
+    </footer>
+
+    <!-- Floating WhatsApp -->
+    <a href="#" id="whatsapp-float"
+        class="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-[#25D366] text-white pl-4 pr-5 py-3 rounded-pill shadow-lg shadow-[#25D366]/30 font-heading font-semibold text-sm hover:scale-105 transition-transform duration-300">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path
+                d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+            <path
+                d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.611.611l4.458-1.495A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.317 0-4.46-.758-6.194-2.04l-.432-.328-2.637.884.884-2.637-.328-.432A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+        </svg>
+        <span class="hidden sm:inline">Randevu Alın</span>
+    </a>
+
+    <!-- Script Initialization -->
+    <script>
+        lucide.createIcons();
+
+        // GSAP context
+        gsap.registerPlugin(ScrollTrigger);
+        let ctx = gsap.context(() => {
+            // Hero entrance
+            const heroTl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+            heroTl
+                .from('.hero-line-1', { y: 40, opacity: 0, duration: 0.8 })
+                .from('.hero-line-2', { y: 60, opacity: 0, duration: 1 }, '-=0.4')
+                .from('.hero-subtitle', { y: 30, opacity: 0, duration: 0.6 }, '-=0.5')
+                .from('.hero-cta', { y: 20, opacity: 0, duration: 0.5 }, '-=0.3')
+                .from('.hero-stats > *', { y: 20, opacity: 0, stagger: 0.1, duration: 0.4 }, '-=0.2');
+
+            // Metric Counter
+            document.querySelectorAll('[data-count]').forEach(el => {
+                const target = parseInt(el.dataset.count);
+                ScrollTrigger.create({
+                    trigger: el,
+                    start: 'top 90%',
+                    onEnter: () => {
+                        gsap.to(el, {
+                            textContent: target,
+                            duration: 1.5,
+                            ease: 'power2.out',
+                            snap: { textContent: 1 },
+                            onUpdate: function () {
+                                el.textContent = Math.round(parseFloat(el.textContent));
+                            }
+                        });
+                    },
+                    once: true
+                });
+            });
+
+            // Features Entrance
+            gsap.from('.feature-card', {
+                y: 60,
+                opacity: 0,
+                stagger: 0.15,
+                duration: 0.8,
+                ease: 'power3.out',
+                scrollTrigger: {
+                    trigger: '#features',
+                    start: 'top 80%',
+                }
+            });
+
+            // Philosophy Words Entrance
+            const philosophyWords = document.querySelectorAll('.philosophy-word');
+            gsap.from(philosophyWords, {
+                y: 30,
+                opacity: 0,
+                stagger: 0.1,
+                duration: 0.8,
+                ease: 'power3.out',
+                scrollTrigger: {
+                    trigger: '.philosophy-section',
+                    start: 'top 70%',
+                }
+            });
+
+            // WhatsApp Button Entry
+            gsap.from('#whatsapp-float', {
+                y: 100,
+                opacity: 0,
+                duration: 0.6,
+                ease: 'back.out(1.7)',
+                delay: 2,
+            });
+
+            // Telemetry Typewriter Logic
+            const phrases = [
+                "Tourbillon senkronizasyonu tamamlandı.",
+                "Safir kristal basınç testi başarılı.",
+                "Mikro-mekanik rezervasyon onaylandı."
+            ];
+            const twEl = document.getElementById('typewriter-text');
+            if (twEl) {
+                let sleepTime = 100;
+                let curPhraseIndex = 0;
+                const writeLoop = async () => {
+                    while (true) {
+                        let curWord = phrases[curPhraseIndex];
+                        for (let i = 0; i < curWord.length; i++) {
+                            twEl.innerText = curWord.substring(0, i + 1);
+                            await new Promise((r) => setTimeout(r, sleepTime));
+                        }
+                        await new Promise((r) => setTimeout(r, 2000));
+                        for (let i = curWord.length; i > 0; i--) {
+                            twEl.innerText = curWord.substring(0, i - 1);
+                            await new Promise((r) => setTimeout(r, 50));
+                        }
+                        await new Promise((r) => setTimeout(r, 500));
+                        if (curPhraseIndex === phrases.length - 1) {
+                            curPhraseIndex = 0;
+                        } else {
+                            curPhraseIndex++;
+                        }
+                    }
+                };
+                writeLoop();
+            }
+        });
+
+        // Navbar Morph Logic
+        const navbar = document.getElementById('navbar');
+        const heroSection = document.getElementById('hero');
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    navbar.classList.remove('navbar-scrolled');
+                    navbar.classList.add('navbar-transparent', 'md:!mt-4');
+                } else {
+                    navbar.classList.remove('navbar-transparent', 'md:!mt-4');
+                    navbar.classList.add('navbar-scrolled');
+                }
+            },
+            { threshold: 0.1 }
+        );
+        observer.observe(heroSection);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,65 @@
+# ═══════════════════════════════════════════════════
+# Marka İş Birliği — Kampanya Konfigürasyonu
+# ═══════════════════════════════════════════════════
+# Bu dosya Antigravity Müşteri Kazanım Agenti formatında yazılmıştır.
+# Proje: Projeler/Marka_Is_Birligi/
+
+# --- 🏷️ KAMPANYA BİLGİLERİ ---
+kampanya_adi: "marka-isbirligi-2026"
+aciklama: "[İSİM SOYAD] markalarla influencer iş birliği outreach kampanyası"
+hedef_tip: "b2b_sirket"     # Markalar = B2B şirketler
+durum: "draft"               # draft | active | paused | completed
+
+# --- 🎯 HEDEF KİTLE (ICP) ---
+icp:
+  platform: ["web"]          # Marka web sitelerinden lead
+  bolge: "Türkiye"
+  dil: ["TR"]
+  
+  # Marka parametreleri
+  sektor: ["yapay zeka", "teknoloji", "dijital araçlar", "SaaS", "AI üretkenlik"]
+  sirket_buyuklugu: ""
+  hedef_pozisyonlar: ["Pazarlama Müdürü", "İletişim Sorumlusu", "Marka Yöneticisi"]
+
+# --- 🔍 ARAMA KRİTERLERİ ---
+arama:
+  anahtar_kelimeler:
+    - "AI tools"
+    - "AI productivity apps"
+    - "tech startups"
+    - "dijital araçlar"
+    - "SaaS products"
+  hashtag_listesi: []
+  rakip_hesaplar: []
+  max_lead_sayisi: 50
+
+# --- 📧 OUTREACH AYARLARI ---
+outreach:
+  gonderen_email: "EMAIL_ADRESI_BURAYA"
+  sablon_dili: "TR"
+  sablon_dosyasi: "Projeler/Marka_Is_Birligi/mail_templates/collaboration_tr.html"
+  deger_onerisi: "Markanızın estetik anlayışını kendi kitlemle paylaşarak karşılıklı bir büyüme ve etki alanı oluşturmak"
+  cta: "Detayları konuşmak ve nasıl bir değer yaratabileceğimizi planlamak için dönüşünüzü bekliyorum"
+  dry_run: true
+
+# --- ⏱️ SEQUENCE AYARLARI ---
+sequence:
+  profil: "influencer"       # Marka iş birliği = influencer profili
+  toplam_adim: 2             # İlk mail + 1 takip
+  bekleme_suresi_acilmadi: 5
+  bekleme_suresi_cevaplanmadi: 3
+  gunluk_gonderim_limiti: 30
+  gonderim_araligi: 10       # dakika (markalar için daha yavaş)
+  gonderim_saatleri: "09:00-17:00"
+  gonderim_gunleri: ["Pzt", "Sal", "Car", "Per", "Cum"]
+  saat_dilimi: "UTC+3"
+
+# --- 📁 DOSYA YOLLARI ---
+dosyalar:
+  proje_dizini: "Projeler/Marka_Is_Birligi/"
+  ham_cikti: "Projeler/Marka_Is_Birligi/data/markalar_raw.json"
+  zenginlestirilmis: "Projeler/Marka_Is_Birligi/data/markalar_enriched.json"
+  mesajlar: "Projeler/Marka_Is_Birligi/data/markalar_messages.json"
+  log: "Projeler/Marka_Is_Birligi/data/markalar_log.csv"
+  mevcut_liste: "Projeler/Marka_Is_Birligi/data/markalar.csv"
+  mail_template: "Projeler/Marka_Is_Birligi/mail_templates/collaboration_tr.html"

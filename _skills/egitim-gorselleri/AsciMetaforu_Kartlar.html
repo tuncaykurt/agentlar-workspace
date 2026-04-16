@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity: Aşçı, Editör & Prodüktör Analojisi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-dark: #07090E;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-main: #FFFFFF;
+            --text-muted: #94A3B8;
+
+            /* Role Colors */
+            --chef-color: #F97316;
+            --chef-rgb: 249, 115, 22;
+            --editor-color: #8B5CF6;
+            --editor-rgb: 139, 92, 246;
+            --producer-color: #06B6D4;
+            --producer-rgb: 6, 182, 212;
+
+            /* Concept Colors */
+            --agent-color: #3B82F6;
+            --agent-rgb: 59, 130, 246;
+            --skill-color: #F59E0B;
+            --skill-rgb: 245, 158, 11;
+            --knowledge-color: #8B5CF6;
+            --knowledge-rgb: 139, 92, 246;
+            --workflow-color: #10B981;
+            --workflow-rgb: 16, 185, 129;
+            --project-color: #EC4899;
+            --project-rgb: 236, 72, 153;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* ── Background ── */
+        .bg-glow {
+            position: fixed;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(140px);
+            opacity: 0.12;
+            z-index: 0;
+            animation: float 12s infinite alternate ease-in-out;
+            pointer-events: none;
+        }
+
+        .glow-1 { background: var(--chef-color); top: -200px; left: -200px; }
+        .glow-2 { background: var(--editor-color); bottom: -200px; right: -200px; animation-delay: -6s; }
+        .glow-3 { background: var(--producer-color); top: 50%; left: 50%; transform: translate(-50%, -50%); animation-delay: -3s; }
+
+        .bg-pattern {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            background-size: 32px 32px;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* ── Layout ── */
+        .container {
+            max-width: 1300px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 3rem 2rem 4rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        section {
+            margin-bottom: 5rem;
+        }
+
+        /* ── Header ── */
+        .header {
+            text-align: center;
+            margin-bottom: 5rem;
+            animation: fadeDown 1s ease-out forwards;
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+
+        .header-chip {
+            display: inline-block;
+            padding: 0.5rem 1.2rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 100px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .header h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #ffffff 0%, #f59e0b 40%, #8b5cf6 70%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 700px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        /* ── Section Titles ── */
+        .section-label {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeUp 0.8s ease-out forwards;
+        }
+
+        .section-number {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .section-label h2 {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .section-label p {
+            color: var(--text-muted);
+            font-size: 1rem;
+            margin-top: 0.25rem;
+        }
+
+        /* ── Agent Cards (Persona Row) ── */
+        .persona-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+
+        .persona-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            backdrop-filter: blur(16px);
+            opacity: 0;
+            transform: translateY(30px);
+            cursor: pointer;
+        }
+
+        .persona-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: var(--accent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .persona-card:hover {
+            transform: translateY(-8px);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(var(--accent-rgb), 0.15);
+        }
+
+        .persona-card:hover::before { opacity: 1; }
+
+        .persona-card.chef { --accent: var(--chef-color); --accent-rgb: var(--chef-rgb); animation-delay: 0.2s; }
+        .persona-card.editor { --accent: var(--editor-color); --accent-rgb: var(--editor-rgb); animation-delay: 0.35s; }
+        .persona-card.producer { --accent: var(--producer-color); --accent-rgb: var(--producer-rgb); animation-delay: 0.5s; }
+
+        .persona-emoji {
+            font-size: 4rem;
+            display: block;
+            margin-bottom: 1rem;
+            transition: transform 0.3s ease;
+        }
+
+        .persona-card:hover .persona-emoji {
+            transform: scale(1.15) rotate(-5deg);
+        }
+
+        .persona-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+        }
+
+        .persona-subtitle {
+            display: inline-block;
+            padding: 0.3rem 0.9rem;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            background: rgba(var(--accent-rgb), 0.15);
+            color: var(--accent);
+            border: 1px solid rgba(var(--accent-rgb), 0.25);
+            margin-bottom: 1rem;
+        }
+
+        .persona-desc {
+            color: var(--text-muted);
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        /* ── Skills Section ── */
+        .skills-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+
+        .skill-column {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(30px);
+            backdrop-filter: blur(16px);
+        }
+
+        .skill-column::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--accent);
+        }
+
+        .skill-column-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .skill-column-header span:first-child {
+            font-size: 1.8rem;
+        }
+
+        .skill-column-header strong {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .skill-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.8rem 1rem;
+            border-radius: 12px;
+            margin-bottom: 0.5rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            transition: all 0.3s ease;
+            cursor: default;
+        }
+
+        .skill-item:hover {
+            background: rgba(var(--accent-rgb), 0.08);
+            border-color: rgba(var(--accent-rgb), 0.2);
+            transform: translateX(6px);
+        }
+
+        .skill-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: rgba(var(--accent-rgb), 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .skill-name {
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .skill-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* ── Workflow Section ── */
+        .workflow-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2.5rem;
+        }
+
+        .workflow-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 2.5rem 2rem;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(16px);
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        .workflow-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(to right, var(--accent), transparent);
+        }
+
+        .workflow-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .workflow-header span { font-size: 2rem; }
+        .workflow-header h3 { font-size: 1.3rem; font-weight: 600; }
+
+        .workflow-steps {
+            position: relative;
+            padding-left: 2rem;
+        }
+
+        .workflow-steps::before {
+            content: '';
+            position: absolute;
+            left: 11px;
+            top: 12px;
+            bottom: 12px;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--accent), transparent);
+            border-radius: 2px;
+        }
+
+        .workflow-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            position: relative;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            cursor: default;
+        }
+
+        .workflow-step:hover {
+            background: rgba(var(--accent-rgb), 0.06);
+        }
+
+        .step-dot {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--bg-dark);
+            border: 2px solid var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--accent);
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1;
+            transition: all 0.3s ease;
+        }
+
+        .workflow-step:hover .step-dot {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 0 15px rgba(var(--accent-rgb), 0.5);
+        }
+
+        .step-content strong {
+            display: block;
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.15rem;
+        }
+
+        .step-content span {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* ── Knowledge Section ── */
+        .knowledge-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .knowledge-main {
+            grid-column: span 2;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(16px);
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        .knowledge-main::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(to right, var(--knowledge-color), var(--agent-color));
+        }
+
+        .knowledge-main h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .knowledge-main > p {
+            color: var(--text-muted);
+            line-height: 1.7;
+            font-size: 1.05rem;
+            margin-bottom: 2rem;
+            max-width: 800px;
+        }
+
+        .knowledge-examples {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .knowledge-example {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            cursor: default;
+        }
+
+        .knowledge-example:hover {
+            background: rgba(var(--accent-rgb), 0.06);
+            border-color: rgba(var(--accent-rgb), 0.2);
+            transform: translateY(-4px);
+        }
+
+        .knowledge-example .ke-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .knowledge-example .ke-header span { font-size: 1.5rem; }
+        .knowledge-example .ke-header strong { font-size: 1rem; }
+
+        .knowledge-example p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .api-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.8rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(var(--knowledge-rgb), 0.12);
+            color: var(--knowledge-color);
+            border: 1px solid rgba(var(--knowledge-rgb), 0.2);
+            margin-top: 0.75rem;
+        }
+
+        /* ── Project Section ── */
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+        }
+
+        .project-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 2.5rem 2rem;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(16px);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0;
+            transform: translateY(30px);
+            cursor: pointer;
+        }
+
+        .project-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: var(--accent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .project-card:hover {
+            transform: translateY(-6px);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(var(--accent-rgb), 0.1);
+        }
+
+        .project-card:hover::before { opacity: 1; }
+
+        .project-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .project-header span { font-size: 2.5rem; }
+
+        .project-header h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .project-header small {
+            display: block;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 400;
+            margin-top: 0.15rem;
+        }
+
+        .project-card > p {
+            color: var(--text-muted);
+            line-height: 1.6;
+            font-size: 0.95rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .project-breakdown {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .project-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.4rem 0.9rem;
+            border-radius: 100px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.3s ease;
+        }
+
+        .project-tag:hover {
+            background: rgba(var(--accent-rgb), 0.12);
+            border-color: rgba(var(--accent-rgb), 0.3);
+        }
+
+        /* ── Summary ── */
+        .summary-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(139, 92, 246, 0.06), rgba(249, 115, 22, 0.06));
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 28px;
+            padding: 3rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        .summary-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(to right, var(--chef-color), var(--editor-color), var(--producer-color));
+        }
+
+        .summary-card h3 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(to right, #ffffff, #a5b4fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .summary-formula {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .formula-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.7rem 1.3rem;
+            border-radius: 14px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            cursor: default;
+        }
+
+        .formula-item:hover {
+            transform: scale(1.08);
+        }
+
+        .formula-plus {
+            font-size: 1.5rem;
+            font-weight: 300;
+            color: var(--text-muted);
+        }
+
+        .formula-equals {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .summary-desc {
+            color: var(--text-muted);
+            font-size: 1.05rem;
+            line-height: 1.7;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* ── Divider ── */
+        .section-divider {
+            height: 1px;
+            background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.08), transparent);
+            margin: 4rem 0;
+        }
+
+        /* ── Animations ── */
+        @keyframes float {
+            0% { transform: translateY(0) scale(1); }
+            100% { transform: translateY(-60px) scale(1.1); }
+        }
+
+        @keyframes fadeDown {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Scroll Reveal ── */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 1024px) {
+            .persona-grid, .skills-container { grid-template-columns: 1fr; }
+            .workflow-container { grid-template-columns: 1fr; }
+            .knowledge-examples { grid-template-columns: 1fr; }
+            .knowledge-grid { grid-template-columns: 1fr; }
+            .knowledge-main { grid-column: span 1; }
+            .project-grid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 { font-size: 2.4rem; }
+            .section-label h2 { font-size: 1.5rem; }
+            .persona-card, .workflow-card, .project-card { padding: 1.8rem 1.5rem; }
+            .summary-formula { gap: 0.4rem; }
+            .formula-item { padding: 0.5rem 0.9rem; font-size: 0.8rem; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg-glow glow-1"></div>
+    <div class="bg-glow glow-2"></div>
+    <div class="bg-glow glow-3"></div>
+    <div class="bg-pattern"></div>
+
+    <div class="container">
+
+        <!-- ═══════════════ HEADER ═══════════════ -->
+        <div class="header">
+            <div class="header-chip">Antigravity Kavramları — Gerçek Hayattan</div>
+            <h1>Aşçı, Editör & Prodüktör</h1>
+            <p>AI sistemini anlamak için gerçek hayattan 3 karakter çağırdık.
+                Agent, Skill, Knowledge, Workflow ve Project kavramlarını
+                hiç teknik terim kullanmadan keşfedelim.</p>
+        </div>
+
+        <!-- ═══════════════ 1. AGENTS ═══════════════ -->
+        <section>
+            <div class="section-label reveal">
+                <div class="section-number" style="background: rgba(var(--agent-rgb), 0.15); color: var(--agent-color); border: 1px solid rgba(var(--agent-rgb), 0.3);">1</div>
+                <div>
+                    <h2>Agent <span style="color: var(--text-muted); font-weight: 400;">— Kişinin Kendisi</span></h2>
+                    <p>İşi yapan kişidir. Beynini, becerilerini ve bilgisini kullanarak görevleri tamamlar.</p>
+                </div>
+            </div>
+
+            <div class="persona-grid">
+                <div class="persona-card chef reveal">
+                    <span class="persona-emoji">👨‍🍳</span>
+                    <div class="persona-title">Aşçı</div>
+                    <div class="persona-subtitle">Agent</div>
+                    <p class="persona-desc">Mutfakta görevli kişidir. Tarife bakar, malzemeleri hazırlar ve lezzetli yemekler üretir. Tüm mutfak sürecinin odak noktası.</p>
+                </div>
+
+                <div class="persona-card editor reveal">
+                    <span class="persona-emoji">🎬</span>
+                    <div class="persona-title">Editör</div>
+                    <div class="persona-subtitle">Agent</div>
+                    <p class="persona-desc">Video prodüksiyonunun yaratıcı gücüdür. Ham görüntüleri alır, işler ve izlenmeye hazır içerikler üretir.</p>
+                </div>
+
+                <div class="persona-card producer reveal">
+                    <span class="persona-emoji">📋</span>
+                    <div class="persona-title">Prodüktör</div>
+                    <div class="persona-subtitle">Agent</div>
+                    <p class="persona-desc">Projenin genel koordinatörüdür. Kimin ne yapacağını planlar, bütçeyi yönetir ve tüm süreci organize eder.</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="section-divider"></div>
+
+        <!-- ═══════════════ 2. SKILLS ═══════════════ -->
+        <section>
+            <div class="section-label reveal">
+                <div class="section-number" style="background: rgba(var(--skill-rgb), 0.15); color: var(--skill-color); border: 1px solid rgba(var(--skill-rgb), 0.3);">2</div>
+                <div>
+                    <h2>Skills <span style="color: var(--text-muted); font-weight: 400;">— Kişinin Becerileri</span></h2>
+                    <p>Her Agent'ın sahip olduğu yeteneklerdir. Bir kez öğrenilir, her yerde kullanılır.</p>
+                </div>
+            </div>
+
+            <div class="skills-container">
+                <div class="skill-column reveal" style="--accent: var(--chef-color); --accent-rgb: var(--chef-rgb);">
+                    <div class="skill-column-header">
+                        <span>👨‍🍳</span>
+                        <strong>Aşçının Becerileri</strong>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">🔥</div>
+                        <div><div class="skill-name">Ocak Kullanma</div><div class="skill-desc">Ateş kontrolü, kızartma, sotele</div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">🫕</div>
+                        <div><div class="skill-name">Fırın Kullanma</div><div class="skill-desc">Pişirme sıcaklığı, zamanlama</div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">🔪</div>
+                        <div><div class="skill-name">Bıçak Tekniği</div><div class="skill-desc">Doğrama, dilim, julyen kesim</div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">🍝</div>
+                        <div><div class="skill-name">Tarif Uygulama</div><div class="skill-desc">Tarifleri adım adım takip etme</div></div>
+                    </div>
+                </div>
+
+                <div class="skill-column reveal" style="--accent: var(--editor-color); --accent-rgb: var(--editor-rgb);">
+                    <div class="skill-column-header">
+                        <span>🎬</span>
+                        <strong>Editörün Becerileri</strong>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">🎨</div>
+                        <div><div class="skill-name">After Effects</div><div class="skill-desc">Animasyon, efekt, motion graphics</div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">✂️</div>
+                        <div><div class="skill-name">CapCut</div><div class="skill-desc">Hızlı montaj, altyazı, geçişler</div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">🎵</div>
+                        <div><div class="skill-name">Ses Düzenleme</div><div class="skill-desc">Müzik senkron, ses temizleme</div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">🖼️</div>
+                        <div><div class="skill-name">Renk Düzeltme</div><div class="skill-desc">Color grading, LUT uygulama</div></div>
+                    </div>
+                </div>
+
+                <div class="skill-column reveal" style="--accent: var(--producer-color); --accent-rgb: var(--producer-rgb);">
+                    <div class="skill-column-header">
+                        <span>📋</span>
+                        <strong>Prodüktörün Becerileri</strong>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">📊</div>
+                        <div><div class="skill-name">Proje Planlama</div><div class="skill-desc">Zaman çizelgesi, görev dağılımı</div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">💰</div>
+                        <div><div class="skill-name">Bütçe Yönetimi</div><div class="skill-desc">Maliyet analizi, harcama takibi</div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">🤝</div>
+                        <div><div class="skill-name">Koordinasyon</div><div class="skill-desc">Ekip yönetimi, iletişim</div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-icon">📅</div>
+                        <div><div class="skill-name">Takvim Yönetimi</div><div class="skill-desc">Deadline takibi, milestone planlama</div></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="section-divider"></div>
+
+        <!-- ═══════════════ 3. WORKFLOW ═══════════════ -->
+        <section>
+            <div class="section-label reveal">
+                <div class="section-number" style="background: rgba(var(--workflow-rgb), 0.15); color: var(--workflow-color); border: 1px solid rgba(var(--workflow-rgb), 0.3);">3</div>
+                <div>
+                    <h2>Workflow <span style="color: var(--text-muted); font-weight: 400;">— İş Süreci</span></h2>
+                    <p>Agent'ın becerilerini sıralı adımlar halinde kullandığı iş akışıdır.</p>
+                </div>
+            </div>
+
+            <div class="workflow-container">
+                <div class="workflow-card reveal" style="--accent: var(--chef-color); --accent-rgb: var(--chef-rgb);">
+                    <div class="workflow-header">
+                        <span>👨‍🍳</span>
+                        <h3>Aşçının İş Akışı</h3>
+                    </div>
+                    <div class="workflow-steps">
+                        <div class="workflow-step"><div class="step-dot">1</div><div class="step-content"><strong>Tarife Bak</strong><span>Bugün ne pişireceğini belirle</span></div></div>
+                        <div class="workflow-step"><div class="step-dot">2</div><div class="step-content"><strong>Malzemeleri Hazırla</strong><span>Bıçak tekniğiyle doğra, ölç</span></div></div>
+                        <div class="workflow-step"><div class="step-dot">3</div><div class="step-content"><strong>Ocakta Pişir</strong><span>Sotele, kavur, kaynat</span></div></div>
+                        <div class="workflow-step"><div class="step-dot">4</div><div class="step-content"><strong>Fırına Koy</strong><span>Doğru sıcaklık ve sürede pişir</span></div></div>
+                        <div class="workflow-step"><div class="step-dot">5</div><div class="step-content"><strong>Servis Et</strong><span>Tabağa düzenle ve sun</span></div></div>
+                    </div>
+                </div>
+
+                <div class="workflow-card reveal" style="--accent: var(--editor-color); --accent-rgb: var(--editor-rgb);">
+                    <div class="workflow-header">
+                        <span>🎬</span>
+                        <h3>Editörün İş Akışı</h3>
+                    </div>
+                    <div class="workflow-steps">
+                        <div class="workflow-step"><div class="step-dot">1</div><div class="step-content"><strong>Ham Görüntüleri Al</strong><span>Kameradan dosyaları aktar</span></div></div>
+                        <div class="workflow-step"><div class="step-dot">2</div><div class="step-content"><strong>Kaba Montaj Yap</strong><span>CapCut ile sıralama ve kırpma</span></div></div>
+                        <div class="workflow-step"><div class="step-dot">3</div><div class="step-content"><strong>Efektleri Ekle</strong><span>After Effects ile animasyon & geçiş</span></div></div>
+                        <div class="workflow-step"><div class="step-dot">4</div><div class="step-content"><strong>Renk ve Ses Ayarla</strong><span>Color grading, müzik senkron</span></div></div>
+                        <div class="workflow-step"><div class="step-dot">5</div><div class="step-content"><strong>Dışa Aktar</strong><span>Final render, YouTube'a hazır format</span></div></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="section-divider"></div>
+
+        <!-- ═══════════════ 4. KNOWLEDGE ═══════════════ -->
+        <section>
+            <div class="section-label reveal">
+                <div class="section-number" style="background: rgba(var(--knowledge-rgb), 0.15); color: var(--knowledge-color); border: 1px solid rgba(var(--knowledge-rgb), 0.3);">4</div>
+                <div>
+                    <h2>Knowledge <span style="color: var(--text-muted); font-weight: 400;">— İşletmeyi Tanıma Bilgisi</span></h2>
+                    <p>Agent'ın çalıştığı işletmeyi, kuralları ve erişim bilgilerini (API anahtarları) bilmesidir.</p>
+                </div>
+            </div>
+
+            <div class="knowledge-grid">
+                <div class="knowledge-main reveal" style="--accent-rgb: var(--knowledge-rgb);">
+                    <h3>📖 Knowledge Nedir?</h3>
+                    <p>Knowledge; Agent'ları sadece birer "becerili kişi" olmaktan çıkarıp <strong>sizin işletmenizin çalışanı</strong> haline getiren bilgidir. Tıpkı işe yeni başlayan birine "şirket el kitapçığı" vermek gibi — ama içinde API anahtarları, şifreleri ve erişim bilgileri de var.</p>
+
+                    <div class="knowledge-examples">
+                        <div class="knowledge-example" style="--accent-rgb: var(--chef-rgb);">
+                            <div class="ke-header"><span>👨‍🍳</span><strong>Aşçı Neyi Bilir?</strong></div>
+                            <p>Restoranın menüsünü, müşteri tercihleri, alerji listesini ve tedarikçi bilgilerini bilir. Hangi malzeme deposunun şifresi ne — hepsi Knowledge'dadır.</p>
+                            <div class="api-badge">🔑 Depo erişim şifresi = API Key</div>
+                        </div>
+
+                        <div class="knowledge-example" style="--accent-rgb: var(--editor-rgb);">
+                            <div class="ke-header"><span>🎬</span><strong>Editör Neyi Bilir?</strong></div>
+                            <p>Kanalın stilini, hangi intro/outro'nun kullanılacağını, brand renklerini ve video arşivine nasıl erişeceğini bilir.</p>
+                            <div class="api-badge">🔑 Video arşiv erişimi = API Key</div>
+                        </div>
+
+                        <div class="knowledge-example" style="--accent-rgb: var(--producer-rgb);">
+                            <div class="ke-header"><span>📋</span><strong>Prodüktör Neyi Bilir?</strong></div>
+                            <p>Şirketin bütçe limitlerini, takvimini, ekip üyelerinin iletişim bilgilerini ve proje yönetim araçlarının giriş şifrelerini bilir.</p>
+                            <div class="api-badge">🔑 Proje yönetim aracı şifresi = API Key</div>
+                        </div>
+
+                        <div class="knowledge-example" style="--accent-rgb: var(--agent-rgb);">
+                            <div class="ke-header"><span>🔐</span><strong>API Anahtarları</strong></div>
+                            <p>Gerçek dünyada kapı anahtarı ne ise, dijital dünyada API anahtarı odur. Editörün videolara, aşçının tariflere, prodüktörün proje araçlarına erişmesini sağlayan dijital şifrelerdir.</p>
+                            <div class="api-badge">🔑 Her erişim = Bir API Key</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="section-divider"></div>
+
+        <!-- ═══════════════ 5. PROJECTS ═══════════════ -->
+        <section>
+            <div class="section-label reveal">
+                <div class="section-number" style="background: rgba(var(--project-rgb), 0.15); color: var(--project-color); border: 1px solid rgba(var(--project-rgb), 0.3);">5</div>
+                <div>
+                    <h2>Project <span style="color: var(--text-muted); font-weight: 400;">— Tüm Bunları Kapsayan Yapı</span></h2>
+                    <p>Proje; Agent + Skills + Knowledge + Workflow'un bir araya gelip somut bir hedefe ulaşmasıdır.</p>
+                </div>
+            </div>
+
+            <div class="project-grid">
+                <div class="project-card reveal" style="--accent: var(--chef-color); --accent-rgb: var(--chef-rgb);">
+                    <div class="project-header">
+                        <span>🍽️</span>
+                        <div><h3>20 Kişilik Akşam Yemeği</h3><small>Aşçının Projesi</small></div>
+                    </div>
+                    <p>Aşçı (Agent), tüm becerilerini (Skills) kullanarak, restoranın kurallarına göre (Knowledge), belirli adımları takip ederek (Workflow) 20 kişiye yemek hazırlar.</p>
+                    <div class="project-breakdown">
+                        <div class="project-tag" style="--accent-rgb: var(--chef-rgb);">👨‍🍳 Agent: Aşçı</div>
+                        <div class="project-tag" style="--accent-rgb: var(--skill-rgb);">⚡ Skills: Ocak, Fırın, Bıçak</div>
+                        <div class="project-tag" style="--accent-rgb: var(--knowledge-rgb);">📖 Knowledge: Menü & Kurallar</div>
+                        <div class="project-tag" style="--accent-rgb: var(--workflow-rgb);">🔄 Workflow: Tarif → Hazırlık → Pişirme → Servis</div>
+                    </div>
+                </div>
+
+                <div class="project-card reveal" style="--accent: var(--editor-color); --accent-rgb: var(--editor-rgb);">
+                    <div class="project-header">
+                        <span>📺</span>
+                        <div><h3>[İSİM] AI YouTube Videosu</h3><small>Editörün Projesi</small></div>
+                    </div>
+                    <p>Editör (Agent), After Effects ve CapCut becerilerini (Skills) kullanarak, kanal stiline uygun şekilde (Knowledge), iş akışını takip ederek (Workflow) bir YouTube videosu tamamlar.</p>
+                    <div class="project-breakdown">
+                        <div class="project-tag" style="--accent-rgb: var(--editor-rgb);">🎬 Agent: Editör</div>
+                        <div class="project-tag" style="--accent-rgb: var(--skill-rgb);">⚡ Skills: AE, CapCut, Renk</div>
+                        <div class="project-tag" style="--accent-rgb: var(--knowledge-rgb);">📖 Knowledge: Kanal Stili & Erişim</div>
+                        <div class="project-tag" style="--accent-rgb: var(--workflow-rgb);">🔄 Workflow: Ham → Montaj → Efekt → Render</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="section-divider"></div>
+
+        <!-- ═══════════════ SUMMARY ═══════════════ -->
+        <section>
+            <div class="summary-card reveal">
+                <h3>🧩 Büyük Resim</h3>
+                <div class="summary-formula">
+                    <div class="formula-item" style="background: rgba(var(--agent-rgb), 0.12); color: var(--agent-color); border: 1px solid rgba(var(--agent-rgb), 0.25);">🤖 Agent</div>
+                    <span class="formula-plus">+</span>
+                    <div class="formula-item" style="background: rgba(var(--skill-rgb), 0.12); color: var(--skill-color); border: 1px solid rgba(var(--skill-rgb), 0.25);">⚡ Skills</div>
+                    <span class="formula-plus">+</span>
+                    <div class="formula-item" style="background: rgba(var(--knowledge-rgb), 0.12); color: var(--knowledge-color); border: 1px solid rgba(var(--knowledge-rgb), 0.25);">📖 Knowledge</div>
+                    <span class="formula-plus">+</span>
+                    <div class="formula-item" style="background: rgba(var(--workflow-rgb), 0.12); color: var(--workflow-color); border: 1px solid rgba(var(--workflow-rgb), 0.25);">🔄 Workflow</div>
+                    <span class="formula-equals">=</span>
+                    <div class="formula-item" style="background: rgba(var(--project-rgb), 0.15); color: var(--project-color); border: 1px solid rgba(var(--project-rgb), 0.3); font-weight: 700;">🚀 Project</div>
+                </div>
+                <p class="summary-desc">
+                    Bir <strong>proje</strong>; doğru <strong>kişinin</strong> (Agent), doğru <strong>becerileri</strong> (Skills) kullanarak, <strong>işletmeyi tanıyan bilgisiyle</strong> (Knowledge) ve belirli bir <strong>iş sürecini</strong> (Workflow) takip ederek ortaya çıkardığı somut sonuçtur.
+                </p>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        // Scroll Reveal Animation
+        const revealElements = document.querySelectorAll('.reveal');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    const siblings = entry.target.parentElement.querySelectorAll('.reveal');
+                    const siblingIndex = Array.from(siblings).indexOf(entry.target);
+                    entry.target.style.transitionDelay = `${siblingIndex * 0.12}s`;
+                    entry.target.classList.add('visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+        revealElements.forEach(el => observer.observe(el));
+
+        // 3D Tilt Effect
+        const interactiveCards = document.querySelectorAll('.persona-card, .project-card');
+        interactiveCards.forEach(card => {
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = ((y - centerY) / centerY) * -4;
+                const rotateY = ((x - centerX) / centerX) * 4;
+                card.style.transform = `perspective(1000px) translateY(-8px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = `perspective(1000px) translateY(0) rotateX(0deg) rotateY(0deg)`;
+            });
+        });
+    </script>
+</body>
+
+</html>

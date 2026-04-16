@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Video Asistanı - Proje Akışı</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(20, 25, 40, 0.6);
+            --card-border: rgba(255, 255, 255, 0.1);
+            --glow-color: rgba(94, 234, 212, 0.5);
+            --accent-color: #5eead4;
+            --text-main: #f8fafc;
+            --text-sec: #94a3b8;
+            --success-color: #4ade80;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(94, 234, 212, 0.04), transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(168, 85, 247, 0.04), transparent 50%);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        header {
+            text-align: center;
+            padding: 5rem 2rem 3rem 2rem;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 2.8rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin: 0;
+            background: linear-gradient(135deg, #fff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 40px rgba(255, 255, 255, 0.1);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-sec);
+            margin-top: 0.8rem;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+
+        .controls {
+            margin-top: 1.5rem;
+            font-size: 0.85rem;
+            color: #64748b;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.6rem 1.2rem;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .flow-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 0 10rem 0;
+            gap: 0;
+            position: relative;
+            z-index: 5;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .node-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            opacity: 0.2;
+            transition: all 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+            transform: translateY(30px) scale(0.95);
+            filter: grayscale(100%);
+        }
+
+        .node-wrapper.active {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            filter: grayscale(0%);
+        }
+
+        .node-wrapper.completed {
+            opacity: 0.8;
+            transform: translateY(0) scale(1.02);
+            filter: grayscale(0%);
+        }
+
+        .node {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 1.8rem;
+            width: 90%;
+            max-width: 650px;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            gap: 1.5rem;
+            position: relative;
+            transition: all 0.5s ease;
+        }
+
+        .node-wrapper.active .node {
+            border-color: rgba(255, 255, 255, 0.4);
+            background: rgba(30, 38, 56, 0.8);
+            box-shadow: 0 0 35px -5px var(--glow-color), inset 0 0 20px -10px var(--glow-color);
+        }
+
+        .node-wrapper.completed .node {
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .icon-container {
+            width: 70px;
+            height: 70px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.2rem;
+            flex-shrink: 0;
+            transition: all 0.5s ease;
+            margin-top: 0.5rem;
+        }
+
+        .node-wrapper.active .icon-container {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.0));
+            border-color: rgba(255, 255, 255, 0.5);
+            color: var(--accent-color);
+            box-shadow: 0 0 20px var(--glow-color);
+            transform: scale(1.05);
+            animation: pulse 2s infinite;
+        }
+
+        .content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .step-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-sec);
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+            transition: color 0.5s ease;
+        }
+
+        .node-wrapper.active .step-label {
+            color: var(--accent-color);
+        }
+
+        .title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin: 0 0 0.5rem 0;
+            color: #fff;
+            letter-spacing: -0.5px;
+        }
+
+        .desc {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: var(--text-sec);
+            margin: 0;
+        }
+
+        /* --- SUB-STEPS / PROCESSING ANIMATIONS --- */
+        .sub-steps {
+            list-style: none;
+            padding: 0;
+            margin: 1.2rem 0 0 0;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+            display: none;
+        }
+
+        .node-wrapper.active .sub-steps,
+        .node-wrapper.completed .sub-steps {
+            display: block;
+        }
+
+        .sub-step {
+            padding: 0.8rem 1rem;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            font-weight: 500;
+            opacity: 0;
+            /* Hidden initially */
+            transform: translateX(-10px);
+        }
+
+        .sub-step:last-child {
+            border-bottom: none;
+        }
+
+        .sub-step.animate-in {
+            animation: slideFadeIn 0.5s forwards;
+        }
+
+        .sub-step.completed .status-icon {
+            color: var(--success-color);
+            background: rgba(74, 222, 128, 0.1);
+            border-color: rgba(74, 222, 128, 0.2);
+            animation: none;
+        }
+
+        .sub-step.processing .status-icon {
+            color: var(--accent-color);
+            background: rgba(94, 234, 212, 0.1);
+            border-color: rgba(94, 234, 212, 0.2);
+        }
+
+        .status-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-sec);
+        }
+
+        /* Processing spinner animation */
+        .sub-step.processing .status-icon::after {
+            content: '';
+            width: 10px;
+            height: 10px;
+            border: 2px solid transparent;
+            border-top-color: var(--accent-color);
+            border-right-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .sub-step.completed .status-icon::after {
+            content: '✓';
+            font-weight: bold;
+        }
+
+        @keyframes slideFadeIn {
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .connector {
+            width: 3px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+            border-radius: 3px;
+            transition: all 0.5s ease;
+        }
+
+        .connector.active {
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 15px var(--glow-color);
+        }
+
+        .connector-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(to bottom, var(--accent-color), #fff);
+            box-shadow: 0 0 10px var(--glow-color);
+            transition: height 0.6s ease;
+        }
+
+        .connector.active .connector-progress {
+            height: 100%;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 15px rgba(255, 255, 255, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .node {
+                padding: 1.2rem;
+                flex-direction: column;
+                text-align: left;
+                gap: 1rem;
+                align-items: center;
+            }
+
+            .content {
+                align-items: center;
+                text-align: center;
+                width: 100%;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .connector {
+                height: 40px;
+            }
+
+            .sub-steps {
+                width: 100%;
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>AI Video Asistanı</h1>
+        <div class="subtitle">Telegram üzerinden kısa mesajlarla bile sinematik yapay zeka videoları üreten bot.</div>
+        <div class="controls">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+            </svg>
+            <span>Boşluk (Space) veya Tıklayarak İlerle</span>
+        </div>
+    </header>
+
+    <div class="flow-container" id="flowContainer">
+        <!-- Nodes will be injected here -->
+    </div>
+
+    <script>
+        // --- DATA INJECTION AREA ---
+        const nodesData = [
+            {
+                title: 'Mesaj Karşılama',
+                desc: 'Kullanıcı Telegram üzerinden bir video hayali veya sorusunu yazar.',
+                icon: '✉️',
+                subSteps: [
+                    'Telegram üzerinden yeni mesaj alınıyor',
+                    'Yapay zeka niyet analizi yapıyor',
+                    'Soru ise veritabanı taranarak anında cevap veriliyor'
+                ]
+            },
+            {
+                title: 'Senaryo Üretimi',
+                desc: 'Kullanıcının basit fikri, video üretimi için detaylı ve sinematik bir yönetmen senaryosuna çevrilir.',
+                icon: '🧠',
+                subSteps: [
+                    'Kullanıcının kısa fikri analiz ediliyor',
+                    'Sinematik kamera açıları ekleniyor',
+                    'Kapsamlı yönetmen promptu oluşturuluyor'
+                ]
+            },
+            {
+                title: 'Video Üretimi (Stüdyo Aşaması)',
+                desc: 'Hazırlanan senaryo video üretim motoruna (Sora / Fal AI) gönderilir ve Frame frame işlenir.',
+                icon: '🎬',
+                subSteps: [
+                    'Video aktarım motoruna istek yapılıyor',
+                    'Yapay zeka asistanı kareleri adım adım işliyor',
+                    'Oluşan video yüksek çözünürlükte sunucumuza indiriliyor'
+                ]
+            },
+            {
+                title: 'Teslimat ve İletişim',
+                desc: 'Asistan, kullanıcıya videoyu başarıyla gönderir ve pozitif bir not düşer.',
+                icon: '🚀',
+                subSteps: [
+                    'Samimi dille mesaj metni hazırlanıyor',
+                    'Ağır olan video dosyası Telegram\'a yükleniyor',
+                    'Kullanıcıya başarılı şekilde teslim ediliyor'
+                ]
+            }
+        ];
+        // ---------------------------
+
+        const container = document.getElementById('flowContainer');
+        let currentIndex = -1;
+        let isAnimatingSubsteps = false;
+
+        function renderNodes() {
+            container.innerHTML = '';
+
+            nodesData.forEach((data, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'node-wrapper';
+                wrapper.id = `node-${index}`;
+
+                let subStepsHtml = '';
+                if (data.subSteps && data.subSteps.length > 0) {
+                    subStepsHtml = `<ul class="sub-steps" id="substeps-${index}">`;
+                    data.subSteps.forEach((step, sIndex) => {
+                        subStepsHtml += `
+                            <li class="sub-step" id="substep-${index}-${sIndex}">
+                                <div class="status-icon"></div>
+                                <div class="text">${step}...</div>
+                            </li>
+                        `;
+                    });
+                    subStepsHtml += `</ul>`;
+                }
+
+                const nodeHtml = `
+                    <div class="node">
+                        <div class="icon-container">${data.icon}</div>
+                        <div class="content">
+                            <div class="step-label">Adım ${index + 1}</div>
+                            <h3 class="title">${data.title}</h3>
+                            <p class="desc">${data.desc}</p>
+                            ${subStepsHtml}
+                        </div>
+                    </div>
+                `;
+
+                wrapper.innerHTML = nodeHtml;
+                container.appendChild(wrapper);
+
+                if (index < nodesData.length - 1) {
+                    const connector = document.createElement('div');
+                    connector.className = 'connector';
+                    connector.id = `connector-${index}`;
+                    connector.innerHTML = `<div class="connector-progress"></div>`;
+                    container.appendChild(connector);
+                }
+            });
+
+            setTimeout(() => {
+                nextNode();
+            }, 300);
+        }
+
+        async function updateState() {
+            const wrappers = document.querySelectorAll('.node-wrapper');
+            const connectors = document.querySelectorAll('.connector');
+
+            wrappers.forEach((el, idx) => {
+                el.classList.remove('active', 'completed');
+                if (idx < currentIndex) {
+                    el.classList.add('completed');
+                    // Ensure past substeps are marked completed instantly
+                    const substeps = el.querySelectorAll('.sub-step');
+                    substeps.forEach(sub => {
+                        sub.classList.add('animate-in', 'completed');
+                        sub.classList.remove('processing');
+                    });
+                } else if (idx === currentIndex) {
+                    el.classList.add('active');
+
+                    setTimeout(() => {
+                        const topPos = el.getBoundingClientRect().top + window.pageYOffset;
+                        const offset = (window.innerHeight / 2) - (el.offsetHeight / 2);
+                        window.scrollTo({
+                            top: topPos - offset,
+                            behavior: 'smooth'
+                        });
+                    }, 50);
+
+                    // Animate sub-steps if any
+                    const currentData = nodesData[currentIndex];
+                    if (currentData.subSteps && currentData.subSteps.length > 0) {
+                        animateSubSteps(currentIndex, currentData.subSteps);
+                    }
+                }
+            });
+
+            connectors.forEach((el, idx) => {
+                el.classList.remove('active');
+                if (idx < currentIndex) {
+                    el.classList.add('active');
+                }
+            });
+        }
+
+        async function animateSubSteps(nodeIndex, subSteps) {
+            isAnimatingSubsteps = true;
+            for (let i = 0; i < subSteps.length; i++) {
+                // Return early if user advanced past this node while animating
+                if (currentIndex !== nodeIndex) return;
+
+                const stepEl = document.getElementById(`substep-${nodeIndex}-${i}`);
+                stepEl.classList.add('animate-in');
+                stepEl.classList.add('processing');
+
+                // Processing time simulation (1s - 2s)
+                const processingTime = 800 + Math.random() * 800;
+                await new Promise(r => setTimeout(r, processingTime));
+
+                if (currentIndex !== nodeIndex) return;
+
+                stepEl.classList.remove('processing');
+                stepEl.classList.add('completed');
+            }
+            isAnimatingSubsteps = false;
+        }
+
+        function nextNode() {
+            if (currentIndex < nodesData.length - 1) {
+                currentIndex++;
+                updateState();
+            }
+        }
+
+        function prevNode() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateState();
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowRight' || e.code === 'ArrowDown') {
+                e.preventDefault();
+                nextNode();
+            } else if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') {
+                e.preventDefault();
+                prevNode();
+            }
+        });
+
+        window.addEventListener('click', (e) => {
+            if (!e.target.closest('.controls')) {
+                nextNode();
+            }
+        });
+
+        renderNodes();
+    </script>
+</body>
+
+</html>
