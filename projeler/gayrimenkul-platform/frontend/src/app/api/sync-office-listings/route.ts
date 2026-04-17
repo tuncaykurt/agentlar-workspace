@@ -179,7 +179,15 @@ export async function POST(req: NextRequest) {
     // Her çalışmada max 50 ilan çek (maliyet kontrolü ~$0.30/run)
     // Daha önce çekilenler source_listing_id ile atlanır
     const maxItems = parseInt(map.office_sync_max_items || '200', 10) || 200
-    items = await runApifyActor({ startUrls: [officeUrl], maxItems }, 280)
+    items = await runApifyActor({ 
+      startUrls: [{ url: officeUrl }], 
+      maxItems,
+      proxyConfiguration: {
+        useApifyProxy: true,
+        groups: ['RESIDENTIAL']
+      },
+      searchAttributes: true // daha detaylı veri için
+    }, 280)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Bilinmeyen'
     await logResult(supabase, runStart, { error: msg, scraped: 0 })
