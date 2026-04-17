@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     .select('*', { count: 'exact' })
     .eq('is_active', true)
     .order('last_seen_at', { ascending: false })
-    .limit(100)
+    .limit(500)
 
   if (status !== 'all') {
     query = query.eq('contact_status', status)
