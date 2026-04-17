@@ -256,34 +256,6 @@ export async function POST(req: NextRequest) {
 
   await logResult(supabase, runStart, summary)
   return NextResponse.json(summary)
-
-  // Bu taramada görülmeyenleri pasifleştir
-  /* 
-  const { data: deactivated, error: deactErr } = await supabase
-    .from('market_listings')
-    .update({ is_active: false, contact_status: 'stale' })
-    .eq('source', 'sahibinden')
-    .eq('office_source_url', officeUrl)
-    .or(`last_seen_at.lt.${runStart},last_seen_at.is.null`)
-    .eq('is_active', true)
-    .select('id')
-
-  const deactivatedCount = deactivated?.length || 0
-  if (deactErr) errors.push(`deactivate: ${deactErr.message}`)
-  */
-  const deactivatedCount = 0;
-
-  const summary = {
-    run_at: runStart,
-    scraped: items.length,
-    inserted,
-    updated,
-    deactivated: deactivatedCount,
-    errors: errors.slice(0, 10),
-  }
-  await logResult(supabase, runStart, summary)
-
-  return NextResponse.json(summary)
 }
 
 // Ayrıca GET ile manual tetikleme (admin panel buton)
