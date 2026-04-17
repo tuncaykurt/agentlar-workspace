@@ -41,6 +41,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
   const [callState, setCallState] = useState<CallState>('idle')
   const [callId, setCallId] = useState<string | null>(null)
   const [monitorUrl, setMonitorUrl] = useState<string | null>(null)
+  const [controlUrl, setControlUrl] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const [command, setCommand] = useState('')
   const [sendingCmd, setSendingCmd] = useState(false)
@@ -49,24 +50,27 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
   const [sentiment, setSentiment] = useState<Record<string, string> | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [isListening, setIsListening] = useState(false)
+  const [controlConnected, setControlConnected] = useState(false)
 
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  // Separate refs for listen WS and control WS
+  const listenWsRef = useRef<WebSocket | null>(null)
+  const controlWsRef = useRef<WebSocket | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
 
   const now = () => new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-  // Cleanup
+  // Cleanup everything
   const cleanup = useCallback(() => {
-    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    if (listenWsRef.current) { listenWsRef.current.close(); listenWsRef.current = null }
+    if (controlWsRef.current) { controlWsRef.current.close(); controlWsRef.current = null }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null }
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.srcObject = null }
     setIsListening(false)
+    setControlConnected(false)
   }, [])
 
   useEffect(() => {
@@ -79,6 +83,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
       setSentiment(null)
       setCallId(null)
       setMonitorUrl(null)
+      setControlUrl(null)
       setErrorMsg(null)
     }
     return cleanup
@@ -89,44 +94,94 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [transcript])
 
-  /* ── Live Audio via monitorUrl WebSocket ── */
-  const startListening = useCallback(async (url: string) => {
-    if (!url || wsRef.current) return
+  /* ── Connect to controlUrl WebSocket for sending commands ── */
+  const connectControl = useCallback((url: string) => {
+    if (!url || controlWsRef.current) return
+
+    const ws = new WebSocket(url)
+    controlWsRef.current = ws
+
+    ws.onopen = () => {
+      console.log('[VapiControl] Connected')
+      setControlConnected(true)
+    }
+
+    ws.onmessage = (event) => {
+      // Control WS may also send transcript/status updates
+      try {
+        const msg = JSON.parse(event.data)
+        if ((msg.type === 'transcript' || msg.type === 'conversation-update') && msg.transcript) {
+          // Vapi sends transcript as array of {role, content}
+          if (Array.isArray(msg.transcript)) {
+            const parsed: TranscriptEntry[] = msg.transcript.map((t: { role: string; content: string }) => ({
+              role: t.role === 'assistant' || t.role === 'bot' ? 'assistant' as const : 'user' as const,
+              text: t.content,
+              time: now(),
+            }))
+            setTranscript(parsed)
+          }
+        }
+      } catch { /* not JSON */ }
+    }
+
+    ws.onclose = () => {
+      console.log('[VapiControl] Disconnected')
+      setControlConnected(false)
+      controlWsRef.current = null
+    }
+
+    ws.onerror = () => {
+      setControlConnected(false)
+      controlWsRef.current = null
+    }
+  }, [])
+
+  /* ── Live Audio via monitorUrl (listenUrl) WebSocket ── */
+  const startListening = useCallback((url: string) => {
+    if (!url) return
+    // Close existing listen connection
+    if (listenWsRef.current) { listenWsRef.current.close(); listenWsRef.current = null }
+    if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null }
+
     try {
       const audioCtx = new AudioContext({ sampleRate: 24000 })
       audioCtxRef.current = audioCtx
 
       const ws = new WebSocket(url)
-      wsRef.current = ws
+      listenWsRef.current = ws
       ws.binaryType = 'arraybuffer'
 
       ws.onopen = () => {
+        console.log('[VapiListen] Connected')
         setIsListening(true)
       }
 
       ws.onmessage = (event) => {
-        if (event.data instanceof ArrayBuffer) {
-          // Raw PCM audio — decode and play
-          const pcmData = new Int16Array(event.data)
-          const floatData = new Float32Array(pcmData.length)
-          for (let i = 0; i < pcmData.length; i++) {
-            floatData[i] = pcmData[i] / 32768
-          }
-          const buffer = audioCtx.createBuffer(1, floatData.length, 24000)
-          buffer.getChannelData(0).set(floatData)
-          const source = audioCtx.createBufferSource()
-          source.buffer = buffer
-          source.connect(audioCtx.destination)
-          source.start()
-        } else {
-          // JSON message — could be transcript update
+        if (!audioCtxRef.current) return
+
+        if (event.data instanceof ArrayBuffer && event.data.byteLength > 0) {
+          try {
+            // Vapi streams μ-law or PCM audio
+            const pcmData = new Int16Array(event.data)
+            const floatData = new Float32Array(pcmData.length)
+            for (let i = 0; i < pcmData.length; i++) {
+              floatData[i] = pcmData[i] / 32768
+            }
+            const buffer = audioCtxRef.current.createBuffer(1, floatData.length, 24000)
+            buffer.getChannelData(0).set(floatData)
+            const source = audioCtxRef.current.createBufferSource()
+            source.buffer = buffer
+            source.connect(audioCtxRef.current.destination)
+            source.start()
+          } catch { /* audio decode error, skip */ }
+        } else if (typeof event.data === 'string') {
+          // Could be JSON transcript data from listen channel
           try {
             const msg = JSON.parse(event.data)
             if (msg.type === 'transcript' && msg.text) {
               setTranscript(prev => {
-                const role = msg.role === 'assistant' ? 'assistant' : 'user'
-                // Update last entry if same role, or add new
-                if (prev.length > 0 && prev[prev.length - 1].role === role && msg.isFinal !== true) {
+                const role = msg.role === 'assistant' || msg.role === 'bot' ? 'assistant' as const : 'user' as const
+                if (prev.length > 0 && prev[prev.length - 1].role === role && !msg.isFinal) {
                   const updated = [...prev]
                   updated[updated.length - 1] = { role, text: msg.text, time: now() }
                   return updated
@@ -134,36 +189,41 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
                 return [...prev, { role, text: msg.text, time: now() }]
               })
             }
-          } catch { /* not JSON, ignore */ }
+          } catch { /* not JSON */ }
         }
       }
 
-      ws.onclose = () => setIsListening(false)
-      ws.onerror = () => setIsListening(false)
+      ws.onclose = () => {
+        console.log('[VapiListen] Disconnected')
+        setIsListening(false)
+        listenWsRef.current = null
+      }
+
+      ws.onerror = () => {
+        setIsListening(false)
+        listenWsRef.current = null
+      }
     } catch {
       setIsListening(false)
     }
   }, [])
 
   const stopListening = useCallback(() => {
-    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    if (listenWsRef.current) { listenWsRef.current.close(); listenWsRef.current = null }
     if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null }
     setIsListening(false)
   }, [])
 
-  /* ── Poll call status ── */
+  /* ── Poll call status (fallback for transcript + end detection) ── */
   const pollStatus = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/vapi/call-status/${id}`)
       const data = await res.json()
 
-      // Parse transcript from Vapi
-      if (data.transcript) {
-        const lines = typeof data.transcript === 'string'
-          ? data.transcript.split('\n').filter(Boolean)
-          : Array.isArray(data.transcript) ? data.transcript : []
-
-        if (typeof data.transcript === 'string' && lines.length > 0) {
+      // Parse transcript from poll (fallback if WS doesn't provide it)
+      if (data.transcript && typeof data.transcript === 'string') {
+        const lines = data.transcript.split('\n').filter(Boolean)
+        if (lines.length > 0) {
           const parsed: TranscriptEntry[] = lines.map((line: string) => {
             const isAssistant = line.startsWith('AI:') || line.startsWith('assistant:') || line.startsWith('bot:')
             return {
@@ -172,7 +232,11 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
               time: now(),
             }
           })
-          setTranscript(prev => parsed.length > prev.length ? parsed : prev)
+          // Only update if poll has more data than current
+          setTranscript(prev => parsed.length > prev.filter(t => t.role !== 'system').length ? [
+            ...parsed,
+            ...prev.filter(t => t.role === 'system'), // keep system messages
+          ] : prev)
         }
       }
 
@@ -214,14 +278,21 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
       setCallId(data.callId)
       setCallState('ringing')
 
+      // Store URLs
       if (data.monitorUrl) {
         setMonitorUrl(data.monitorUrl)
+        // Auto-start listening
         startListening(data.monitorUrl)
+      }
+      if (data.controlUrl) {
+        setControlUrl(data.controlUrl)
+        // Connect control WebSocket for sending commands
+        connectControl(data.controlUrl)
       }
 
       // Timer
       timerRef.current = setInterval(() => setElapsedSecs(s => s + 1), 1000)
-      // Poll
+      // Poll for status updates (fallback)
       pollRef.current = setInterval(() => pollStatus(data.callId), 3000)
 
     } catch (err) {
@@ -230,28 +301,73 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
     }
   }
 
-  /* ── Send command via REST API ── */
+  /* ── Send command via controlUrl WebSocket ── */
   const sendCommand = async (text?: string) => {
     const msg = (text || command).trim()
     if (!msg || !callId) return
 
     setSendingCmd(true)
     try {
-      const res = await fetch('/api/vapi/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callId, message: msg }),
-      })
-      const data = await res.json()
+      // Primary: use controlUrl WebSocket
+      if (controlWsRef.current && controlWsRef.current.readyState === WebSocket.OPEN) {
+        controlWsRef.current.send(JSON.stringify({
+          type: 'add-message',
+          message: { role: 'system', content: msg },
+        }))
 
-      if (!res.ok) throw new Error(data.error || 'Mesaj gönderilemedi')
+        setTranscript(prev => [...prev, {
+          role: 'system',
+          text: msg,
+          time: now(),
+        }])
+        setCommand('')
+      }
+      // Fallback: reconnect and send
+      else if (controlUrl) {
+        const ws = new WebSocket(controlUrl)
+        controlWsRef.current = ws
 
-      setTranscript(prev => [...prev, {
-        role: 'system',
-        text: msg,
-        time: now(),
-      }])
-      setCommand('')
+        await new Promise<void>((resolve, reject) => {
+          ws.onopen = () => {
+            setControlConnected(true)
+            resolve()
+          }
+          ws.onerror = () => reject(new Error('WebSocket bağlantısı kurulamadı'))
+          setTimeout(() => reject(new Error('Bağlantı zaman aşımı')), 5000)
+        })
+
+        ws.send(JSON.stringify({
+          type: 'add-message',
+          message: { role: 'system', content: msg },
+        }))
+
+        ws.onclose = () => { setControlConnected(false); controlWsRef.current = null }
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            if (data.type === 'transcript' && Array.isArray(data.transcript)) {
+              const parsed: TranscriptEntry[] = data.transcript.map((t: { role: string; content: string }) => ({
+                role: t.role === 'assistant' || t.role === 'bot' ? 'assistant' as const : 'user' as const,
+                text: t.content,
+                time: now(),
+              }))
+              setTranscript(prev => {
+                const systemMsgs = prev.filter(p => p.role === 'system')
+                return [...parsed, ...systemMsgs]
+              })
+            }
+          } catch { /* ignore */ }
+        }
+
+        setTranscript(prev => [...prev, {
+          role: 'system',
+          text: msg,
+          time: now(),
+        }])
+        setCommand('')
+      } else {
+        throw new Error('Control bağlantısı mevcut değil. Vapi bu arama için controlUrl döndürmedi.')
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Komut gönderilemedi')
     } finally {
@@ -304,7 +420,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
             </div>
           </div>
 
-          {/* Status */}
+          {/* Status line */}
           <div className="mt-3 flex items-center justify-between">
             <div className="text-sm">
               {callState === 'idle' && <p className="text-slate-400">Lina ile <strong className="text-white">{listing.seller_name || 'mülk sahibini'}</strong> arayacaksınız</p>}
@@ -315,19 +431,31 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
               {callState === 'error' && <p className="text-red-400 flex items-center gap-2"><AlertCircle size={14} /> {errorMsg}</p>}
             </div>
 
-            {/* Live listen toggle */}
-            {isActive && monitorUrl && (
-              <button
-                onClick={() => isListening ? stopListening() : startListening(monitorUrl)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  isListening
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-slate-700 text-slate-400 border border-slate-600 hover:text-white'
-                }`}
-              >
-                {isListening ? <Volume2 size={13} className="animate-pulse" /> : <VolumeX size={13} />}
-                {isListening ? 'Dinleniyor' : 'Dinle'}
-              </button>
+            {/* Connection indicators */}
+            {isActive && (
+              <div className="flex items-center gap-2">
+                {/* Live listen toggle */}
+                {monitorUrl && (
+                  <button
+                    onClick={() => isListening ? stopListening() : startListening(monitorUrl)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      isListening
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-slate-700 text-slate-400 border border-slate-600 hover:text-white'
+                    }`}
+                  >
+                    {isListening ? <Volume2 size={13} className="animate-pulse" /> : <VolumeX size={13} />}
+                    {isListening ? 'Canlı' : 'Dinle'}
+                  </button>
+                )}
+                {/* Control WS status */}
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] ${
+                  controlConnected ? 'text-green-400' : 'text-slate-500'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${controlConnected ? 'bg-green-400' : 'bg-slate-600'}`} />
+                  {controlConnected ? 'Bağlı' : 'Bağlanıyor'}
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -404,6 +532,9 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
             <div className="flex items-center gap-2 mb-2">
               <MessageSquare size={13} className="text-amber-400" />
               <p className="text-xs text-amber-400 font-medium">Lina&apos;ya anlık yönlendirme gönder</p>
+              {!controlConnected && controlUrl && (
+                <span className="text-[10px] text-red-400 ml-auto">Kontrol bağlantısı kuruluyor...</span>
+              )}
             </div>
 
             {/* Quick command buttons */}
@@ -412,8 +543,8 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
                 <button
                   key={i}
                   onClick={() => sendCommand(cmd)}
-                  disabled={sendingCmd}
-                  className="px-2.5 py-1 bg-slate-700/80 hover:bg-slate-600 border border-slate-600/50 rounded-lg text-[11px] text-slate-300 hover:text-white transition-colors disabled:opacity-50"
+                  disabled={sendingCmd || !controlConnected}
+                  className="px-2.5 py-1 bg-slate-700/80 hover:bg-slate-600 border border-slate-600/50 rounded-lg text-[11px] text-slate-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {cmd}
                 </button>
