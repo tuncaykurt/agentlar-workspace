@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     .from('market_listings')
     .select('*', { count: 'exact' })
     .eq('is_active', true)
-    .order('created_at', { ascending: false })
+    .order('last_seen_at', { ascending: false })
     .limit(100)
 
   if (status !== 'all') {

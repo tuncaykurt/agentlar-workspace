@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
   try {
     // Her çalışmada max 50 ilan çek (maliyet kontrolü ~$0.30/run)
     // Daha önce çekilenler source_listing_id ile atlanır
-    const maxItems = parseInt(map.office_sync_max_items || '50', 10) || 50
+    const maxItems = parseInt(map.office_sync_max_items || '200', 10) || 200
     items = await runApifyActor({ startUrls: [officeUrl], maxItems }, 280)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Bilinmeyen'
@@ -237,6 +237,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Bu taramada görülmeyenleri pasifleştir
+  /* 
   const { data: deactivated, error: deactErr } = await supabase
     .from('market_listings')
     .update({ is_active: false, contact_status: 'stale' })
@@ -248,6 +249,8 @@ export async function POST(req: NextRequest) {
 
   const deactivatedCount = deactivated?.length || 0
   if (deactErr) errors.push(`deactivate: ${deactErr.message}`)
+  */
+  const deactivatedCount = 0;
 
   const summary = {
     run_at: runStart,
