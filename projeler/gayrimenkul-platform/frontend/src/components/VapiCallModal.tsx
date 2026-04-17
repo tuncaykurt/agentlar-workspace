@@ -101,10 +101,12 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
     if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null }
 
     try {
-      // Vapi telefon sesi 16kHz PCM16 mono olarak gelir (linear16)
-      const audioCtx = new AudioContext({ sampleRate: 16000 })
+      // Tarayıcının default sample rate'ini kullan (genelde 44100 veya 48000)
+      // Vapi'den gelen PCM verisi muhtemelen 8kHz (telefon) veya 16kHz
+      // İlk chunk'tan sample rate'i otomatik tespit edeceğiz
+      const audioCtx = new AudioContext()
       audioCtxRef.current = audioCtx
-      nextPlayTimeRef.current = audioCtx.currentTime
+      nextPlayTimeRef.current = 0
 
       const ws = new WebSocket(url)
       listenWsRef.current = ws
@@ -112,7 +114,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
 
       ws.onopen = () => setIsListening(true)
 
-      const playPcm16 = (raw: ArrayBuffer) => {
+      const playPcm16 = (raw: ArrayBuffer, inputRate: number) => {
         const ctx = audioCtxRef.current
         if (!ctx || raw.byteLength === 0) return
         try {
@@ -122,14 +124,31 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
             float32[i] = pcm16[i] / 32768
           }
 
-          const buffer = ctx.createBuffer(1, float32.length, 16000)
-          buffer.getChannelData(0).set(float32)
+          // Resample: inputRate -> ctx.sampleRate
+          const outputRate = ctx.sampleRate
+          const ratio = outputRate / inputRate
+          const outputLen = Math.round(float32.length * ratio)
+          const buffer = ctx.createBuffer(1, outputLen, outputRate)
+          const output = buffer.getChannelData(0)
+
+          for (let i = 0; i < outputLen; i++) {
+            const srcIdx = i / ratio
+            const idx = Math.floor(srcIdx)
+            const frac = srcIdx - idx
+            const s0 = float32[idx] || 0
+            const s1 = float32[Math.min(idx + 1, float32.length - 1)] || 0
+            output[i] = s0 + frac * (s1 - s0)
+          }
 
           const source = ctx.createBufferSource()
           source.buffer = buffer
           source.connect(ctx.destination)
 
           const currentTime = ctx.currentTime
+          // Gecikme kontrolü: 1 saniyeden fazla gerideyse atla, şimdiden başla
+          if (nextPlayTimeRef.current < currentTime - 1) {
+            nextPlayTimeRef.current = currentTime
+          }
           if (nextPlayTimeRef.current < currentTime) {
             nextPlayTimeRef.current = currentTime
           }
@@ -138,19 +157,31 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
         } catch { /* decode error */ }
       }
 
+      // Birden fazla sample rate dene — ilk başarılı olan kalır
+      let detectedRate = 0
+
       ws.onmessage = (event) => {
-        if (event.data instanceof ArrayBuffer) {
-          playPcm16(event.data)
+        if (event.data instanceof ArrayBuffer && event.data.byteLength > 0) {
+          // İlk chunk'ta sample rate tespit et
+          if (detectedRate === 0) {
+            // Telefon genelde 8kHz, web 16kHz veya 24kHz
+            // Chunk boyutuna göre tahmin: 8kHz = 320 bytes/20ms, 16kHz = 640 bytes/20ms
+            const byteLen = event.data.byteLength
+            if (byteLen <= 400) detectedRate = 8000
+            else if (byteLen <= 800) detectedRate = 16000
+            else detectedRate = 24000
+            console.log('[audio] Detected sample rate:', detectedRate, 'chunk size:', byteLen)
+          }
+          playPcm16(event.data, detectedRate)
         } else if (typeof event.data === 'string') {
-          // Vapi bazen JSON mesaj gönderebilir (base64 audio veya event)
           try {
             const json = JSON.parse(event.data)
             if (json.audio) {
-              // base64 encoded PCM
               const binary = atob(json.audio)
               const bytes = new Uint8Array(binary.length)
               for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-              playPcm16(bytes.buffer)
+              if (detectedRate === 0) detectedRate = 16000
+              playPcm16(bytes.buffer, detectedRate)
             }
           } catch { /* not JSON or no audio field */ }
         }
@@ -261,15 +292,17 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
     }
   }
 
-  /* ── Mesaj gönder — Server-side WebSocket proxy ── */
+  /* ── Mesaj gönder — Server-side HTTP POST proxy ── */
+  const [cmdError, setCmdError] = useState<string | null>(null)
+
   const sendCommand = async (text?: string) => {
     const msg = (text || command).trim()
     if (!msg || !callId) return
 
     setSendingCmd(true)
+    setCmdError(null)
     try {
-      // Server-side proxy üzerinden gönder
-      // Server, controlUrl'i Vapi API'den alır ve WebSocket ile mesaj gönderir
+      // Server proxy controlUrl'e HTTP POST ile add-message gönderir
       const res = await fetch('/api/vapi/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -292,7 +325,10 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
       }])
       setCommand('')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Komut gönderilemedi')
+      const errMsg = err instanceof Error ? err.message : 'Komut gönderilemedi'
+      setCmdError(errMsg)
+      // 3 saniye sonra hatayı temizle
+      setTimeout(() => setCmdError(null), 3000)
     } finally {
       setSendingCmd(false)
     }
@@ -455,6 +491,10 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
                 </button>
               ))}
             </div>
+
+            {cmdError && (
+              <p className="text-xs text-red-400 mb-2">{cmdError}</p>
+            )}
 
             <div className="flex gap-2">
               <input
