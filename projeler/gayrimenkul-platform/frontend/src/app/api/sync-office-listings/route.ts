@@ -182,11 +182,13 @@ export async function POST(req: NextRequest) {
     items = await runApifyActor({ 
       startUrls: [officeUrl], 
       maxItems,
+      limit: maxItems, // Bazı sürümler bunu bekler
+      maxPages: Math.ceil(maxItems / 20), // Sayfa sayısı (1000 / 20 = 50 sayfa)
+      enriched: true, // Telefon ve detaylar için
       proxyConfiguration: {
         useApifyProxy: true,
         groups: ['RESIDENTIAL']
-      },
-      searchAttributes: true // daha detaylı veri için
+      }
     }, 280)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Bilinmeyen'
