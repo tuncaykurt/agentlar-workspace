@@ -101,8 +101,8 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
     if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null }
 
     try {
-      // Vapi telefon sesi 24kHz PCM16 mono olarak gelir
-      const audioCtx = new AudioContext({ sampleRate: 24000 })
+      // Vapi telefon sesi 16kHz PCM16 mono olarak gelir (linear16)
+      const audioCtx = new AudioContext({ sampleRate: 16000 })
       audioCtxRef.current = audioCtx
       nextPlayTimeRef.current = audioCtx.currentTime
 
@@ -112,35 +112,47 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
 
       ws.onopen = () => setIsListening(true)
 
-      ws.onmessage = (event) => {
+      const playPcm16 = (raw: ArrayBuffer) => {
         const ctx = audioCtxRef.current
-        if (!ctx) return
+        if (!ctx || raw.byteLength === 0) return
+        try {
+          const pcm16 = new Int16Array(raw)
+          const float32 = new Float32Array(pcm16.length)
+          for (let i = 0; i < pcm16.length; i++) {
+            float32[i] = pcm16[i] / 32768
+          }
 
-        if (event.data instanceof ArrayBuffer && event.data.byteLength > 0) {
+          const buffer = ctx.createBuffer(1, float32.length, 16000)
+          buffer.getChannelData(0).set(float32)
+
+          const source = ctx.createBufferSource()
+          source.buffer = buffer
+          source.connect(ctx.destination)
+
+          const currentTime = ctx.currentTime
+          if (nextPlayTimeRef.current < currentTime) {
+            nextPlayTimeRef.current = currentTime
+          }
+          source.start(nextPlayTimeRef.current)
+          nextPlayTimeRef.current += buffer.duration
+        } catch { /* decode error */ }
+      }
+
+      ws.onmessage = (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          playPcm16(event.data)
+        } else if (typeof event.data === 'string') {
+          // Vapi bazen JSON mesaj gönderebilir (base64 audio veya event)
           try {
-            // PCM16 → Float32
-            const pcm16 = new Int16Array(event.data)
-            const float32 = new Float32Array(pcm16.length)
-            for (let i = 0; i < pcm16.length; i++) {
-              float32[i] = pcm16[i] / 32768
+            const json = JSON.parse(event.data)
+            if (json.audio) {
+              // base64 encoded PCM
+              const binary = atob(json.audio)
+              const bytes = new Uint8Array(binary.length)
+              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+              playPcm16(bytes.buffer)
             }
-
-            // AudioBuffer oluştur — 24kHz mono
-            const buffer = ctx.createBuffer(1, float32.length, 24000)
-            buffer.getChannelData(0).set(float32)
-
-            const source = ctx.createBufferSource()
-            source.buffer = buffer
-            source.connect(ctx.destination)
-
-            // Sıralı zamanlama — ses chunk'ları arka arkaya oynar
-            const currentTime = ctx.currentTime
-            if (nextPlayTimeRef.current < currentTime) {
-              nextPlayTimeRef.current = currentTime
-            }
-            source.start(nextPlayTimeRef.current)
-            nextPlayTimeRef.current += buffer.duration
-          } catch { /* decode error */ }
+          } catch { /* not JSON or no audio field */ }
         }
       }
 
