@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
     // Daha önce çekilenler source_listing_id ile atlanır
     const maxItems = parseInt(map.office_sync_max_items || '200', 10) || 200
     items = await runApifyActor({ 
-      startUrls: [{ url: officeUrl }], 
+      startUrls: [officeUrl], 
       maxItems,
       proxyConfiguration: {
         useApifyProxy: true,
