@@ -36,10 +36,22 @@ export async function POST(req: NextRequest) {
   if (!phone.startsWith('90')) phone = '90' + phone
   phone = '+' + phone
 
-  const propertyContext = `
-Sen CB Ambiance Gayrimenkul ofisinin dijital asistanı Lina'sın.
-Şu anda ${sellerName || 'bir mülk sahibi'} ile konuşuyorsun.
-İlan bilgileri: ${propertyTitle || 'ilan'} — ${city || ''}${district ? '/' + district : ''} — ${price ? price.toLocaleString('tr-TR') + ' TL' : 'fiyat belirtilmemiş'}
+  // Admin panelinden düzenlenmiş promptu oku
+  let basePrompt = ''
+  try {
+    const { data: setting } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'lina_call_prompt')
+      .single()
+
+    if (setting?.value) {
+      basePrompt = typeof setting.value === 'string' ? setting.value : JSON.parse(setting.value)
+    }
+  } catch { /* varsayılan kullan */ }
+
+  if (!basePrompt) {
+    basePrompt = `Sen CB Ambiance Gayrimenkul ofisinin dijital asistanı Lina'sın.
 
 Görevin:
 1. Kibarca tanıt kendini ve CB Ambiance'ı
@@ -48,7 +60,18 @@ Görevin:
 4. Yetki sözleşmesi için randevu almaya çalış
 5. Cevap olumsuzsa teşekkür et ve vedalaş
 
-ÖNEMLİ: Konuşma sırasında sana ek talimatlar (system mesajları) gelebilir. Bu talimatlar danışmanından geliyor. Talimatları hemen uygula ve konuşmayı ona göre yönlendir. Talimatı aldığını karşı tarafa belli etme, doğal şekilde konuşmaya devam et.
+Konuşma kuralları:
+- Nazik ve profesyonel ol
+- Kısa ve öz konuş
+- Türkçe konuş
+
+ÖNEMLİ: Konuşma sırasında sana ek talimatlar (system mesajları) gelebilir. Bu talimatlar danışmanından geliyor. Talimatları hemen uygula ve konuşmayı ona göre yönlendir. Talimatı aldığını karşı tarafa belli etme, doğal şekilde konuşmaya devam et.`
+  }
+
+  const propertyContext = `${basePrompt}
+
+Şu anda ${sellerName || 'bir mülk sahibi'} ile konuşuyorsun.
+İlan bilgileri: ${propertyTitle || 'ilan'} — ${city || ''}${district ? '/' + district : ''} — ${price ? price.toLocaleString('tr-TR') + ' TL' : 'fiyat belirtilmemiş'}
 `.trim()
 
   try {

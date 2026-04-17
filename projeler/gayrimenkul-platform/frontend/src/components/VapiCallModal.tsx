@@ -2,14 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  Phone, PhoneOff, Mic, MicOff, Send, X,
-  Volume2, Clock, CheckCircle, AlertCircle, Loader2
+  Phone, PhoneOff, Send, X,
+  Volume2, VolumeX, Clock, CheckCircle, AlertCircle, Loader2,
+  Mic, MessageSquare,
 } from 'lucide-react'
 
 type CallState = 'idle' | 'starting' | 'ringing' | 'in-progress' | 'ended' | 'error'
 
 type TranscriptEntry = {
-  role: 'assistant' | 'user'
+  role: 'assistant' | 'user' | 'system'
   text: string
   time: string
 }
@@ -29,57 +30,150 @@ interface VapiCallModalProps {
   }
 }
 
+const QUICK_COMMANDS = [
+  'Randevu için bu haftayı öner',
+  'Fiyat konusunda esnek olup olmadığını sor',
+  'Mülkün durumu hakkında detay sor',
+  'Teşekkür et ve konuşmayı kapat',
+]
+
 export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModalProps) {
   const [callState, setCallState] = useState<CallState>('idle')
   const [callId, setCallId] = useState<string | null>(null)
-  const [controlUrl, setControlUrl] = useState<string | null>(null)
+  const [monitorUrl, setMonitorUrl] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const [command, setCommand] = useState('')
+  const [sendingCmd, setSendingCmd] = useState(false)
   const [elapsedSecs, setElapsedSecs] = useState(0)
   const [summary, setSummary] = useState<string | null>(null)
-  const [sentiment, setSentiment] = useState<{ Olumlu?: string; Olumsuz?: string; Belirsiz?: string } | null>(null)
+  const [sentiment, setSentiment] = useState<Record<string, string> | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [isListening, setIsListening] = useState(false)
 
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
 
-  // Temizle
+  const now = () => new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+  // Cleanup
   const cleanup = useCallback(() => {
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+    if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null }
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.srcObject = null }
+    setIsListening(false)
   }, [])
 
   useEffect(() => {
-    if (!isOpen) { cleanup(); setCallState('idle'); setElapsedSecs(0); setTranscript([]); setSummary(null); setSentiment(null); setCallId(null) }
+    if (!isOpen) {
+      cleanup()
+      setCallState('idle')
+      setElapsedSecs(0)
+      setTranscript([])
+      setSummary(null)
+      setSentiment(null)
+      setCallId(null)
+      setMonitorUrl(null)
+      setErrorMsg(null)
+    }
     return cleanup
   }, [isOpen, cleanup])
 
-  // Transcript sonuna scroll
+  // Auto-scroll transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [transcript])
 
-  // Poll call status
+  /* ── Live Audio via monitorUrl WebSocket ── */
+  const startListening = useCallback(async (url: string) => {
+    if (!url || wsRef.current) return
+    try {
+      const audioCtx = new AudioContext({ sampleRate: 24000 })
+      audioCtxRef.current = audioCtx
+
+      const ws = new WebSocket(url)
+      wsRef.current = ws
+      ws.binaryType = 'arraybuffer'
+
+      ws.onopen = () => {
+        setIsListening(true)
+      }
+
+      ws.onmessage = (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          // Raw PCM audio — decode and play
+          const pcmData = new Int16Array(event.data)
+          const floatData = new Float32Array(pcmData.length)
+          for (let i = 0; i < pcmData.length; i++) {
+            floatData[i] = pcmData[i] / 32768
+          }
+          const buffer = audioCtx.createBuffer(1, floatData.length, 24000)
+          buffer.getChannelData(0).set(floatData)
+          const source = audioCtx.createBufferSource()
+          source.buffer = buffer
+          source.connect(audioCtx.destination)
+          source.start()
+        } else {
+          // JSON message — could be transcript update
+          try {
+            const msg = JSON.parse(event.data)
+            if (msg.type === 'transcript' && msg.text) {
+              setTranscript(prev => {
+                const role = msg.role === 'assistant' ? 'assistant' : 'user'
+                // Update last entry if same role, or add new
+                if (prev.length > 0 && prev[prev.length - 1].role === role && msg.isFinal !== true) {
+                  const updated = [...prev]
+                  updated[updated.length - 1] = { role, text: msg.text, time: now() }
+                  return updated
+                }
+                return [...prev, { role, text: msg.text, time: now() }]
+              })
+            }
+          } catch { /* not JSON, ignore */ }
+        }
+      }
+
+      ws.onclose = () => setIsListening(false)
+      ws.onerror = () => setIsListening(false)
+    } catch {
+      setIsListening(false)
+    }
+  }, [])
+
+  const stopListening = useCallback(() => {
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null }
+    setIsListening(false)
+  }, [])
+
+  /* ── Poll call status ── */
   const pollStatus = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/vapi/call-status/${id}`)
       const data = await res.json()
 
-      // Transcript parse
+      // Parse transcript from Vapi
       if (data.transcript) {
-        const lines = data.transcript.split('\n').filter(Boolean)
-        const parsed: TranscriptEntry[] = lines.map((line: string) => {
-          const isAssistant = line.startsWith('AI:') || line.startsWith('assistant:')
-          return {
-            role: isAssistant ? 'assistant' : 'user',
-            text: line.replace(/^(AI:|assistant:|user:|User:)\s*/i, ''),
-            time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-          }
-        })
-        if (parsed.length > 0) setTranscript(parsed)
+        const lines = typeof data.transcript === 'string'
+          ? data.transcript.split('\n').filter(Boolean)
+          : Array.isArray(data.transcript) ? data.transcript : []
+
+        if (typeof data.transcript === 'string' && lines.length > 0) {
+          const parsed: TranscriptEntry[] = lines.map((line: string) => {
+            const isAssistant = line.startsWith('AI:') || line.startsWith('assistant:') || line.startsWith('bot:')
+            return {
+              role: isAssistant ? 'assistant' as const : 'user' as const,
+              text: line.replace(/^(AI:|assistant:|bot:|user:|User:)\s*/i, ''),
+              time: now(),
+            }
+          })
+          setTranscript(prev => parsed.length > prev.length ? parsed : prev)
+        }
       }
 
       if (data.status === 'ended') {
@@ -92,13 +186,14 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
       } else if (data.status === 'ringing') {
         setCallState('ringing')
       }
-    } catch { /* sessiz geç */ }
+    } catch { /* silent */ }
   }, [cleanup])
 
-  // Aramayı başlat
+  /* ── Start call ── */
   const startCall = async () => {
     setCallState('starting')
     setErrorMsg(null)
+    setTranscript([])
     try {
       const res = await fetch('/api/vapi/start-call', {
         method: 'POST',
@@ -119,12 +214,14 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
       setCallId(data.callId)
       setCallState('ringing')
 
-      if (data.controlUrl) setControlUrl(data.controlUrl)
+      if (data.monitorUrl) {
+        setMonitorUrl(data.monitorUrl)
+        startListening(data.monitorUrl)
+      }
 
-      // Timer başlat
+      // Timer
       timerRef.current = setInterval(() => setElapsedSecs(s => s + 1), 1000)
-
-      // Poll başlat
+      // Poll
       pollRef.current = setInterval(() => pollStatus(data.callId), 3000)
 
     } catch (err) {
@@ -133,32 +230,32 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
     }
   }
 
-  // Komut gönder (controlUrl WebSocket)
-  const sendCommand = async () => {
-    if (!command.trim() || !controlUrl) return
+  /* ── Send command via REST API ── */
+  const sendCommand = async (text?: string) => {
+    const msg = (text || command).trim()
+    if (!msg || !callId) return
+
+    setSendingCmd(true)
     try {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-        wsRef.current = new WebSocket(controlUrl)
-        await new Promise((res, rej) => {
-          wsRef.current!.onopen = res
-          wsRef.current!.onerror = rej
-        })
-      }
-      wsRef.current.send(JSON.stringify({
-        type: 'add-message',
-        message: {
-          role: 'system',
-          content: command.trim(),
-        }
-      }))
+      const res = await fetch('/api/vapi/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callId, message: msg }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) throw new Error(data.error || 'Mesaj gönderilemedi')
+
       setTranscript(prev => [...prev, {
-        role: 'assistant',
-        text: `⚡ Yönlendirme: ${command.trim()}`,
-        time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+        role: 'system',
+        text: msg,
+        time: now(),
       }])
       setCommand('')
-    } catch {
-      alert('Komut gönderilemedi. Control URL bağlantısı kopmuş olabilir.')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Komut gönderilemedi')
+    } finally {
+      setSendingCmd(false)
     }
   }
 
@@ -166,12 +263,14 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
 
   if (!isOpen) return null
 
+  const isActive = callState === 'in-progress' || callState === 'ringing'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
 
         {/* Header */}
-        <div className={`p-5 border-b border-slate-700 ${
+        <div className={`p-5 border-b border-slate-700 flex-shrink-0 ${
           callState === 'in-progress' ? 'bg-emerald-500/10' :
           callState === 'ringing' ? 'bg-blue-500/10' :
           callState === 'ended' ? 'bg-purple-500/10' :
@@ -193,7 +292,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {callState === 'in-progress' && (
+              {isActive && (
                 <span className="flex items-center gap-1.5 text-emerald-400 text-sm font-mono">
                   <Clock size={14} />
                   {fmtTime(elapsedSecs)}
@@ -205,44 +304,66 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
             </div>
           </div>
 
-          {/* Durum */}
-          <div className="mt-3 text-sm">
-            {callState === 'idle' && <p className="text-slate-400">Lina ile <strong className="text-white">{listing.seller_name || 'mülk sahibini'}</strong> arayacaksınız</p>}
-            {callState === 'starting' && <p className="text-blue-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Arama başlatılıyor...</p>}
-            {callState === 'ringing' && <p className="text-blue-400 flex items-center gap-2"><Volume2 size={14} className="animate-bounce" /> Çalıyor...</p>}
-            {callState === 'in-progress' && <p className="text-emerald-400 flex items-center gap-2"><Mic size={14} /> Görüşme devam ediyor</p>}
-            {callState === 'ended' && <p className="text-purple-400 flex items-center gap-2"><CheckCircle size={14} /> Görüşme tamamlandı</p>}
-            {callState === 'error' && <p className="text-red-400 flex items-center gap-2"><AlertCircle size={14} /> {errorMsg}</p>}
+          {/* Status */}
+          <div className="mt-3 flex items-center justify-between">
+            <div className="text-sm">
+              {callState === 'idle' && <p className="text-slate-400">Lina ile <strong className="text-white">{listing.seller_name || 'mülk sahibini'}</strong> arayacaksınız</p>}
+              {callState === 'starting' && <p className="text-blue-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Arama başlatılıyor...</p>}
+              {callState === 'ringing' && <p className="text-blue-400 flex items-center gap-2"><Phone size={14} className="animate-bounce" /> Çalıyor...</p>}
+              {callState === 'in-progress' && <p className="text-emerald-400 flex items-center gap-2"><Mic size={14} /> Görüşme devam ediyor</p>}
+              {callState === 'ended' && <p className="text-purple-400 flex items-center gap-2"><CheckCircle size={14} /> Görüşme tamamlandı</p>}
+              {callState === 'error' && <p className="text-red-400 flex items-center gap-2"><AlertCircle size={14} /> {errorMsg}</p>}
+            </div>
+
+            {/* Live listen toggle */}
+            {isActive && monitorUrl && (
+              <button
+                onClick={() => isListening ? stopListening() : startListening(monitorUrl)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  isListening
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-slate-700 text-slate-400 border border-slate-600 hover:text-white'
+                }`}
+              >
+                {isListening ? <Volume2 size={13} className="animate-pulse" /> : <VolumeX size={13} />}
+                {isListening ? 'Dinleniyor' : 'Dinle'}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* İlan özeti */}
-        <div className="px-5 py-3 bg-slate-800/40 border-b border-slate-700/60 text-xs text-slate-400">
+        {/* Property info bar */}
+        <div className="px-5 py-2.5 bg-slate-800/40 border-b border-slate-700/60 text-xs text-slate-400 flex-shrink-0">
           <span className="line-clamp-1">{listing.title}</span>
-          {listing.price && <span className="ml-2 font-medium text-slate-300">{listing.price.toLocaleString('tr-TR')} TL</span>}
+          {listing.price > 0 && <span className="ml-2 font-medium text-slate-300">{listing.price.toLocaleString('tr-TR')} TL</span>}
         </div>
 
         {/* Transcript */}
-        <div className="h-52 overflow-y-auto px-5 py-4 space-y-3">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-[200px]">
           {transcript.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
+            <div className="h-full flex items-center justify-center min-h-[150px]">
               <p className="text-slate-600 text-sm">
                 {callState === 'idle' ? 'Aramayı başlatın...' : 'Transcript bekleniyor...'}
               </p>
             </div>
           ) : (
             transcript.map((t, i) => (
-              <div key={i} className={`flex gap-2 ${t.role === 'assistant' ? '' : 'flex-row-reverse'}`}>
+              <div key={i} className={`flex gap-2 ${t.role === 'user' ? 'flex-row-reverse' : ''}`}>
                 <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  t.role === 'assistant' ? 'bg-blue-500 text-white' : 'bg-slate-600 text-slate-200'
+                  t.role === 'assistant' ? 'bg-blue-500 text-white' :
+                  t.role === 'system' ? 'bg-amber-500 text-white' :
+                  'bg-slate-600 text-slate-200'
                 }`}>
-                  {t.role === 'assistant' ? 'L' : 'M'}
+                  {t.role === 'assistant' ? 'L' : t.role === 'system' ? '!' : 'M'}
                 </div>
                 <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs ${
                   t.role === 'assistant'
                     ? 'bg-blue-500/15 border border-blue-500/20 text-blue-100'
+                    : t.role === 'system'
+                    ? 'bg-amber-500/15 border border-amber-500/20 text-amber-200 italic'
                     : 'bg-slate-700 text-slate-200'
                 }`}>
+                  {t.role === 'system' && <span className="text-amber-400 font-medium not-italic block mb-0.5">Yönlendirme:</span>}
                   <p>{t.text}</p>
                   <p className="text-slate-500 mt-1">{t.time}</p>
                 </div>
@@ -252,47 +373,76 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
           <div ref={transcriptEndRef} />
         </div>
 
-        {/* Sentiment (arama bittikten sonra) */}
+        {/* Sentiment & Summary (after call ends) */}
         {callState === 'ended' && sentiment && (
-          <div className="px-5 py-3 border-t border-slate-700/60 grid grid-cols-3 gap-2">
-            {sentiment.Olumlu && <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-xs text-green-400"><span className="font-medium block mb-0.5">Olumlu</span>{sentiment.Olumlu}</div>}
-            {sentiment.Olumsuz && <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-xs text-red-400"><span className="font-medium block mb-0.5">Olumsuz</span>{sentiment.Olumsuz}</div>}
-            {sentiment.Belirsiz && <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2 text-xs text-yellow-400"><span className="font-medium block mb-0.5">Belirsiz</span>{sentiment.Belirsiz}</div>}
+          <div className="px-5 py-3 border-t border-slate-700/60 grid grid-cols-3 gap-2 flex-shrink-0">
+            {Object.entries(sentiment).map(([key, val]) => {
+              const colors: Record<string, string> = {
+                Olumlu: 'bg-green-500/10 border-green-500/20 text-green-400',
+                Olumsuz: 'bg-red-500/10 border-red-500/20 text-red-400',
+                Belirsiz: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',
+              }
+              return val ? (
+                <div key={key} className={`border rounded-lg p-2 text-xs ${colors[key] || 'bg-slate-700 border-slate-600 text-slate-300'}`}>
+                  <span className="font-medium block mb-0.5">{key}</span>{val}
+                </div>
+              ) : null
+            })}
           </div>
         )}
 
         {callState === 'ended' && summary && (
-          <div className="px-5 py-3 border-t border-slate-700/60">
+          <div className="px-5 py-3 border-t border-slate-700/60 flex-shrink-0">
             <p className="text-xs text-slate-400 font-medium mb-1">Özet</p>
             <p className="text-xs text-slate-300">{summary}</p>
           </div>
         )}
 
-        {/* Komut girişi (arama devam ederken) */}
-        {(callState === 'in-progress' || callState === 'ringing') && controlUrl && (
-          <div className="px-5 py-3 border-t border-slate-700/60 bg-slate-800/40">
-            <p className="text-xs text-slate-500 mb-2">Lina'ya yönlendirme gönder</p>
+        {/* Command input — visible during active call */}
+        {isActive && (
+          <div className="px-5 py-3 border-t border-slate-700/60 bg-slate-800/40 flex-shrink-0">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageSquare size={13} className="text-amber-400" />
+              <p className="text-xs text-amber-400 font-medium">Lina&apos;ya anlık yönlendirme gönder</p>
+            </div>
+
+            {/* Quick command buttons */}
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {QUICK_COMMANDS.map((cmd, i) => (
+                <button
+                  key={i}
+                  onClick={() => sendCommand(cmd)}
+                  disabled={sendingCmd}
+                  className="px-2.5 py-1 bg-slate-700/80 hover:bg-slate-600 border border-slate-600/50 rounded-lg text-[11px] text-slate-300 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {cmd}
+                </button>
+              ))}
+            </div>
+
+            {/* Free text input */}
             <div className="flex gap-2">
               <input
                 type="text"
                 value={command}
                 onChange={e => setCommand(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && sendCommand()}
-                placeholder="Örn: Randevu için bu haftayı öner"
-                className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                onKeyDown={e => e.key === 'Enter' && !sendingCmd && sendCommand()}
+                placeholder="Özel yönlendirme yazın..."
+                className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
               />
               <button
-                onClick={sendCommand}
-                className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 rounded-lg text-white transition-colors"
+                onClick={() => sendCommand()}
+                disabled={!command.trim() || sendingCmd}
+                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg text-white transition-colors flex items-center gap-1.5"
               >
-                <Send size={14} />
+                {sendingCmd ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               </button>
             </div>
           </div>
         )}
 
-        {/* Aksiyon butonları */}
-        <div className="p-5 border-t border-slate-700 flex gap-3">
+        {/* Action buttons */}
+        <div className="p-5 border-t border-slate-700 flex gap-3 flex-shrink-0">
           {callState === 'idle' && (
             <button
               onClick={startCall}
@@ -308,13 +458,13 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
               Başlatılıyor...
             </button>
           )}
-          {(callState === 'ringing' || callState === 'in-progress') && (
+          {isActive && (
             <button
               onClick={() => { cleanup(); setCallState('ended') }}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-500/80 hover:bg-red-600 rounded-xl text-white font-medium transition-all"
             >
               <PhoneOff size={16} />
-              Takip Et / Kapat
+              Aramayı Sonlandır
             </button>
           )}
           {(callState === 'ended' || callState === 'error') && (

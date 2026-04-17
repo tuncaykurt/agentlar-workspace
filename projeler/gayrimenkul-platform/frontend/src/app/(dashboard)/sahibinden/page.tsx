@@ -7,7 +7,8 @@ import {
   X, ExternalLink, Thermometer, Banknote, BedDouble,
   Ruler, Building2, Layers, Phone, Bot,
   Loader2, RefreshCw, Tag, Clock, Bath, Calendar,
-  Maximize2, Zap, User, PhoneCall,
+  Maximize2, Zap, User, PhoneCall, Settings, Save, RotateCcw,
+  ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 /* ── Types ───────────────────────────────────────────────────────── */
@@ -314,6 +315,123 @@ function DetailModal({ listing: l, onClose, onCall }: { listing: MarketListing; 
   )
 }
 
+/* ── Prompt Editör ──────────────────────────────────────────────── */
+function PromptEditor() {
+  const [open, setOpen] = useState(false)
+  const [prompt, setPrompt] = useState('')
+  const [original, setOriginal] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [isDefault, setIsDefault] = useState(true)
+
+  useEffect(() => {
+    if (open && !prompt) {
+      setLoading(true)
+      fetch('/api/vapi/prompt')
+        .then(r => r.json())
+        .then(d => { setPrompt(d.prompt); setOriginal(d.prompt); setIsDefault(d.isDefault) })
+        .catch(() => {})
+        .finally(() => setLoading(false))
+    }
+  }, [open, prompt])
+
+  async function handleSave() {
+    setSaving(true)
+    setSaved(false)
+    try {
+      const res = await fetch('/api/vapi/prompt', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+      if (!res.ok) throw new Error()
+      setOriginal(prompt)
+      setIsDefault(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch {
+      alert('Prompt kaydedilemedi')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const hasChanges = prompt !== original
+
+  return (
+    <div className="card mb-6 border border-slate-200">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+            <Settings size={20} className="text-amber-600" />
+          </div>
+          <div className="text-left">
+            <h3 className="font-semibold text-slate-900">Konuşma Akış Promptu</h3>
+            <p className="text-slate-500 text-xs">Lina&apos;nın arama esnasında kullandığı sistem talimatını düzenleyin</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isDefault && (
+            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Varsayılan</span>
+          )}
+          {open ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+        </div>
+      </button>
+
+      {open && (
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          {loading ? (
+            <div className="flex items-center justify-center py-8 text-slate-400">
+              <Loader2 size={20} className="animate-spin mr-2" />
+              <span className="text-sm">Yükleniyor...</span>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-slate-500 mb-2">
+                Aşağıdaki değişkenler otomatik eklenir: <code className="bg-slate-100 px-1 rounded">{'sellerName'}</code>, <code className="bg-slate-100 px-1 rounded">{'propertyTitle'}</code>, <code className="bg-slate-100 px-1 rounded">{'city/district'}</code>, <code className="bg-slate-100 px-1 rounded">{'price'}</code>
+              </p>
+              <textarea
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                rows={14}
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm text-slate-800 font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-y"
+                placeholder="Sistem promptunu buraya yazın..."
+              />
+              <div className="flex items-center justify-between mt-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setPrompt(original) }}
+                    disabled={!hasChanges}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <RotateCcw size={13} />
+                    Geri Al
+                  </button>
+                  {saved && (
+                    <span className="text-xs text-green-600 font-medium">Kaydedildi!</span>
+                  )}
+                </div>
+                <button
+                  onClick={handleSave}
+                  disabled={!hasChanges || saving}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors"
+                >
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  Kaydet
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Test Arama Paneli ───────────────────────────────────────────── */
 function TestCallPanel({ listings, onStartCall }: { listings: MarketListing[]; onStartCall: (listing: MarketListing) => void }) {
   const [testPhone, setTestPhone] = useState('')
@@ -529,6 +647,9 @@ export default function SahibindenIlanlarPage() {
           </div>
         ))}
       </div>
+
+      {/* Prompt Editör */}
+      <PromptEditor />
 
       {/* Test Arama Paneli */}
       <TestCallPanel listings={listings} onStartCall={setCallTarget} />
