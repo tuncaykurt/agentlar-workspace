@@ -179,17 +179,26 @@ export async function POST(req: NextRequest) {
     // Her çalışmada max 50 ilan çek (maliyet kontrolü ~$0.30/run)
     // Daha önce çekilenler source_listing_id ile atlanır
     const maxItems = parseInt(map.office_sync_max_items || '200', 10) || 200
+    // Aktör sayfalama yapmadığı için sayfaları biz üretiyoruz
+    const pagesToScrape = Math.ceil(maxItems / 20)
+    const startUrls = []
+    for (let i = 0; i < pagesToScrape; i++) {
+        const offset = i * 20
+        const pageUrl = officeUrl.includes('?') 
+            ? `${officeUrl}&pagingOffset=${offset}` 
+            : `${officeUrl}?pagingOffset=${offset}`
+        startUrls.push(pageUrl)
+    }
+
     items = await runApifyActor({ 
-      startUrls: [officeUrl], 
+      startUrls, 
       maxItems,
-      limit: maxItems, // Bazı sürümler bunu bekler
-      maxPages: Math.ceil(maxItems / 20), // Sayfa sayısı (1000 / 20 = 50 sayfa)
-      enriched: true, // Telefon ve detaylar için
+      enriched: true,
       proxyConfiguration: {
         useApifyProxy: true,
         groups: ['RESIDENTIAL']
       }
-    }, 280)
+    }, 300)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Bilinmeyen'
     await logResult(supabase, runStart, { error: msg, scraped: 0 })
