@@ -178,82 +178,84 @@ export async function POST(req: NextRequest) {
   try {
     // Her çalışmada max 50 ilan çek (maliyet kontrolü ~$0.30/run)
     // Daha önce çekilenler source_listing_id ile atlanır
-    const maxItems = parseInt(map.office_sync_max_items || '200', 10) || 200
-    // Aktör sayfalama yapmadığı için sayfaları biz üretiyoruz
-    const pagesToScrape = Math.ceil(maxItems / 20)
-    const startUrls = []
-    for (let i = 0; i < pagesToScrape; i++) {
-        const offset = i * 20
-        const pageUrl = officeUrl.includes('?') 
-            ? `${officeUrl}&pagingOffset=${offset}` 
-            : `${officeUrl}?pagingOffset=${offset}`
-        startUrls.push(pageUrl)
-    }
-
-    items = await runApifyActor({ 
-      startUrls, 
-      maxItems,
-      enriched: true,
-      proxyConfiguration: {
-        useApifyProxy: true,
-        groups: ['RESIDENTIAL']
-      }
-    }, 300)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Bilinmeyen'
-    await logResult(supabase, runStart, { error: msg, scraped: 0 })
-    return NextResponse.json({ error: `Apify scraping başarısız: ${msg}` }, { status: 502 })
-  }
-
-  if (items.length === 0) {
-    await logResult(supabase, runStart, { warning: 'Apify 0 ilan döndürdü', scraped: 0 })
-    return NextResponse.json({ scraped: 0, warning: 'İlan bulunamadı' })
-  }
-
-  // Upsert her ilan → market_listings tablosuna (portföy değil, lead havuzu)
-  let inserted = 0
-  let updated = 0
+  const maxItems = parseInt(map.office_sync_max_items || '200', 10) || 200
+  const pagesToScrape = Math.ceil(maxItems / 20)
+  
+  let totalScraped = 0
+  let totalInserted = 0
+  let totalUpdated = 0
   const errors: string[] = []
 
-  for (const raw of items) {
-    if (!raw?.id) continue
-    const mapped = mapItem(raw, officeUrl)
-    const payload = {
-      ...mapped,
-      is_active: true,
-      last_seen_at: runStart,
-    }
+  for (let i = 0; i < pagesToScrape; i++) {
+    const offset = i * 20
+    const pageUrl = officeUrl.includes('?') 
+      ? `${officeUrl}&pagingOffset=${offset}` 
+      : `${officeUrl}?pagingOffset=${offset}`
+    
+    try {
+      const pageItems = await runApifyActor({ 
+        startUrls: [pageUrl], 
+        maxItems: 20,
+        enriched: true,
+        proxyConfiguration: { useApifyProxy: true, groups: ['RESIDENTIAL'] }
+      }, 120) as SahibindenItem[]
 
-    // Var mı bak (source_listing_id + source)
-    const { data: existing } = await supabase
-      .from('market_listings')
-      .select('id')
-      .eq('source', 'sahibinden')
-      .eq('source_listing_id', mapped.source_listing_id)
-      .maybeSingle()
+      if (!pageItems || pageItems.length === 0) break
 
-    if (existing?.id) {
-      // Sadece fiyat, başlık ve son görülme zamanını güncelle (iletişim notlarına dokunma)
-      const { error } = await supabase
-        .from('market_listings')
-        .update({
-          title: payload.title,
-          price: payload.price,
-          photos: payload.photos,
+      for (const raw of pageItems) {
+        if (!raw?.id) continue
+        const mapped = mapItem(raw, pageUrl) // url as context
+        const payload = {
+          ...mapped,
           is_active: true,
           last_seen_at: runStart,
-        })
-        .eq('id', existing.id)
-      if (error) errors.push(`update ${mapped.source_listing_id}: ${error.message}`)
-      else updated++
-    } else {
-      const { error } = await supabase
-        .from('market_listings')
-        .insert({ ...payload, contact_status: 'new' })
-      if (error) errors.push(`insert ${mapped.source_listing_id}: ${error.message}`)
-      else inserted++
+        }
+
+        const { data: existing } = await supabase
+          .from('market_listings')
+          .select('id')
+          .eq('source', 'sahibinden')
+          .eq('source_listing_id', mapped.source_listing_id)
+          .maybeSingle()
+
+        if (existing?.id) {
+          const { error } = await supabase
+            .from('market_listings')
+            .update({
+              title: payload.title,
+              price: payload.price,
+              photos: payload.photos,
+              is_active: true,
+              last_seen_at: runStart,
+            })
+            .eq('id', existing.id)
+          if (error) errors.push(`update ${mapped.source_listing_id}: ${error.message}`)
+          else totalUpdated++
+        } else {
+          const { error } = await supabase
+            .from('market_listings')
+            .insert({ ...payload, contact_status: 'new' })
+          if (error) errors.push(`insert ${mapped.source_listing_id}: ${error.message}`)
+          else totalInserted++
+        }
+      }
+      totalScraped += pageItems.length
+    } catch (err: any) {
+      errors.push(`Page ${i} error: ${err.message}`)
     }
   }
+
+  const summary = {
+    run_at: runStart,
+    scraped: totalScraped,
+    inserted: totalInserted,
+    updated: totalUpdated,
+    deactivated: 0,
+    errors: errors.slice(0, 10),
+  }
+
+  await logResult(supabase, runStart, summary)
+  return NextResponse.json(summary)
 
   // Bu taramada görülmeyenleri pasifleştir
   /* 
