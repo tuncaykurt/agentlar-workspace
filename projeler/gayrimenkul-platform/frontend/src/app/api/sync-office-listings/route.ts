@@ -256,6 +256,11 @@ export async function POST(req: NextRequest) {
 
   await logResult(supabase, runStart, summary)
   return NextResponse.json(summary)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Bilinmeyen hata'
+    await logResult(supabase, runStart, { error: msg, scraped: 0 })
+    return NextResponse.json({ error: `Sync işlemi başarısız: ${msg}` }, { status: 500 })
+  }
 }
 
 // Ayrıca GET ile manual tetikleme (admin panel buton)
