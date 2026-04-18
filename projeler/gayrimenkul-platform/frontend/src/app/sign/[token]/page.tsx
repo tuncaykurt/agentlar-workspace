@@ -287,8 +287,6 @@ function DocSummary({ doc, signerRole, token }: { doc: DocInfo; signerRole: stri
           </p>
           <a
             href={`/api/sign/${token}/preview`}
-            target="_blank"
-            rel="noopener noreferrer"
             className="text-xs font-semibold text-blue-700 underline underline-offset-2"
           >
             Belgeyi Görüntüle ↗
@@ -442,9 +440,7 @@ export default function SignPage() {
           </p>
           <a
             href={`/api/sign/${token}/preview`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
+            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition text-center"
           >
             Belgeyi Görüntüle / PDF İndir
           </a>
@@ -492,9 +488,7 @@ export default function SignPage() {
           </div>
           <a
             href={`/api/sign/${token}/preview`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
+            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition text-center"
           >
             Belgeyi Görüntüle / PDF İndir
           </a>

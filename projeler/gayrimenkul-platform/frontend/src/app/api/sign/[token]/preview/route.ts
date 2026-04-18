@@ -236,6 +236,10 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       } catch { return '___' }
     })()
 
+    const logoHtml = officeLogo
+      ? `<img src="${officeLogo}" style="max-height:100px;max-width:260px;object-fit:contain;display:block;" />`
+      : `<div style="font-weight:bold;font-size:16px;color:#111;">${officeName}</div>`
+
     const body = `
       <style>
         .auth-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:0;}
@@ -246,8 +250,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <table class="auth-tbl" style="margin-bottom:0;">
         <tr>
           <td style="width:42%;vertical-align:top;padding:8px;border-right:2px solid #000;">
-            ${logoHtml}
-            <div style="margin-top:6px;font-size:9px;line-height:1.7;color:#222;">
+            <div style="font-size:9px;line-height:1.7;color:#222;">
               <strong style="font-size:10px;display:block;margin-bottom:2px;">${officeLegalName}</strong>
               ${officeAddress ? officeAddress.replace(/\n/g, '<br>') : ''}<br>
               <span style="color:#666;">Mersis No: ${officeMersis}</span>
@@ -319,13 +322,9 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}MÜŞTERİ<br><strong>${clientName(doc.client)}</strong></div></div>
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}GAYRİMENKUL DANIŞMANI<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Adına İmza</div></div>`
 
-    const logoHtml = officeLogo
-      ? `<img src="${officeLogo}" style="max-height:100px;max-width:260px;object-fit:contain;display:block;" />`
-      : `<div style="font-weight:bold;font-size:16px;color:#111;">${officeName}</div>`
-
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style>${jsBlock}</head><body>
       <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Aracılık Sözleşmesi','authorization')">⬇️ PDF İndir</button></div>
-      <div style="margin-bottom:4px;">${logoHtml}</div>
+      <div style="margin-bottom:0;">${logoHtml}</div>
       <h1>ARACILIK SÖZLEŞMESİ</h1>
       <div style="text-align:right;font-size:13px;color:#333;margin-bottom:2px;">Düzenlenme: ${today}</div>
       <hr class="divider">
