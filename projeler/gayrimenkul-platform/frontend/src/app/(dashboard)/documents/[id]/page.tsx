@@ -384,10 +384,24 @@ function SignerRow({
         </div>
       )}
 
-      {/* İmza bilgisi */}
+      {/* İmza bilgisi ve görsel */}
       {req.status === 'signed' && req.signature_type && (
-        <div className="text-xs bg-green-50 text-green-700 px-3 py-2 rounded-lg">
-          {req.signature_type === 'drawn' ? '✏️ El imzası ile imzalandı' : '⌨️ İsim yazılarak imzalandı'}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
+          <p className="text-xs text-green-700">
+            {req.signature_type === 'drawn' ? '✏️ El imzası ile imzalandı' : '⌨️ İsim yazılarak imzalandı'}
+          </p>
+          {req.signature_type === 'drawn' && req.signature_data?.startsWith('data:image') && (
+            <div className="bg-white border border-green-100 rounded-lg p-3 flex justify-center">
+              <img src={req.signature_data} alt={`${req.signer_name} imzası`} className="max-h-16 max-w-[200px] object-contain" />
+            </div>
+          )}
+          {req.signature_type === 'typed' && req.signature_data && (
+            <div className="bg-white border border-green-100 rounded-lg p-3 flex justify-center">
+              <span style={{ fontFamily: "'Brush Script MT', cursive", fontSize: '24px', color: '#1a237e' }}>
+                {req.signature_data}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -542,6 +556,10 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
       .sig { break-inside: avoid; page-break-inside: avoid; }
       .auth-sigs { break-inside: avoid; page-break-inside: avoid; display: flex !important; flex-wrap: wrap; }
       .auth-sig { break-inside: avoid; page-break-inside: avoid; }
+      .sig-area { height: auto !important; min-height: 60px; }
+      .sig-area img { display: block !important; max-height: 56px !important; max-width: 180px !important; visibility: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .sig-typed { display: block !important; visibility: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .auth-sig-box { min-height: 60px; }
     }
   `
 
