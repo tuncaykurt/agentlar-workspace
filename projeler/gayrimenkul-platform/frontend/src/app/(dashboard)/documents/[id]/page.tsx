@@ -177,18 +177,28 @@ function AddSignerModal({
     onClose()
   }
 
+  // Telefon numarasını +90 formatına çevir
+  function ensurePlus90(phone: string): string {
+    if (!phone) return ''
+    let p = phone.replace(/\s/g, '')
+    if (p.startsWith('+90')) return p
+    if (p.startsWith('0')) return '+90' + p.slice(1)
+    if (p.startsWith('90')) return '+' + p
+    return '+90' + p
+  }
+
   // Pre-fill party info when role changes
   function handleRoleChange(role: string) {
     setSignerRole(role)
     if (role === 'main' && doc.client) {
       setSignerName(`${doc.client.salutation ? doc.client.salutation + ' ' : ''}${doc.client.full_name}`.trim())
-      setSignerPhone(doc.client.phone || '')
+      setSignerPhone(ensurePlus90(doc.client.phone || ''))
     } else if (role === 'second') {
       setSignerName(String(templateData.second_client_name || ''))
-      setSignerPhone(String(templateData.second_client_phone || ''))
+      setSignerPhone(ensurePlus90(String(templateData.second_client_phone || '')))
     } else if (role === 'consultant' && doc.consultant) {
       setSignerName(doc.consultant.full_name)
-      setSignerPhone(doc.consultant.phone || '')
+      setSignerPhone(ensurePlus90(doc.consultant.phone || ''))
     } else {
       setSignerName('')
       setSignerPhone('')

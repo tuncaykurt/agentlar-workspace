@@ -316,10 +316,19 @@ export default function ProfilePage() {
     setSaving(true)
 
     const supabase = createClient()
+    // Telefon numarasını +90 formatına çevir
+    let phone = form.phone.replace(/\s/g, '')
+    if (phone && !phone.startsWith('+')) {
+      if (phone.startsWith('0')) phone = '+90' + phone.slice(1)
+      else if (phone.startsWith('90')) phone = '+' + phone
+      else phone = '+90' + phone
+    }
+
     const { error } = await supabase
       .from('consultants')
       .update({
         ...form,
+        phone,
         certifications: certifications,
       })
       .eq('id', consultant.id)
@@ -411,8 +420,15 @@ export default function ProfilePage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
                   <Phone size={12} /> Telefon
                 </label>
-                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder="05XX XXX XXXX"
+                <input value={form.phone} onChange={e => {
+                    let val = e.target.value.replace(/[^\d+]/g, '')
+                    // Otomatik +90 prefix
+                    if (val.startsWith('0')) val = '+90' + val.slice(1)
+                    else if (val.startsWith('90') && !val.startsWith('+90')) val = '+' + val
+                    else if (val.match(/^[1-9]/) && !val.startsWith('+')) val = '+90' + val
+                    setForm(f => ({ ...f, phone: val }))
+                  }}
+                  placeholder="+905XX XXX XXXX"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
