@@ -548,8 +548,8 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     }
     @media print {
       .no-print { display: none !important; }
-      @page { size: A4; margin: 15mm; }
-      body { padding: 0; font-size: 13px; }
+      @page { size: A4; margin: 8mm 6mm; }
+      body { padding: 0 4px; font-size: 13px; max-width: 100%; }
       td { font-size: 12px; }
       h1 { font-size: 16px; }
       .sigs { break-inside: avoid; page-break-inside: avoid; display: flex !important; flex-wrap: wrap; }
@@ -681,10 +681,6 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
             <div class="auth-sig-box">${sigArea('consultant', doc.consultant?.full_name || '')}</div>
             <div style="font-size:11px;margin-top:6px;font-weight:bold;">${doc.consultant?.full_name || '___'}</div>
           </div>
-          <div class="auth-sig" style="max-width:130px;">
-            <div class="auth-sig-label">TARİH</div>
-            <div class="auth-sig-box" style="padding-top:12px;">${created}</div>
-          </div>
         </div>
       `,
     },
@@ -787,22 +783,27 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>${cfg.title}</title>
   <style>${styles}</style>
-  <script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm 5mm}@media print{body{zoom:0.7}}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}</script>
+  <script>function pdfDownload(t,d){var el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:6mm 4mm}@media print{body{zoom:0.68;padding:10px 8px;max-width:100%;}}';document.head.appendChild(el);document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}</script>
 </head>
 <body>
   <div class="no-print" style="text-align:right;margin-bottom:20px;">
     <button class="print-btn" onclick="window.print()">🖨️ Yazdır</button>
     <button class="pdf-btn" onclick="pdfDownload('${doc.title||'Belge'}','${doc.doc_type}')">⬇️ PDF İndir</button>
   </div>
-  ${doc.doc_type !== 'authorization' ? `  <div class="letterhead">
+  ${doc.doc_type === 'authorization' ? `
+  <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:8px;">
+    <div style="flex-shrink:0;">${CB_LOGO_SVG.replace('max-height:80px', 'max-height:100px').replace('max-width:220px', 'max-width:260px')}</div>
+    <h1 style="margin-bottom:0;">${cfg.title}</h1>
+  </div>` : `
+  <div class="letterhead">
     ${CB_LOGO_SVG}
-        <div class="letterhead-text">
+    <div class="letterhead-text">
       <strong>Ambiance Gayrimenkul Yatırım Ortaklığı İnşaat San. Tic. Ltd. Şti.</strong><br>
       ${officeAddress ? officeAddress.replace(/\n/g, '<br>') : ''}<br>
       <span style="font-size:10px;color:#666;">Mersis No: 0068090568900012</span>
     </div>
-  </div>` : ''}
-  <h1>${cfg.title}</h1>
+  </div>
+  <h1>${cfg.title}</h1>`}
   ${doc.doc_type === 'sales_contract' ? `<div class="sub" style="font-size:13px;font-weight:bold;letter-spacing:1px;color:#333;">PROTOKOL YAZISI</div>` : ''}
   <div class="sub">Düzenlenme: ${created}</div>
   <hr class="divider">

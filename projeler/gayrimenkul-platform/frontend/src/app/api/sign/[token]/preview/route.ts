@@ -131,13 +131,14 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
     .pdf-btn { background: #16a34a; color: #fff; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 14px; font-family: sans-serif; }
     @media print {
       .no-print { display: none !important; }
-      @page { size: A4; margin: 15mm; }
-      body { padding: 0; font-size: 13px; }
+      @page { size: A4; margin: 8mm 6mm; }
+      body { padding: 0 4px; font-size: 13px; max-width: 100%; }
       table td { font-size: 12px; }
       h1 { font-size: 16px; }
+      .sig-area img { display: block !important; max-height: 56px !important; max-width: 180px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }`
 
-  const jsBlock = `<script>function pdfDownload(t,d){var f=['authorization','sales_contract','offer_letter'];var el;if(f.indexOf(d)!==-1){el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:8mm 5mm}@media print{body{zoom:0.7}}';document.head.appendChild(el);}document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}<\/script>`
+  const jsBlock = `<script>function pdfDownload(t,d){var el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:6mm 4mm}@media print{body{zoom:0.68;padding:10px 8px;max-width:100%;}}';document.head.appendChild(el);document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}<\/script>`
 
   // ── Sales contract ────────────────────────────────────────────────────────
   if (doc.doc_type === 'sales_contract') {
@@ -298,13 +299,18 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
 
     const sigs = `
       <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}MÜŞTERİ<br><strong>${clientName(doc.client)}</strong></div></div>
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}GAYRİMENKUL DANIŞMANI<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Adına İmza</div></div>
-      <div class="sig" style="max-width:130px;"><div class="sig-line">TARİH<br>${today}</div></div>`
+      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}GAYRİMENKUL DANIŞMANI<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Adına İmza</div></div>`
+
+    const logoHtml = officeLogo
+      ? `<img src="${officeLogo}" style="max-height:100px;max-width:260px;object-fit:contain;display:block;" />`
+      : `<div style="font-weight:bold;font-size:16px;color:#111;">${officeName}</div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style>${jsBlock}</head><body>
       <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Aracılık Sözleşmesi','authorization')">⬇️ PDF İndir</button></div>
-      ${letterhead}
-      <h1>ARACILIK SÖZLEŞMESİ</h1>
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:8px;">
+        <div style="flex-shrink:0;">${logoHtml}</div>
+        <h1 style="margin-bottom:0;">ARACILIK SÖZLEŞMESİ</h1>
+      </div>
       <div class="sub">${today}</div>
       <hr class="divider">
       ${body}
