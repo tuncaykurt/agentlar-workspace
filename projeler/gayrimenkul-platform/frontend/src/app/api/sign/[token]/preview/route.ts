@@ -238,35 +238,52 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
 
     const body = `
       <style>
-        .auth-tbl{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:8px;}
-        .auth-tbl td{border:1px solid #000;padding:3px 6px;}
-        .sec-title{background:#e0e0e0;font-weight:bold;font-size:14px;padding:4px 8px;border:1px solid #000;border-bottom:none;text-transform:uppercase;}
-        .clause{font-size:15px;line-height:1.8;margin-bottom:8px;text-align:justify;}
+        .auth-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:0;}
+        .auth-tbl td{border:1px solid #000;padding:6px 8px;vertical-align:middle;}
+        .sec-title{background:#e0e0e0;font-weight:bold;font-size:12px;padding:6px 8px;border:1px solid #000;border-bottom:none;text-transform:uppercase;}
+        .clause{font-size:10.5px;line-height:1.65;margin-bottom:5px;text-align:justify;}
       </style>
-      <div class="sec-title">GAYRİMENKULE AİT BİLGİLER</div>
+      <table class="auth-tbl" style="margin-bottom:0;">
+        <tr>
+          <td style="width:42%;vertical-align:top;padding:8px;border-right:2px solid #000;">
+            ${logoHtml}
+            <div style="margin-top:6px;font-size:9px;line-height:1.7;color:#222;">
+              <strong style="font-size:10px;display:block;margin-bottom:2px;">${officeLegalName}</strong>
+              ${officeAddress ? officeAddress.replace(/\n/g, '<br>') : ''}<br>
+              <span style="color:#666;">Mersis No: ${officeMersis}</span>
+            </div>
+          </td>
+          <td style="width:58%;padding:0;vertical-align:top;">
+            <div style="background:#1a3a6b;color:#fff;text-align:center;padding:5px 8px;font-weight:bold;font-size:13px;letter-spacing:2px;">ARACILIK SÖZLEŞMESİ</div>
+            <div style="padding:6px 8px;">
+              <table style="width:100%;border-collapse:collapse;font-size:10px;">
+                <tr><td style="font-weight:bold;width:85px;padding:2px 0;">AD SOYAD</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${clientName(doc.client)}</td></tr>
+                <tr><td style="font-weight:bold;padding:2px 0;">ADRESİ</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${data.main_address || ''}</td></tr>
+                <tr><td style="font-weight:bold;padding:2px 0;">TELEFON</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${doc.client?.phone || ''}</td></tr>
+                <tr><td style="font-weight:bold;padding:2px 0;">TC No</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${data.main_tc_no || ''}</td></tr>
+                <tr><td style="font-weight:bold;padding:2px 0;">e-mail</td><td style="border-bottom:1px solid #bbb;padding:2px 4px;">${data.main_email || doc.client?.email || ''}</td></tr>
+              </table>
+            </div>
+          </td>
+        </tr>
+      </table>
+      <div class="sec-title" style="margin-top:6px;">GAYRİMENKULE AİT BİLGİLER</div>
       <div class="tbl-wrap"><table class="auth-tbl">
         <tr>
+          <td style="text-align:center;">${chk(propType==='detached_house')} Ev</td>
           <td style="text-align:center;">${chk(propType==='apartment')} Apt. Dairesi</td>
-          <td style="text-align:center;">${chk(propType==='detached_house')} Müstakil Ev</td>
-          <td style="text-align:center;">${chk(propType==='villa')} Villa</td>
-          <td style="text-align:center;">${chk(propType==='commercial'||propType==='office')} İşyeri</td>
+          <td style="text-align:center;">${chk(['commercial','office'].includes(propType))} İşyeri</td>
           <td style="text-align:center;">${chk(propType==='shop')} Dükkan</td>
+          <td style="text-align:center;">${chk(propType==='villa')} Villa</td>
           <td style="text-align:center;">${chk(propType==='land')} Arsa</td>
-          <td style="text-align:center;">${chk(!Object.keys(typeMap).includes(propType))} Diğer</td>
+          <td style="text-align:center;">${chk(!['detached_house','apartment','commercial','office','shop','villa','land'].includes(propType))} Diğer</td>
         </tr>
-        <tr><td colspan="7">Adresi: ${[prop?.address, prop?.district, prop?.city].filter(Boolean).join(', ') || '___'}</td></tr>
-        <tr>
-          <td colspan="3">Mahallesi: ${data.mahalle || '___'}</td>
-          <td colspan="2">İlçesi: ${data.ilce || prop?.district || '___'}</td>
-          <td colspan="2">İli: ${data.il || prop?.city || '___'}</td>
-        </tr>
-        <tr>
-          <td colspan="3">Pafta: ${data.pafta || '___'}</td>
-          <td colspan="2">Ada: ${data.ada || '___'}</td>
-          <td colspan="2">Parsel: ${data.parsel || '___'}</td>
-        </tr>
+        <tr><td colspan="2" style="font-weight:bold;">Adresi</td><td colspan="5">${[prop?.address, prop?.district, prop?.city].filter(Boolean).join(', ') || '___'}</td></tr>
+        <tr><td style="font-weight:bold;">Mahallesi</td><td colspan="2">${data.mahalle || '___'}</td><td style="font-weight:bold;">İlçesi</td><td>${data.ilce || prop?.district || '___'}</td><td style="font-weight:bold;">İli</td><td>${data.il || prop?.city || '___'}</td></tr>
+        <tr><td colspan="2" style="font-weight:bold;">Tapu Kayıt Bilg.</td><td>Pafta: ${data.pafta || '___'}</td><td colspan="2">Ada: ${data.ada || '___'}</td><td colspan="2">Parsel: ${data.parsel || '___'}</td></tr>
+        <tr><td colspan="2" style="font-weight:bold;">Diğer Özellikler</td><td colspan="5">${data.ozel_sartlar || ''}</td></tr>
       </table></div>
-      <div class="sec-title">YAPILACAK İŞLEME AİT BİLGİLER</div>
+      <div class="sec-title" style="margin-top:6px;">YAPILACAK İŞLEME AİT BİLGİLER</div>
       <div class="tbl-wrap"><table class="auth-tbl">
         <tr>
           <td style="font-weight:bold;">${data.yetki_turu === 'Kiralama' ? 'Kira Bedeli' : 'Satış Tutarı'}</td>
@@ -277,23 +294,24 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
         <tr>
           <td style="font-weight:bold;">Komisyon Oranı</td>
           <td>%${data.komisyon_orani || '2'} + KDV (${data.komisyon_turu || 'Satıcıdan'})</td>
-          <td style="font-weight:bold;">Yetki Türü</td>
-          <td>${data.yetki_turu || 'Satış'}</td>
+          <td style="font-weight:bold;">Gayrimenkul Danışmanı</td>
+          <td>${consultant?.full_name || '___'}</td>
         </tr>
         <tr>
-          <td style="font-weight:bold;">Başlangıç Tarihi</td>
-          <td>${fmtDate(data.baslangic_tarihi)}</td>
-          <td style="font-weight:bold;">Bitiş Tarihi</td>
-          <td>${sureSon}</td>
+          <td style="font-weight:bold;">Yetki Türü</td>
+          <td>${data.yetki_turu || 'Satış'}</td>
+          <td style="font-weight:bold;">Süre</td>
+          <td>${data.yetki_suresi_gun || '90'} gün (${fmtDate(data.baslangic_tarihi)} – ${sureSon})</td>
         </tr>
       </table></div>
-      <div style="margin-top:14px;font-size:15px;line-height:1.8;">
-        <p class="clause"><strong>1. GAYRİMENKUL SATIŞI:</strong> Müşteri, yukarıda adresi yazılı gayrimenkulünü satmak/kiralamak amacıyla ${officeName}'e <strong>${data.yetki_suresi_gun || '90'} gün</strong> süre ile <strong>${fmtDate(data.baslangic_tarihi)}</strong> tarihinden itibaren münhasır yetki vermektedir.</p>
-        <p class="clause"><strong>2. HİZMET BEDELİ:</strong> Müşteri, ${officeName}'in aracılığıyla gerçekleşecek satış/kiralama işleminde, satış/kira bedeli üzerinden <strong>%${data.komisyon_orani || '2'} + KDV</strong> oranında hizmet bedeli ödemeyi kabul eder. Bu ücret, tapu devri/sözleşme imzası sırasında peşinen ödenecektir.</p>
-        <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları ${officeName}'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Müşteri, sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması/kiralaması halinde yukarıdaki satış tutarı üzerinden %${data.komisyon_orani || '2'} + KDV komisyon miktarını ${officeName}'e ödemeyi kabul eder.</p>
-        <p class="clause"><strong>4. TAPU DEVRİ:</strong> Alıcı ve Satıcı, tapu devri sırasında ${officeName}'e komisyon ücretini ödemeyi peşinen kabul eder. Satışın herhangi bir nedenle gerçekleşmemesi durumunda komisyon iade edilmez.</p>
-        <p class="clause"><strong>5. SÖZLEŞME SÜRESİ:</strong> Bu sözleşme <strong>${fmtDate(data.baslangic_tarihi)}</strong> tarihinde başlar ve <strong>${data.yetki_suresi_gun || '90'} gün</strong> süre ile geçerlidir (bitiş: <strong>${sureSon}</strong>). Sözleşme süresi sona erdikten sonra ${data.yetki_suresi_gun || '90'} gün içinde ${officeName}'in aracılığıyla görüşülen bir alıcıya satış gerçekleşirse komisyon ödenir.</p>
-        <p class="clause"><strong>6. ANLAŞMAZLIK:</strong> İşbu sözleşmeden doğacak anlaşmazlıklarda Bursa mahkemeleri yetkilidir.</p>
+      <div style="margin-top:8px;">
+        <p class="clause"><strong>1. KONU:</strong> Müşteri ile ${officeName}, yukarıda belirtilen gayrimenkulün ${data.yetki_turu || 'satış'}ına aracılık edilmesi işlemi için karşılıklı olarak anlaşılmıştır.</p>
+        <p class="clause"><strong>2. TANITIM YETKİSİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak satış işlemi amacıyla internet, basın, yayın ve medyaya da dahil olmak üzere tanıtım faaliyetlerinde bulunması hakkında ve gayrimenkulün giriş müşahedesi yapılmasını Ambiance Gayrimenkul'e kabul ve taahhüt eder.</p>
+        <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları Ambiance Gayrimenkul'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması halinde %${data.komisyon_orani || '2'} + KDV komisyon miktarını Ambiance Gayrimenkul'e ödemeyi kabul eder.</p>
+        <p class="clause"><strong>4. İŞLEM YETKİSİ:</strong> Müşteri, gayrimenkulünün üzerinde işlem yapma yetkisi bulunmayan üçüncü kişilerin sebep olacağı zararı önlemek amacıyla Ambiance Gayrimenkul'in gerekli tedbirleri almasına izin vermeyi kabul eder.</p>
+        <p class="clause"><strong>5. SÜRE:</strong> İşbu sözleşme imzalandığı tarihten itibaren <strong>${data.yetki_suresi_gun || '90'} gün</strong> süreyle geçerlidir. Bitiş: <strong>${sureSon}</strong>. Sözleşme süresi içinde taşınmaz satılır/kiralanırsa komisyon tutarı tahsil edilecektir.</p>
+        <p class="clause"><strong>6. SÜRENİN BİTİMİ:</strong> Sözleşme süresinin dolmasından sonra ${data.yetki_suresi_gun || '90'} gün içinde Ambiance Gayrimenkul'in tanıştırdığı kişiyle işlem yapılması halinde komisyon miktarının 2 katı + KDV hizmet bedeli olarak ödenir.</p>
+        <p class="clause"><strong>7. İHTİLAF:</strong> Bu sözleşmenin uygulanmasından doğacak uyuşmazlıklarda Bursa (Merkez) Mahkemeleri ve İcra Daireleri yetkilidir. Doğacak damga vergisi, resim, pul ve harçların tamamı müşteriye aittir.</p>
         ${data.ek_madde ? `<p class="clause"><strong>EK MADDE:</strong> ${data.ek_madde}</p>` : ''}
       </div>`
 
@@ -307,11 +325,9 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style>${jsBlock}</head><body>
       <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Aracılık Sözleşmesi','authorization')">⬇️ PDF İndir</button></div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:8px;">
-        <div style="flex-shrink:0;">${logoHtml}</div>
-        <h1 style="margin-bottom:0;">ARACILIK SÖZLEŞMESİ</h1>
-      </div>
-      <div class="sub">${today}</div>
+      <div style="margin-bottom:4px;">${logoHtml}</div>
+      <h1>ARACILIK SÖZLEŞMESİ</h1>
+      <div style="text-align:right;font-size:13px;color:#333;margin-bottom:2px;">Düzenlenme: ${today}</div>
       <hr class="divider">
       ${body}
       <div class="sigs">${sigs}</div>

@@ -801,10 +801,10 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     <button class="pdf-btn" onclick="pdfDownload('${doc.title||'Belge'}','${doc.doc_type}')">⬇️ PDF İndir</button>
   </div>
   ${doc.doc_type === 'authorization' ? `
-  <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:8px;">
-    <div style="flex-shrink:0;">${CB_LOGO_SVG.replace('max-height:80px', 'max-height:100px').replace('max-width:220px', 'max-width:260px')}</div>
-    <h1 style="margin-bottom:0;">${cfg.title}</h1>
-  </div>` : `
+  <div style="margin-bottom:4px;">${CB_LOGO_SVG.replace('max-height:80px', 'max-height:90px').replace('max-width:220px', 'max-width:240px')}</div>
+  <h1>${cfg.title}</h1>
+  <div style="text-align:right;font-size:13px;color:#333;margin-bottom:2px;">Düzenlenme: ${created}</div>
+  <hr class="divider">` : `
   <div class="letterhead">
     ${CB_LOGO_SVG}
     <div class="letterhead-text">
@@ -813,10 +813,10 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
       <span style="font-size:10px;color:#666;">Mersis No: 0068090568900012</span>
     </div>
   </div>
-  <h1>${cfg.title}</h1>`}
-  ${doc.doc_type === 'sales_contract' ? `<div class="sub" style="font-size:13px;font-weight:bold;letter-spacing:1px;color:#333;">PROTOKOL YAZISI</div>` : ''}
+  <h1>${cfg.title}</h1>
+  ${doc.doc_type === 'sales_contract' ? '<div class="sub" style="font-size:13px;font-weight:bold;letter-spacing:1px;color:#333;">PROTOKOL YAZISI</div>' : ''}
   <div class="sub">Düzenlenme: ${created}</div>
-  <hr class="divider">
+  <hr class="divider">`}
   ${cfg.body}
   <div class="sigs">${cfg.sigs}</div>
 </body>
