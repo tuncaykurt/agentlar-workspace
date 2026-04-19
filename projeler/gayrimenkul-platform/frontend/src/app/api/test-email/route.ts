@@ -27,10 +27,15 @@ export async function POST(req: NextRequest) {
       smtp[row.key] = val
     }
 
+    // Show raw DB values for debugging
+    const rawDebug = (rows || []).map(r => ({ key: r.key, rawValue: r.value, rawType: typeof r.value }))
+
     if (!smtp.smtp_host || !smtp.smtp_user || !smtp.smtp_pass) {
       return NextResponse.json({
         error: 'SMTP ayarları eksik',
-        debug: { host: smtp.smtp_host || null, user: smtp.smtp_user || null, passLen: smtp.smtp_pass?.length || 0 }
+        debug: { host: smtp.smtp_host || null, user: smtp.smtp_user || null, passLen: smtp.smtp_pass?.length || 0 },
+        rawRows: rawDebug,
+        foundKeys: (rows || []).map(r => r.key),
       }, { status: 400 })
     }
 
