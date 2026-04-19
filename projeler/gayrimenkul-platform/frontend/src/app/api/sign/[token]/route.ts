@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import nodemailer from 'nodemailer'
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -148,7 +149,7 @@ export async function POST(
     // Get document + consultant info
     const { data: doc } = await supabase
       .from('documents')
-      .select('id, title, consultant:consultants(id, full_name, phone, wa_instance)')
+      .select('id, title, consultant:consultants(id, full_name, phone, email, wa_instance)')
       .eq('id', sigReq.document_id)
       .single()
 
@@ -156,7 +157,7 @@ export async function POST(
     const evoUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '') || null
     const evoKey = process.env.EVOLUTION_API_KEY || null
 
-    type ConsultantWA = { id: string; full_name: string; phone: string; wa_instance: string }
+    type ConsultantWA = { id: string; full_name: string; phone: string; email?: string; wa_instance: string }
     const rawConsultant = doc?.consultant
     const consultant = (Array.isArray(rawConsultant) ? rawConsultant[0] : rawConsultant) as unknown as ConsultantWA | null
     const evolutionInstance = consultant?.wa_instance || process.env.EVOLUTION_INSTANCE || ''
@@ -214,6 +215,82 @@ export async function POST(
     }
   } catch (e) {
     console.error('[sign] WA TryCatch error:', e)
+  }
+
+  // 7. Send email notification to consultant
+  try {
+    const smtpSettings = await supabase
+      .from('settings')
+      .select('key, value')
+      .in('key', ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from_name'])
+
+    const smtp: Record<string, string> = {}
+    for (const row of smtpSettings.data || []) {
+      smtp[row.key] = String(row.value || '').replace(/^"|"$/g, '')
+    }
+
+    if (smtp.smtp_host && smtp.smtp_user && smtp.smtp_pass) {
+      // Get consultant email + doc title
+      const { data: emailDoc } = await supabase
+        .from('documents')
+        .select('title, consultant:consultants(full_name, email)')
+        .eq('id', sigReq.document_id)
+        .single()
+
+      const rawC = emailDoc?.consultant
+      const cons = (Array.isArray(rawC) ? rawC[0] : rawC) as { full_name: string; email?: string } | null
+      const consultantEmail = cons?.email
+
+      if (consultantEmail) {
+        const transporter = nodemailer.createTransport({
+          host: smtp.smtp_host,
+          port: parseInt(smtp.smtp_port || '587'),
+          secure: parseInt(smtp.smtp_port || '587') === 465,
+          auth: { user: smtp.smtp_user, pass: smtp.smtp_pass },
+        })
+
+        const docTitle = emailDoc?.title || 'Belge'
+        const signerInfo = `${sigReq.signer_name} (${sigReq.signer_role || 'İmzacı'})`
+        const fromName = smtp.smtp_from_name || 'Ambiance Gayrimenkul'
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || ''
+
+        const subject = allSigned
+          ? `✅ ${docTitle} — Tüm İmzalar Tamamlandı`
+          : `✍️ ${docTitle} — Yeni İmza: ${sigReq.signer_name}`
+
+        const html = allSigned
+          ? `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;">
+              <h2 style="color:#16a34a;margin-bottom:8px;">Tüm İmzalar Tamamlandı!</h2>
+              <p style="color:#333;font-size:15px;line-height:1.6;">
+                <strong>${docTitle}</strong> belgesi tüm taraflarca imzalanarak tamamlanmıştır.
+              </p>
+              <p style="color:#555;font-size:14px;">Son imzalayan: <strong>${signerInfo}</strong></p>
+              ${appUrl ? `<a href="${appUrl}/documents/${sigReq.document_id}" style="display:inline-block;margin-top:16px;padding:10px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;">Belgeyi Görüntüle</a>` : ''}
+              <p style="color:#999;font-size:12px;margin-top:24px;">${fromName}</p>
+            </div>`
+          : `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;">
+              <h2 style="color:#2563eb;margin-bottom:8px;">Yeni İmza Bildirimi</h2>
+              <p style="color:#333;font-size:15px;line-height:1.6;">
+                <strong>${docTitle}</strong> belgesini <strong>${signerInfo}</strong> imzaladı.
+              </p>
+              <p style="color:#555;font-size:14px;">Diğer imzalar bekleniyor.</p>
+              ${appUrl ? `<a href="${appUrl}/documents/${sigReq.document_id}" style="display:inline-block;margin-top:16px;padding:10px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;">Belgeyi Görüntüle</a>` : ''}
+              <p style="color:#999;font-size:12px;margin-top:24px;">${fromName}</p>
+            </div>`
+
+        await transporter.sendMail({
+          from: `"${fromName}" <${smtp.smtp_user}>`,
+          to: consultantEmail,
+          subject,
+          html,
+        })
+        console.log('[sign] Email sent to', consultantEmail)
+      }
+    } else {
+      console.warn('[sign] Email skipped — SMTP not configured')
+    }
+  } catch (e) {
+    console.error('[sign] Email error:', e)
   }
 
   return NextResponse.json({ success: true, allSigned })
