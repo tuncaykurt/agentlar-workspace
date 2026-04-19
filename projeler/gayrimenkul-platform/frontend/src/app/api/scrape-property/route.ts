@@ -270,7 +270,23 @@ export async function POST(req: NextRequest) {
             { status: 502 },
           )
         }
-        return NextResponse.json(mapSahibindenItem(item, url))
+        // Cloudflare challenge sayfası kontrolü
+        const title = item.title || ''
+        if (title.toLowerCase().includes('just a moment') || title.toLowerCase().includes('attention required')) {
+          return NextResponse.json(
+            { error: 'Sahibinden Cloudflare koruması nedeniyle veri çekilemedi. Lütfen tekrar deneyin.' },
+            { status: 502 },
+          )
+        }
+        const mapped = mapSahibindenItem(item, url)
+        // Hiçbir anlamlı veri yoksa hata döndür
+        if (!mapped.title && !mapped.price && !mapped.city) {
+          return NextResponse.json(
+            { error: 'İlan verisi alınamadı. İlan kaldırılmış veya erişilemiyor olabilir.' },
+            { status: 502 },
+          )
+        }
+        return NextResponse.json(mapped)
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Bilinmeyen hata'
         return NextResponse.json(

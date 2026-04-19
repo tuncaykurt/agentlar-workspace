@@ -61,6 +61,15 @@ interface SahibindenItem {
   images?: string[]
   features?: string[]
   attributes?: Record<string, unknown>
+  // Seller info (Apify enriched mode)
+  sellerName?: string
+  sellerPhone?: string
+  seller?: { name?: string; phone?: string; type?: string }
+  contactName?: string
+  contactPhone?: string
+  phone?: string
+  userName?: string
+  userType?: string
 }
 
 function mapItem(item: SahibindenItem, officeUrl: string) {
@@ -111,6 +120,9 @@ function mapItem(item: SahibindenItem, officeUrl: string) {
     source_listing_id: item.id != null ? String(item.id) : null,
     source_url: item.url || null,
     office_source_url: officeUrl,
+    seller_name: item.sellerName || item.seller?.name || item.contactName || item.userName || null,
+    seller_phone: item.sellerPhone || item.seller?.phone || item.contactPhone || item.phone || null,
+    seller_type: item.seller?.type || item.userType || null,
   }
 }
 
@@ -227,6 +239,9 @@ export async function POST(req: NextRequest) {
               photos: payload.photos,
               is_active: true,
               last_seen_at: runStart,
+              ...(payload.seller_name ? { seller_name: payload.seller_name } : {}),
+              ...(payload.seller_phone ? { seller_phone: payload.seller_phone } : {}),
+              ...(payload.seller_type ? { seller_type: payload.seller_type } : {}),
             })
             .eq('id', existing.id)
           if (error) errors.push(`update ${mapped.source_listing_id}: ${error.message}`)
