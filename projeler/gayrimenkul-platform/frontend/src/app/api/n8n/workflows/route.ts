@@ -943,6 +943,32 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Check for conflicting workflows with same webhook path and remove them
+    try {
+      const webhookNode = (workflow.nodes || []).find(
+        (n: { type: string }) => n.type === 'n8n-nodes-base.webhook'
+      )
+      const newWebhookPath = webhookNode?.parameters?.path
+      if (newWebhookPath) {
+        const existing = await n8nFetch(cfg, 'GET', '/workflows?limit=200')
+        const allWfs: { id: string; active: boolean }[] = existing.data || []
+        for (const wf of allWfs) {
+          try {
+            const detail = await n8nFetch(cfg, 'GET', `/workflows/${wf.id}`)
+            const wh = (detail.nodes || []).find(
+              (n: { type: string }) => n.type === 'n8n-nodes-base.webhook'
+            )
+            if (wh?.parameters?.path === newWebhookPath) {
+              if (wf.active) {
+                await n8nFetch(cfg, 'POST', `/workflows/${wf.id}/deactivate`).catch(() => {})
+              }
+              await n8nFetch(cfg, 'DELETE', `/workflows/${wf.id}`).catch(() => {})
+            }
+          } catch { /* skip */ }
+        }
+      }
+    } catch { /* non-fatal */ }
+
     const created = await n8nFetch(cfg, 'POST', '/workflows', workflow)
 
     // Assign tag separately — n8n doesn't accept tags in POST body
