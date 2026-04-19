@@ -226,8 +226,16 @@ export async function POST(
 
     const smtp: Record<string, string> = {}
     for (const row of smtpSettings.data || []) {
-      smtp[row.key] = String(row.value || '').replace(/^"|"$/g, '')
+      // Handle JSON-encoded values (some are stored as "\"value\"")
+      let val = String(row.value || '')
+      // Remove surrounding quotes at any depth
+      while (val.startsWith('"') && val.endsWith('"') && val.length > 1) {
+        val = val.slice(1, -1)
+      }
+      smtp[row.key] = val
     }
+
+    console.log('[sign] SMTP config:', { host: smtp.smtp_host, port: smtp.smtp_port, user: smtp.smtp_user, passLen: smtp.smtp_pass?.length || 0 })
 
     if (smtp.smtp_host && smtp.smtp_user && smtp.smtp_pass) {
       // Get consultant email + doc title
@@ -241,13 +249,20 @@ export async function POST(
       const cons = (Array.isArray(rawC) ? rawC[0] : rawC) as { full_name: string; email?: string } | null
       const consultantEmail = cons?.email
 
+      console.log('[sign] Consultant email:', consultantEmail, '| Doc:', emailDoc?.title)
+
       if (consultantEmail) {
+        const port = parseInt(smtp.smtp_port || '587')
         const transporter = nodemailer.createTransport({
           host: smtp.smtp_host,
-          port: parseInt(smtp.smtp_port || '587'),
-          secure: parseInt(smtp.smtp_port || '587') === 465,
+          port,
+          secure: port === 465,
           auth: { user: smtp.smtp_user, pass: smtp.smtp_pass },
         })
+
+        // Verify SMTP connection
+        await transporter.verify()
+        console.log('[sign] SMTP connection verified')
 
         const docTitle = emailDoc?.title || 'Belge'
         const signerInfo = `${sigReq.signer_name} (${sigReq.signer_role || 'İmzacı'})`
@@ -255,8 +270,8 @@ export async function POST(
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || ''
 
         const subject = allSigned
-          ? `✅ ${docTitle} — Tüm İmzalar Tamamlandı`
-          : `✍️ ${docTitle} — Yeni İmza: ${sigReq.signer_name}`
+          ? `${docTitle} — Tüm İmzalar Tamamlandı`
+          : `${docTitle} — Yeni İmza: ${sigReq.signer_name}`
 
         const html = allSigned
           ? `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;">
@@ -278,19 +293,21 @@ export async function POST(
               <p style="color:#999;font-size:12px;margin-top:24px;">${fromName}</p>
             </div>`
 
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
           from: `"${fromName}" <${smtp.smtp_user}>`,
           to: consultantEmail,
           subject,
           html,
         })
-        console.log('[sign] Email sent to', consultantEmail)
+        console.log('[sign] Email sent to', consultantEmail, '| messageId:', info.messageId)
+      } else {
+        console.warn('[sign] Email skipped — consultant has no email address')
       }
     } else {
-      console.warn('[sign] Email skipped — SMTP not configured')
+      console.warn('[sign] Email skipped — SMTP not configured:', { host: !!smtp.smtp_host, user: !!smtp.smtp_user, pass: !!smtp.smtp_pass })
     }
   } catch (e) {
-    console.error('[sign] Email error:', e)
+    console.error('[sign] Email error:', e instanceof Error ? e.message : e)
   }
 
   return NextResponse.json({ success: true, allSigned })
