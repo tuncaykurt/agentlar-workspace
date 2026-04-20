@@ -137,7 +137,7 @@ function SignaturePad({ onReady }: { onReady: (getDataURL: () => string | null) 
     <div className="relative">
       <canvas
         ref={canvasRef}
-        className="w-full h-36 border-2 border-dashed border-outline rounded-xl bg-surface-container-high touch-none cursor-crosshair"
+        className="w-full h-36 border-2 border-dashed border-outline rounded-xl bg-white touch-none cursor-crosshair"
         style={{ touchAction: 'none' }}
       />
       <button

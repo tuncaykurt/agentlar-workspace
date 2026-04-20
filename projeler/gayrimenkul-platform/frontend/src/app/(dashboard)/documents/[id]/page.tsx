@@ -401,12 +401,12 @@ function SignerRow({
             {req.signature_type === 'drawn' ? '✏️ El imzası ile imzalandı' : '⌨️ İsim yazılarak imzalandı'}
           </p>
           {req.signature_type === 'drawn' && req.signature_data?.startsWith('data:image') && (
-            <div className="bg-surface-container border border-green-100 rounded-lg p-3 flex justify-center">
+            <div className="bg-white border border-green-100 rounded-lg p-3 flex justify-center">
               <img src={req.signature_data} alt={`${req.signer_name} imzası`} className="max-h-16 max-w-[200px] object-contain" />
             </div>
           )}
           {req.signature_type === 'typed' && req.signature_data && (
-            <div className="bg-surface-container border border-green-100 rounded-lg p-3 flex justify-center">
+            <div className="bg-white border border-green-100 rounded-lg p-3 flex justify-center">
               <span style={{ fontFamily: "'Brush Script MT', cursive", fontSize: '24px', color: '#1a237e' }}>
                 {req.signature_data}
               </span>
