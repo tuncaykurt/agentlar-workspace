@@ -132,29 +132,29 @@ export default function NewClientPage() {
     <div className="p-6 max-w-3xl mx-auto">
       {/* Başlık */}
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/crm" className="text-slate-400 hover:text-slate-600 transition-colors">
+        <Link href="/crm" className="text-on-surface-variant hover:text-on-surface-variant transition-colors">
           <ArrowLeft size={20} />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Yeni Müşteri</h1>
-          <p className="text-slate-500 text-sm">Alıcı veya satıcı müşteri ekleyin</p>
+          <h1 className="text-2xl font-bold text-on-surface">Yeni Müşteri</h1>
+          <p className="text-on-surface-variant text-sm">Alıcı veya satıcı müşteri ekleyin</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Temel Bilgiler */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
             <User size={16} /> Temel Bilgiler
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 flex gap-3">
               <div className="w-36">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Hitap Şekli</label>
+                <label className="block text-sm font-medium text-on-surface mb-1">Hitap Şekli</label>
                 <select
                   value={form.salutation}
                   onChange={e => setForm(f => ({ ...f, salutation: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="">—</option>
                   <option value="Bey">Bey</option>
@@ -170,7 +170,7 @@ export default function NewClientPage() {
                 </select>
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-on-surface mb-1">
                   Ad Soyad <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -178,12 +178,12 @@ export default function NewClientPage() {
                   value={form.full_name}
                   onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
                   placeholder="Ahmet Yılmaz"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+              <label className="block text-sm font-medium text-on-surface mb-1 flex items-center gap-1">
                 <Phone size={13} /> Telefon
               </label>
               <input
@@ -191,11 +191,11 @@ export default function NewClientPage() {
                 value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                 placeholder="05XX XXX XXXX"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+              <label className="block text-sm font-medium text-on-surface mb-1 flex items-center gap-1">
                 <Mail size={13} /> E-posta
               </label>
               <input
@@ -203,7 +203,7 @@ export default function NewClientPage() {
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                 placeholder="ahmet@email.com"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
@@ -211,34 +211,34 @@ export default function NewClientPage() {
 
         {/* Müşteri Tipi & Durum */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4">Sınıflandırma</h2>
+          <h2 className="font-semibold text-on-surface mb-4">Sınıflandırma</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Müşteri Tipi</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Müşteri Tipi</label>
               <select
                 value={form.client_type}
                 onChange={e => setForm(f => ({ ...f, client_type: e.target.value as ClientType }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-surface-container"
               >
                 {clientTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Durum</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Durum</label>
               <select
                 value={form.lead_status}
                 onChange={e => setForm(f => ({ ...f, lead_status: e.target.value as LeadStatus }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-surface-container"
               >
                 {leadStatuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Kaynak</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Kaynak</label>
               <select
                 value={form.source}
                 onChange={e => setForm(f => ({ ...f, source: e.target.value as ListingSource }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-surface-container"
               >
                 {sources.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
@@ -249,14 +249,14 @@ export default function NewClientPage() {
         {/* Alıcı Kriterleri */}
         {isBuyer && (
           <div className="card">
-            <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
               <Home size={16} /> Arama Kriterleri
-              <span className="text-xs text-slate-400 font-normal">(Eşleştirme için kullanılır)</span>
+              <span className="text-xs text-on-surface-variant font-normal">(Eşleştirme için kullanılır)</span>
             </h2>
             <div className="space-y-4">
               {/* Bütçe */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-1">
+                <label className="block text-sm font-medium text-on-surface mb-2 flex items-center gap-1">
                   <DollarSign size={13} /> Bütçe Aralığı (₺)
                 </label>
                 <div className="flex items-center gap-2">
@@ -265,15 +265,15 @@ export default function NewClientPage() {
                     value={form.budget_min}
                     onChange={e => setForm(f => ({ ...f, budget_min: e.target.value }))}
                     placeholder="Min"
-                    className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
-                  <span className="text-slate-400 text-sm">—</span>
+                  <span className="text-on-surface-variant text-sm">—</span>
                   <input
                     type="number"
                     value={form.budget_max}
                     onChange={e => setForm(f => ({ ...f, budget_max: e.target.value }))}
                     placeholder="Max"
-                    className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               </div>
@@ -281,40 +281,40 @@ export default function NewClientPage() {
               {/* m2 ve Oda */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Min m²</label>
+                  <label className="block text-sm font-medium text-on-surface mb-1">Min m²</label>
                   <input
                     type="number"
                     value={form.min_m2}
                     onChange={e => setForm(f => ({ ...f, min_m2: e.target.value }))}
                     placeholder="60"
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Max m²</label>
+                  <label className="block text-sm font-medium text-on-surface mb-1">Max m²</label>
                   <input
                     type="number"
                     value={form.max_m2}
                     onChange={e => setForm(f => ({ ...f, max_m2: e.target.value }))}
                     placeholder="150"
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Min Oda</label>
+                  <label className="block text-sm font-medium text-on-surface mb-1">Min Oda</label>
                   <input
                     type="number"
                     value={form.min_rooms}
                     onChange={e => setForm(f => ({ ...f, min_rooms: e.target.value }))}
                     placeholder="2"
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               </div>
 
               {/* Şehir */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-1">
+                <label className="block text-sm font-medium text-on-surface mb-2 flex items-center gap-1">
                   <MapPin size={13} /> Tercih Edilen Şehirler
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -325,8 +325,8 @@ export default function NewClientPage() {
                       onClick={() => setForm(f => ({ ...f, preferred_cities: toggle(f.preferred_cities, city) }))}
                       className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                         form.preferred_cities.includes(city)
-                          ? 'bg-blue-600 border-blue-600 text-white'
-                          : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
+                          ? 'bg-primary border-primary text-white'
+                          : 'bg-surface-container border-outline text-on-surface-variant hover:border-primary/30'
                       }`}
                     >
                       {city}
@@ -337,7 +337,7 @@ export default function NewClientPage() {
 
               {/* Mülk Tipi */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Tercih Edilen Mülk Tipleri</label>
+                <label className="block text-sm font-medium text-on-surface mb-2">Tercih Edilen Mülk Tipleri</label>
                 <div className="flex flex-wrap gap-2">
                   {propertyTypes.map(pt => (
                     <button
@@ -347,7 +347,7 @@ export default function NewClientPage() {
                       className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                         form.preferred_property_types.includes(pt.value)
                           ? 'bg-green-600 border-green-600 text-white'
-                          : 'bg-white border-slate-200 text-slate-600 hover:border-green-300'
+                          : 'bg-surface-container border-outline text-on-surface-variant hover:border-green-300'
                       }`}
                     >
                       {pt.label}
@@ -361,13 +361,13 @@ export default function NewClientPage() {
 
         {/* Notlar */}
         <div className="card">
-          <label className="block text-sm font-medium text-slate-700 mb-2">Notlar</label>
+          <label className="block text-sm font-medium text-on-surface mb-2">Notlar</label>
           <textarea
             value={form.notes}
             onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
             placeholder="Müşteriyle ilgili özel notlar..."
             rows={3}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
           />
         </div>
 

@@ -342,28 +342,28 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-lg bg-surface border border-outline rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
 
         {/* Header */}
-        <div className={`p-5 border-b border-slate-700 flex-shrink-0 ${
+        <div className={`p-5 border-b border-outline flex-shrink-0 ${
           callState === 'in-progress' ? 'bg-emerald-500/10' :
-          callState === 'ringing' ? 'bg-blue-500/10' :
+          callState === 'ringing' ? 'bg-primary/10' :
           callState === 'ended' ? 'bg-purple-500/10' :
-          callState === 'error' ? 'bg-red-500/10' : 'bg-slate-800/60'
+          callState === 'error' ? 'bg-red-500/10' : 'bg-surface-container-low/60'
         }`}>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                 callState === 'in-progress' ? 'bg-emerald-500 animate-pulse' :
-                callState === 'ringing' ? 'bg-blue-500 animate-pulse' :
+                callState === 'ringing' ? 'bg-primary animate-pulse' :
                 callState === 'ended' ? 'bg-purple-500' :
-                callState === 'error' ? 'bg-red-500' : 'bg-slate-700'
+                callState === 'error' ? 'bg-red-500' : 'bg-surface-container'
               }`}>
                 <Phone size={18} className="text-white" />
               </div>
               <div>
                 <p className="text-white font-semibold">{listing.seller_name || 'Mülk Sahibi'}</p>
-                <p className="text-slate-400 text-sm">{listing.seller_phone}</p>
+                <p className="text-on-surface-variant text-sm">{listing.seller_phone}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -373,7 +373,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
                   {fmtTime(elapsedSecs)}
                 </span>
               )}
-              <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg">
+              <button onClick={onClose} className="p-1.5 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg">
                 <X size={18} />
               </button>
             </div>
@@ -382,9 +382,9 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
           {/* Status */}
           <div className="mt-3 flex items-center justify-between">
             <div className="text-sm">
-              {callState === 'idle' && <p className="text-slate-400">Lina ile <strong className="text-white">{listing.seller_name || 'mülk sahibini'}</strong> arayacaksınız</p>}
-              {callState === 'starting' && <p className="text-blue-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Arama başlatılıyor...</p>}
-              {callState === 'ringing' && <p className="text-blue-400 flex items-center gap-2"><Phone size={14} className="animate-bounce" /> Çalıyor...</p>}
+              {callState === 'idle' && <p className="text-on-surface-variant">Lina ile <strong className="text-white">{listing.seller_name || 'mülk sahibini'}</strong> arayacaksınız</p>}
+              {callState === 'starting' && <p className="text-primary flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Arama başlatılıyor...</p>}
+              {callState === 'ringing' && <p className="text-primary flex items-center gap-2"><Phone size={14} className="animate-bounce" /> Çalıyor...</p>}
               {callState === 'in-progress' && <p className="text-emerald-400 flex items-center gap-2"><Mic size={14} /> Görüşme devam ediyor</p>}
               {callState === 'ended' && <p className="text-purple-400 flex items-center gap-2"><CheckCircle size={14} /> Görüşme tamamlandı</p>}
               {callState === 'error' && <p className="text-red-400 flex items-center gap-2"><AlertCircle size={14} /> {errorMsg}</p>}
@@ -396,7 +396,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   isListening
                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-slate-700 text-slate-400 border border-slate-600 hover:text-white'
+                    : 'bg-surface-container text-on-surface-variant border border-outline hover:text-white'
                 }`}
               >
                 {isListening ? <Volume2 size={13} className="animate-pulse" /> : <VolumeX size={13} />}
@@ -407,16 +407,16 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
         </div>
 
         {/* Property info */}
-        <div className="px-5 py-2.5 bg-slate-800/40 border-b border-slate-700/60 text-xs text-slate-400 flex-shrink-0">
+        <div className="px-5 py-2.5 bg-surface-container-low/40 border-b border-outline text-xs text-on-surface-variant flex-shrink-0">
           <span className="line-clamp-1">{listing.title}</span>
-          {listing.price > 0 && <span className="ml-2 font-medium text-slate-300">{listing.price.toLocaleString('tr-TR')} TL</span>}
+          {listing.price > 0 && <span className="ml-2 font-medium text-on-surface-variant">{listing.price.toLocaleString('tr-TR')} TL</span>}
         </div>
 
         {/* Transcript */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-[200px]">
           {transcript.length === 0 ? (
             <div className="h-full flex items-center justify-center min-h-[150px]">
-              <p className="text-slate-600 text-sm">
+              <p className="text-on-surface-variant text-sm">
                 {callState === 'idle' ? 'Aramayı başlatın...' : 'Transcript bekleniyor...'}
               </p>
             </div>
@@ -424,22 +424,22 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
             transcript.map((t, i) => (
               <div key={i} className={`flex gap-2 ${t.role === 'user' ? 'flex-row-reverse' : ''}`}>
                 <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  t.role === 'assistant' ? 'bg-blue-500 text-white' :
+                  t.role === 'assistant' ? 'bg-primary text-white' :
                   t.role === 'system' ? 'bg-amber-500 text-white' :
-                  'bg-slate-600 text-slate-200'
+                  'bg-surface-container-high text-on-surface'
                 }`}>
                   {t.role === 'assistant' ? 'L' : t.role === 'system' ? '!' : 'M'}
                 </div>
                 <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs ${
                   t.role === 'assistant'
-                    ? 'bg-blue-500/15 border border-blue-500/20 text-blue-100'
+                    ? 'bg-primary/15 border border-primary/20 text-on-primary-container'
                     : t.role === 'system'
                     ? 'bg-amber-500/15 border border-amber-500/20 text-amber-200 italic'
-                    : 'bg-slate-700 text-slate-200'
+                    : 'bg-surface-container text-on-surface'
                 }`}>
                   {t.role === 'system' && <span className="text-amber-400 font-medium not-italic block mb-0.5">Yönlendirme:</span>}
                   <p>{t.text}</p>
-                  <p className="text-slate-500 mt-1">{t.time}</p>
+                  <p className="text-on-surface-variant mt-1">{t.time}</p>
                 </div>
               </div>
             ))
@@ -449,7 +449,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
 
         {/* Summary / Sentiment */}
         {callState === 'ended' && sentiment && (
-          <div className="px-5 py-3 border-t border-slate-700/60 grid grid-cols-3 gap-2 flex-shrink-0">
+          <div className="px-5 py-3 border-t border-outline grid grid-cols-3 gap-2 flex-shrink-0">
             {Object.entries(sentiment).map(([key, val]) => {
               const c: Record<string, string> = {
                 Olumlu: 'bg-green-500/10 border-green-500/20 text-green-400',
@@ -457,7 +457,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
                 Belirsiz: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',
               }
               return val ? (
-                <div key={key} className={`border rounded-lg p-2 text-xs ${c[key] || 'bg-slate-700 border-slate-600 text-slate-300'}`}>
+                <div key={key} className={`border rounded-lg p-2 text-xs ${c[key] || 'bg-surface-container border-outline text-on-surface-variant'}`}>
                   <span className="font-medium block mb-0.5">{key}</span>{val}
                 </div>
               ) : null
@@ -465,15 +465,15 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
           </div>
         )}
         {callState === 'ended' && summary && (
-          <div className="px-5 py-3 border-t border-slate-700/60 flex-shrink-0">
-            <p className="text-xs text-slate-400 font-medium mb-1">Özet</p>
-            <p className="text-xs text-slate-300">{summary}</p>
+          <div className="px-5 py-3 border-t border-outline flex-shrink-0">
+            <p className="text-xs text-on-surface-variant font-medium mb-1">Özet</p>
+            <p className="text-xs text-on-surface-variant">{summary}</p>
           </div>
         )}
 
         {/* Komut girişi */}
         {isActive && (
-          <div className="px-5 py-3 border-t border-slate-700/60 bg-slate-800/40 flex-shrink-0">
+          <div className="px-5 py-3 border-t border-outline bg-surface-container-low/40 flex-shrink-0">
             <div className="flex items-center gap-2 mb-2">
               <MessageSquare size={13} className="text-amber-400" />
               <p className="text-xs text-amber-400 font-medium">Lina&apos;ya anlık yönlendirme gönder</p>
@@ -485,7 +485,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
                   key={i}
                   onClick={() => sendCommand(cmd)}
                   disabled={sendingCmd}
-                  className="px-2.5 py-1 bg-slate-700/80 hover:bg-slate-600 border border-slate-600/50 rounded-lg text-[11px] text-slate-300 hover:text-white transition-colors disabled:opacity-50"
+                  className="px-2.5 py-1 bg-surface-container/80 hover:bg-surface-container-high border border-outline rounded-lg text-[11px] text-on-surface-variant hover:text-white transition-colors disabled:opacity-50"
                 >
                   {cmd}
                 </button>
@@ -503,12 +503,12 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
                 onChange={e => setCommand(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !sendingCmd && sendCommand()}
                 placeholder="Özel yönlendirme yazın..."
-                className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
+                className="flex-1 px-3 py-2 bg-surface-container border border-outline rounded-lg text-xs text-white placeholder:text-on-surface-variant focus:outline-none focus:border-amber-500"
               />
               <button
                 onClick={() => sendCommand()}
                 disabled={!command.trim() || sendingCmd}
-                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
+                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-surface-container-high disabled:cursor-not-allowed rounded-lg text-white transition-colors"
               >
                 {sendingCmd ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               </button>
@@ -517,14 +517,14 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
         )}
 
         {/* Aksiyon butonları */}
-        <div className="p-5 border-t border-slate-700 flex gap-3 flex-shrink-0">
+        <div className="p-5 border-t border-outline flex gap-3 flex-shrink-0">
           {callState === 'idle' && (
             <button onClick={startCall} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-500 hover:bg-emerald-600 rounded-xl text-white font-medium">
               <Phone size={16} /> Lina ile Ara
             </button>
           )}
           {callState === 'starting' && (
-            <button disabled className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-slate-700 rounded-xl text-slate-400 cursor-not-allowed">
+            <button disabled className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-surface-container rounded-xl text-on-surface-variant cursor-not-allowed">
               <Loader2 size={16} className="animate-spin" /> Başlatılıyor...
             </button>
           )}
@@ -534,7 +534,7 @@ export default function VapiCallModal({ isOpen, onClose, listing }: VapiCallModa
             </button>
           )}
           {(callState === 'ended' || callState === 'error') && (
-            <button onClick={onClose} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-white font-medium">
+            <button onClick={onClose} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-surface-container hover:bg-surface-container-high rounded-xl text-white font-medium">
               Kapat
             </button>
           )}

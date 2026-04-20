@@ -30,12 +30,12 @@ type MarketListing = {
 }
 
 const STATUS_CONFIG = {
-  new:           { label: 'Yeni',           color: 'bg-blue-500/20 text-blue-400 border-blue-500/30',     dot: 'bg-blue-400' },
+  new:           { label: 'Yeni',           color: 'bg-primary/20 text-primary border-primary/30',     dot: 'bg-primary' },
   contacted:     { label: 'Arandı',         color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', dot: 'bg-yellow-400' },
   interested:    { label: 'İlgili',         color: 'bg-green-500/20 text-green-400 border-green-500/30',  dot: 'bg-green-400' },
   not_interested:{ label: 'İlgisiz',        color: 'bg-red-500/20 text-red-400 border-red-500/30',        dot: 'bg-red-400' },
   converted:     { label: 'Portföye Alındı',color: 'bg-purple-500/20 text-purple-400 border-purple-500/30', dot: 'bg-purple-400' },
-  stale:         { label: 'Pasif',          color: 'bg-slate-500/20 text-slate-400 border-slate-500/30', dot: 'bg-slate-400' },
+  stale:         { label: 'Pasif',          color: 'bg-surface-container-high/20 text-on-surface-variant border-outline', dot: 'bg-surface-container-highest' },
 }
 
 function fmtPrice(price: number, currency: string) {
@@ -91,7 +91,7 @@ export default function PiyasaClient() {
   }, { new: 0, contacted: 0, interested: 0, converted: 0, stale: 0 })
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-surface text-white">
       {/* Vapi Arama Modalı */}
       <VapiCallModal
         isOpen={!!callTarget}
@@ -100,7 +100,7 @@ export default function PiyasaClient() {
       />
 
       {/* Header */}
-      <div className="border-b border-slate-700/60 bg-slate-800/50 px-6 py-5">
+      <div className="border-b border-outline bg-surface-container-low/50 px-6 py-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
@@ -108,7 +108,7 @@ export default function PiyasaClient() {
             </div>
             <div>
               <h1 className="text-lg font-semibold text-white">Piyasa İlanları</h1>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-on-surface-variant">
                 Sahibinden'den otomatik çekilen {totalCount} potansiyel mülk sahibi
               </p>
             </div>
@@ -116,7 +116,7 @@ export default function PiyasaClient() {
           <div className="flex items-center gap-2">
             <button
               onClick={fetchListings}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
+              className="p-2 text-on-surface-variant hover:text-white hover:bg-surface-container rounded-lg transition-all"
               title="Yenile"
             >
               <RefreshCw size={15} />
@@ -131,15 +131,15 @@ export default function PiyasaClient() {
         {/* İstatistik kartları */}
         <div className="grid grid-cols-5 gap-3 mt-5">
           {[
-            { label: 'Yeni Lead',    value: statusCounts.new,        color: 'text-blue-400',   bg: 'bg-blue-500/10 border-blue-500/20' },
+            { label: 'Yeni Lead',    value: statusCounts.new,        color: 'text-primary',   bg: 'bg-primary/10 border-primary/20' },
             { label: 'Arandı',       value: statusCounts.contacted,  color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/20' },
             { label: 'İlgili',       value: statusCounts.interested, color: 'text-green-400',  bg: 'bg-green-500/10 border-green-500/20' },
             { label: 'Portföye Alındı', value: statusCounts.converted,color: 'text-purple-400',bg: 'bg-purple-500/10 border-purple-500/20' },
-            { label: 'Toplam',       value: totalCount,              color: 'text-slate-300',  bg: 'bg-slate-700/40 border-slate-600/30' },
+            { label: 'Toplam',       value: totalCount,              color: 'text-on-surface-variant',  bg: 'bg-surface-container/40 border-outline' },
           ].map(s => (
             <div key={s.label} className={`${s.bg} border rounded-xl p-3 text-center`}>
               <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{s.label}</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">{s.label}</p>
             </div>
           ))}
         </div>
@@ -148,13 +148,13 @@ export default function PiyasaClient() {
       {/* Filtreler */}
       <div className="px-6 py-4 flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
           <input
             type="text"
             placeholder="İlan, şehir veya mülk sahibi ara..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+            className="w-full pl-9 pr-4 py-2 bg-surface-container-low border border-outline rounded-lg text-sm text-white placeholder:text-on-surface-variant focus:outline-none focus:border-emerald-500"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -165,7 +165,7 @@ export default function PiyasaClient() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 filterStatus === s
                   ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-800 border border-slate-700 text-slate-400 hover:border-slate-600'
+                  : 'bg-surface-container-low border border-outline text-on-surface-variant hover:border-outline'
               }`}
             >
               {s === 'all' ? 'Tümü' : STATUS_CONFIG[s as keyof typeof STATUS_CONFIG]?.label || s}
@@ -177,12 +177,12 @@ export default function PiyasaClient() {
       {/* Liste */}
       <div className="px-6 pb-8">
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-slate-500">
+          <div className="flex items-center justify-center py-20 text-on-surface-variant">
             <Loader2 size={28} className="animate-spin mr-2" />
             <span className="text-sm">İlanlar yükleniyor...</span>
           </div>
         ) : listings.length === 0 ? (
-          <div className="text-center py-20 text-slate-500">
+          <div className="text-center py-20 text-on-surface-variant">
             <TrendingUp size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm">Henüz ilan yok. Scheduled Task çalıştığında ilanlar burada görünecek.</p>
           </div>
@@ -192,14 +192,14 @@ export default function PiyasaClient() {
               const status = STATUS_CONFIG[l.contact_status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.new
               const photo = l.photos?.[0]
               return (
-                <div key={l.id} className="bg-slate-800/60 border border-slate-700/60 rounded-xl overflow-hidden hover:border-slate-600 transition-all group">
+                <div key={l.id} className="bg-surface-container-low/60 border border-outline rounded-xl overflow-hidden hover:border-outline transition-all group">
                   {/* Fotoğraf */}
-                  <div className="relative h-40 bg-slate-700/50">
+                  <div className="relative h-40 bg-surface-container/50">
                     {photo ? (
                       <img src={photo} alt={l.title} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <Home size={32} className="text-slate-600" />
+                        <Home size={32} className="text-on-surface-variant" />
                       </div>
                     )}
                     <span className={`absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border ${status.color}`}>
@@ -217,26 +217,26 @@ export default function PiyasaClient() {
                       {l.title || 'İlan başlığı yok'}
                     </h3>
 
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3">
+                    <div className="flex items-center gap-1.5 text-xs text-on-surface-variant mb-3">
                       <MapPin size={12} />
                       <span>{[l.neighborhood, l.district, l.city].filter(Boolean).join(', ')}</span>
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs text-slate-500 mb-3">
+                    <div className="flex items-center gap-3 text-xs text-on-surface-variant mb-3">
                       {l.room_count && <span className="flex items-center gap-1"><Home size={11} />{l.room_count}</span>}
                       {l.m2_gross && <span>{l.m2_gross} m²</span>}
                       {l.property_type && <span className="flex items-center gap-1"><Tag size={11} />{l.property_type}</span>}
                     </div>
 
                     {l.seller_name && (
-                      <div className="flex items-center gap-2 py-2 border-t border-slate-700/60">
-                        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
-                          <span className="text-xs text-slate-300">{l.seller_name[0]}</span>
+                      <div className="flex items-center gap-2 py-2 border-t border-outline">
+                        <div className="w-6 h-6 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs text-on-surface-variant">{l.seller_name[0]}</span>
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs text-white truncate">{l.seller_name}</p>
                           {l.seller_type && (
-                            <p className="text-xs text-slate-500">{l.seller_type === 'owner' ? 'Mülk Sahibi' : 'Acente'}</p>
+                            <p className="text-xs text-on-surface-variant">{l.seller_type === 'owner' ? 'Mülk Sahibi' : 'Acente'}</p>
                           )}
                         </div>
                       </div>
@@ -257,14 +257,14 @@ export default function PiyasaClient() {
                           href={l.source_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-300 text-xs hover:bg-slate-700 transition-all"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-surface-container/50 border border-outline rounded-lg text-on-surface-variant text-xs hover:bg-surface-container transition-all"
                         >
                           İlanı Gör
                         </a>
                       )}
                     </div>
 
-                    <p className="text-xs text-slate-600 mt-2 flex items-center gap-1">
+                    <p className="text-xs text-on-surface-variant mt-2 flex items-center gap-1">
                       <Clock size={10} />
                       {timeAgo(l.created_at)}
                     </p>

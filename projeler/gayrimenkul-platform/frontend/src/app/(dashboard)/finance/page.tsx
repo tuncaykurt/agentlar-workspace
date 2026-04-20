@@ -71,8 +71,8 @@ export default function FinancePage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Finans</h1>
-          <p className="text-slate-500 text-sm mt-1">Komisyon ve gider yönetimi</p>
+          <h1 className="text-2xl font-bold text-on-surface">Finans</h1>
+          <p className="text-on-surface-variant text-sm mt-1">Komisyon ve gider yönetimi</p>
         </div>
         <Link href="/finance/expense/new" className="btn-primary flex items-center gap-2">
           <Plus size={16} /> Gider Ekle
@@ -91,12 +91,12 @@ export default function FinancePage() {
           return (
             <div key={s.label} className="stat-card">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-slate-500">{s.label}</p>
+                <p className="text-xs text-on-surface-variant">{s.label}</p>
                 <div className={`w-8 h-8 rounded-lg bg-${s.color}-50 flex items-center justify-center`}>
                   <Icon size={15} className={`text-${s.color}-600`} />
                 </div>
               </div>
-              <p className="font-bold text-slate-900 text-lg leading-tight">{s.value}</p>
+              <p className="font-bold text-on-surface text-lg leading-tight">{s.value}</p>
             </div>
           )
         })}
@@ -112,7 +112,7 @@ export default function FinancePage() {
 
       {/* Sekmeler */}
       <div className="card p-0">
-        <div className="flex border-b border-slate-100">
+        <div className="flex border-b border-outline">
           {[
             { key: 'commissions', label: `Komisyonlar (${commissions.length})` },
             { key: 'expenses', label: `Giderler (${expenses.length})` },
@@ -123,8 +123,8 @@ export default function FinancePage() {
               onClick={() => setActiveTab(tab.key as typeof activeTab)}
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.key
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-on-surface-variant hover:text-on-surface'
               }`}
             >
               {tab.label}
@@ -137,31 +137,31 @@ export default function FinancePage() {
           {activeTab === 'commissions' && (
             loading ? (
               <div className="flex justify-center py-10">
-                <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
             ) : commissions.length === 0 ? (
-              <div className="text-center py-10 text-slate-400 text-sm">
+              <div className="text-center py-10 text-on-surface-variant text-sm">
                 <DollarSign size={32} className="mx-auto mb-2 opacity-30" />
                 Henüz komisyon kaydı yok
               </div>
             ) : (
               <div className="space-y-2">
                 {commissions.map(c => (
-                  <div key={c.id} className="flex items-center gap-4 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                  <div key={c.id} className="flex items-center gap-4 p-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest transition-colors">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-slate-900">
+                        <p className="text-sm font-medium text-on-surface">
                           {formatMoney(c.sale_price)} satış
                         </p>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           c.status === 'paid' ? 'bg-green-100 text-green-700' :
-                          c.status === 'confirmed' ? 'bg-blue-100 text-blue-700' :
+                          c.status === 'confirmed' ? 'bg-primary-container text-primary' :
                           'bg-orange-100 text-orange-700'
                         }`}>
                           {c.status === 'paid' ? 'Ödendi' : c.status === 'confirmed' ? 'Onaylandı' : 'Bekliyor'}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-on-surface-variant mt-0.5">
                         %{c.total_commission_rate} komisyon · {formatDate(c.created_at)}
                       </p>
                     </div>
@@ -169,7 +169,7 @@ export default function FinancePage() {
                       <p className="font-semibold text-green-700 text-sm">
                         {formatMoney(c.consultant_share_amount || 0)}
                       </p>
-                      <p className="text-xs text-slate-400">payınız</p>
+                      <p className="text-xs text-on-surface-variant">payınız</p>
                     </div>
                   </div>
                 ))}
@@ -181,16 +181,16 @@ export default function FinancePage() {
           {activeTab === 'expenses' && (
             <div className="space-y-2">
               {expenses.length === 0 ? (
-                <div className="text-center py-10 text-slate-400 text-sm">
+                <div className="text-center py-10 text-on-surface-variant text-sm">
                   <Receipt size={32} className="mx-auto mb-2 opacity-30" />
                   Gider kaydı yok
                 </div>
               ) : (
                 expenses.map(e => (
-                  <div key={e.id} className="flex items-center gap-4 p-3 rounded-lg bg-slate-50">
+                  <div key={e.id} className="flex items-center gap-4 p-3 rounded-lg bg-surface-container-high">
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-slate-900">{e.description}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-sm font-medium text-on-surface">{e.description}</p>
+                      <p className="text-xs text-on-surface-variant">
                         {expenseCategoryLabels[e.category] || e.category} · {formatDate(e.expense_date)}
                       </p>
                     </div>
@@ -216,40 +216,40 @@ export default function FinancePage() {
           {activeTab === 'calculator' && (
             <div className="max-w-md mx-auto">
               <div className="flex items-center gap-2 mb-4">
-                <Calculator size={18} className="text-blue-600" />
-                <h3 className="font-semibold text-slate-900">Komisyon Hesaplayıcı</h3>
+                <Calculator size={18} className="text-primary" />
+                <h3 className="font-semibold text-on-surface">Komisyon Hesaplayıcı</h3>
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Satış Fiyatı (₺)</label>
+                  <label className="block text-sm font-medium text-on-surface mb-1">Satış Fiyatı (₺)</label>
                   <input
                     type="number"
                     value={salePrice}
                     onChange={e => setSalePrice(e.target.value)}
                     placeholder="2.500.000"
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Ofis Komisyon Oranı (%)</label>
+                    <label className="block text-sm font-medium text-on-surface mb-1">Ofis Komisyon Oranı (%)</label>
                     <input
                       type="number"
                       value={commissionRate}
                       onChange={e => setCommissionRate(e.target.value)}
                       placeholder="3"
                       step="0.5"
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Danışman Payı (%)</label>
+                    <label className="block text-sm font-medium text-on-surface mb-1">Danışman Payı (%)</label>
                     <input
                       type="number"
                       value={consultantRate}
                       onChange={e => setConsultantRate(e.target.value)}
                       placeholder="50"
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
                 </div>
@@ -258,15 +258,15 @@ export default function FinancePage() {
                 </button>
 
                 {calcResult && (
-                  <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">
+                  <div className="bg-surface-container-high rounded-xl p-4 space-y-3 border border-outline">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-slate-600">Toplam Komisyon</span>
-                      <span className="font-bold text-slate-900">{formatMoney(calcResult.total)}</span>
+                      <span className="text-sm text-on-surface-variant">Toplam Komisyon</span>
+                      <span className="font-bold text-on-surface">{formatMoney(calcResult.total)}</span>
                     </div>
-                    <div className="h-px bg-slate-200" />
+                    <div className="h-px bg-surface-container-highest" />
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-slate-600">Ofis Payı</span>
-                      <span className="font-semibold text-slate-700">{formatMoney(calcResult.office)}</span>
+                      <span className="text-sm text-on-surface-variant">Ofis Payı</span>
+                      <span className="font-semibold text-on-surface">{formatMoney(calcResult.office)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-green-700 font-medium">Danışman Payı (Siz)</span>

@@ -42,8 +42,8 @@ type TemplateData = Record<string, string | null | undefined>
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const sigStatusConfig: Record<SignatureStatus, { label: string; color: string; icon: React.ElementType }> = {
-  draft:    { label: 'Taslak',       color: 'bg-slate-100 text-slate-600',   icon: FileText },
-  sent:     { label: 'Gönderildi',   color: 'bg-blue-100 text-blue-700',     icon: Clock },
+  draft:    { label: 'Taslak',       color: 'bg-surface-container-high text-on-surface-variant',   icon: FileText },
+  sent:     { label: 'Gönderildi',   color: 'bg-primary-container text-primary',     icon: Clock },
   viewed:   { label: 'Görüldü',      color: 'bg-yellow-100 text-yellow-700', icon: Clock },
   signed:   { label: 'İmzalandı',    color: 'bg-green-100 text-green-700',   icon: CheckCircle },
   declined: { label: 'Reddedildi',   color: 'bg-red-100 text-red-700',       icon: XCircle },
@@ -51,7 +51,7 @@ const sigStatusConfig: Record<SignatureStatus, { label: string; color: string; i
 }
 
 const reqStatusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  pending: { label: 'Bekliyor',    color: 'bg-slate-100 text-slate-600',   icon: Clock },
+  pending: { label: 'Bekliyor',    color: 'bg-surface-container-high text-on-surface-variant',   icon: Clock },
   viewed:  { label: 'Görüldü',     color: 'bg-yellow-100 text-yellow-700', icon: Clock },
   signed:  { label: 'İmzalandı',   color: 'bg-green-100 text-green-700',   icon: CheckCircle },
   declined:{ label: 'Reddedildi',  color: 'bg-red-100 text-red-700',       icon: XCircle },
@@ -89,9 +89,9 @@ function money(v: string | null | undefined) {
 function TemplateDetails({ docType, data }: { docType: string; data: TemplateData }) {
   const row = (label: string, value: string | null | undefined) =>
     value ? (
-      <div key={label} className="flex gap-2 text-sm py-1.5 border-b border-slate-100 last:border-0">
-        <span className="text-slate-500 w-44 flex-shrink-0">{label}</span>
-        <span className="text-slate-900 font-medium">{value}</span>
+      <div key={label} className="flex gap-2 text-sm py-1.5 border-b border-outline last:border-0">
+        <span className="text-on-surface-variant w-44 flex-shrink-0">{label}</span>
+        <span className="text-on-surface font-medium">{value}</span>
       </div>
     ) : null
 
@@ -205,15 +205,15 @@ function AddSignerModal({
     }
   }
 
-  const inp = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+  const inp = 'w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary'
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm space-y-4">
-        <h3 className="font-semibold text-slate-900">İmzacı Ekle</h3>
+      <div className="bg-surface-container rounded-xl shadow-xl p-6 w-full max-w-sm space-y-4">
+        <h3 className="font-semibold text-on-surface">İmzacı Ekle</h3>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Rol</label>
+          <label className="block text-sm font-medium text-on-surface mb-1">Rol</label>
           <select value={signerRole} onChange={e => handleRoleChange(e.target.value)} className={inp}>
             <option value="main">{mainLabel}</option>
             {hasSecond && <option value="second">{secondLabel}</option>}
@@ -223,24 +223,24 @@ function AddSignerModal({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Ad Soyad</label>
+          <label className="block text-sm font-medium text-on-surface mb-1">Ad Soyad</label>
           <input type="text" value={signerName} onChange={e => setSignerName(e.target.value)} className={inp} placeholder="İmzacı adı" />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">WhatsApp Numarası</label>
+          <label className="block text-sm font-medium text-on-surface mb-1">WhatsApp Numarası</label>
           <input type="tel" value={signerPhone} onChange={e => setSignerPhone(e.target.value)} className={inp} placeholder="905xxxxxxxxx" />
-          <p className="text-xs text-slate-400 mt-1">Ülke kodu ile yazın (ör: 905551234567)</p>
+          <p className="text-xs text-on-surface-variant mt-1">Ülke kodu ile yazın (ör: 905551234567)</p>
         </div>
 
         <div className="flex gap-2 pt-2">
-          <button onClick={onClose} className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
+          <button onClick={onClose} className="flex-1 px-4 py-2 border border-outline rounded-lg text-sm text-on-surface-variant hover:bg-surface-container-high">
             İptal
           </button>
           <button
             onClick={handleAdd}
             disabled={saving || !signerName.trim() || !signerPhone.trim()}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
           >
             {saving ? 'Ekleniyor...' : 'Ekle'}
           </button>
@@ -333,17 +333,17 @@ function SignerRow({
   }
 
   return (
-    <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+    <div className="border border-outline rounded-xl p-4 space-y-3">
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-medium text-slate-900 text-sm">{req.signer_name}</p>
-            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+            <p className="font-medium text-on-surface text-sm">{req.signer_name}</p>
+            <span className="text-xs text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full">
               {roleLabels[req.signer_role] || req.signer_role}
             </span>
           </div>
-          {req.signer_phone && <p className="text-xs text-slate-500 mt-0.5">{req.signer_phone}</p>}
+          {req.signer_phone && <p className="text-xs text-on-surface-variant mt-0.5">{req.signer_phone}</p>}
         </div>
         <div className="flex items-center gap-2">
           <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${statusConf.color}`}>
@@ -353,7 +353,7 @@ function SignerRow({
           {req.status !== 'signed' && (
             <button
               onClick={() => setDeleteConfirm(true)}
-              className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
+              className="text-on-surface-variant hover:text-red-500 transition-colors p-0.5"
               title="İmzacıyı Sil"
             >
               <Trash2 size={14} />
@@ -369,7 +369,7 @@ function SignerRow({
           <div className="flex gap-2">
             <button
               onClick={() => setDeleteConfirm(false)}
-              className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50"
+              className="flex-1 px-3 py-1.5 border border-outline rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high"
             >
               İptal
             </button>
@@ -386,7 +386,7 @@ function SignerRow({
 
       {/* Timestamps */}
       {(req.wa_sent_at || req.viewed_at || req.signed_at) && (
-        <div className="text-xs text-slate-400 space-y-0.5">
+        <div className="text-xs text-on-surface-variant space-y-0.5">
           {req.wa_sent_at && <p>📤 Gönderildi: {formatDateTime(req.wa_sent_at)}</p>}
           {req.viewed_at && <p>👁 Görüldü: {formatDateTime(req.viewed_at)}</p>}
           {req.signed_at && <p>✅ İmzalandı: {formatDateTime(req.signed_at)}</p>}
@@ -401,12 +401,12 @@ function SignerRow({
             {req.signature_type === 'drawn' ? '✏️ El imzası ile imzalandı' : '⌨️ İsim yazılarak imzalandı'}
           </p>
           {req.signature_type === 'drawn' && req.signature_data?.startsWith('data:image') && (
-            <div className="bg-white border border-green-100 rounded-lg p-3 flex justify-center">
+            <div className="bg-surface-container border border-green-100 rounded-lg p-3 flex justify-center">
               <img src={req.signature_data} alt={`${req.signer_name} imzası`} className="max-h-16 max-w-[200px] object-contain" />
             </div>
           )}
           {req.signature_type === 'typed' && req.signature_data && (
-            <div className="bg-white border border-green-100 rounded-lg p-3 flex justify-center">
+            <div className="bg-surface-container border border-green-100 rounded-lg p-3 flex justify-center">
               <span style={{ fontFamily: "'Brush Script MT', cursive", fontSize: '24px', color: '#1a237e' }}>
                 {req.signature_data}
               </span>
@@ -430,7 +430,7 @@ function SignerRow({
           )}
           <button
             onClick={copyLink}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-outline text-on-surface-variant rounded-lg text-xs font-medium hover:bg-surface-container-high transition-colors"
           >
             <Copy size={12} />
             {copied ? 'Kopyalandı!' : 'Linki Kopyala'}
@@ -439,7 +439,7 @@ function SignerRow({
             href={signingLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-outline text-on-surface-variant rounded-lg text-xs font-medium hover:bg-surface-container-high transition-colors"
           >
             <ExternalLink size={12} /> Önizle
           </a>
@@ -956,7 +956,7 @@ export default function DocumentDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -964,7 +964,7 @@ export default function DocumentDetailPage() {
   if (!doc) {
     return (
       <div className="p-6 text-center">
-        <p className="text-slate-500">Belge bulunamadı.</p>
+        <p className="text-on-surface-variant">Belge bulunamadı.</p>
         <Link href="/documents" className="btn-primary mt-3 inline-flex">Geri Dön</Link>
       </div>
     )
@@ -983,24 +983,24 @@ export default function DocumentDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Link href="/documents" className="text-slate-400 hover:text-slate-600">
+          <Link href="/documents" className="text-on-surface-variant hover:text-on-surface-variant">
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-tight">{doc.title}</h1>
+            <h1 className="text-xl font-bold text-on-surface leading-tight">{doc.title}</h1>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full">
                 {docTypeLabels[doc.doc_type]}
               </span>
               <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${sigConf.color}`}>
                 <SigIcon size={10} /> {sigConf.label}
               </span>
-              <span className="text-xs text-slate-400">{formatDate(doc.created_at)}</span>
+              <span className="text-xs text-on-surface-variant">{formatDate(doc.created_at)}</span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
+          <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 border border-outline rounded-lg text-sm text-on-surface-variant hover:bg-surface-container-high">
             <Printer size={14} /> Yazdır
           </button>
           <button onClick={() => setDeleteConfirm(true)} className="flex items-center gap-1.5 px-3 py-2 border border-red-200 rounded-lg text-sm text-red-600 hover:bg-red-50">
@@ -1013,62 +1013,62 @@ export default function DocumentDetailPage() {
 
         {/* Taraflar */}
         <div className="card">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">Taraflar</h2>
+          <h2 className="text-sm font-semibold text-on-surface mb-3">Taraflar</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {doc.client && (
               <div className="flex items-start gap-2">
-                <User size={15} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                <User size={15} className="text-on-surface-variant mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-xs text-slate-500 mb-0.5">
+                  <p className="text-xs text-on-surface-variant mb-0.5">
                     {doc.doc_type === 'authorization' ? 'Mülk Sahibi' :
                      doc.doc_type === 'sales_contract' ? 'Satıcı' :
                      doc.doc_type === 'rental_contract' ? 'Kiraya Veren' : 'Alıcı'}
                   </p>
-                  <Link href={`/crm/${doc.client.id}`} className="text-sm font-medium text-blue-600 hover:underline">
+                  <Link href={`/crm/${doc.client.id}`} className="text-sm font-medium text-primary hover:underline">
                     {doc.client.salutation ? doc.client.salutation + ' ' : ''}{doc.client.full_name}
                   </Link>
-                  {doc.client.phone && <p className="text-xs text-slate-500">{doc.client.phone}</p>}
+                  {doc.client.phone && <p className="text-xs text-on-surface-variant">{doc.client.phone}</p>}
                 </div>
               </div>
             )}
             {templateData.second_client_name && (
               <div className="flex items-start gap-2">
-                <User size={15} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                <User size={15} className="text-on-surface-variant mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-xs text-slate-500 mb-0.5">
+                  <p className="text-xs text-on-surface-variant mb-0.5">
                     {doc.doc_type === 'sales_contract' ? 'Alıcı' :
                      doc.doc_type === 'rental_contract' ? 'Kiracı' : 'Diğer Taraf'}
                   </p>
                   {templateData.second_client_id ? (
-                    <Link href={`/crm/${templateData.second_client_id}`} className="text-sm font-medium text-blue-600 hover:underline">
+                    <Link href={`/crm/${templateData.second_client_id}`} className="text-sm font-medium text-primary hover:underline">
                       {String(templateData.second_client_name)}
                     </Link>
                   ) : (
-                    <p className="text-sm font-medium text-slate-900">{String(templateData.second_client_name)}</p>
+                    <p className="text-sm font-medium text-on-surface">{String(templateData.second_client_name)}</p>
                   )}
                 </div>
               </div>
             )}
             {doc.property && (
               <div className="flex items-start gap-2">
-                <Building2 size={15} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                <Building2 size={15} className="text-on-surface-variant mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-xs text-slate-500 mb-0.5">Mülk</p>
-                  <Link href={`/portfolio/${doc.property.id}`} className="text-sm font-medium text-blue-600 hover:underline">
+                  <p className="text-xs text-on-surface-variant mb-0.5">Mülk</p>
+                  <Link href={`/portfolio/${doc.property.id}`} className="text-sm font-medium text-primary hover:underline">
                     {doc.property.title}
                   </Link>
                   {(doc.property.city || doc.property.district) && (
-                    <p className="text-xs text-slate-500">{[doc.property.city, doc.property.district].filter(Boolean).join(', ')}</p>
+                    <p className="text-xs text-on-surface-variant">{[doc.property.city, doc.property.district].filter(Boolean).join(', ')}</p>
                   )}
                 </div>
               </div>
             )}
             {doc.consultant && (
               <div className="flex items-start gap-2">
-                <Edit3 size={15} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                <Edit3 size={15} className="text-on-surface-variant mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-xs text-slate-500 mb-0.5">Danışman</p>
-                  <p className="text-sm font-medium text-slate-900">{doc.consultant.full_name}</p>
+                  <p className="text-xs text-on-surface-variant mb-0.5">Danışman</p>
+                  <p className="text-sm font-medium text-on-surface">{doc.consultant.full_name}</p>
                 </div>
               </div>
             )}
@@ -1077,7 +1077,7 @@ export default function DocumentDetailPage() {
 
         {/* Belge Detayları */}
         <div className="card">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">Belge Detayları</h2>
+          <h2 className="text-sm font-semibold text-on-surface mb-3">Belge Detayları</h2>
           <TemplateDetails docType={doc.doc_type} data={templateData} />
         </div>
 
@@ -1085,20 +1085,20 @@ export default function DocumentDetailPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm font-semibold text-slate-700">Dijital İmza</h2>
+              <h2 className="text-sm font-semibold text-on-surface">Dijital İmza</h2>
               {totalCount > 0 && (
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-on-surface-variant mt-0.5">
                   {signedCount}/{totalCount} imzacı tamamladı
                 </p>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={loadSigRequests} className="text-slate-400 hover:text-slate-600 p-1" title="Yenile">
+              <button onClick={loadSigRequests} className="text-on-surface-variant hover:text-on-surface-variant p-1" title="Yenile">
                 <RefreshCw size={14} />
               </button>
               <button
                 onClick={() => setShowAddSigner(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover"
               >
                 <Plus size={12} /> İmzacı Ekle
               </button>
@@ -1106,10 +1106,10 @@ export default function DocumentDetailPage() {
           </div>
 
           {sigRequests.length === 0 ? (
-            <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl">
-              <Send size={24} className="mx-auto text-slate-300 mb-2" />
-              <p className="text-sm text-slate-400">Henüz imzacı eklenmedi</p>
-              <p className="text-xs text-slate-400 mt-1">
+            <div className="text-center py-6 border-2 border-dashed border-outline rounded-xl">
+              <Send size={24} className="mx-auto text-on-surface-variant mb-2" />
+              <p className="text-sm text-on-surface-variant">Henüz imzacı eklenmedi</p>
+              <p className="text-xs text-on-surface-variant mt-1">
                 "İmzacı Ekle" ile tarafları ekleyin, ardından WhatsApp'tan imzalama linki gönderin.
               </p>
             </div>
@@ -1139,12 +1139,12 @@ export default function DocumentDetailPage() {
 
         {/* Durum Güncelle */}
         <div className="card">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">İmza Durumu</h2>
+          <h2 className="text-sm font-semibold text-on-surface mb-3">İmza Durumu</h2>
           <div className="flex items-center gap-3">
             <select
               value={newStatus}
               onChange={e => setNewStatus(e.target.value as SignatureStatus)}
-              className="flex-1 border border-slate-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 border border-outline rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {STATUS_OPTIONS.map(s => (
                 <option key={s} value={s}>{sigStatusConfig[s].label}</option>
@@ -1159,15 +1159,15 @@ export default function DocumentDetailPage() {
             </button>
           </div>
           {doc.signed_at && (
-            <p className="text-xs text-slate-500 mt-2">İmzalanma tarihi: {formatDate(doc.signed_at)}</p>
+            <p className="text-xs text-on-surface-variant mt-2">İmzalanma tarihi: {formatDate(doc.signed_at)}</p>
           )}
         </div>
 
         {/* Notlar */}
         {doc.notes && (
           <div className="card">
-            <h2 className="text-sm font-semibold text-slate-700 mb-2">İç Notlar</h2>
-            <p className="text-sm text-slate-600 whitespace-pre-wrap">{doc.notes}</p>
+            <h2 className="text-sm font-semibold text-on-surface mb-2">İç Notlar</h2>
+            <p className="text-sm text-on-surface-variant whitespace-pre-wrap">{doc.notes}</p>
           </div>
         )}
 
@@ -1185,13 +1185,13 @@ export default function DocumentDetailPage() {
       {/* Delete Confirm */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
-            <h3 className="font-semibold text-slate-900 mb-2">Belgeyi Sil</h3>
-            <p className="text-sm text-slate-500 mb-4">
+          <div className="bg-surface-container rounded-xl shadow-xl p-6 w-full max-w-sm">
+            <h3 className="font-semibold text-on-surface mb-2">Belgeyi Sil</h3>
+            <p className="text-sm text-on-surface-variant mb-4">
               <strong>{doc.title}</strong> belgesini kalıcı olarak silmek istediğinize emin misiniz?
             </p>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setDeleteConfirm(false)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
+              <button onClick={() => setDeleteConfirm(false)} className="px-4 py-2 border border-outline rounded-lg text-sm text-on-surface-variant hover:bg-surface-container-high">
                 İptal
               </button>
               <button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">

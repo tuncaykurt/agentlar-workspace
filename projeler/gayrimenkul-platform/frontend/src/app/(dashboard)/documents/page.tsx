@@ -10,8 +10,8 @@ import {
 } from 'lucide-react'
 
 const sigStatusConfig: Record<SignatureStatus, { label: string; color: string; icon: React.ElementType }> = {
-  draft: { label: 'Taslak', color: 'bg-slate-100 text-slate-600', icon: FileText },
-  sent: { label: 'Gönderildi', color: 'bg-blue-100 text-blue-700', icon: Clock },
+  draft: { label: 'Taslak', color: 'bg-surface-container-high text-on-surface-variant', icon: FileText },
+  sent: { label: 'Gönderildi', color: 'bg-primary-container text-primary', icon: Clock },
   viewed: { label: 'Görüldü', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
   signed: { label: 'İmzalandı', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   declined: { label: 'Reddedildi', color: 'bg-red-100 text-red-700', icon: XCircle },
@@ -76,8 +76,8 @@ export default function DocumentsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Belgeler</h1>
-          <p className="text-slate-500 text-sm mt-1">Sözleşmeler ve yetki belgeleri</p>
+          <h1 className="text-2xl font-bold text-on-surface">Belgeler</h1>
+          <p className="text-on-surface-variant text-sm mt-1">Sözleşmeler ve yetki belgeleri</p>
         </div>
         <Link href="/documents/new" className="btn-primary flex items-center gap-2">
           <Plus size={16} /> Belge Oluştur
@@ -90,12 +90,12 @@ export default function DocumentsPage() {
           <div
             key={s.label}
             className={`stat-card cursor-pointer hover:shadow transition-shadow ${
-              s.status && filterStatus === s.status ? 'border-blue-300 bg-blue-50' : ''
+              s.status && filterStatus === s.status ? 'border-primary/30 bg-primary-container' : ''
             }`}
             onClick={() => s.status && setFilterStatus(s.status === filterStatus ? 'all' : s.status as SignatureStatus)}
           >
-            <p className="text-xs text-slate-500">{s.label}</p>
-            <p className="text-2xl font-bold text-slate-900 mt-0.5">{s.value}</p>
+            <p className="text-xs text-on-surface-variant">{s.label}</p>
+            <p className="text-2xl font-bold text-on-surface mt-0.5">{s.value}</p>
           </div>
         ))}
       </div>
@@ -104,19 +104,19 @@ export default function DocumentsPage() {
       <div className="card mb-4">
         <div className="flex gap-3">
           <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="text"
               placeholder="Belge adı, müşteri veya mülk ara..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-9 pr-4 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
           <select
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value as SignatureStatus | 'all')}
-            className="border border-slate-200 rounded-lg text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-outline rounded-lg text-sm px-3 py-2 bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="all">Tüm Durumlar</option>
             {Object.entries(sigStatusConfig).map(([k, v]) => (
@@ -130,10 +130,10 @@ export default function DocumentsPage() {
       <div className="card p-0 overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-on-surface-variant">
             <FileText size={36} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">Belge bulunamadı</p>
             <Link href="/documents/new" className="btn-primary mt-3 inline-flex items-center gap-1 text-sm">
@@ -141,26 +141,26 @@ export default function DocumentsPage() {
             </Link>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-outline">
             {filtered.map(doc => {
               const sigConf = sigStatusConfig[doc.signature_status]
               const SigIcon = sigConf.icon
               return (
-                <Link key={doc.id} href={`/documents/${doc.id}`} className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors cursor-pointer">
+                <Link key={doc.id} href={`/documents/${doc.id}`} className="flex items-center gap-4 p-4 hover:bg-surface-container-high transition-colors cursor-pointer">
                   {/* Tip ikonu */}
-                  <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <FileText size={18} className="text-slate-500" />
+                  <div className="w-9 h-9 bg-surface-container-high rounded-lg flex items-center justify-center flex-shrink-0">
+                    <FileText size={18} className="text-on-surface-variant" />
                   </div>
 
                   {/* Bilgiler */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="font-medium text-slate-900 text-sm truncate">{doc.title}</p>
-                      <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                      <p className="font-medium text-on-surface text-sm truncate">{doc.title}</p>
+                      <span className="text-xs text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full flex-shrink-0">
                         {docTypeLabels[doc.doc_type] || doc.doc_type}
                       </span>
                     </div>
-                    <div className="text-xs text-slate-500 flex items-center gap-2">
+                    <div className="text-xs text-on-surface-variant flex items-center gap-2">
                       {doc.client?.full_name && <span>{doc.client.full_name}</span>}
                       {doc.property?.title && <><span>·</span><span className="truncate">{doc.property.title}</span></>}
                       <span>·</span>
@@ -176,17 +176,17 @@ export default function DocumentsPage() {
                     </span>
                     {doc.signed_pdf_url && (
                       <a href={doc.signed_pdf_url} target="_blank" rel="noopener noreferrer"
-                        className="text-blue-500 hover:text-blue-700">
+                        className="text-primary hover:text-primary">
                         <ExternalLink size={14} />
                       </a>
                     )}
                     {doc.pdf_url && !doc.signed_pdf_url && (
                       <a href={doc.pdf_url} target="_blank" rel="noopener noreferrer"
-                        className="text-slate-400 hover:text-slate-600">
+                        className="text-on-surface-variant hover:text-on-surface-variant">
                         <ExternalLink size={14} />
                       </a>
                     )}
-                    <ChevronRight size={15} className="text-slate-300" />
+                    <ChevronRight size={15} className="text-on-surface-variant" />
                   </div>
                 </Link>
               )

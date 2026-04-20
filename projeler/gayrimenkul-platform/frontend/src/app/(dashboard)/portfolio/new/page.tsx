@@ -202,37 +202,37 @@ export default function NewPropertyPage() {
     <div className="p-6 max-w-3xl mx-auto">
       {/* Başlık */}
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/portfolio" className="text-slate-400 hover:text-slate-600 transition-colors">
+        <Link href="/portfolio" className="text-on-surface-variant hover:text-on-surface-variant transition-colors">
           <ArrowLeft size={20} />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Mülk Ekle</h1>
-          <p className="text-slate-500 text-sm">URL yapıştırarak otomatik doldurun veya manuel girin</p>
+          <h1 className="text-2xl font-bold text-on-surface">Mülk Ekle</h1>
+          <p className="text-on-surface-variant text-sm">URL yapıştırarak otomatik doldurun veya manuel girin</p>
         </div>
       </div>
 
       {/* URL Scraping Kutusu */}
-      <div className="card mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+      <div className="card mb-6 bg-gradient-to-r from-primary-container to-primary-container border-primary/20">
         <div className="flex items-center gap-2 mb-3">
-          <Zap size={18} className="text-blue-600" />
-          <h2 className="font-semibold text-slate-900">Otomatik Doldur (URL ile)</h2>
-          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Önerilen</span>
+          <Zap size={18} className="text-primary" />
+          <h2 className="font-semibold text-on-surface">Otomatik Doldur (URL ile)</h2>
+          <span className="text-xs bg-primary-container text-primary px-2 py-0.5 rounded-full">Önerilen</span>
         </div>
-        <p className="text-xs text-slate-500 mb-3 flex items-center gap-1">
+        <p className="text-xs text-on-surface-variant mb-3 flex items-center gap-1">
           <Info size={11} />
           Sahibinden (Apify ile tam detay), Hepsiemlak, Emlakjet, Zingat, CB.com.tr desteklenir.
           Fotoğraflar, konum, tüm öznitelikler otomatik çekilir.
         </p>
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Link2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Link2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="url"
               value={url}
               onChange={e => setUrl(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleScrape()}
               placeholder="https://www.sahibinden.com/ilan/..."
-              className="w-full pl-9 pr-4 py-2.5 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="w-full pl-9 pr-4 py-2.5 border border-primary/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-surface-container"
             />
           </div>
           <button
@@ -260,7 +260,7 @@ export default function NewPropertyPage() {
               <div className="mt-2 grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                 {form.photos.map((src, i) => (
                   <img key={i} src={src} alt={`foto-${i + 1}`}
-                    className="w-full h-20 object-cover rounded-lg border border-slate-200"
+                    className="w-full h-20 object-cover rounded-lg border border-outline"
                     onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 ))}
@@ -280,50 +280,50 @@ export default function NewPropertyPage() {
       <div className="space-y-5">
         {/* Temel Bilgiler */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
             <Home size={16} /> Temel Bilgiler
           </h2>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-on-surface mb-1">
                 Başlık <span className="text-red-500">*</span>
               </label>
               <input
                 value={form.title}
                 onChange={e => set('title', e.target.value)}
                 placeholder="3+1 Satılık Daire, Kadıköy"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Mülk Tipi</label>
+                <label className="block text-sm font-medium text-on-surface mb-1">Mülk Tipi</label>
                 <select
                   value={form.property_type}
                   onChange={e => set('property_type', e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   {propertyTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Oda Sayısı</label>
+                <label className="block text-sm font-medium text-on-surface mb-1">Oda Sayısı</label>
                 <input
                   value={form.room_count}
                   onChange={e => set('room_count', e.target.value)}
                   placeholder="3+1"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Açıklama</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Açıklama</label>
               <textarea
                 value={form.description}
                 onChange={e => set('description', e.target.value)}
                 rows={3}
                 placeholder="Mülk hakkında detaylı bilgi..."
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
               />
             </div>
           </div>
@@ -331,26 +331,26 @@ export default function NewPropertyPage() {
 
         {/* Fiyat */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
             <DollarSign size={16} /> Fiyat
           </h2>
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Fiyat</label>
+              <label className="block text-xs font-medium text-on-surface-variant mb-1">Fiyat</label>
               <input
                 type="number"
                 value={form.price}
                 onChange={e => set('price', e.target.value)}
                 placeholder="2.500.000"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Para Birimi</label>
+              <label className="block text-xs font-medium text-on-surface-variant mb-1">Para Birimi</label>
               <select
                 value={form.currency}
                 onChange={e => set('currency', e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="TRY">₺ TRY</option>
                 <option value="USD">$ USD</option>
@@ -360,23 +360,23 @@ export default function NewPropertyPage() {
           </div>
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Depozito (TL)</label>
+              <label className="block text-xs font-medium text-on-surface-variant mb-1">Depozito (TL)</label>
               <input
                 type="number"
                 value={form.deposit}
                 onChange={e => set('deposit', e.target.value)}
                 placeholder="16.000"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Aidat (TL)</label>
+              <label className="block text-xs font-medium text-on-surface-variant mb-1">Aidat (TL)</label>
               <input
                 type="number"
                 value={form.dues}
                 onChange={e => set('dues', e.target.value)}
                 placeholder="500"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
@@ -384,49 +384,49 @@ export default function NewPropertyPage() {
 
         {/* Konum */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
             <MapPin size={16} /> Konum
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Şehir</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Şehir</label>
               <input value={form.city} onChange={e => set('city', e.target.value)} placeholder="İstanbul"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">İlçe</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">İlçe</label>
               <input value={form.district} onChange={e => set('district', e.target.value)} placeholder="Kadıköy"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Mahalle</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Mahalle</label>
               <input value={form.neighborhood} onChange={e => set('neighborhood', e.target.value)} placeholder="Moda"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
           <div className="mt-3">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Tam Adres</label>
+            <label className="block text-sm font-medium text-on-surface mb-1">Tam Adres</label>
             <input value={form.address} onChange={e => set('address', e.target.value)}
               placeholder="Moda Cad. No:15 D:8"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Enlem (Latitude)</label>
+              <label className="block text-xs font-medium text-on-surface-variant mb-1">Enlem (Latitude)</label>
               <input
                 value={form.latitude}
                 onChange={e => set('latitude', e.target.value)}
                 placeholder="40.1937"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Boylam (Longitude)</label>
+              <label className="block text-xs font-medium text-on-surface-variant mb-1">Boylam (Longitude)</label>
               <input
                 value={form.longitude}
                 onChange={e => set('longitude', e.target.value)}
                 placeholder="29.0697"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
@@ -435,7 +435,7 @@ export default function NewPropertyPage() {
               href={`https://www.google.com/maps?q=${form.latitude},${form.longitude}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-2"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-2"
             >
               <MapPin size={11} /> Haritada gör
             </a>
@@ -444,7 +444,7 @@ export default function NewPropertyPage() {
 
         {/* Detaylar */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4">Fiziksel Özellikler</h2>
+          <h2 className="font-semibold text-on-surface mb-4">Fiziksel Özellikler</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: 'Brüt m²', field: 'm2_gross', placeholder: '120' },
@@ -455,28 +455,28 @@ export default function NewPropertyPage() {
               { label: 'Bina Yaşı', field: 'age', placeholder: '5' },
             ].map(f => (
               <div key={f.field}>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{f.label}</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">{f.label}</label>
                 <input
                   type="number"
                   value={form[f.field as keyof FormData] as string}
                   onChange={e => set(f.field as keyof FormData, e.target.value)}
                   placeholder={f.placeholder}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             ))}
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Isıtma</label>
+              <label className="block text-xs font-medium text-on-surface-variant mb-1">Isıtma</label>
               <input value={form.heating_type} onChange={e => set('heating_type', e.target.value)}
                 placeholder="Doğalgaz, Merkezi, Kombi..."
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
         </div>
 
         {/* Özellikler */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-3">Özellikler / Sosyal Alanlar</h2>
+          <h2 className="font-semibold text-on-surface mb-3">Özellikler / Sosyal Alanlar</h2>
           <div className="flex flex-wrap gap-2">
             {commonFeatures.map(f => (
               <button
@@ -485,8 +485,8 @@ export default function NewPropertyPage() {
                 onClick={() => toggleFeature(f)}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                   form.features.includes(f)
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
+                    ? 'bg-primary border-primary text-white'
+                    : 'bg-surface-container border-outline text-on-surface-variant hover:border-primary/30'
                 }`}
               >
                 {f}
@@ -494,7 +494,7 @@ export default function NewPropertyPage() {
             ))}
           </div>
           {form.features.length > 0 && (
-            <p className="text-xs text-slate-400 mt-2">
+            <p className="text-xs text-on-surface-variant mt-2">
               Seçili: {form.features.join(', ')}
             </p>
           )}

@@ -13,8 +13,8 @@ function formatDate(d: string) {
 }
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  draft: { label: 'Taslak', color: 'bg-slate-100 text-slate-600', icon: Clock },
-  scheduled: { label: 'Planlandı', color: 'bg-blue-100 text-blue-700', icon: Clock },
+  draft: { label: 'Taslak', color: 'bg-surface-container-high text-on-surface-variant', icon: Clock },
+  scheduled: { label: 'Planlandı', color: 'bg-primary-container text-primary', icon: Clock },
   sending: { label: 'Gönderiliyor', color: 'bg-yellow-100 text-yellow-700', icon: Loader2 },
   completed: { label: 'Tamamlandı', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   cancelled: { label: 'İptal', color: 'bg-red-100 text-red-600', icon: XCircle },
@@ -83,8 +83,8 @@ export default function CampaignsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Kampanyalar</h1>
-          <p className="text-slate-500 text-sm mt-1">WhatsApp toplu mesaj kampanyaları</p>
+          <h1 className="text-2xl font-bold text-on-surface">Kampanyalar</h1>
+          <p className="text-on-surface-variant text-sm mt-1">WhatsApp toplu mesaj kampanyaları</p>
         </div>
         <button onClick={() => setShowForm(true)}
           className="btn-primary flex items-center gap-2">
@@ -103,12 +103,12 @@ export default function CampaignsPage() {
           return (
             <div key={s.label} className="stat-card">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-slate-500">{s.label}</p>
+                <p className="text-xs text-on-surface-variant">{s.label}</p>
                 <div className={`w-8 h-8 rounded-lg bg-${s.color}-50 flex items-center justify-center`}>
                   <Icon size={15} className={`text-${s.color}-600`} />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-slate-900">{s.value}</p>
+              <p className="text-2xl font-bold text-on-surface">{s.value}</p>
             </div>
           )
         })}
@@ -116,46 +116,46 @@ export default function CampaignsPage() {
 
       {/* Yeni Kampanya Formu */}
       {showForm && (
-        <div className="card mb-6 border-blue-200 bg-blue-50">
-          <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <MessageSquare size={16} className="text-blue-600" /> Yeni Kampanya Oluştur
+        <div className="card mb-6 border-primary/20 bg-primary-container">
+          <h3 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
+            <MessageSquare size={16} className="text-primary" /> Yeni Kampanya Oluştur
           </h3>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Kampanya Adı</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Kampanya Adı</label>
               <input
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="Bahar Kampanyası 2026"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Hedef Kitle</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Hedef Kitle</label>
               <select
                 value={form.target_type}
                 onChange={e => setForm(f => ({ ...f, target_type: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="all">Tüm Müşteriler ({clients.length} kişi)</option>
                 <option value="buyer">Alıcılar ({clients.filter(c => ['buyer','both','investor','tenant'].includes(c.client_type)).length} kişi)</option>
                 <option value="seller">Satıcılar ({clients.filter(c => ['seller','both','landlord'].includes(c.client_type)).length} kişi)</option>
               </select>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-on-surface-variant mt-1">
                 Seçilen hedef: <strong>{targetClients.length} kişi</strong>
               </p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Mesaj Şablonu</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Mesaj Şablonu</label>
               <textarea
                 value={form.message_template}
                 onChange={e => setForm(f => ({ ...f, message_template: e.target.value }))}
                 rows={4}
                 placeholder="Merhaba {isim}, size özel bir fırsatımız var..."
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary resize-none"
               />
-              <p className="text-xs text-slate-400 mt-1">
-                <code className="bg-slate-100 px-1 rounded">{'{isim}'}</code> kullanıcı adıyla otomatik değiştirilir.
+              <p className="text-xs text-on-surface-variant mt-1">
+                <code className="bg-surface-container-high px-1 rounded">{'{isim}'}</code> kullanıcı adıyla otomatik değiştirilir.
               </p>
             </div>
             <div className="flex gap-2 pt-1">
@@ -177,34 +177,34 @@ export default function CampaignsPage() {
       <div className="card p-0 overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : campaigns.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-on-surface-variant">
             <Megaphone size={36} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">Henüz kampanya yok</p>
             <p className="text-xs mt-1">Yeni kampanya oluşturun ve WhatsApp üzerinden gönderin</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-outline">
             {campaigns.map(c => {
               const st = statusConfig[c.status] || statusConfig.draft
               const StIcon = st.icon
               return (
-                <div key={c.id} className="flex items-center gap-4 p-4 hover:bg-slate-50">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                    <Megaphone size={18} className="text-blue-600" />
+                <div key={c.id} className="flex items-center gap-4 p-4 hover:bg-surface-container-high">
+                  <div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center flex-shrink-0">
+                    <Megaphone size={18} className="text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-900 text-sm truncate">{c.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{c.message_template}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{formatDate(c.created_at)}</p>
+                    <p className="font-medium text-on-surface text-sm truncate">{c.name}</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5 line-clamp-1">{c.message_template}</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">{formatDate(c.created_at)}</p>
                   </div>
                   <div className="text-right flex-shrink-0 space-y-1">
                     <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${st.color}`}>
                       <StIcon size={10} /> {st.label}
                     </span>
-                    <div className="flex items-center gap-1 justify-end text-xs text-slate-400">
+                    <div className="flex items-center gap-1 justify-end text-xs text-on-surface-variant">
                       <Users size={10} />
                       <span>{c.sent_count}/{c.target_count}</span>
                     </div>

@@ -10,14 +10,14 @@ import {
 
 const platformConfig: Record<string, { label: string; color: string }> = {
   instagram: { label: 'Instagram', color: 'bg-pink-50 text-pink-700' },
-  facebook: { label: 'Facebook', color: 'bg-blue-50 text-blue-700' },
+  facebook: { label: 'Facebook', color: 'bg-primary-container text-primary' },
   linkedin: { label: 'LinkedIn', color: 'bg-sky-50 text-sky-700' },
-  twitter: { label: 'Twitter/X', color: 'bg-slate-100 text-slate-700' },
+  twitter: { label: 'Twitter/X', color: 'bg-surface-container-high text-on-surface' },
 }
 
 const statusConfig: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Taslak', color: 'bg-slate-100 text-slate-600' },
-  scheduled: { label: 'Planlandı', color: 'bg-blue-100 text-blue-700' },
+  draft: { label: 'Taslak', color: 'bg-surface-container-high text-on-surface-variant' },
+  scheduled: { label: 'Planlandı', color: 'bg-primary-container text-primary' },
   posted: { label: 'Yayınlandı', color: 'bg-green-100 text-green-700' },
   failed: { label: 'Hata', color: 'bg-red-100 text-red-600' },
 }
@@ -101,8 +101,8 @@ export default function SocialPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Sosyal Medya</h1>
-          <p className="text-slate-500 text-sm mt-1">AI destekli içerik üretimi ve paylaşım takvimi</p>
+          <h1 className="text-2xl font-bold text-on-surface">Sosyal Medya</h1>
+          <p className="text-on-surface-variant text-sm mt-1">AI destekli içerik üretimi ve paylaşım takvimi</p>
         </div>
         <button onClick={() => setShowForm(true)}
           className="btn-primary flex items-center gap-2">
@@ -121,12 +121,12 @@ export default function SocialPage() {
           return (
             <div key={s.label} className="stat-card">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-slate-500">{s.label}</p>
+                <p className="text-xs text-on-surface-variant">{s.label}</p>
                 <div className={`w-8 h-8 rounded-lg bg-${s.color}-50 flex items-center justify-center`}>
                   <Icon size={15} className={`text-${s.color}-600`} />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-slate-900">{s.value}</p>
+              <p className="text-2xl font-bold text-on-surface">{s.value}</p>
             </div>
           )
         })}
@@ -135,16 +135,16 @@ export default function SocialPage() {
       {/* Yeni İçerik Formu */}
       {showForm && (
         <div className="card mb-6 border-pink-200 bg-pink-50">
-          <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h3 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
             <Sparkles size={16} className="text-pink-600" /> Yeni İçerik Oluştur
           </h3>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Platform</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Platform</label>
               <select
                 value={form.platform}
                 onChange={e => setForm(f => ({ ...f, platform: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 {Object.entries(platformConfig).map(([k, v]) => (
                   <option key={k} value={k}>{v.label}</option>
@@ -152,39 +152,39 @@ export default function SocialPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Mülk Bilgisi (AI için)</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Mülk Bilgisi (AI için)</label>
               <input
                 value={form.property_desc}
                 onChange={e => setForm(f => ({ ...f, property_desc: e.target.value }))}
                 placeholder="Örn: Bursa Mudanya'da 4.5+1 satılık daire, 250m², havuzlu site, 26.5M TL"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <button
               onClick={generateContent}
               disabled={generating || !form.property_desc.trim()}
-              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-pink-300 text-pink-700 bg-white hover:bg-pink-50 text-sm font-medium disabled:opacity-50 transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-pink-300 text-pink-700 bg-surface-container hover:bg-pink-50 text-sm font-medium disabled:opacity-50 transition-colors"
             >
               {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
               AI ile İçerik Üret
             </button>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">İçerik Metni</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">İçerik Metni</label>
               <textarea
                 value={form.content_text}
                 onChange={e => setForm(f => ({ ...f, content_text: e.target.value }))}
                 rows={5}
                 placeholder="Post içeriği burada görünecek veya kendiniz yazabilirsiniz..."
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary resize-none"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Yayın Tarihi (opsiyonel)</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Yayın Tarihi (opsiyonel)</label>
               <input
                 type="datetime-local"
                 value={form.scheduled_at}
                 onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div className="flex gap-2 pt-1">
@@ -206,21 +206,21 @@ export default function SocialPage() {
       <div className="card p-0 overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : posts.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-on-surface-variant">
             <Share2 size={36} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">Henüz içerik yok</p>
             <p className="text-xs mt-1">AI ile mülk ilanlarınız için otomatik post oluşturun</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-outline">
             {posts.map(p => {
-              const pl = platformConfig[p.platform] || { label: p.platform, color: 'bg-slate-100 text-slate-600' }
+              const pl = platformConfig[p.platform] || { label: p.platform, color: 'bg-surface-container-high text-on-surface-variant' }
               const st = statusConfig[p.status] || statusConfig.draft
               return (
-                <div key={p.id} className="flex items-start gap-4 p-4 hover:bg-slate-50">
+                <div key={p.id} className="flex items-start gap-4 p-4 hover:bg-surface-container-high">
                   <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center flex-shrink-0">
                     <Share2 size={18} className="text-pink-600" />
                   </div>
@@ -229,8 +229,8 @@ export default function SocialPage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full ${pl.color}`}>{pl.label}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
                     </div>
-                    <p className="text-sm text-slate-700 line-clamp-2">{p.content_text}</p>
-                    <p className="text-xs text-slate-400 mt-1">{formatDate(p.created_at)}</p>
+                    <p className="text-sm text-on-surface line-clamp-2">{p.content_text}</p>
+                    <p className="text-xs text-on-surface-variant mt-1">{formatDate(p.created_at)}</p>
                   </div>
                 </div>
               )

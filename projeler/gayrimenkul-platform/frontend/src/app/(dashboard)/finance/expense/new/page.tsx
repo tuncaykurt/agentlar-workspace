@@ -60,23 +60,23 @@ export default function NewExpensePage() {
   return (
     <div className="p-6 max-w-lg mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/finance" className="text-slate-400 hover:text-slate-600">
+        <Link href="/finance" className="text-on-surface-variant hover:text-on-surface-variant">
           <ArrowLeft size={20} />
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Gider Ekle</h1>
-          <p className="text-slate-500 text-sm">Yeni gider kaydı oluştur</p>
+          <h1 className="text-xl font-bold text-on-surface">Gider Ekle</h1>
+          <p className="text-on-surface-variant text-sm">Yeni gider kaydı oluştur</p>
         </div>
       </div>
 
       <div className="card space-y-4">
-        <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-          <Receipt size={16} className="text-blue-600" />
-          <h2 className="font-semibold text-slate-800">Gider Bilgileri</h2>
+        <div className="flex items-center gap-2 pb-3 border-b border-outline">
+          <Receipt size={16} className="text-primary" />
+          <h2 className="font-semibold text-on-surface">Gider Bilgileri</h2>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label className="block text-sm font-medium text-on-surface mb-1">
             Tutar (₺) <span className="text-red-500">*</span>
           </label>
           <input
@@ -84,40 +84,40 @@ export default function NewExpensePage() {
             value={form.amount}
             onChange={e => set('amount', e.target.value)}
             placeholder="0"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Kategori</label>
+          <label className="block text-sm font-medium text-on-surface mb-1">Kategori</label>
           <select
             value={form.category}
             onChange={e => set('category', e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
           >
             {categories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label className="block text-sm font-medium text-on-surface mb-1">
             Açıklama <span className="text-red-500">*</span>
           </label>
           <input
             value={form.description}
             onChange={e => set('description', e.target.value)}
             placeholder="Gider detayı..."
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Tarih</label>
+          <label className="block text-sm font-medium text-on-surface mb-1">Tarih</label>
           <input
             type="date"
             value={form.expense_date}
             onChange={e => set('expense_date', e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
 

@@ -19,13 +19,13 @@ interface Contact {
 }
 
 const typeColors: Record<string, string> = {
-  buyer:   'bg-blue-50 text-blue-700',
+  buyer:   'bg-primary-container text-primary',
   seller:  'bg-green-50 text-green-700',
   both:    'bg-purple-50 text-purple-700',
   investor:'bg-orange-50 text-orange-700',
   tenant:  'bg-teal-50 text-teal-700',
   landlord:'bg-rose-50 text-rose-700',
-  network: 'bg-slate-100 text-slate-600',
+  network: 'bg-surface-container-high text-on-surface-variant',
 }
 
 const typeLabels: Record<string, string> = {
@@ -110,7 +110,7 @@ function SalutationInput({ value, onChange }: { value: string; onChange: (v: str
 
   return (
     <div ref={ref} className="relative">
-      <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+      <div className="flex items-center border border-outline rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary">
         <input
           value={value}
           onChange={e => onChange(e.target.value)}
@@ -121,16 +121,16 @@ function SalutationInput({ value, onChange }: { value: string; onChange: (v: str
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
-          className="px-2 text-slate-400 hover:text-slate-600"
+          className="px-2 text-on-surface-variant hover:text-on-surface-variant"
         >
           <ChevronDown size={14} />
         </button>
       </div>
       {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+        <div className="absolute z-50 top-full left-0 mt-1 w-full bg-surface-container border border-outline rounded-lg shadow-lg overflow-hidden">
           <button
             onClick={() => { onChange(''); setOpen(false) }}
-            className="w-full text-left px-3 py-2 text-sm text-slate-400 hover:bg-slate-50"
+            className="w-full text-left px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high"
           >
             — (yok)
           </button>
@@ -138,7 +138,7 @@ function SalutationInput({ value, onChange }: { value: string; onChange: (v: str
             <button
               key={s}
               onClick={() => { onChange(s); setOpen(false) }}
-              className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 hover:text-blue-700 ${value === s ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'}`}
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-primary-container hover:text-primary ${value === s ? 'bg-primary-container text-primary font-medium' : 'text-on-surface'}`}
             >
               {s}
             </button>
@@ -301,11 +301,11 @@ export default function RehberPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Başlık + Arama */}
-        <div className="p-5 pb-3 bg-white border-b border-slate-100">
+        <div className="p-5 pb-3 bg-surface-container border-b border-outline">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Rehber</h1>
-              <p className="text-slate-500 text-sm mt-0.5">{contacts.length} kişi</p>
+              <h1 className="text-2xl font-bold text-on-surface">Rehber</h1>
+              <p className="text-on-surface-variant text-sm mt-0.5">{contacts.length} kişi</p>
             </div>
             {/* Dışa Aktar */}
             <div className="flex items-center gap-2">
@@ -319,7 +319,7 @@ export default function RehberPage() {
               )}
               <button
                 onClick={() => downloadVCF(selected.size > 0 ? selectedContacts : filtered)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 bg-surface-container-high text-on-surface hover:bg-surface-container-highest rounded-lg text-sm font-medium transition-colors"
                 title={selected.size > 0 ? `${selected.size} seçili kişiyi dışa aktar` : 'Tümünü dışa aktar'}
               >
                 <Download size={14} />
@@ -330,17 +330,17 @@ export default function RehberPage() {
 
           {/* Arama + Tümünü seç */}
           <div className="flex items-center gap-2">
-            <button onClick={toggleSelectAll} className="flex-shrink-0 text-slate-400 hover:text-blue-600 transition-colors" title="Tümünü seç">
-              {allSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
+            <button onClick={toggleSelectAll} className="flex-shrink-0 text-on-surface-variant hover:text-primary transition-colors" title="Tümünü seç">
+              {allSelected ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} />}
             </button>
             <div className="relative flex-1">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
               <input
                 type="text"
                 placeholder="İsim, telefon veya e-posta ara..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                className="w-full pl-9 pr-4 py-2.5 border border-outline rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-surface-container-high"
               />
             </div>
           </div>
@@ -350,10 +350,10 @@ export default function RehberPage() {
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex justify-center py-16">
-              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-16 text-slate-400">
+            <div className="text-center py-16 text-on-surface-variant">
               <BookUser size={40} className="mx-auto mb-3 opacity-30" />
               <p className="text-sm font-medium">Kişi bulunamadı</p>
               <p className="text-xs mt-1">CRM'den kişi ekleyin veya VCF dosyası içe aktarın</p>
@@ -362,19 +362,19 @@ export default function RehberPage() {
             <div className="pb-8">
               {grouped.map(([letter, items]) => (
                 <div key={letter} id={`section-${letter}`}>
-                  <div className="sticky top-0 z-10 bg-slate-100 px-5 py-1.5">
-                    <span className="text-xs font-bold text-slate-500 tracking-widest">{letter}</span>
+                  <div className="sticky top-0 z-10 bg-surface-container-high px-5 py-1.5">
+                    <span className="text-xs font-bold text-on-surface-variant tracking-widest">{letter}</span>
                   </div>
-                  <div className="bg-white divide-y divide-slate-50">
+                  <div className="bg-surface-container divide-y divide-outline">
                     {items.map(contact => (
                       <div
                         key={contact.id}
-                        className={`flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors ${selected.has(contact.id) ? 'bg-blue-50/50' : ''}`}
+                        className={`flex items-center gap-3 px-5 py-3 hover:bg-surface-container-high transition-colors ${selected.has(contact.id) ? 'bg-primary-container/50' : ''}`}
                       >
                         {/* Checkbox */}
-                        <button onClick={() => toggleSelect(contact.id)} className="flex-shrink-0 text-slate-300 hover:text-blue-500 transition-colors">
+                        <button onClick={() => toggleSelect(contact.id)} className="flex-shrink-0 text-on-surface-variant hover:text-primary transition-colors">
                           {selected.has(contact.id)
-                            ? <CheckSquare size={18} className="text-blue-600" />
+                            ? <CheckSquare size={18} className="text-primary" />
                             : <Square size={18} />}
                         </button>
 
@@ -389,16 +389,16 @@ export default function RehberPage() {
                             {contact.salutation && (
                               <span className="text-xs text-indigo-600 font-medium">{contact.salutation}</span>
                             )}
-                            <span className="text-sm font-medium text-slate-900 truncate">{contact.full_name}</span>
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${typeColors[contact.client_type] || 'bg-slate-100 text-slate-600'}`}>
+                            <span className="text-sm font-medium text-on-surface truncate">{contact.full_name}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${typeColors[contact.client_type] || 'bg-surface-container-high text-on-surface-variant'}`}>
                               {typeLabels[contact.client_type] || contact.client_type}
                             </span>
                           </div>
                           {contact.phone && (
-                            <p className="text-xs text-slate-500 mt-0.5">{contact.phone}</p>
+                            <p className="text-xs text-on-surface-variant mt-0.5">{contact.phone}</p>
                           )}
                           {contact.email && !contact.phone && (
-                            <p className="text-xs text-slate-400 mt-0.5">{contact.email}</p>
+                            <p className="text-xs text-on-surface-variant mt-0.5">{contact.email}</p>
                           )}
                         </div>
 
@@ -417,7 +417,7 @@ export default function RehberPage() {
                               </a>
                               <a
                                 href={`tel:${contact.phone}`}
-                                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-blue-50 text-blue-600 transition-colors"
+                                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-primary-container text-primary transition-colors"
                                 title="Ara"
                               >
                                 <Phone size={17} />
@@ -451,12 +451,12 @@ export default function RehberPage() {
 
       {/* Harf indeksi */}
       {!loading && letters.length > 0 && (
-        <div className="w-8 flex flex-col items-center justify-center py-4 gap-0.5 bg-white border-l border-slate-100 overflow-y-auto">
+        <div className="w-8 flex flex-col items-center justify-center py-4 gap-0.5 bg-surface-container border-l border-outline overflow-y-auto">
           {letters.map(letter => (
             <button
               key={letter}
               onClick={() => scrollTo(letter)}
-              className="text-xs font-medium text-slate-400 hover:text-blue-600 w-6 h-6 flex items-center justify-center rounded hover:bg-blue-50 transition-colors"
+              className="text-xs font-medium text-on-surface-variant hover:text-primary w-6 h-6 flex items-center justify-center rounded hover:bg-primary-container transition-colors"
             >
               {letter}
             </button>
@@ -466,11 +466,11 @@ export default function RehberPage() {
 
       {/* ── Düzenleme Modalı ─────────────────────────────────── */}
       {editContact && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <h2 className="font-semibold text-slate-900">Kişiyi Düzenle</h2>
-              <button onClick={() => setEditContact(null)} className="text-slate-400 hover:text-slate-600">
+        <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/50 dark:bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
+              <h2 className="font-semibold text-on-surface">Kişiyi Düzenle</h2>
+              <button onClick={() => setEditContact(null)} className="text-on-surface-variant hover:text-on-surface-variant">
                 <X size={20} />
               </button>
             </div>
@@ -479,22 +479,22 @@ export default function RehberPage() {
               {/* Hitap + İsim */}
               <div className="flex gap-2">
                 <div className="w-40 flex-shrink-0">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Hitap Şekli</label>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1">Hitap Şekli</label>
                   <SalutationInput value={editForm.salutation} onChange={v => setEditForm(f => ({ ...f, salutation: v }))} />
                 </div>
                 <div className="flex-1">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Ad Soyad *</label>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1">Ad Soyad *</label>
                   <input
                     value={editForm.full_name}
                     onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               </div>
 
               {/* Etiket */}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Etiket</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Etiket</label>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(typeLabels).map(([val, label]) => (
                     <button
@@ -502,8 +502,8 @@ export default function RehberPage() {
                       onClick={() => setEditForm(f => ({ ...f, client_type: val }))}
                       className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors font-medium ${
                         editForm.client_type === val
-                          ? (typeColors[val] || 'bg-slate-100 text-slate-600') + ' border-transparent ring-2 ring-offset-1 ring-blue-400'
-                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                          ? (typeColors[val] || 'bg-surface-container-high text-on-surface-variant') + ' border-transparent ring-2 ring-offset-1 ring-primary'
+                          : 'bg-surface-container border-outline text-on-surface-variant hover:border-outline'
                       }`}
                     >
                       {label}
@@ -514,28 +514,28 @@ export default function RehberPage() {
 
               {/* Telefon */}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">Telefon</label>
                 <input
                   value={editForm.phone}
                   onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
                   placeholder="05XX XXX XXXX"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
 
               {/* E-posta */}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">E-posta</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">E-posta</label>
                 <input
                   value={editForm.email}
                   onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="ornek@email.com"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
 
-            <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
+            <div className="flex gap-3 px-5 py-4 border-t border-outline">
               <button onClick={() => setEditContact(null)} className="btn-secondary flex-1">İptal</button>
               <button
                 onClick={handleSave}
@@ -552,14 +552,14 @@ export default function RehberPage() {
 
       {/* ── Tekli Silme Modalı ───────────────────────────────── */}
       {deleteContact && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/50 dark:bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-sm">
             <div className="p-6 text-center">
               <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
                 <AlertTriangle size={22} className="text-red-500" />
               </div>
-              <h3 className="font-semibold text-slate-900 mb-1">Kişiyi Sil</h3>
-              <p className="text-sm text-slate-500">
+              <h3 className="font-semibold text-on-surface mb-1">Kişiyi Sil</h3>
+              <p className="text-sm text-on-surface-variant">
                 <strong>{deleteContact.salutation ? deleteContact.salutation + ' ' : ''}{deleteContact.full_name}</strong> rehberden kaldırılacak.
               </p>
             </div>
@@ -580,14 +580,14 @@ export default function RehberPage() {
 
       {/* ── Toplu Silme Onay Modalı ──────────────────────────── */}
       {confirmBulk && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/50 dark:bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-sm">
             <div className="p-6 text-center">
               <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
                 <AlertTriangle size={22} className="text-red-500" />
               </div>
-              <h3 className="font-semibold text-slate-900 mb-1">Toplu Silme</h3>
-              <p className="text-sm text-slate-500">
+              <h3 className="font-semibold text-on-surface mb-1">Toplu Silme</h3>
+              <p className="text-sm text-on-surface-variant">
                 Seçili <strong>{selected.size} kişi</strong> rehberden kaldırılacak. Bu işlem geri alınabilir.
               </p>
             </div>

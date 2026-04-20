@@ -11,13 +11,13 @@ import {
 } from 'lucide-react'
 
 const statusColors: Record<LeadStatus, string> = {
-  new: 'bg-blue-100 text-blue-700',
+  new: 'bg-primary-container text-primary',
   contacted: 'bg-purple-100 text-purple-700',
   qualified: 'bg-yellow-100 text-yellow-700',
   negotiating: 'bg-orange-100 text-orange-700',
   won: 'bg-green-100 text-green-700',
   lost: 'bg-red-100 text-red-700',
-  dormant: 'bg-slate-100 text-slate-600',
+  dormant: 'bg-surface-container-high text-on-surface-variant',
 }
 
 const statusLabels: Record<LeadStatus, string> = {
@@ -27,11 +27,11 @@ const statusLabels: Record<LeadStatus, string> = {
 
 const channelIcons: Record<string, React.ReactNode> = {
   whatsapp: <MessageSquare size={14} className="text-green-500" />,
-  call_inbound: <PhoneCall size={14} className="text-blue-500" />,
+  call_inbound: <PhoneCall size={14} className="text-primary" />,
   call_outbound: <PhoneCall size={14} className="text-purple-500" />,
   email: <Mail size={14} className="text-orange-500" />,
-  meeting: <Calendar size={14} className="text-slate-500" />,
-  note: <FileText size={14} className="text-slate-400" />,
+  meeting: <Calendar size={14} className="text-on-surface-variant" />,
+  note: <FileText size={14} className="text-on-surface-variant" />,
 }
 
 const channelLabels: Record<string, string> = {
@@ -129,16 +129,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   if (!client) {
     return (
-      <div className="p-6 text-center text-slate-500">
+      <div className="p-6 text-center text-on-surface-variant">
         Müşteri bulunamadı.
-        <Link href="/crm" className="text-blue-600 ml-2">CRM'e Dön</Link>
+        <Link href="/crm" className="text-primary ml-2">CRM'e Dön</Link>
       </div>
     )
   }
@@ -149,10 +149,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     <div className="p-6 max-w-4xl mx-auto">
       {/* Başlık */}
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/crm" className="text-slate-400 hover:text-slate-600 transition-colors">
+        <Link href="/crm" className="text-on-surface-variant hover:text-on-surface-variant transition-colors">
           <ArrowLeft size={20} />
         </Link>
-        <h1 className="text-xl font-bold text-slate-900 flex-1">{client.full_name}</h1>
+        <h1 className="text-xl font-bold text-on-surface flex-1">{client.full_name}</h1>
         <Link href={`/crm/${id}/edit`} className="btn-secondary flex items-center gap-2">
           <Edit2 size={14} /> Düzenle
         </Link>
@@ -164,12 +164,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           {/* Profil Kartı */}
           <div className="card">
             <div className="flex flex-col items-center text-center mb-4">
-              <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-3">
-                <span className="text-blue-700 font-bold text-xl">{client.full_name.charAt(0)}</span>
+              <div className="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center mb-3">
+                <span className="text-primary font-bold text-xl">{client.full_name.charAt(0)}</span>
               </div>
-              <h2 className="font-semibold text-slate-900">{client.full_name}</h2>
+              <h2 className="font-semibold text-on-surface">{client.full_name}</h2>
               {(client.consultant as { full_name: string } | undefined)?.full_name && (
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-on-surface-variant mt-0.5">
                   Danışman: {(client.consultant as { full_name: string }).full_name}
                 </p>
               )}
@@ -179,7 +179,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <select
               value={client.lead_status}
               onChange={e => updateStatus(e.target.value as LeadStatus)}
-              className={`w-full text-xs font-medium px-3 py-2 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${statusColors[client.lead_status]}`}
+              className={`w-full text-xs font-medium px-3 py-2 rounded-lg border-0 cursor-pointer focus:ring-2 focus:ring-primary ${statusColors[client.lead_status]}`}
             >
               {Object.entries(statusLabels).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
@@ -188,19 +188,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
             <div className="mt-4 space-y-2">
               {client.phone && (
-                <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600 transition-colors">
-                  <Phone size={14} className="text-slate-400" /> {client.phone}
+                <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-on-surface-variant hover:text-primary transition-colors">
+                  <Phone size={14} className="text-on-surface-variant" /> {client.phone}
                 </a>
               )}
               {client.email && (
-                <a href={`mailto:${client.email}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600 transition-colors truncate">
-                  <Mail size={14} className="text-slate-400" /> {client.email}
+                <a href={`mailto:${client.email}`} className="flex items-center gap-2 text-sm text-on-surface-variant hover:text-primary transition-colors truncate">
+                  <Mail size={14} className="text-on-surface-variant" /> {client.email}
                 </a>
               )}
             </div>
 
             {client.last_contacted_at && (
-              <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-1.5 text-xs text-slate-400">
+              <div className="mt-3 pt-3 border-t border-outline flex items-center gap-1.5 text-xs text-on-surface-variant">
                 <Clock size={12} /> Son iletişim: {formatDateShort(client.last_contacted_at)}
               </div>
             )}
@@ -209,31 +209,31 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           {/* Alıcı Kriterleri */}
           {(client.budget_min || client.budget_max || client.preferred_cities?.length) && (
             <div className="card">
-              <h3 className="font-semibold text-slate-900 text-sm mb-3 flex items-center gap-1.5">
+              <h3 className="font-semibold text-on-surface text-sm mb-3 flex items-center gap-1.5">
                 <Building2 size={14} /> Arama Kriterleri
               </h3>
-              <div className="space-y-2 text-xs text-slate-600">
+              <div className="space-y-2 text-xs text-on-surface-variant">
                 {(client.budget_min || client.budget_max) && (
                   <div>
-                    <span className="text-slate-400">Bütçe:</span>{' '}
+                    <span className="text-on-surface-variant">Bütçe:</span>{' '}
                     {client.budget_min ? `₺${client.budget_min.toLocaleString('tr-TR')}` : '—'} –{' '}
                     {client.budget_max ? `₺${client.budget_max.toLocaleString('tr-TR')}` : '—'}
                   </div>
                 )}
                 {client.preferred_cities?.length && (
                   <div>
-                    <span className="text-slate-400">Şehir:</span>{' '}
+                    <span className="text-on-surface-variant">Şehir:</span>{' '}
                     {client.preferred_cities.join(', ')}
                   </div>
                 )}
                 {(client.min_m2 || client.max_m2) && (
                   <div>
-                    <span className="text-slate-400">m²:</span>{' '}
+                    <span className="text-on-surface-variant">m²:</span>{' '}
                     {client.min_m2 || '—'} – {client.max_m2 || '—'}
                   </div>
                 )}
                 {client.min_rooms && (
-                  <div><span className="text-slate-400">Min oda:</span> {client.min_rooms}+</div>
+                  <div><span className="text-on-surface-variant">Min oda:</span> {client.min_rooms}+</div>
                 )}
               </div>
             </div>
@@ -242,14 +242,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           {/* Bekleyen Takipler */}
           {pendingFollowUps.length > 0 && (
             <div className="card border-l-4 border-l-orange-400">
-              <h3 className="font-semibold text-slate-900 text-sm mb-2 flex items-center gap-1.5">
+              <h3 className="font-semibold text-on-surface text-sm mb-2 flex items-center gap-1.5">
                 <AlertCircle size={14} className="text-orange-500" />
                 Bekleyen Takip ({pendingFollowUps.length})
               </h3>
               {pendingFollowUps.slice(0, 3).map(f => (
-                <div key={f.id} className="text-xs text-slate-600 mt-1.5">
+                <div key={f.id} className="text-xs text-on-surface-variant mt-1.5">
                   <span className="font-medium">{formatDateShort(f.due_at)}</span>
-                  {f.custom_message && <p className="text-slate-400 mt-0.5 truncate">{f.custom_message}</p>}
+                  {f.custom_message && <p className="text-on-surface-variant mt-0.5 truncate">{f.custom_message}</p>}
                 </div>
               ))}
             </div>
@@ -258,8 +258,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           {/* Notlar */}
           {client.notes && (
             <div className="card">
-              <h3 className="font-semibold text-slate-900 text-sm mb-2">Notlar</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">{client.notes}</p>
+              <h3 className="font-semibold text-on-surface text-sm mb-2">Notlar</h3>
+              <p className="text-xs text-on-surface-variant leading-relaxed">{client.notes}</p>
             </div>
           )}
         </div>
@@ -294,7 +294,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           {/* Takip Ekleme Formu */}
           {showFollowUpForm && (
             <div className="card bg-orange-50 border border-orange-200">
-              <h3 className="font-semibold text-slate-900 text-sm mb-3 flex items-center gap-1.5">
+              <h3 className="font-semibold text-on-surface text-sm mb-3 flex items-center gap-1.5">
                 <Calendar size={14} /> Yeni Takip Planla
               </h3>
               <div className="space-y-3">
@@ -302,14 +302,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   type="datetime-local"
                   value={followUpDate}
                   onChange={e => setFollowUpDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-surface-container"
                 />
                 <textarea
                   value={followUpMsg}
                   onChange={e => setFollowUpMsg(e.target.value)}
                   placeholder="Gönderilecek mesaj (opsiyonel)..."
                   rows={2}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white resize-none"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-surface-container resize-none"
                 />
                 <div className="flex gap-2 justify-end">
                   <button onClick={() => setShowFollowUpForm(false)} className="btn-secondary text-xs">İptal</button>
@@ -323,7 +323,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
           {/* Sekmeler */}
           <div className="card p-0">
-            <div className="flex border-b border-slate-100">
+            <div className="flex border-b border-outline">
               {[
                 { key: 'interactions', label: `İletişim (${interactions.length})` },
                 { key: 'followups', label: `Takipler (${followUps.length})` },
@@ -334,8 +334,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   onClick={() => setActiveTab(tab.key as typeof activeTab)}
                   className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                     activeTab === tab.key
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-slate-500 hover:text-slate-700'
+                      ? 'text-primary border-b-2 border-primary'
+                      : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
                   {tab.label}
@@ -355,7 +355,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       onChange={e => setNoteText(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && !e.shiftKey && addNote()}
                       placeholder="Not ekle veya görüşmeyi kaydet..."
-                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                     <button
                       onClick={addNote}
@@ -368,24 +368,24 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
                   {/* Geçmiş Listesi */}
                   {interactions.length === 0 ? (
-                    <div className="text-center py-8 text-slate-400 text-sm">
+                    <div className="text-center py-8 text-on-surface-variant text-sm">
                       Henüz iletişim kaydı yok
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-80 overflow-y-auto">
                       {interactions.map(i => (
-                        <div key={i.id} className="flex gap-3 p-3 rounded-lg bg-slate-50">
+                        <div key={i.id} className="flex gap-3 p-3 rounded-lg bg-surface-container-high">
                           <div className="mt-0.5">{channelIcons[i.channel] || <MessageSquare size={14} />}</div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-xs font-medium text-slate-600">
+                              <span className="text-xs font-medium text-on-surface-variant">
                                 {channelLabels[i.channel] || i.channel}
                               </span>
-                              <span className="text-xs text-slate-400">{formatDate(i.created_at)}</span>
+                              <span className="text-xs text-on-surface-variant">{formatDate(i.created_at)}</span>
                             </div>
-                            {i.content && <p className="text-sm text-slate-700 leading-relaxed">{i.content}</p>}
+                            {i.content && <p className="text-sm text-on-surface leading-relaxed">{i.content}</p>}
                             {i.duration_seconds && (
-                              <p className="text-xs text-slate-400 mt-0.5">
+                              <p className="text-xs text-on-surface-variant mt-0.5">
                                 Süre: {Math.floor(i.duration_seconds / 60)}:{String(i.duration_seconds % 60).padStart(2, '0')}
                               </p>
                             )}
@@ -401,19 +401,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               {activeTab === 'followups' && (
                 <div className="space-y-2">
                   {followUps.length === 0 ? (
-                    <div className="text-center py-8 text-slate-400 text-sm">Takip planlanmamış</div>
+                    <div className="text-center py-8 text-on-surface-variant text-sm">Takip planlanmamış</div>
                   ) : (
                     followUps.map(f => (
                       <div key={f.id} className={`flex items-start gap-3 p-3 rounded-lg ${
-                        f.status === 'done' ? 'bg-green-50' : f.status === 'pending' ? 'bg-orange-50' : 'bg-slate-50'
+                        f.status === 'done' ? 'bg-green-50' : f.status === 'pending' ? 'bg-orange-50' : 'bg-surface-container-high'
                       }`}>
                         {f.status === 'done'
                           ? <CheckCircle size={16} className="text-green-500 mt-0.5" />
                           : <Clock size={16} className="text-orange-500 mt-0.5" />}
                         <div className="flex-1">
-                          <p className="text-xs font-medium text-slate-700">{formatDate(f.due_at)}</p>
-                          {f.custom_message && <p className="text-sm text-slate-600 mt-0.5">{f.custom_message}</p>}
-                          <span className="text-xs text-slate-400 capitalize">{f.channel}</span>
+                          <p className="text-xs font-medium text-on-surface">{formatDate(f.due_at)}</p>
+                          {f.custom_message && <p className="text-sm text-on-surface-variant mt-0.5">{f.custom_message}</p>}
+                          <span className="text-xs text-on-surface-variant capitalize">{f.channel}</span>
                         </div>
                       </div>
                     ))
@@ -425,25 +425,25 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               {activeTab === 'documents' && (
                 <div className="space-y-2">
                   {documents.length === 0 ? (
-                    <div className="text-center py-8 text-slate-400 text-sm">Belge oluşturulmamış</div>
+                    <div className="text-center py-8 text-on-surface-variant text-sm">Belge oluşturulmamış</div>
                   ) : (
                     documents.map(d => (
                       <Link key={d.id} href={`/documents/${d.id}`}
-                        className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                        <FileText size={16} className="text-slate-400" />
+                        className="flex items-center gap-3 p-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest transition-colors">
+                        <FileText size={16} className="text-on-surface-variant" />
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-slate-700">{d.title}</p>
-                          <p className="text-xs text-slate-400">{formatDateShort(d.created_at)}</p>
+                          <p className="text-sm font-medium text-on-surface">{d.title}</p>
+                          <p className="text-xs text-on-surface-variant">{formatDateShort(d.created_at)}</p>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           d.signature_status === 'signed' ? 'bg-green-100 text-green-700' :
-                          d.signature_status === 'sent' ? 'bg-blue-100 text-blue-700' :
-                          'bg-slate-100 text-slate-600'
+                          d.signature_status === 'sent' ? 'bg-primary-container text-primary' :
+                          'bg-surface-container-high text-on-surface-variant'
                         }`}>
                           {d.signature_status === 'signed' ? 'İmzalandı' :
                            d.signature_status === 'sent' ? 'Gönderildi' : 'Taslak'}
                         </span>
-                        <ChevronRight size={14} className="text-slate-300" />
+                        <ChevronRight size={14} className="text-on-surface-variant" />
                       </Link>
                     ))
                   )}

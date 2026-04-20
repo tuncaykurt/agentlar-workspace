@@ -33,14 +33,14 @@ export default function FeatureGate({
   if (!allowed) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
-        <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
-          <Lock size={28} className="text-slate-400" />
+        <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center mb-4">
+          <Lock size={28} className="text-on-surface-variant" />
         </div>
-        <h2 className="text-lg font-semibold text-slate-700 mb-1">Bu Özellik Aktif Değil</h2>
-        <p className="text-sm text-slate-500 text-center max-w-sm">
+        <h2 className="text-lg font-semibold text-on-surface mb-1">Bu Özellik Aktif Değil</h2>
+        <p className="text-sm text-on-surface-variant text-center max-w-sm">
           Bu özellik henüz hesabınız için aktifleştirilmemiş. Yöneticinizle iletişime geçin.
         </p>
-        <p className="text-xs text-slate-400 mt-3">Dashboard'a yönlendiriliyorsunuz...</p>
+        <p className="text-xs text-on-surface-variant mt-3">Dashboard'a yönlendiriliyorsunuz...</p>
       </div>
     )
   }

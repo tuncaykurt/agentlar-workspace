@@ -220,15 +220,15 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
   const isActive = callData?.status === 'ringing' || callData?.status === 'in-progress' || callData?.status === 'queued'
 
   return (
-    <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden shadow-2xl">
+    <div className="bg-surface rounded-2xl border border-outline overflow-hidden shadow-2xl">
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-3 bg-slate-800 cursor-pointer"
+        className="flex items-center justify-between px-4 py-3 bg-surface-container-low cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-3">
           <div className="relative">
-            <Radio size={18} className={isActive ? 'text-green-400' : 'text-slate-500'} />
+            <Radio size={18} className={isActive ? 'text-green-400' : 'text-on-surface-variant'} />
             {isActive && (
               <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -239,17 +239,17 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
           <div>
             <h3 className="text-white text-sm font-semibold">
               Canlı Arama Paneli
-              {propertyTitle && <span className="text-slate-400 font-normal ml-2">— {propertyTitle}</span>}
+              {propertyTitle && <span className="text-on-surface-variant font-normal ml-2">— {propertyTitle}</span>}
             </h3>
             <div className="flex items-center gap-3 text-xs">
-              <span className={`flex items-center gap-1 ${isActive ? 'text-green-400' : 'text-slate-500'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-green-400' : 'bg-slate-500'}`} />
+              <span className={`flex items-center gap-1 ${isActive ? 'text-green-400' : 'text-on-surface-variant'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-green-400' : 'bg-surface-container-high0'}`} />
                 {callData?.status === 'ringing' ? 'Çalıyor' :
                  callData?.status === 'in-progress' ? 'Görüşme Devam Ediyor' :
                  callData?.status === 'queued' ? 'Kuyrukta' :
                  callData?.status === 'ended' ? 'Bitti' : 'Bağlanıyor...'}
               </span>
-              <span className="text-slate-500 flex items-center gap-1">
+              <span className="text-on-surface-variant flex items-center gap-1">
                 <Clock size={10} />
                 {formatSeconds(elapsed)}
               </span>
@@ -260,19 +260,19 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
           {/* Ses Kontrolleri */}
           <button
             onClick={e => { e.stopPropagation(); setIsMuted(!isMuted) }}
-            className={`p-2 rounded-lg transition-colors ${isMuted ? 'bg-red-500/20 text-red-400' : 'bg-slate-700 text-slate-300 hover:text-white'}`}
+            className={`p-2 rounded-lg transition-colors ${isMuted ? 'bg-red-500/20 text-red-400' : 'bg-surface-container text-on-surface-variant hover:text-white'}`}
             title={isMuted ? 'Sesi Aç' : 'Sesi Kapat'}
           >
             {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
           </button>
           <button
             onClick={e => { e.stopPropagation(); setIsListening(!isListening) }}
-            className={`p-2 rounded-lg transition-colors ${!isListening ? 'bg-red-500/20 text-red-400' : 'bg-slate-700 text-slate-300 hover:text-white'}`}
+            className={`p-2 rounded-lg transition-colors ${!isListening ? 'bg-red-500/20 text-red-400' : 'bg-surface-container text-on-surface-variant hover:text-white'}`}
             title={isListening ? 'Dinlemeyi Durdur' : 'Dinlemeye Başla'}
           >
             {isListening ? <Mic size={16} /> : <MicOff size={16} />}
           </button>
-          {expanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+          {expanded ? <ChevronUp size={16} className="text-on-surface-variant" /> : <ChevronDown size={16} className="text-on-surface-variant" />}
         </div>
       </div>
 
@@ -280,11 +280,11 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
         <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-slate-700">
           {/* Sol: Canlı Transkript */}
           <div className="flex-1 flex flex-col min-h-0">
-            <div className="px-4 py-2 border-b border-slate-700 flex items-center gap-2">
-              <MessageSquare size={14} className="text-blue-400" />
-              <span className="text-xs font-medium text-slate-300">Canlı Transkript</span>
+            <div className="px-4 py-2 border-b border-outline flex items-center gap-2">
+              <MessageSquare size={14} className="text-primary" />
+              <span className="text-xs font-medium text-on-surface-variant">Canlı Transkript</span>
               {isActive && (
-                <Loader2 size={12} className="animate-spin text-blue-400 ml-auto" />
+                <Loader2 size={12} className="animate-spin text-primary ml-auto" />
               )}
             </div>
             <div
@@ -292,7 +292,7 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
               className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[300px] min-h-[200px]"
             >
               {transcriptMessages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                <div className="flex flex-col items-center justify-center h-full text-on-surface-variant">
                   <Radio size={24} className="mb-2 opacity-30" />
                   <p className="text-xs">Konuşma başladığında transkript burada görünecek...</p>
                 </div>
@@ -308,14 +308,14 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
                     ) : (
                       <div className={`max-w-[80%] ${msg.role === 'user' ? '' : ''}`}>
                         <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className={`text-[10px] font-medium ${msg.role === 'assistant' ? 'text-blue-400' : 'text-green-400'}`}>
+                          <span className={`text-[10px] font-medium ${msg.role === 'assistant' ? 'text-primary' : 'text-green-400'}`}>
                             {msg.role === 'assistant' ? '🤖 Asistan' : '👤 Müşteri'}
                           </span>
-                          {msg.time && <span className="text-[10px] text-slate-600">{msg.time}</span>}
+                          {msg.time && <span className="text-[10px] text-on-surface-variant">{msg.time}</span>}
                         </div>
                         <div className={`px-3 py-2 rounded-xl text-sm leading-relaxed ${
                           msg.role === 'assistant'
-                            ? 'bg-blue-500/10 text-blue-100 rounded-tl-sm'
+                            ? 'bg-primary/10 text-on-primary-container rounded-tl-sm'
                             : 'bg-green-500/10 text-green-100 rounded-tr-sm'
                         }`}>
                           {msg.content}
@@ -330,17 +330,17 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
 
           {/* Sağ: Whisper / Yönlendirme Paneli */}
           <div className="lg:w-[340px] flex flex-col">
-            <div className="px-4 py-2 border-b border-slate-700 flex items-center gap-2">
+            <div className="px-4 py-2 border-b border-outline flex items-center gap-2">
               <Send size={14} className="text-amber-400" />
-              <span className="text-xs font-medium text-slate-300">Konuşma Yönlendirme</span>
+              <span className="text-xs font-medium text-on-surface-variant">Konuşma Yönlendirme</span>
             </div>
 
             {/* Gönderilmiş talimatlar */}
             <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[200px] min-h-[120px]">
               {whisperMessages.length === 0 ? (
-                <div className="text-center py-6 text-slate-600">
+                <div className="text-center py-6 text-on-surface-variant">
                   <p className="text-xs">Asistana anlık talimat gönderin.</p>
-                  <p className="text-[10px] mt-1 text-slate-700">Örn: &quot;Fiyatı sor&quot;, &quot;Randevu teklif et&quot;</p>
+                  <p className="text-[10px] mt-1 text-on-surface">Örn: &quot;Fiyatı sor&quot;, &quot;Randevu teklif et&quot;</p>
                 </div>
               ) : (
                 whisperMessages.map((w, i) => (
@@ -351,8 +351,8 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
                       <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-slate-300">{w.text}</p>
-                      <p className="text-[10px] text-slate-600">{w.sentAt}</p>
+                      <p className="text-xs text-on-surface-variant">{w.text}</p>
+                      <p className="text-[10px] text-on-surface-variant">{w.sentAt}</p>
                     </div>
                   </div>
                 ))
@@ -360,7 +360,7 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
             </div>
 
             {/* Hızlı Talimat Butonları */}
-            <div className="px-3 py-2 border-t border-slate-700/50 flex flex-wrap gap-1.5">
+            <div className="px-3 py-2 border-t border-outline flex flex-wrap gap-1.5">
               {[
                 'Fiyatı sor',
                 'Randevu teklif et',
@@ -373,7 +373,7 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
                   key={text}
                   onClick={() => { setWhisperInput(text); }}
                   disabled={!isActive}
-                  className="text-[10px] px-2 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 text-slate-300 rounded-md transition-colors"
+                  className="text-[10px] px-2 py-1 bg-surface-container hover:bg-surface-container-high disabled:opacity-30 text-on-surface-variant rounded-md transition-colors"
                 >
                   {text}
                 </button>
@@ -381,7 +381,7 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
             </div>
 
             {/* Mesaj Girişi */}
-            <div className="p-3 border-t border-slate-700">
+            <div className="p-3 border-t border-outline">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -390,12 +390,12 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
                   onChange={e => setWhisperInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={!isActive || sendingWhisper}
-                  className="flex-1 bg-slate-700 border border-slate-600 text-white placeholder-slate-500 rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-40"
+                  className="flex-1 bg-surface-container border border-outline text-white placeholder-on-surface-variant rounded-xl text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-40"
                 />
                 <button
                   onClick={sendWhisper}
                   disabled={!whisperInput.trim() || !isActive || sendingWhisper}
-                  className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-xl transition-colors flex items-center gap-1"
+                  className="px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-surface-container disabled:text-on-surface-variant text-white rounded-xl transition-colors flex items-center gap-1"
                 >
                   {sendingWhisper ? (
                     <Loader2 size={16} className="animate-spin" />
@@ -404,7 +404,7 @@ export default function LiveCallPanel({ callId, onCallEnd, propertyTitle }: Live
                   )}
                 </button>
               </div>
-              <p className="text-[10px] text-slate-600 mt-1.5 px-1">
+              <p className="text-[10px] text-on-surface-variant mt-1.5 px-1">
                 Enter ile gönder · Asistan talimatı doğal konuşmaya çevirir
               </p>
             </div>

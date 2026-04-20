@@ -10,6 +10,7 @@ import {
   Store, TrendingUp, Coins,
 } from 'lucide-react'
 import { useFeatures } from '@/lib/features'
+import { ThemeToggle } from '@/lib/theme'
 
 // featureKey maps to feature_config.feature_key in DB
 const navItems = [
@@ -53,7 +54,7 @@ function SidebarLinks({ onNav }: { onNav?: () => void }) {
             key={href}
             href={href}
             onClick={onNav}
-            className={`sidebar-link ${pathname.startsWith(href) ? 'active' : 'text-slate-400'}`}
+            className={`sidebar-link ${pathname.startsWith(href) ? 'active' : ''}`}
           >
             <Icon size={18} />
             {label}
@@ -62,13 +63,13 @@ function SidebarLinks({ onNav }: { onNav?: () => void }) {
       </nav>
 
       {/* Bottom items — always visible, never scrolled away */}
-      <div className="flex-shrink-0 px-3 py-4 border-t border-slate-700 space-y-1">
+      <div className="flex-shrink-0 px-3 py-4 border-t border-sidebar-border space-y-1">
         {/* Credit balance */}
         {!isAdmin && !loading && (
-          <div className="flex items-center gap-2 px-3 py-2 mb-1 rounded-lg bg-slate-700/50">
-            <Coins size={15} className="text-yellow-400" />
-            <span className="text-xs text-slate-300">Kredi:</span>
-            <span className="text-xs font-semibold text-yellow-400">{creditBalance}</span>
+          <div className="flex items-center gap-2 px-3 py-2 mb-1 rounded-lg bg-surface-container-highest/30">
+            <Coins size={15} className="text-tertiary" />
+            <span className="text-xs text-sidebar-text">Kredi:</span>
+            <span className="text-xs font-semibold text-tertiary">{creditBalance}</span>
           </div>
         )}
         {visibleBottom.map(({ href, label, icon: Icon }) => (
@@ -76,14 +77,14 @@ function SidebarLinks({ onNav }: { onNav?: () => void }) {
             key={href}
             href={href}
             onClick={onNav}
-            className={`sidebar-link ${pathname.startsWith(href) ? 'active' : 'text-slate-400'}`}
+            className={`sidebar-link ${pathname.startsWith(href) ? 'active' : ''}`}
           >
             <Icon size={18} />
             {label}
           </Link>
         ))}
         <button
-          className="sidebar-link text-slate-400 w-full text-left"
+          className="sidebar-link w-full text-left"
           onClick={onNav}
         >
           <LogOut size={18} />
@@ -99,79 +100,82 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* ─── DESKTOP sidebar (md+) ───────���───────────────────────────────────
-          sticky + h-screen: stays in viewport no matter how long the page is
-          overflow-hidden: inner nav scrolls, outer wrapper clips        */}
-      <aside className="hidden md:flex flex-col flex-shrink-0 w-64 h-screen sticky top-0 bg-slate-800 overflow-hidden">
+      {/* ─── DESKTOP sidebar (md+) ──────────────────────────────────────── */}
+      <aside className="hidden md:flex flex-col flex-shrink-0 w-64 h-screen sticky top-0 bg-sidebar overflow-hidden">
         {/* Logo */}
-        <div className="flex-shrink-0 px-6 py-5 border-b border-slate-700">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-              <Building2 size={18} className="text-white" />
+        <div className="flex-shrink-0 px-6 py-5 border-b border-sidebar-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                <Building2 size={18} className="text-on-primary" />
+              </div>
+              <div>
+                <p className="text-on-primary font-semibold text-sm leading-none">
+                  {process.env.NEXT_PUBLIC_OFFICE_NAME || 'Gayrimenkul'}
+                </p>
+                <p className="text-sidebar-text text-xs mt-0.5">Platform</p>
+              </div>
             </div>
-            <div>
-              <p className="text-white font-semibold text-sm leading-none">
-                {process.env.NEXT_PUBLIC_OFFICE_NAME || 'Gayrimenkul'}
-              </p>
-              <p className="text-slate-400 text-xs mt-0.5">Platform</p>
-            </div>
+            <ThemeToggle />
           </div>
         </div>
         <SidebarLinks />
       </aside>
 
-      {/* ─── MOBILE top header bar (hamburger) ──────���──────────────────────── */}
-      <header className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center gap-3 px-4 h-14 bg-slate-800 border-b border-slate-700">
+      {/* ─── MOBILE top header bar (hamburger) ──────────────────────────── */}
+      <header className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center gap-3 px-4 h-14 bg-sidebar border-b border-sidebar-border">
         <button
           onClick={() => setOpen(true)}
-          className="p-1.5 -ml-1.5 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg"
+          className="p-1.5 -ml-1.5 text-sidebar-text hover:text-on-primary rounded-lg"
           aria-label="Menüyü aç"
         >
           <Menu size={22} />
         </button>
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-blue-500 rounded flex items-center justify-center">
-            <Building2 size={13} className="text-white" />
+        <div className="flex items-center gap-2 flex-1">
+          <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
+            <Building2 size={13} className="text-on-primary" />
           </div>
-          <span className="text-white font-semibold text-sm">
+          <span className="text-on-primary font-semibold text-sm">
             {process.env.NEXT_PUBLIC_OFFICE_NAME || 'Gayrimenkul'}
           </span>
         </div>
+        <ThemeToggle />
       </header>
 
-      {/* ─── MOBILE backdrop ─────────────��───────────────────────────────────── */}
+      {/* ─── MOBILE backdrop ──────────────────────────────────────────── */}
       {open && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/60"
+          className="md:hidden fixed inset-0 z-40"
+          style={{ background: 'var(--backdrop)' }}
           onClick={() => setOpen(false)}
         />
       )}
 
-      {/* ─── MOBILE slide-in drawer ───────────────���─────────────────────────���── */}
+      {/* ─── MOBILE slide-in drawer ──────────────────────────────────── */}
       <aside
         className={`
           md:hidden fixed inset-y-0 left-0 z-50
-          flex flex-col w-72 bg-slate-800 shadow-2xl
-          transition-transform duration-200 ease-in-out
+          flex flex-col w-72 bg-sidebar shadow-ambient
+          transition-transform duration-200 ease-design
           ${open ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
         {/* Drawer header with close button */}
-        <div className="flex-shrink-0 px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+        <div className="flex-shrink-0 px-5 py-4 border-b border-sidebar-border flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-              <Building2 size={18} className="text-white" />
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <Building2 size={18} className="text-on-primary" />
             </div>
             <div>
-              <p className="text-white font-semibold text-sm leading-none">
+              <p className="text-on-primary font-semibold text-sm leading-none">
                 {process.env.NEXT_PUBLIC_OFFICE_NAME || 'Gayrimenkul'}
               </p>
-              <p className="text-slate-400 text-xs mt-0.5">Platform</p>
+              <p className="text-sidebar-text text-xs mt-0.5">Platform</p>
             </div>
           </div>
           <button
             onClick={() => setOpen(false)}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg"
+            className="p-1.5 text-sidebar-text hover:text-on-primary rounded-lg"
             aria-label="Kapat"
           >
             <X size={18} />

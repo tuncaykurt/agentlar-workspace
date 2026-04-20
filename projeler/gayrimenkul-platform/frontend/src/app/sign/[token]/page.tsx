@@ -137,18 +137,18 @@ function SignaturePad({ onReady }: { onReady: (getDataURL: () => string | null) 
     <div className="relative">
       <canvas
         ref={canvasRef}
-        className="w-full h-36 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 touch-none cursor-crosshair"
+        className="w-full h-36 border-2 border-dashed border-outline rounded-xl bg-surface-container-high touch-none cursor-crosshair"
         style={{ touchAction: 'none' }}
       />
       <button
         onClick={clearCanvas}
         type="button"
-        className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 bg-white rounded-lg p-1 shadow-sm border border-slate-200"
+        className="absolute top-2 right-2 text-on-surface-variant hover:text-on-surface-variant bg-surface-container rounded-lg p-1 shadow-sm border border-outline"
         title="Temizle"
       >
         <Trash2 size={14} />
       </button>
-      <p className="text-xs text-slate-400 mt-1 text-center">Yukarıdaki alana imzanızı çizin</p>
+      <p className="text-xs text-on-surface-variant mt-1 text-center">Yukarıdaki alana imzanızı çizin</p>
     </div>
   )
 }
@@ -258,36 +258,36 @@ function DocSummary({ doc, signerRole, token }: { doc: DocInfo; signerRole: stri
   }
 
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-xl overflow-hidden">
+    <div className="bg-primary-container border border-primary/20 rounded-xl overflow-hidden">
       {/* Summary */}
       <div className="p-4 space-y-3">
         <div>
-          <span className="text-xs font-semibold text-blue-600 uppercase tracking-wide">{docTypeLabels[doc.doc_type]}</span>
-          <h2 className="text-base font-bold text-slate-900 mt-0.5 leading-tight">{doc.title}</h2>
+          <span className="text-xs font-semibold text-primary uppercase tracking-wide">{docTypeLabels[doc.doc_type]}</span>
+          <h2 className="text-base font-bold text-on-surface mt-0.5 leading-tight">{doc.title}</h2>
         </div>
 
         {doc.property && (
-          <div className="text-sm text-slate-700">
-            <span className="text-slate-500">Mülk: </span>
+          <div className="text-sm text-on-surface">
+            <span className="text-on-surface-variant">Mülk: </span>
             <span className="font-medium">{doc.property.title}</span>
-            {doc.property.city && <span className="text-slate-500"> · {doc.property.city}</span>}
+            {doc.property.city && <span className="text-on-surface-variant"> · {doc.property.city}</span>}
           </div>
         )}
 
         {keyItems.filter(i => i.value).map(item => (
           <div key={item.label} className="flex justify-between text-sm">
-            <span className="text-slate-500">{item.label}</span>
-            <span className="font-semibold text-slate-900">{item.value}</span>
+            <span className="text-on-surface-variant">{item.label}</span>
+            <span className="font-semibold text-on-surface">{item.value}</span>
           </div>
         ))}
 
-        <div className="pt-2 border-t border-blue-200 flex items-center justify-between">
-          <p className="text-xs text-blue-700">
+        <div className="pt-2 border-t border-primary/20 flex items-center justify-between">
+          <p className="text-xs text-primary">
             <span className="font-semibold">Rolünüz:</span> {roleLabel}
           </p>
           <a
             href={`/api/sign/${token}/preview`}
-            className="text-xs font-semibold text-blue-700 underline underline-offset-2"
+            className="text-xs font-semibold text-primary underline underline-offset-2"
           >
             Belgeyi Görüntüle ↗
           </a>
@@ -296,15 +296,15 @@ function DocSummary({ doc, signerRole, token }: { doc: DocInfo; signerRole: stri
 
       {/* Full contract view */}
       {expanded && contractSections.length > 0 && (
-        <div className="border-t border-blue-200 bg-white px-4 py-4 space-y-4">
+        <div className="border-t border-primary/20 bg-surface-container px-4 py-4 space-y-4">
           {contractSections.map(section => (
             <div key={section.title}>
-              {section.title && <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">{section.title}</p>}
+              {section.title && <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wide mb-2">{section.title}</p>}
               <div className="space-y-1">
                 {section.rows.map((row, i) => (
-                  <div key={i} className={row.label ? 'flex justify-between text-sm' : 'text-sm text-slate-700 leading-relaxed'}>
-                    {row.label && <span className="text-slate-500 shrink-0 mr-3">{row.label}</span>}
-                    <span className="font-medium text-slate-900 text-right">{row.value}</span>
+                  <div key={i} className={row.label ? 'flex justify-between text-sm' : 'text-sm text-on-surface leading-relaxed'}>
+                    {row.label && <span className="text-on-surface-variant shrink-0 mr-3">{row.label}</span>}
+                    <span className="font-medium text-on-surface text-right">{row.value}</span>
                   </div>
                 ))}
               </div>
@@ -414,24 +414,24 @@ export default function SignPage() {
 
   if (state === 'loading') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-surface-container-high flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   if (state === 'already_signed') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+      <div className="min-h-screen bg-surface-container-high flex items-center justify-center p-4">
+        <div className="bg-surface-container rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
           {officeLogo && (
             <img src={officeLogo} alt={officeName} className="h-14 max-w-[180px] object-contain mx-auto mb-5" />
           )}
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle size={32} className="text-green-600" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Zaten İmzalandı</h2>
-          <p className="text-slate-500 text-sm">
+          <h2 className="text-xl font-bold text-on-surface mb-2">Zaten İmzalandı</h2>
+          <p className="text-on-surface-variant text-sm">
             Bu belge <strong>{sigReq?.signer_name}</strong> tarafından{' '}
             {sigReq?.signed_at
               ? new Date(sigReq.signed_at).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -440,11 +440,11 @@ export default function SignPage() {
           </p>
           <a
             href={`/api/sign/${token}/preview`}
-            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition text-center"
+            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition text-center"
           >
             Belgeyi Görüntüle / PDF İndir
           </a>
-          <p className="text-xs text-slate-400 mt-4">{officeName}</p>
+          <p className="text-xs text-on-surface-variant mt-4">{officeName}</p>
         </div>
       </div>
     )
@@ -452,14 +452,14 @@ export default function SignPage() {
 
   if (state === 'error') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+      <div className="min-h-screen bg-surface-container-high flex items-center justify-center p-4">
+        <div className="bg-surface-container rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <XCircle size={32} className="text-red-600" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Geçersiz Link</h2>
-          <p className="text-slate-500 text-sm">Bu imzalama linki geçersiz veya süresi dolmuş.</p>
-          <p className="text-xs text-slate-400 mt-4">{officeName}</p>
+          <h2 className="text-xl font-bold text-on-surface mb-2">Geçersiz Link</h2>
+          <p className="text-on-surface-variant text-sm">Bu imzalama linki geçersiz veya süresi dolmuş.</p>
+          <p className="text-xs text-on-surface-variant mt-4">{officeName}</p>
         </div>
       </div>
     )
@@ -467,32 +467,32 @@ export default function SignPage() {
 
   if (state === 'success') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
+      <div className="min-h-screen bg-surface-container-high flex items-center justify-center p-4">
+        <div className="bg-surface-container rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
           {officeLogo && (
             <img src={officeLogo} alt={officeName} className="h-14 max-w-[180px] object-contain mx-auto mb-5" />
           )}
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle size={32} className="text-green-600" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">İmzalandı!</h2>
-          <p className="text-slate-500 text-sm mb-1">
+          <h2 className="text-xl font-bold text-on-surface mb-2">İmzalandı!</h2>
+          <p className="text-on-surface-variant text-sm mb-1">
             <strong>{sigReq?.signer_name}</strong>, belgeniz başarıyla imzalanmıştır.
           </p>
-          <p className="text-slate-500 text-sm">
+          <p className="text-on-surface-variant text-sm">
             {new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </p>
-          <div className="mt-4 p-3 bg-slate-50 rounded-lg text-left">
-            <p className="text-xs text-slate-500 font-medium">{doc?.title}</p>
-            {doc?.property && <p className="text-xs text-slate-400">{doc.property.title}</p>}
+          <div className="mt-4 p-3 bg-surface-container-high rounded-lg text-left">
+            <p className="text-xs text-on-surface-variant font-medium">{doc?.title}</p>
+            {doc?.property && <p className="text-xs text-on-surface-variant">{doc.property.title}</p>}
           </div>
           <a
             href={`/api/sign/${token}/preview`}
-            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition text-center"
+            className="mt-5 inline-block w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition text-center"
           >
             Belgeyi Görüntüle / PDF İndir
           </a>
-          <p className="text-xs text-slate-400 mt-6">{officeName}</p>
+          <p className="text-xs text-on-surface-variant mt-6">{officeName}</p>
         </div>
       </div>
     )
@@ -501,14 +501,14 @@ export default function SignPage() {
   // ── Ready: show signing form ───────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-container-high">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-4 py-3 text-center">
+      <div className="bg-surface-container border-b border-outline px-4 py-3 text-center">
         {officeLogo
           ? <img src={officeLogo} alt={officeName} className="h-10 max-w-[160px] object-contain mx-auto mb-1" />
-          : <p className="text-xs text-slate-500">{officeName}</p>
+          : <p className="text-xs text-on-surface-variant">{officeName}</p>
         }
-        <p className="text-sm font-semibold text-slate-900">Elektronik İmza</p>
+        <p className="text-sm font-semibold text-on-surface">Elektronik İmza</p>
       </div>
 
       <div className="max-w-lg mx-auto p-4 space-y-4 pb-8">
@@ -518,23 +518,23 @@ export default function SignPage() {
 
         {/* İmzacı Bilgisi */}
         {sigReq && (
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <p className="text-xs text-slate-500 mb-0.5">İmzacı</p>
-            <p className="font-semibold text-slate-900">{sigReq.signer_name}</p>
-            {sigReq.signer_phone && <p className="text-sm text-slate-500">{sigReq.signer_phone}</p>}
+          <div className="bg-surface-container rounded-xl border border-outline p-4">
+            <p className="text-xs text-on-surface-variant mb-0.5">İmzacı</p>
+            <p className="font-semibold text-on-surface">{sigReq.signer_name}</p>
+            {sigReq.signer_phone && <p className="text-sm text-on-surface-variant">{sigReq.signer_phone}</p>}
           </div>
         )}
 
         {/* İmza Alanı */}
-        <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
-          <p className="text-sm font-semibold text-slate-700">İmzanız</p>
+        <div className="bg-surface-container rounded-xl border border-outline p-4 space-y-3">
+          <p className="text-sm font-semibold text-on-surface">İmzanız</p>
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+          <div className="flex gap-1 bg-surface-container-high rounded-lg p-1">
             <button
               onClick={() => setTab('draw')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                tab === 'draw' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                tab === 'draw' ? 'bg-surface-container text-on-surface shadow-sm' : 'text-on-surface-variant'
               }`}
             >
               <PenLine size={14} /> İmza Çiz
@@ -542,7 +542,7 @@ export default function SignPage() {
             <button
               onClick={() => setTab('type')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                tab === 'type' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                tab === 'type' ? 'bg-surface-container text-on-surface shadow-sm' : 'text-on-surface-variant'
               }`}
             >
               <Type size={14} /> İsim Yaz
@@ -560,10 +560,10 @@ export default function SignPage() {
                 value={typedName}
                 onChange={e => setTypedName(e.target.value)}
                 placeholder="Adınızı ve soyadınızı yazın..."
-                className="w-full px-3 py-3 border border-slate-200 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-3 border border-outline rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary"
                 style={{ fontFamily: 'cursive', fontSize: '18px' }}
               />
-              <p className="text-xs text-slate-400 mt-1 text-center">
+              <p className="text-xs text-on-surface-variant mt-1 text-center">
                 Yazılan isim elektronik imzanız olarak kabul edilir
               </p>
             </div>
@@ -571,16 +571,16 @@ export default function SignPage() {
         </div>
 
         {/* Onay Checkbox */}
-        <label className="flex items-start gap-3 bg-white rounded-xl border border-slate-200 p-4 cursor-pointer">
+        <label className="flex items-start gap-3 bg-surface-container rounded-xl border border-outline p-4 cursor-pointer">
           <div className="relative mt-0.5">
             <input
               type="checkbox"
               checked={agreed}
               onChange={e => setAgreed(e.target.checked)}
-              className="w-5 h-5 rounded border-slate-300 accent-blue-600"
+              className="w-5 h-5 rounded border-outline accent-blue-600"
             />
           </div>
-          <span className="text-sm text-slate-700 leading-relaxed">
+          <span className="text-sm text-on-surface leading-relaxed">
             Yukarıda özetlenen <strong>{doc ? docTypeLabels[doc.doc_type] : 'belgeyi'}</strong> okuduğumu,
             anladığımı ve içeriğini onayladığımı beyan ederim. Bu elektronik imzanın 5070 sayılı
             Elektronik İmza Kanunu kapsamında geçerli olduğunu kabul ediyorum.
@@ -599,12 +599,12 @@ export default function SignPage() {
         <button
           onClick={handleSubmit}
           disabled={submitting || !agreed}
-          className="w-full py-4 bg-blue-600 text-white font-semibold rounded-xl text-base hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full py-4 bg-primary text-white font-semibold rounded-xl text-base hover:bg-primary-hover active:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {submitting ? 'İmzalanıyor...' : 'Belgeyi İmzala'}
         </button>
 
-        <p className="text-xs text-slate-400 text-center">
+        <p className="text-xs text-on-surface-variant text-center">
           Bu imzalama işlemi güvenli bir şekilde kaydedilmektedir.
           İşlem tarihi, saati ve IP adresi loglanmaktadır.
         </p>

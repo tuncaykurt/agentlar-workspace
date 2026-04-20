@@ -13,8 +13,8 @@ import {
 const statusColors: Record<PropertyStatus, string> = {
   active: 'bg-green-100 text-green-700',
   under_offer: 'bg-yellow-100 text-yellow-700',
-  sold: 'bg-slate-100 text-slate-500',
-  rented: 'bg-blue-100 text-blue-700',
+  sold: 'bg-surface-container-high text-on-surface-variant',
+  rented: 'bg-primary-container text-primary',
   withdrawn: 'bg-red-100 text-red-600',
 }
 
@@ -67,12 +67,12 @@ export default function PropertyDetailPage() {
 
   if (loading) return (
     <div className="flex justify-center items-center h-64">
-      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
   if (!property) return (
-    <div className="p-6 text-center text-slate-400">
+    <div className="p-6 text-center text-on-surface-variant">
       <Building2 size={40} className="mx-auto mb-3 opacity-30" />
       <p>Mülk bulunamadı.</p>
       <Link href="/portfolio" className="btn-primary mt-4 inline-block">Portföye Dön</Link>
@@ -84,13 +84,13 @@ export default function PropertyDetailPage() {
       {/* Başlık */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Link href="/portfolio" className="text-slate-400 hover:text-slate-600">
+          <Link href="/portfolio" className="text-on-surface-variant hover:text-on-surface-variant">
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-slate-900">{property.title}</h1>
+            <h1 className="text-xl font-bold text-on-surface">{property.title}</h1>
             {(property.city || property.district) && (
-              <p className="text-sm text-slate-500 flex items-center gap-1 mt-0.5">
+              <p className="text-sm text-on-surface-variant flex items-center gap-1 mt-0.5">
                 <MapPin size={12} /> {[property.neighborhood, property.district, property.city].filter(Boolean).join(', ')}
               </p>
             )}
@@ -143,11 +143,11 @@ export default function PropertyDetailPage() {
             </div>
             {/* Thumbnail'lar */}
             {photos.length > 1 && (
-              <div className="flex gap-1.5 p-2 overflow-x-auto bg-slate-50">
+              <div className="flex gap-1.5 p-2 overflow-x-auto bg-surface-container-high">
                 {photos.map((src, i) => (
                   <button key={i} onClick={() => setActivePhoto(i)}
                     className={`flex-shrink-0 rounded overflow-hidden border-2 transition-all ${
-                      i === activePhoto ? 'border-blue-500' : 'border-transparent opacity-60 hover:opacity-100'
+                      i === activePhoto ? 'border-primary' : 'border-transparent opacity-60 hover:opacity-100'
                     }`}
                   >
                     <img src={src} alt={`thumb-${i}`}
@@ -164,14 +164,14 @@ export default function PropertyDetailPage() {
 
       {/* Durum Değiştir */}
       <div className="card mb-4">
-        <p className="text-xs font-medium text-slate-500 mb-2">DURUM GÜNCELLE</p>
+        <p className="text-xs font-medium text-on-surface-variant mb-2">DURUM GÜNCELLE</p>
         <div className="flex flex-wrap gap-2">
           {(Object.keys(statusLabels) as PropertyStatus[]).map(s => (
             <button key={s} onClick={() => handleStatusChange(s)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                 property.status === s
                   ? statusColors[s] + ' border-transparent font-medium'
-                  : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                  : 'border-outline text-on-surface-variant hover:bg-surface-container-high'
               }`}>
               {property.status === s && <CheckCircle size={10} className="inline mr-1" />}
               {statusLabels[s]}
@@ -183,59 +183,59 @@ export default function PropertyDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Temel Bilgiler */}
         <div className="card">
-          <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+          <h3 className="font-semibold text-on-surface mb-3 flex items-center gap-2">
             <Home size={16} /> Mülk Bilgileri
           </h3>
           <div className="space-y-2 text-sm">
             {property.price && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Fiyat</span>
-                <span className="font-semibold text-slate-900">{formatPrice(property.price, property.currency)}</span>
+                <span className="text-on-surface-variant">Fiyat</span>
+                <span className="font-semibold text-on-surface">{formatPrice(property.price, property.currency)}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-slate-500">Tip</span>
-              <span className="text-slate-700">{property.property_type}</span>
+              <span className="text-on-surface-variant">Tip</span>
+              <span className="text-on-surface">{property.property_type}</span>
             </div>
             {property.m2_gross && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Brüt m²</span>
-                <span className="text-slate-700">{property.m2_gross} m²</span>
+                <span className="text-on-surface-variant">Brüt m²</span>
+                <span className="text-on-surface">{property.m2_gross} m²</span>
               </div>
             )}
             {property.m2_net && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Net m²</span>
-                <span className="text-slate-700">{property.m2_net} m²</span>
+                <span className="text-on-surface-variant">Net m²</span>
+                <span className="text-on-surface">{property.m2_net} m²</span>
               </div>
             )}
             {property.room_count && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Oda Sayısı</span>
-                <span className="text-slate-700">{property.room_count}</span>
+                <span className="text-on-surface-variant">Oda Sayısı</span>
+                <span className="text-on-surface">{property.room_count}</span>
               </div>
             )}
             {property.floor != null && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Kat</span>
-                <span className="text-slate-700">{property.floor}{property.total_floors ? ` / ${property.total_floors}` : ''}</span>
+                <span className="text-on-surface-variant">Kat</span>
+                <span className="text-on-surface">{property.floor}{property.total_floors ? ` / ${property.total_floors}` : ''}</span>
               </div>
             )}
             {property.age != null && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Bina Yaşı</span>
-                <span className="text-slate-700">{property.age} yıl</span>
+                <span className="text-on-surface-variant">Bina Yaşı</span>
+                <span className="text-on-surface">{property.age} yıl</span>
               </div>
             )}
             {property.heating_type && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Isıtma</span>
-                <span className="text-slate-700">{property.heating_type}</span>
+                <span className="text-on-surface-variant">Isıtma</span>
+                <span className="text-on-surface">{property.heating_type}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-slate-500 flex items-center gap-1"><Eye size={12} /> Görüntülenme</span>
-              <span className="text-slate-700">{property.view_count}</span>
+              <span className="text-on-surface-variant flex items-center gap-1"><Eye size={12} /> Görüntülenme</span>
+              <span className="text-on-surface">{property.view_count}</span>
             </div>
           </div>
         </div>
@@ -243,29 +243,29 @@ export default function PropertyDetailPage() {
         {/* Konum & Danışman */}
         <div className="space-y-4">
           <div className="card">
-            <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <h3 className="font-semibold text-on-surface mb-3 flex items-center gap-2">
               <MapPin size={16} /> Konum
             </h3>
-            <div className="space-y-1 text-sm text-slate-600">
+            <div className="space-y-1 text-sm text-on-surface-variant">
               {property.city && <p>{property.city}</p>}
               {property.district && <p>{property.district}</p>}
               {property.neighborhood && <p>{property.neighborhood}</p>}
-              {property.address && <p className="text-slate-400 text-xs mt-1">{property.address}</p>}
+              {property.address && <p className="text-on-surface-variant text-xs mt-1">{property.address}</p>}
             </div>
           </div>
 
           <div className="card">
-            <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <h3 className="font-semibold text-on-surface mb-3 flex items-center gap-2">
               <Calendar size={16} /> Diğer
             </h3>
-            <div className="space-y-1 text-sm text-slate-600">
+            <div className="space-y-1 text-sm text-on-surface-variant">
               {property.source_url && (
                 <a href={property.source_url} target="_blank"
-                  className="text-blue-500 hover:underline text-xs block truncate">
+                  className="text-primary hover:underline text-xs block truncate">
                   Kaynak İlan
                 </a>
               )}
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-on-surface-variant">
                 Eklenme: {new Date(property.created_at).toLocaleDateString('tr-TR')}
               </p>
             </div>
@@ -276,12 +276,12 @@ export default function PropertyDetailPage() {
       {/* Özellikler */}
       {property.features && (property.features as string[]).length > 0 && (
         <div className="card mt-4">
-          <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+          <h3 className="font-semibold text-on-surface mb-3 flex items-center gap-2">
             <CheckCircle size={16} /> Özellikler
           </h3>
           <div className="flex flex-wrap gap-2">
             {(property.features as string[]).map((f, i) => (
-              <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{f}</span>
+              <span key={i} className="text-xs bg-primary-container text-primary px-2 py-1 rounded-full">{f}</span>
             ))}
           </div>
         </div>
@@ -290,24 +290,24 @@ export default function PropertyDetailPage() {
       {/* Açıklama */}
       {property.description && (
         <div className="card mt-4">
-          <h3 className="font-semibold text-slate-700 mb-2 flex items-center gap-2">
+          <h3 className="font-semibold text-on-surface mb-2 flex items-center gap-2">
             <Edit2 size={16} /> Açıklama
           </h3>
-          <p className="text-sm text-slate-600 leading-relaxed">{property.description}</p>
+          <p className="text-sm text-on-surface-variant leading-relaxed">{property.description}</p>
         </div>
       )}
 
       {/* Fiyat & Komisyon Hesap */}
       {property.price && (
-        <div className="card mt-4 bg-blue-50 border-blue-100">
-          <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+        <div className="card mt-4 bg-primary-container border-primary/20">
+          <h3 className="font-semibold text-on-surface mb-3 flex items-center gap-2">
             <DollarSign size={16} /> Hızlı Komisyon Hesabı
           </h3>
           <div className="grid grid-cols-3 gap-3 text-center text-sm">
             {[2, 3, 4].map(rate => (
-              <div key={rate} className="bg-white rounded-lg p-3">
-                <p className="text-xs text-slate-400 mb-1">%{rate} Komisyon</p>
-                <p className="font-bold text-slate-900 text-sm">
+              <div key={rate} className="bg-surface-container rounded-lg p-3">
+                <p className="text-xs text-on-surface-variant mb-1">%{rate} Komisyon</p>
+                <p className="font-bold text-on-surface text-sm">
                   {formatPrice(property.price! * rate / 100)}
                 </p>
               </div>

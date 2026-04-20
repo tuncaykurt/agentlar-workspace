@@ -21,13 +21,13 @@ import {
 } from 'lucide-react'
 
 const statusColors: Record<LeadStatus, string> = {
-  new: 'bg-blue-100 text-blue-700',
+  new: 'bg-primary-container text-primary',
   contacted: 'bg-purple-100 text-purple-700',
   qualified: 'bg-yellow-100 text-yellow-700',
   negotiating: 'bg-orange-100 text-orange-700',
   won: 'bg-green-100 text-green-700',
   lost: 'bg-red-100 text-red-700',
-  dormant: 'bg-slate-100 text-slate-600',
+  dormant: 'bg-surface-container-high text-on-surface-variant',
 }
 
 const statusLabels: Record<LeadStatus, string> = {
@@ -369,8 +369,8 @@ export default function CRMPage() {
       {/* Başlık */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">CRM</h1>
-          <p className="text-slate-500 text-sm mt-1">Tüm müşterilerinizi buradan yönetin</p>
+          <h1 className="text-2xl font-bold text-on-surface">CRM</h1>
+          <p className="text-on-surface-variant text-sm mt-1">Tüm müşterilerinizi buradan yönetin</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -398,8 +398,8 @@ export default function CRMPage() {
             <div key={s.label} className="stat-card">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-slate-500">{s.label}</p>
-                  <p className="text-xl font-bold text-slate-900 mt-0.5">{s.value}</p>
+                  <p className="text-xs text-on-surface-variant">{s.label}</p>
+                  <p className="text-xl font-bold text-on-surface mt-0.5">{s.value}</p>
                 </div>
                 <div className={`w-9 h-9 rounded-lg bg-${s.color}-50 flex items-center justify-center`}>
                   <Icon size={18} className={`text-${s.color}-600`} />
@@ -414,20 +414,20 @@ export default function CRMPage() {
       <div className="card mb-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="text"
               placeholder="İsim, telefon veya e-posta ara..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-9 pr-4 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
           <div className="flex gap-2">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as LeadStatus | 'all')}
-              className="border border-slate-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="border border-outline rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary bg-surface-container"
             >
               <option value="all">Tüm Durumlar</option>
               {Object.entries(statusLabels).map(([k, v]) => (
@@ -437,7 +437,7 @@ export default function CRMPage() {
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value as ClientType | 'all')}
-              className="border border-slate-200 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="border border-outline rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary bg-surface-container"
             >
               <option value="all">Tüm Tipler</option>
               {Object.entries(typeLabels).map(([k, v]) => (
@@ -451,29 +451,29 @@ export default function CRMPage() {
       {/* Müşteri Listesi */}
       <div className="card p-0 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400">
+          <div className="flex items-center justify-center py-16 text-on-surface-variant">
             <div className="text-center">
-              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
               <p className="text-sm">Yükleniyor...</p>
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+          <div className="flex flex-col items-center justify-center py-16 text-on-surface-variant">
             <Users size={40} className="mb-3 opacity-30" />
             <p className="text-sm font-medium">Müşteri bulunamadı</p>
             <p className="text-xs mt-1">Yeni müşteri ekleyin veya filtreyi değiştirin</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-outline">
             {filtered.map((client) => (
               <Link
                 key={client.id}
                 href={`/crm/${client.id}`}
-                className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors group"
+                className="flex items-center gap-4 p-4 hover:bg-surface-container-high transition-colors group"
               >
                 {/* Avatar */}
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                  <span className="text-blue-700 font-semibold text-sm">
+                <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0">
+                  <span className="text-primary font-semibold text-sm">
                     {client.full_name.charAt(0).toUpperCase()}
                   </span>
                 </div>
@@ -481,14 +481,14 @@ export default function CRMPage() {
                 {/* Bilgiler */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <p className="font-medium text-slate-900 text-sm truncate">
+                    <p className="font-medium text-on-surface text-sm truncate">
                       {client.salutation ? `${client.salutation} ` : ''}{client.full_name}
                     </p>
-                    <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 bg-slate-100 text-slate-600">
+                    <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 bg-surface-container-high text-on-surface-variant">
                       {typeLabels[client.client_type]}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-slate-500">
+                  <div className="flex items-center gap-3 text-xs text-on-surface-variant">
                     {client.phone && (
                       <span className="flex items-center gap-1">
                         <Phone size={11} /> {client.phone}
@@ -508,11 +508,11 @@ export default function CRMPage() {
                     {statusLabels[client.lead_status]}
                   </span>
                   {client.consultant && (
-                    <span className="text-xs text-slate-400 hidden lg:block">
+                    <span className="text-xs text-on-surface-variant hidden lg:block">
                       {(client.consultant as { full_name: string }).full_name}
                     </span>
                   )}
-                  <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+                  <ChevronRight size={16} className="text-on-surface-variant group-hover:text-on-surface-variant transition-colors" />
                 </div>
               </Link>
             ))}
@@ -522,15 +522,15 @@ export default function CRMPage() {
 
       {/* ── VCF Import Modal ─────────────────────────────────────────────── */}
       {showImport && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/50 dark:bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
             {/* Modal Başlık */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
               <div>
-                <h2 className="font-semibold text-slate-900">VCF Kişi Dosyası İçe Aktar</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Telefondan indirilen .vcf dosyasını seçin</p>
+                <h2 className="font-semibold text-on-surface">VCF Kişi Dosyası İçe Aktar</h2>
+                <p className="text-xs text-on-surface-variant mt-0.5">Telefondan indirilen .vcf dosyasını seçin</p>
               </div>
-              <button onClick={closeImport} className="text-slate-400 hover:text-slate-600">
+              <button onClick={closeImport} className="text-on-surface-variant hover:text-on-surface-variant">
                 <X size={20} />
               </button>
             </div>
@@ -547,7 +547,7 @@ export default function CRMPage() {
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full border-2 border-dashed border-slate-200 rounded-xl py-6 flex flex-col items-center gap-2 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                  className="w-full border-2 border-dashed border-outline rounded-xl py-6 flex flex-col items-center gap-2 text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
                 >
                   <Upload size={24} />
                   <span className="text-sm font-medium">
@@ -562,28 +562,28 @@ export default function CRMPage() {
               {parsedContacts.length > 0 && (
                 <>
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-700">
+                    <p className="text-sm font-medium text-on-surface">
                       {selected.size} / {parsedContacts.length} kişi seçili
                     </p>
                     <button
                       onClick={toggleAll}
-                      className="text-xs text-blue-600 hover:underline"
+                      className="text-xs text-primary hover:underline"
                     >
                       {selected.size === parsedContacts.length ? 'Tümünü Kaldır' : 'Tümünü Seç'}
                     </button>
                   </div>
 
-                  <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                  <div className="border border-outline rounded-xl overflow-hidden divide-y divide-outline max-h-80 overflow-y-auto">
                     {parsedContacts.map((c, i) => (
                       <label
                         key={i}
-                        className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 ${selected.has(i) ? 'bg-blue-50/40' : ''}`}
+                        className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container-high ${selected.has(i) ? 'bg-primary-container/40' : ''}`}
                       >
                         <input
                           type="checkbox"
                           checked={selected.has(i)}
                           onChange={() => toggleSelect(i)}
-                          className="rounded border-slate-300 text-blue-600"
+                          className="rounded border-outline text-primary"
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
@@ -592,11 +592,11 @@ export default function CRMPage() {
                                 {c.salutation}
                               </span>
                             )}
-                            <span className="text-sm font-medium text-slate-900 truncate">{c.full_name}</span>
+                            <span className="text-sm font-medium text-on-surface truncate">{c.full_name}</span>
                           </div>
-                          <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
+                          <div className="flex items-center gap-3 mt-0.5 text-xs text-on-surface-variant">
                             <span>{c.phone}</span>
-                            {c.org && <span className="truncate text-slate-400">{c.org}</span>}
+                            {c.org && <span className="truncate text-on-surface-variant">{c.org}</span>}
                           </div>
                         </div>
                       </label>
@@ -622,7 +622,7 @@ export default function CRMPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex gap-3 px-5 py-4 border-t border-slate-100">
+            <div className="flex gap-3 px-5 py-4 border-t border-outline">
               <button onClick={closeImport} className="btn-secondary flex-1">
                 {importResult ? 'Kapat' : 'İptal'}
               </button>

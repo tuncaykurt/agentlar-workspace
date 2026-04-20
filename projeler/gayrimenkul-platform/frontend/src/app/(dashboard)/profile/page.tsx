@@ -69,14 +69,14 @@ function WAQRModal({ onClose, onConnected }: { onClose: () => void; onConnected:
   }, [connected])
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-center justify-center p-4">
+      <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
           <div className="flex items-center gap-2">
             <Smartphone size={18} className="text-green-600" />
-            <h3 className="font-semibold text-slate-900">WhatsApp Bağla</h3>
+            <h3 className="font-semibold text-on-surface">WhatsApp Bağla</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100">
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface-variant p-1 rounded-lg hover:bg-surface-container-highest">
             <X size={18} />
           </button>
         </div>
@@ -87,8 +87,8 @@ function WAQRModal({ onClose, onConnected }: { onClose: () => void; onConnected:
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <CheckCircle size={32} className="text-green-600" />
               </div>
-              <h4 className="font-semibold text-slate-900 mb-1">WhatsApp Bağlandı!</h4>
-              <p className="text-sm text-slate-500 mb-4">Artık mesaj gönderebilirsiniz.</p>
+              <h4 className="font-semibold text-on-surface mb-1">WhatsApp Bağlandı!</h4>
+              <p className="text-sm text-on-surface-variant mb-4">Artık mesaj gönderebilirsiniz.</p>
               <button onClick={onClose} className="btn-primary">Tamam</button>
             </div>
           ) : error ? (
@@ -97,41 +97,41 @@ function WAQRModal({ onClose, onConnected }: { onClose: () => void; onConnected:
                 <WifiOff size={22} className="text-red-500" />
               </div>
               <p className="text-sm text-red-600 mb-3">{error}</p>
-              <button onClick={fetchQR} className="flex items-center gap-1.5 mx-auto px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">
+              <button onClick={fetchQR} className="flex items-center gap-1.5 mx-auto px-4 py-2 border border-outline rounded-lg text-sm hover:bg-surface-container-high">
                 <RefreshCw size={13} /> Tekrar Dene
               </button>
             </div>
           ) : (
             <div className="text-center">
-              <p className="text-sm text-slate-600 mb-4">
+              <p className="text-sm text-on-surface-variant mb-4">
                 WhatsApp'ı açın → <strong>Bağlı Cihazlar</strong> → <strong>Cihaz Ekle</strong> → QR kodu okutun
               </p>
               <div className="relative inline-block">
                 {loading ? (
-                  <div className="w-52 h-52 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
-                    <Loader2 size={32} className="animate-spin text-slate-400" />
+                  <div className="w-52 h-52 bg-surface-container-high rounded-xl flex items-center justify-center mx-auto">
+                    <Loader2 size={32} className="animate-spin text-on-surface-variant" />
                   </div>
                 ) : qr ? (
                   <div className="relative">
-                    <img src={qr} alt="WhatsApp QR" className="w-52 h-52 rounded-xl border-2 border-slate-200 mx-auto" />
-                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm">
-                      <span className="text-xs font-bold text-slate-500">{countdown}</span>
+                    <img src={qr} alt="WhatsApp QR" className="w-52 h-52 rounded-xl border-2 border-outline mx-auto" />
+                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-surface-container border border-outline rounded-full flex items-center justify-center shadow-sm">
+                      <span className="text-xs font-bold text-on-surface-variant">{countdown}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="w-52 h-52 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
-                    <QrCode size={48} className="text-slate-300" />
+                  <div className="w-52 h-52 bg-surface-container-high rounded-xl flex items-center justify-center mx-auto">
+                    <QrCode size={48} className="text-on-surface-variant" />
                   </div>
                 )}
               </div>
               <div className="mt-4 space-y-1">
-                <p className="text-xs text-slate-400">QR kod {countdown} saniye sonra yenilenir</p>
-                <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
+                <p className="text-xs text-on-surface-variant">QR kod {countdown} saniye sonra yenilenir</p>
+                <div className="flex items-center justify-center gap-1.5 text-xs text-on-surface-variant">
                   <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
                   Telefon bağlantısı bekleniyor...
                 </div>
               </div>
-              <button onClick={fetchQR} disabled={loading} className="mt-3 flex items-center gap-1.5 mx-auto px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50">
+              <button onClick={fetchQR} disabled={loading} className="mt-3 flex items-center gap-1.5 mx-auto px-3 py-1.5 border border-outline rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50">
                 <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> QR'ı Yenile
               </button>
             </div>
@@ -180,38 +180,38 @@ function WACard() {
     <>
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+          <h2 className="font-semibold text-on-surface flex items-center gap-2">
             <MessageCircle size={16} className="text-green-600" />
             WhatsApp Bağlantısı
           </h2>
-          <button onClick={checkStatus} disabled={checking} className="text-slate-400 hover:text-slate-600 p-1">
+          <button onClick={checkStatus} disabled={checking} className="text-on-surface-variant hover:text-on-surface-variant p-1">
             <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
           </button>
         </div>
 
         {/* Durum */}
-        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl mb-4">
+        <div className="flex items-center gap-3 p-3 bg-surface-container-high rounded-xl mb-4">
           <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-            checking ? 'bg-slate-300 animate-pulse' :
+            checking ? 'bg-surface-container-highest animate-pulse' :
             isConnected ? 'bg-green-500' : 'bg-orange-400'
           }`} />
           <div className="flex-1">
             <p className={`text-sm font-medium ${
-              checking ? 'text-slate-400' :
+              checking ? 'text-on-surface-variant' :
               isConnected ? 'text-green-600' : 'text-orange-500'
             }`}>
               {checking ? 'Kontrol ediliyor...' : isConnected ? 'Bağlı' : 'Bağlı Değil'}
             </p>
             {isConnected && phone && (
-              <p className="text-xs text-slate-500 mt-0.5">+{phone}</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">+{phone}</p>
             )}
             {isConnected && status?.connectedAt && (
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-on-surface-variant mt-0.5">
                 {new Date(status.connectedAt).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })} tarihinde bağlandı
               </p>
             )}
             {!isConnected && !checking && (
-              <p className="text-xs text-slate-400 mt-0.5">Kendi WhatsApp numaranızı bağlayın</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">Kendi WhatsApp numaranızı bağlayın</p>
             )}
           </div>
           {isConnected && (
@@ -241,7 +241,7 @@ function WACard() {
           )}
         </div>
 
-        <p className="text-xs text-slate-400 mt-3">
+        <p className="text-xs text-on-surface-variant mt-3">
           Bağladığınız numara, müşterilere gönderilen tüm WhatsApp mesajlarında kullanılır.
         </p>
       </div>
@@ -353,7 +353,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -369,8 +369,8 @@ export default function ProfilePage() {
     <div className="p-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Profilim</h1>
-          <p className="text-slate-500 text-sm mt-1">Kişisel bilgilerinizi ve belgelerinizi yönetin</p>
+          <h1 className="text-2xl font-bold text-on-surface">Profilim</h1>
+          <p className="text-on-surface-variant text-sm mt-1">Kişisel bilgilerinizi ve belgelerinizi yönetin</p>
         </div>
         <button
           onClick={handleSave}
@@ -385,19 +385,19 @@ export default function ProfilePage() {
       {/* Profil Tamamlık */}
       <div className="card mb-5">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-slate-700">Profil Tamamlık</p>
+          <p className="text-sm font-medium text-on-surface">Profil Tamamlık</p>
           <span className={`text-sm font-bold ${completionPct >= 80 ? 'text-green-600' : completionPct >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
             %{completionPct}
           </span>
         </div>
-        <div className="w-full bg-slate-100 rounded-full h-2">
+        <div className="w-full bg-surface-container-high rounded-full h-2">
           <div
             className={`h-2 rounded-full transition-all ${completionPct >= 80 ? 'bg-green-500' : completionPct >= 50 ? 'bg-yellow-400' : 'bg-red-400'}`}
             style={{ width: `${completionPct}%` }}
           />
         </div>
         {completionPct < 95 && (
-          <p className="text-xs text-slate-500 mt-1.5">
+          <p className="text-xs text-on-surface-variant mt-1.5">
             Profil tamamlık oranı yükseldikçe sistem tarafından daha az hatırlatma alırsınız.
           </p>
         )}
@@ -406,18 +406,18 @@ export default function ProfilePage() {
       <div className="space-y-5">
         {/* Temel Bilgiler */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
             <User size={16} /> Kişisel Bilgiler
           </h2>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Ad Soyad</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Ad Soyad</label>
               <input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                <label className="block text-sm font-medium text-on-surface mb-1 flex items-center gap-1">
                   <Phone size={12} /> Telefon
                 </label>
                 <input value={form.phone} onChange={e => {
@@ -429,48 +429,48 @@ export default function ProfilePage() {
                     setForm(f => ({ ...f, phone: val }))
                   }}
                   placeholder="+905XX XXX XXXX"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                <label className="block text-sm font-medium text-on-surface mb-1 flex items-center gap-1">
                   <Mail size={12} /> E-posta
                 </label>
                 <input value={consultant?.email || ''} disabled
-                  className="w-full border border-slate-100 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-400 cursor-not-allowed" />
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container-high text-on-surface-variant cursor-not-allowed" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Adres</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Adres</label>
               <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
                 placeholder="İlçe, Şehir"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Bio / Hakkımda</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Bio / Hakkımda</label>
               <textarea value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))}
                 rows={3} placeholder="Kendinizi kısaca tanıtın..."
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
             </div>
           </div>
         </div>
 
         {/* Resmi Belgeler */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
             <FileText size={16} /> Resmi Bilgiler
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Vergi Numarası</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">Vergi Numarası</label>
               <input value={form.tax_number} onChange={e => setForm(f => ({ ...f, tax_number: e.target.value }))}
                 placeholder="1234567890"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">TC Kimlik No</label>
+              <label className="block text-sm font-medium text-on-surface mb-1">TC Kimlik No</label>
               <input value={form.id_number} onChange={e => setForm(f => ({ ...f, id_number: e.target.value }))}
                 placeholder="12345678901"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
 
@@ -481,20 +481,20 @@ export default function ProfilePage() {
               { label: 'Kimlik (Ön)', field: 'id_front_url', url: consultant?.id_front_url },
               { label: 'Yetki Belgesi', field: 'authorization_doc_url', url: consultant?.authorization_doc_url },
             ].map(doc => (
-              <div key={doc.field} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
+              <div key={doc.field} className="flex items-center justify-between p-3 border border-outline rounded-lg">
                 <div className="flex items-center gap-2">
-                  <FileText size={15} className="text-slate-400" />
-                  <span className="text-sm text-slate-700">{doc.label}</span>
+                  <FileText size={15} className="text-on-surface-variant" />
+                  <span className="text-sm text-on-surface">{doc.label}</span>
                 </div>
                 {doc.url ? (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-green-600 flex items-center gap-1">
                       <CheckCircle size={12} /> Yüklendi
                     </span>
-                    <a href={doc.url} target="_blank" className="text-xs text-blue-500 hover:underline">Görüntüle</a>
+                    <a href={doc.url} target="_blank" className="text-xs text-primary hover:underline">Görüntüle</a>
                   </div>
                 ) : (
-                  <button className="text-xs text-blue-600 flex items-center gap-1 hover:text-blue-800">
+                  <button className="text-xs text-primary flex items-center gap-1 hover:text-primary-hover">
                     <Upload size={12} /> Yükle
                   </button>
                 )}
@@ -505,18 +505,18 @@ export default function ProfilePage() {
 
         {/* Sertifikalar */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
             <Award size={16} /> Sertifikalar & Yetkinlikler
           </h2>
 
           {certifications.length > 0 && (
             <div className="space-y-2 mb-3">
               {certifications.map((cert, i) => (
-                <div key={i} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
+                <div key={i} className="flex items-center justify-between p-2.5 bg-surface-container-high rounded-lg">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{cert.name}</p>
+                    <p className="text-sm font-medium text-on-surface">{cert.name}</p>
                     {cert.expires_at && (
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-on-surface-variant">
                         Geçerlilik: {new Date(cert.expires_at).toLocaleDateString('tr-TR')}
                       </p>
                     )}
@@ -535,13 +535,13 @@ export default function ProfilePage() {
               value={newCert.name}
               onChange={e => setNewCert(c => ({ ...c, name: e.target.value }))}
               placeholder="Sertifika adı (SPK, TDUB...)"
-              className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <input
               type="date"
               value={newCert.expires_at}
               onChange={e => setNewCert(c => ({ ...c, expires_at: e.target.value }))}
-              className="w-36 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-36 border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <button onClick={addCert} className="btn-secondary flex items-center gap-1 text-xs">
               <Plus size={13} /> Ekle
@@ -551,28 +551,28 @@ export default function ProfilePage() {
 
         {/* Sosyal Medya */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4">Sosyal Medya Hesapları</h2>
+          <h2 className="font-semibold text-on-surface mb-4">Sosyal Medya Hesapları</h2>
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <span className="text-pink-500 text-lg flex-shrink-0">📷</span>
               <input value={form.instagram_handle}
                 onChange={e => setForm(f => ({ ...f, instagram_handle: e.target.value }))}
                 placeholder="@kullanici_adi"
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="flex-1 border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-4.5 h-4.5 flex-shrink-0 text-blue-600 font-bold text-sm">f</div>
+              <div className="w-4.5 h-4.5 flex-shrink-0 text-primary font-bold text-sm">f</div>
               <input value={form.facebook_page}
                 onChange={e => setForm(f => ({ ...f, facebook_page: e.target.value }))}
                 placeholder="facebook.com/sayfaniz"
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="flex-1 border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-blue-700 text-lg flex-shrink-0">in</span>
+              <span className="text-primary text-lg flex-shrink-0">in</span>
               <input value={form.linkedin_url}
                 onChange={e => setForm(f => ({ ...f, linkedin_url: e.target.value }))}
                 placeholder="linkedin.com/in/adsoyadiniz"
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="flex-1 border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
         </div>
@@ -582,13 +582,13 @@ export default function ProfilePage() {
 
         {/* Komisyon Bilgisi (Salt Okunur) */}
         {consultant && (
-          <div className="card bg-slate-50">
+          <div className="card bg-surface-container-high">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-700">Komisyon Oranınız</p>
-                <p className="text-xs text-slate-400 mt-0.5">Bu oran yönetici tarafından belirlenir</p>
+                <p className="text-sm font-medium text-on-surface">Komisyon Oranınız</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">Bu oran yönetici tarafından belirlenir</p>
               </div>
-              <span className="text-2xl font-bold text-blue-600">%{consultant.commission_rate}</span>
+              <span className="text-2xl font-bold text-primary">%{consultant.commission_rate}</span>
             </div>
           </div>
         )}

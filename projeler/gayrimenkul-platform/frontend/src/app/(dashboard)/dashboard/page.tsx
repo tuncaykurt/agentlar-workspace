@@ -87,8 +87,8 @@ export default async function DashboardPage() {
     <div className="p-6">
       {/* Başlık */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 text-sm mt-1">Hoş geldiniz. Bugünkü özet aşağıda.</p>
+        <h1 className="text-2xl font-bold text-on-surface">Dashboard</h1>
+        <p className="text-on-surface-variant text-sm mt-1">Hoş geldiniz. Bugünkü özet aşağıda.</p>
       </div>
 
       {/* İstatistik Kartları */}
@@ -98,14 +98,14 @@ export default async function DashboardPage() {
           return (
             <div key={stat.label} className="stat-card">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-medium text-slate-500">{stat.label}</p>
+                <p className="text-sm font-medium text-on-surface-variant">{stat.label}</p>
                 <div className={`w-9 h-9 rounded-lg bg-${stat.color}-50 flex items-center justify-center`}>
                   <Icon size={18} className={`text-${stat.color}-600`} />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
+              <p className="text-2xl font-bold text-on-surface">{stat.value}</p>
               {stat.change && (
-                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                <p className="text-xs text-on-surface-variant mt-1 flex items-center gap-1">
                   <TrendingUp size={12} />
                   {stat.change}
                 </p>
@@ -120,8 +120,8 @@ export default async function DashboardPage() {
         {/* Bugünkü Takipler */}
         <div className="lg:col-span-2 card flex flex-col">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-slate-900">Bugünkü Takipler</h2>
-            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+            <h2 className="font-semibold text-on-surface">Bugünkü Takipler</h2>
+            <span className="text-xs text-on-surface-variant bg-surface-container-high px-2 py-1 rounded-full">
               {todaysFollowups?.length || 0} Adet
             </span>
           </div>
@@ -129,24 +129,24 @@ export default async function DashboardPage() {
           {todaysFollowups && todaysFollowups.length > 0 ? (
             <div className="space-y-3 flex-1">
               {todaysFollowups.map((f: any) => (
-                <div key={f.id} className="flex items-center gap-4 p-3 border border-slate-100 rounded-lg hover:bg-slate-50 transition-colors">
+                <div key={f.id} className="flex items-center gap-4 p-3 border border-outline rounded-lg hover:bg-surface-container-high transition-colors">
                   <div className={`w-10 h-10 rounded-full flex items-center shrink-0 justify-center ${f.status === 'done' ? 'bg-green-100 text-green-600' : 'bg-red-50 text-red-600'}`}>
                     <Clock size={16} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-slate-900 truncate">
+                    <h3 className="text-sm font-medium text-on-surface truncate">
                       {f.clients ? f.clients.full_name : 'Bilinmeyen Müşteri'}
                     </h3>
-                    <p className="text-xs text-slate-500 truncate">{f.notes || 'Not girilmemiş...'}</p>
+                    <p className="text-xs text-on-surface-variant truncate">{f.notes || 'Not girilmemiş...'}</p>
                   </div>
-                  <div className="text-xs font-semibold text-slate-400 shrink-0">
+                  <div className="text-xs font-semibold text-on-surface-variant shrink-0">
                     {new Date(f.due_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400 flex-1 border border-dashed border-slate-200 rounded-lg">
+            <div className="flex flex-col items-center justify-center py-12 text-on-surface-variant flex-1 border border-dashed border-outline rounded-lg">
               <CheckCircle size={40} className="mb-3 opacity-30 text-green-500" />
               <p className="text-sm">Bugün için planlanan takip bulunmuyor</p>
             </div>
@@ -155,7 +155,7 @@ export default async function DashboardPage() {
 
         {/* Hızlı Aksiyonlar */}
         <div className="card">
-          <h2 className="font-semibold text-slate-900 mb-4">Hızlı Aksiyonlar</h2>
+          <h2 className="font-semibold text-on-surface mb-4">Hızlı Aksiyonlar</h2>
           <div className="space-y-2">
             {[
               { label: 'Yeni Müşteri Ekle', href: '/crm/new', icon: Users },
@@ -168,12 +168,12 @@ export default async function DashboardPage() {
                 <a
                   key={action.label}
                   href={action.href}
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors group"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-container-high transition-colors group"
                 >
-                  <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100">
-                    <Icon size={15} className="text-blue-600" />
+                  <div className="w-8 h-8 bg-primary-container rounded-lg flex items-center justify-center group-hover:bg-primary-container">
+                    <Icon size={15} className="text-primary" />
                   </div>
-                  <span className="text-sm text-slate-700 font-medium">{action.label}</span>
+                  <span className="text-sm text-on-surface font-medium">{action.label}</span>
                 </a>
               )
             })}

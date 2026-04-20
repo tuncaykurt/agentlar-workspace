@@ -2,54 +2,348 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN SYSTEM: The Midnight Curator
+   Light & Dark theme via CSS custom properties
+   ═══════════════════════════════════════════════════════════════ */
+
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --sidebar-bg: #1e293b;
-  --sidebar-text: #94a3b8;
-  --sidebar-active: #3b82f6;
-  --card-bg: #ffffff;
-  --border: #e2e8f0;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
+  /* ── Surface Hierarchy ── */
+  --surface: #F8FAFC;
+  --surface-container-low: #F1F5F9;
+  --surface-container: #FFFFFF;
+  --surface-container-high: #F1F5F9;
+  --surface-container-highest: #E2E8F0;
+
+  /* ── On Surface (Text) ── */
+  --on-surface: #0F172A;
+  --on-surface-variant: #64748B;
+
+  /* ── Primary ── */
+  --primary: #4F46E5;
+  --primary-hover: #4338CA;
+  --primary-container: #EEF2FF;
+  --on-primary: #FFFFFF;
+  --on-primary-container: #4F46E5;
+
+  /* ── Secondary ── */
+  --secondary: #10B981;
+  --secondary-container: #D1FAE5;
+  --on-secondary-container: #065F46;
+
+  /* ── Tertiary (Turkish Gold) ── */
+  --tertiary: #F59E0B;
+  --tertiary-container: #FEF3C7;
+  --on-tertiary-container: #92400E;
+
+  /* ── Error ── */
+  --error: #F43F5E;
+  --error-container: #FFF1F2;
+  --on-error-container: #9F1239;
+
+  /* ── Outline ── */
+  --outline: #E2E8F0;
+  --outline-variant: rgba(0, 0, 0, 0.06);
+
+  /* ── Sidebar ── */
+  --sidebar-bg: #1E293B;
+  --sidebar-text: #94A3B8;
+  --sidebar-active: #4F46E5;
+  --sidebar-border: #334155;
+  --sidebar-hover: #334155;
+  --sidebar-on-active: #FFFFFF;
+
+  /* ── Misc ── */
+  --backdrop: rgba(0, 0, 0, 0.5);
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-blur: 20px;
+
+  /* ── Legacy mapping ── */
+  --background: var(--surface);
+  --foreground: var(--on-surface);
+  --card-bg: var(--surface-container);
+  --border: var(--outline);
+}
+
+.dark {
+  /* ── Surface Hierarchy (The Midnight Curator) ── */
+  --surface: #0F0F13;
+  --surface-container-low: #131317;
+  --surface-container: #1A1A24;
+  --surface-container-high: #1F1F2B;
+  --surface-container-highest: #28283A;
+
+  /* ── On Surface (Text) ── */
+  --on-surface: #E4E4E7;
+  --on-surface-variant: #A1A1AA;
+
+  /* ── Primary (The Electric Pulse) ── */
+  --primary: #4F46E5;
+  --primary-hover: #6366F1;
+  --primary-container: #312E81;
+  --on-primary: #FFFFFF;
+  --on-primary-container: #A5B4FC;
+
+  /* ── Secondary ── */
+  --secondary: #10B981;
+  --secondary-container: rgba(16, 185, 129, 0.15);
+  --on-secondary-container: #34D399;
+
+  /* ── Tertiary (Turkish Gold) ── */
+  --tertiary: #F59E0B;
+  --tertiary-container: rgba(245, 158, 11, 0.15);
+  --on-tertiary-container: #FCD34D;
+
+  /* ── Error ── */
+  --error: #F43F5E;
+  --error-container: rgba(244, 63, 94, 0.15);
+  --on-error-container: #FB7185;
+
+  /* ── Outline ── */
+  --outline: rgba(255, 255, 255, 0.08);
+  --outline-variant: rgba(255, 255, 255, 0.04);
+
+  /* ── Sidebar ── */
+  --sidebar-bg: #0A0A0E;
+  --sidebar-text: #A1A1AA;
+  --sidebar-active: #4F46E5;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-hover: rgba(255, 255, 255, 0.06);
+  --sidebar-on-active: #FFFFFF;
+
+  /* ── Misc ── */
+  --backdrop: rgba(0, 0, 0, 0.7);
+  --shadow-color: rgba(0, 0, 0, 0.4);
+  --glass-bg: rgba(19, 19, 23, 0.7);
+  --glass-blur: 20px;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--on-surface);
+  background: var(--surface);
   font-family: 'Inter', Arial, Helvetica, sans-serif;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITY CLASSES
+   ═══════════════════════════════════════════════════════════════ */
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
 
+  /* ── Sidebar Links ── */
   .sidebar-link {
-    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150;
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200;
+    color: var(--sidebar-text);
   }
 
   .sidebar-link:hover {
-    @apply bg-slate-700 text-white;
+    background: var(--sidebar-hover);
+    color: var(--on-surface);
+  }
+
+  .dark .sidebar-link:hover {
+    color: #E4E4E7;
   }
 
   .sidebar-link.active {
-    @apply bg-blue-600 text-white;
+    background: var(--sidebar-active);
+    color: var(--sidebar-on-active);
   }
 
+  /* ── Cards ── */
   .card {
-    @apply bg-white rounded-xl border border-slate-200 shadow-sm p-6;
+    background: var(--surface-container);
+    border-radius: 0.75rem;
+    border: 1px solid var(--outline);
+    padding: 1.5rem;
+    transition: background-color 0.2s, border-color 0.2s;
+  }
+
+  .dark .card {
+    border-color: transparent;
+    background-image: linear-gradient(var(--surface-container), var(--surface-container)),
+                      linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    border: 1px solid transparent;
   }
 
   .stat-card {
-    @apply bg-white rounded-xl border border-slate-200 shadow-sm p-5;
+    background: var(--surface-container);
+    border-radius: 0.75rem;
+    border: 1px solid var(--outline);
+    padding: 1.25rem;
+    transition: background-color 0.2s, border-color 0.2s;
   }
 
+  .dark .stat-card {
+    border-color: transparent;
+    background-image: linear-gradient(var(--surface-container), var(--surface-container)),
+                      linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    border: 1px solid transparent;
+  }
+
+  /* ── Buttons ── */
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors;
+    background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+    color: var(--on-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-primary:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px var(--shadow-color);
   }
 
   .btn-secondary {
-    @apply bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors;
+    background: var(--surface-container-high);
+    color: var(--on-surface);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid var(--outline);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
+
+  .btn-secondary:hover {
+    background: var(--surface-container-highest);
+  }
+
+  /* ── Glass Header (for dark mode) ── */
+  .glass-header {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+  }
+
+  /* ── Ghost Border (inputs) ── */
+  .ghost-border {
+    border: 1px solid var(--outline);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .ghost-border:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    outline: none;
+  }
+
+  /* ── Neon Badge ── */
+  .badge-success {
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
+  }
+
+  .badge-error {
+    background: var(--error-container);
+    color: var(--on-error-container);
+  }
+
+  .badge-warning {
+    background: var(--tertiary-container);
+    color: var(--on-tertiary-container);
+  }
+
+  .badge-primary {
+    background: var(--primary-container);
+    color: var(--on-primary-container);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DARK MODE: Functional color overrides
+   Status badges, alerts, and semantic colors
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Green (success) */
+.dark .bg-green-100 { background: rgba(16, 185, 129, 0.15) !important; }
+.dark .bg-green-50 { background: rgba(16, 185, 129, 0.10) !important; }
+.dark .text-green-700, .dark .text-green-600 { color: #34D399 !important; }
+.dark .text-green-500 { color: #10B981 !important; }
+
+/* Red (error/danger) */
+.dark .bg-red-100 { background: rgba(244, 63, 94, 0.15) !important; }
+.dark .bg-red-50 { background: rgba(244, 63, 94, 0.10) !important; }
+.dark .text-red-700, .dark .text-red-600 { color: #FB7185 !important; }
+.dark .text-red-500, .dark .text-red-400 { color: #F43F5E !important; }
+.dark .border-red-200 { border-color: rgba(244, 63, 94, 0.25) !important; }
+
+/* Blue (info) */
+.dark .bg-blue-100 { background: rgba(79, 70, 229, 0.15) !important; }
+.dark .text-blue-700 { color: #A5B4FC !important; }
+
+/* Yellow/Amber (warning) */
+.dark .bg-yellow-100 { background: rgba(245, 158, 11, 0.15) !important; }
+.dark .bg-yellow-50 { background: rgba(245, 158, 11, 0.10) !important; }
+.dark .text-yellow-700, .dark .text-yellow-800 { color: #FCD34D !important; }
+
+/* Orange */
+.dark .bg-orange-100 { background: rgba(249, 115, 22, 0.15) !important; }
+.dark .text-orange-700, .dark .text-orange-600 { color: #FB923C !important; }
+
+/* Purple */
+.dark .bg-purple-100 { background: rgba(139, 92, 246, 0.15) !important; }
+.dark .bg-purple-50 { background: rgba(139, 92, 246, 0.10) !important; }
+.dark .text-purple-700 { color: #C4B5FD !important; }
+
+/* Teal */
+.dark .bg-teal-50 { background: rgba(20, 184, 166, 0.10) !important; }
+.dark .text-teal-700 { color: #5EEAD4 !important; }
+
+/* Rose */
+.dark .bg-rose-50 { background: rgba(244, 63, 94, 0.10) !important; }
+.dark .text-rose-700 { color: #FDA4AF !important; }
+
+/* Indigo */
+.dark .bg-indigo-50 { background: rgba(79, 70, 229, 0.10) !important; }
+.dark .text-indigo-700, .dark .text-indigo-600 { color: #A5B4FC !important; }
+
+/* ── Inputs & Selects (dark mode) ── */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: var(--surface-container-high);
+  color: var(--on-surface);
+  border-color: var(--outline);
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--on-surface-variant);
+  opacity: 0.6;
+}
+
+.dark select option {
+  background-color: var(--surface-container);
+  color: var(--on-surface);
+}
+
+/* ── Scrollbar (dark mode) ── */
+.dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: var(--surface-container-low);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--surface-container-highest);
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--on-surface-variant);
 }

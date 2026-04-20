@@ -41,7 +41,7 @@ const roleLabels: Record<string, string> = {
 const roleColors: Record<string, string> = {
   admin: 'bg-red-100 text-red-700',
   manager: 'bg-purple-100 text-purple-700',
-  consultant: 'bg-blue-100 text-blue-700',
+  consultant: 'bg-primary-container text-primary',
 }
 
 const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; settings: SettingMeta[] }[] = [
@@ -129,15 +129,15 @@ function LogoUploadField({ value, onChange, desc }: { value: string; onChange: (
 
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">
+      <label className="block text-sm font-medium text-on-surface mb-1">
         Ofis Logosu
-        {desc && <span className="text-slate-400 font-normal ml-1.5 text-xs">— {desc}</span>}
+        {desc && <span className="text-on-surface-variant font-normal ml-1.5 text-xs">— {desc}</span>}
       </label>
 
       {/* Preview */}
       {value && (
         <div className="mb-3 relative inline-block">
-          <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 inline-flex items-center justify-center" style={{ minWidth: 120, minHeight: 60 }}>
+          <div className="border border-outline rounded-xl p-3 bg-surface-container-high inline-flex items-center justify-center" style={{ minWidth: 120, minHeight: 60 }}>
             <img
               src={value}
               alt="Logo önizleme"
@@ -168,12 +168,12 @@ function LogoUploadField({ value, onChange, desc }: { value: string; onChange: (
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-outline rounded-xl text-sm text-on-surface-variant hover:border-primary hover:text-primary hover:bg-primary-container transition-colors disabled:opacity-50"
         >
           {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
           {uploading ? 'Yükleniyor...' : value ? 'Logoyu Değiştir' : 'Logo Seç (PNG / JPG)'}
         </button>
-        <p className="text-xs text-slate-400 mt-1.5">Dosya seçildiğinde otomatik olarak yüklenir. &quot;Kaydet&quot; ile kaydedin.</p>
+        <p className="text-xs text-on-surface-variant mt-1.5">Dosya seçildiğinde otomatik olarak yüklenir. &quot;Kaydet&quot; ile kaydedin.</p>
       </div>
     </div>
   )
@@ -189,7 +189,7 @@ function SettingField({
   onChange: (v: string) => void
 }) {
   const [showPass, setShowPass] = useState(false)
-  const inp = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white'
+  const inp = 'w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-surface-container'
 
   if (meta.type === 'logo') {
     return <LogoUploadField value={value} onChange={onChange} desc={meta.desc} />
@@ -197,9 +197,9 @@ function SettingField({
 
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">
+      <label className="block text-sm font-medium text-on-surface mb-1">
         {meta.label}
-        {meta.desc && <span className="text-slate-400 font-normal ml-1.5 text-xs">— {meta.desc}</span>}
+        {meta.desc && <span className="text-on-surface-variant font-normal ml-1.5 text-xs">— {meta.desc}</span>}
       </label>
       {meta.type === 'textarea' ? (
         <textarea
@@ -221,7 +221,7 @@ function SettingField({
           <button
             type="button"
             onClick={() => setShowPass(p => !p)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface-variant p-1"
           >
             {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
@@ -307,15 +307,15 @@ function QRModal({ onClose }: { onClose: () => void }) {
   }, [connected])
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-center justify-center p-4">
+      <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
           <div className="flex items-center gap-2">
             <Smartphone size={18} className="text-green-600" />
-            <h3 className="font-semibold text-slate-900">WhatsApp Bağla</h3>
+            <h3 className="font-semibold text-on-surface">WhatsApp Bağla</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100">
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface-variant p-1 rounded-lg hover:bg-surface-container-highest">
             <X size={18} />
           </button>
         </div>
@@ -327,8 +327,8 @@ function QRModal({ onClose }: { onClose: () => void }) {
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <CheckCircle size={32} className="text-green-600" />
               </div>
-              <h4 className="font-semibold text-slate-900 mb-1">WhatsApp Bağlandı!</h4>
-              <p className="text-sm text-slate-500 mb-4">Mesaj gönderebilirsiniz.</p>
+              <h4 className="font-semibold text-on-surface mb-1">WhatsApp Bağlandı!</h4>
+              <p className="text-sm text-on-surface-variant mb-4">Mesaj gönderebilirsiniz.</p>
               <button onClick={onClose} className="btn-primary">Tamam</button>
             </div>
           ) : error ? (
@@ -338,50 +338,50 @@ function QRModal({ onClose }: { onClose: () => void }) {
                 <WifiOff size={22} className="text-red-500" />
               </div>
               <p className="text-sm text-red-600 mb-3">{error}</p>
-              <p className="text-xs text-slate-400 mb-4">
+              <p className="text-xs text-on-surface-variant mb-4">
                 WhatsApp API URL, API Key ve Instance adını kontrol edin.
               </p>
-              <button onClick={fetchQR} className="flex items-center gap-1.5 mx-auto px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">
+              <button onClick={fetchQR} className="flex items-center gap-1.5 mx-auto px-4 py-2 border border-outline rounded-lg text-sm hover:bg-surface-container-high">
                 <RefreshCw size={13} /> Tekrar Dene
               </button>
             </div>
           ) : (
             /* QR State */
             <div className="text-center">
-              <p className="text-sm text-slate-600 mb-4">
+              <p className="text-sm text-on-surface-variant mb-4">
                 WhatsApp'ı açın → <strong>Bağlı Cihazlar</strong> → <strong>Cihaz Ekle</strong> → QR kodu okutun
               </p>
 
               {/* QR Code */}
               <div className="relative inline-block">
                 {loadingQr ? (
-                  <div className="w-52 h-52 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
-                    <Loader2 size={32} className="animate-spin text-slate-400" />
+                  <div className="w-52 h-52 bg-surface-container-high rounded-xl flex items-center justify-center mx-auto">
+                    <Loader2 size={32} className="animate-spin text-on-surface-variant" />
                   </div>
                 ) : qr ? (
                   <div className="relative">
                     <img
                       src={qr}
                       alt="WhatsApp QR Kodu"
-                      className="w-52 h-52 rounded-xl border-2 border-slate-200 mx-auto"
+                      className="w-52 h-52 rounded-xl border-2 border-outline mx-auto"
                     />
                     {/* Countdown ring overlay */}
-                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm">
-                      <span className="text-xs font-bold text-slate-500">{countdown}</span>
+                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-surface-container border border-outline rounded-full flex items-center justify-center shadow-sm">
+                      <span className="text-xs font-bold text-on-surface-variant">{countdown}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="w-52 h-52 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
-                    <QrCode size={48} className="text-slate-300" />
+                  <div className="w-52 h-52 bg-surface-container-high rounded-xl flex items-center justify-center mx-auto">
+                    <QrCode size={48} className="text-on-surface-variant" />
                   </div>
                 )}
               </div>
 
               <div className="mt-4 space-y-1">
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-on-surface-variant">
                   QR kod {countdown} saniye sonra yenilenir
                 </p>
-                <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
+                <div className="flex items-center justify-center gap-1.5 text-xs text-on-surface-variant">
                   <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
                   Telefon bağlantısı bekleniyor...
                 </div>
@@ -390,7 +390,7 @@ function QRModal({ onClose }: { onClose: () => void }) {
               <button
                 onClick={fetchQR}
                 disabled={loadingQr}
-                className="mt-3 flex items-center gap-1.5 mx-auto px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                className="mt-3 flex items-center gap-1.5 mx-auto px-3 py-1.5 border border-outline rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50"
               >
                 <RefreshCw size={11} className={loadingQr ? 'animate-spin' : ''} />
                 QR'ı Yenile
@@ -432,33 +432,33 @@ function N8nCard() {
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+        <h3 className="font-semibold text-on-surface flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
             <Zap size={14} className="text-orange-500" />
           </div>
           n8n Otomasyon Bağlantısı
         </h3>
-        <button onClick={test} disabled={status === 'testing'} className="text-slate-400 hover:text-slate-600 p-1" title="Yenile">
+        <button onClick={test} disabled={status === 'testing'} className="text-on-surface-variant hover:text-on-surface-variant p-1" title="Yenile">
           <RefreshCw size={14} className={status === 'testing' ? 'animate-spin' : ''} />
         </button>
       </div>
 
       {/* Status */}
-      <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl mb-4">
+      <div className="flex items-center gap-3 p-3 bg-surface-container-high rounded-xl mb-4">
         <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-          status === 'idle' || status === 'testing' ? 'bg-slate-300 animate-pulse' :
+          status === 'idle' || status === 'testing' ? 'bg-surface-container-highest animate-pulse' :
           status === 'ok' ? 'bg-green-500' : 'bg-red-400'
         }`} />
         <div className="flex-1">
           <p className={`text-sm font-medium ${
-            status === 'idle' || status === 'testing' ? 'text-slate-400' :
+            status === 'idle' || status === 'testing' ? 'text-on-surface-variant' :
             status === 'ok' ? 'text-green-600' : 'text-red-500'
           }`}>
             {status === 'idle' || status === 'testing' ? 'Bağlantı kontrol ediliyor...' :
              status === 'ok' ? 'n8n Bağlantısı Aktif' : error}
           </p>
           {status === 'ok' && (
-            <p className="text-xs text-slate-400 mt-0.5">İş akışları oluşturulabilir ve yönetilebilir</p>
+            <p className="text-xs text-on-surface-variant mt-0.5">İş akışları oluşturulabilir ve yönetilebilir</p>
           )}
         </div>
         {status === 'ok' && (
@@ -485,7 +485,7 @@ function N8nCard() {
         {status === 'testing' ? 'Test ediliyor...' : 'Bağlantıyı Test Et'}
       </button>
 
-      <p className="text-xs text-slate-400 mt-3">
+      <p className="text-xs text-on-surface-variant mt-3">
         n8n URL ve API Key aşağıdaki <strong>Otomasyon Ayarları</strong> bölümünden girilir.
       </p>
     </div>
@@ -522,11 +522,11 @@ function WAConnectTest({ saved }: { saved: boolean }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-outline">
         <button
           onClick={test}
           disabled={status === 'testing'}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-outline rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50"
         >
           <RefreshCw size={12} className={status === 'testing' ? 'animate-spin' : ''} />
           Bağlantıyı Test Et
@@ -541,7 +541,7 @@ function WAConnectTest({ saved }: { saved: boolean }) {
 
         {status === 'ok' && (
           <span className="flex items-center gap-1 text-xs text-green-600">
-            <Wifi size={12} /> Bağlı {msg && <span className="text-slate-400">({msg})</span>}
+            <Wifi size={12} /> Bağlı {msg && <span className="text-on-surface-variant">({msg})</span>}
           </span>
         )}
         {status === 'error' && (
@@ -587,33 +587,33 @@ function WhatsAppCard() {
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+        <h3 className="font-semibold text-on-surface flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-green-50 flex items-center justify-center">
             <MessageCircle size={14} className="text-green-600" />
           </div>
           WhatsApp Bağlantısı
         </h3>
-        <button onClick={checkStatus} disabled={checking} className="text-slate-400 hover:text-slate-600 p-1" title="Yenile">
+        <button onClick={checkStatus} disabled={checking} className="text-on-surface-variant hover:text-on-surface-variant p-1" title="Yenile">
           <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
         </button>
       </div>
 
       {/* Durum */}
-      <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl mb-4">
+      <div className="flex items-center gap-3 p-3 bg-surface-container-high rounded-xl mb-4">
         <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-          checking ? 'bg-slate-300 animate-pulse' :
+          checking ? 'bg-surface-container-highest animate-pulse' :
           result?.reachable ? 'bg-green-500' : 'bg-red-400'
         }`} />
         <div className="flex-1">
           <p className={`text-sm font-medium ${
-            checking ? 'text-slate-400' :
+            checking ? 'text-on-surface-variant' :
             result?.reachable ? 'text-green-600' : 'text-red-500'
           }`}>
             {checking ? 'Kontrol ediliyor...' :
              result?.reachable ? 'WhatsApp Bağlantısı Aktif' : (result?.error || 'Bağlanamadı')}
           </p>
           {result?.reachable && (
-            <p className="text-xs text-slate-400 mt-0.5">WhatsApp mesajları gönderilebilir</p>
+            <p className="text-xs text-on-surface-variant mt-0.5">WhatsApp mesajları gönderilebilir</p>
           )}
         </div>
         {result?.reachable && (
@@ -637,13 +637,13 @@ function WhatsAppCard() {
       <button
         onClick={checkStatus}
         disabled={checking}
-        className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+        className="flex items-center gap-1.5 px-4 py-2 border border-outline rounded-lg text-sm text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50"
       >
         <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
         Durumu Kontrol Et
       </button>
 
-      <p className="text-xs text-slate-400 mt-3">
+      <p className="text-xs text-on-surface-variant mt-3">
         Her danışman kendi WhatsApp numarasını profil sayfasından bağlayabilir.
       </p>
     </div>
@@ -699,7 +699,7 @@ function SettingsTab() {
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -721,7 +721,7 @@ function SettingsTab() {
 
         return (
           <div key={group.title} className="card space-y-4">
-            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+            <h3 className="font-semibold text-on-surface flex items-center gap-2">
               <div className={`w-7 h-7 rounded-lg bg-${group.color}-50 flex items-center justify-center`}>
                 <Icon size={14} className={`text-${group.color}-600`} />
               </div>
@@ -748,7 +748,7 @@ function SettingsTab() {
               <button
                 onClick={() => saveGroup(group.settings.map(s => s.key))}
                 disabled={isSaving}
-                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
               >
                 {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                 {isSaving ? 'Kaydediliyor...' : 'Kaydet'}
@@ -811,44 +811,44 @@ function ConsultantsTab() {
           { label: 'Pasif', value: consultants.length - activeCount, color: 'slate' },
         ].map(s => (
           <div key={s.label} className="stat-card">
-            <p className="text-xs text-slate-500">{s.label}</p>
-            <p className="text-2xl font-bold text-slate-900 mt-0.5">{s.value}</p>
+            <p className="text-xs text-on-surface-variant">{s.label}</p>
+            <p className="text-2xl font-bold text-on-surface mt-0.5">{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* List */}
       <div className="card p-0 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-          <Shield size={15} className="text-blue-600" />
-          <h2 className="font-semibold text-slate-800 text-sm">Danışmanlar</h2>
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-outline">
+          <Shield size={15} className="text-primary" />
+          <h2 className="font-semibold text-on-surface text-sm">Danışmanlar</h2>
         </div>
 
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : consultants.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-on-surface-variant">
             <Users size={36} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">Danışman bulunamadı</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-outline">
             {consultants.map(c => (
-              <div key={c.id} className="flex items-center gap-4 p-4 hover:bg-slate-50">
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-700 font-semibold text-sm">
+              <div key={c.id} className="flex items-center gap-4 p-4 hover:bg-surface-container-high">
+                <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0 text-primary font-semibold text-sm">
                   {c.full_name.charAt(0).toUpperCase()}
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-medium text-slate-900 text-sm">{c.full_name}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${roleColors[c.role] || 'bg-slate-100 text-slate-600'}`}>
+                    <p className="font-medium text-on-surface text-sm">{c.full_name}</p>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${roleColors[c.role] || 'bg-surface-container-high text-on-surface-variant'}`}>
                       {roleLabels[c.role] || c.role}
                     </span>
                     {!c.is_active && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">Pasif</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">Pasif</span>
                     )}
                     {/* WhatsApp durum rozeti */}
                     {c.wa_phone ? (
@@ -865,8 +865,8 @@ function ConsultantsTab() {
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">{c.email}</p>
-                  {c.phone && <p className="text-xs text-slate-400">{c.phone}</p>}
+                  <p className="text-xs text-on-surface-variant mt-0.5">{c.email}</p>
+                  {c.phone && <p className="text-xs text-on-surface-variant">{c.phone}</p>}
                   {c.wa_phone && (
                     <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
                       <MessageCircle size={10} /> +{c.wa_phone}
@@ -877,28 +877,28 @@ function ConsultantsTab() {
                 {/* Komisyon */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <div className="flex items-center gap-1">
-                    <TrendingUp size={12} className="text-slate-400" />
+                    <TrendingUp size={12} className="text-on-surface-variant" />
                     {editId === c.id ? (
                       <div className="flex items-center gap-1">
                         <input
                           type="number"
                           value={editRate}
                           onChange={e => setEditRate(e.target.value)}
-                          className="w-16 border border-blue-300 rounded px-2 py-0.5 text-xs focus:outline-none"
+                          className="w-16 border border-primary rounded px-2 py-0.5 text-xs focus:outline-none"
                           placeholder={String(c.commission_rate)}
                         />
-                        <span className="text-xs text-slate-500">%</span>
+                        <span className="text-xs text-on-surface-variant">%</span>
                         <button onClick={() => updateRate(c.id)} disabled={saving} className="text-green-600 hover:text-green-700">
                           {saving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={14} />}
                         </button>
-                        <button onClick={() => setEditId(null)} className="text-slate-400">
+                        <button onClick={() => setEditId(null)} className="text-on-surface-variant">
                           <XCircle size={14} />
                         </button>
                       </div>
                     ) : (
                       <button
                         onClick={() => { setEditId(c.id); setEditRate(String(c.commission_rate)) }}
-                        className="text-xs text-slate-600 hover:text-blue-600 flex items-center gap-1"
+                        className="text-xs text-on-surface-variant hover:text-primary flex items-center gap-1"
                       >
                         %{c.commission_rate} <Edit2 size={10} />
                       </button>
@@ -908,7 +908,7 @@ function ConsultantsTab() {
                   <button
                     onClick={() => toggleActive(c.id, c.is_active)}
                     className={`p-1.5 rounded-lg transition-colors ${
-                      c.is_active ? 'text-green-600 hover:bg-green-50' : 'text-slate-400 hover:bg-slate-100'
+                      c.is_active ? 'text-green-600 hover:bg-green-50' : 'text-on-surface-variant hover:bg-surface-container-highest'
                     }`}
                     title={c.is_active ? 'Pasife Al' : 'Aktif Et'}
                   >
@@ -1122,17 +1122,17 @@ function AutomationsTab() {
     <div className="space-y-4">
       {/* Consultant selector */}
       <div className="card">
-        <h3 className="font-semibold text-slate-800 flex items-center gap-2 mb-3">
+        <h3 className="font-semibold text-on-surface flex items-center gap-2 mb-3">
           <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
             <Zap size={14} className="text-orange-500" />
           </div>
           İş Akışı Yönetimi
         </h3>
-        <label className="block text-sm text-slate-600 mb-1">Danışman Seçin</label>
+        <label className="block text-sm text-on-surface-variant mb-1">Danışman Seçin</label>
         <select
           value={selectedId}
           onChange={e => setSelectedId(e.target.value)}
-          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+          className="w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-surface-container"
         >
           <option value="">— Danışman seçin —</option>
           {consultants.map(c => (
@@ -1149,8 +1149,8 @@ function AutomationsTab() {
       {/* Workflow list */}
       {selectedId && (
         <div className="card p-0 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-            <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-outline">
+            <h4 className="font-semibold text-on-surface text-sm flex items-center gap-2">
               <Zap size={14} className="text-orange-500" />
               {selected?.full_name} — İş Akışları
             </h4>
@@ -1179,27 +1179,27 @@ function AutomationsTab() {
 
           {loadingWf ? (
             <div className="flex justify-center py-10">
-              <Loader2 size={22} className="animate-spin text-slate-400" />
+              <Loader2 size={22} className="animate-spin text-on-surface-variant" />
             </div>
           ) : workflows.length === 0 ? (
-            <div className="text-center py-10 text-slate-400">
+            <div className="text-center py-10 text-on-surface-variant">
               <Zap size={32} className="mx-auto mb-2 opacity-20" />
               <p className="text-sm">Henüz iş akışı yok</p>
               <p className="text-xs mt-1">Yeni İş Akışı butonuyla şablon seçin</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-outline">
               {workflows.map(wf => (
-                <div key={wf.id} className="px-3 sm:px-4 py-2.5 hover:bg-slate-50">
+                <div key={wf.id} className="px-3 sm:px-4 py-2.5 hover:bg-surface-container-high">
                   {/* Top row: name + active toggle */}
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="flex-1 text-xs sm:text-sm font-medium text-slate-800 truncate">{wf.name}</p>
+                    <p className="flex-1 text-xs sm:text-sm font-medium text-on-surface truncate">{wf.name}</p>
                     {/* Active toggle */}
                     <button
                       onClick={() => handleToggle(wf)}
                       disabled={toggling === wf.id}
                       className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium transition-colors ${
-                        wf.active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        wf.active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
                       }`}
                     >
                       {toggling === wf.id
@@ -1212,15 +1212,15 @@ function AutomationsTab() {
                   <div className="flex items-center gap-1.5">
                     <div className="flex-1 min-w-0">
                       {wf.webhookUrl
-                        ? <p className="text-[10px] text-slate-400 truncate font-mono">{wf.webhookUrl}</p>
-                        : <p className="text-[10px] text-slate-400">ID: {wf.id}</p>
+                        ? <p className="text-[10px] text-on-surface-variant truncate font-mono">{wf.webhookUrl}</p>
+                        : <p className="text-[10px] text-on-surface-variant">ID: {wf.id}</p>
                       }
                     </div>
                     {/* Copy URL */}
                     {wf.webhookUrl && (
                       <button
                         onClick={() => { navigator.clipboard.writeText(wf.webhookUrl!); alert('URL kopyalandı!') }}
-                        className="p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-1 text-on-surface-variant hover:text-primary hover:bg-primary-container rounded-lg transition-colors"
                         title="Webhook URL'yi kopyala"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
@@ -1231,7 +1231,7 @@ function AutomationsTab() {
                       <button
                         onClick={() => handleSyncWebhook(wf.id)}
                         disabled={syncing === wf.id}
-                        className="p-1 text-slate-400 hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-1 text-on-surface-variant hover:text-purple-500 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
                         title="Evolution webhook'u senkronize et"
                       >
                         {syncing === wf.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
@@ -1241,7 +1241,7 @@ function AutomationsTab() {
                     <button
                       onClick={() => handleDelete(wf.id)}
                       disabled={deleting === wf.id}
-                      className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                      className="p-1 text-on-surface-variant hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                       title="Sil"
                     >
                       {deleting === wf.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
@@ -1256,18 +1256,18 @@ function AutomationsTab() {
 
       {/* Create modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[92vh]">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
-              <h3 className="font-semibold text-slate-900 text-sm">Yeni İş Akışı Oluştur</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-end sm:items-center justify-center">
+          <div className="bg-surface-container rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-outline flex-shrink-0">
+              <h3 className="font-semibold text-on-surface text-sm">Yeni İş Akışı Oluştur</h3>
+              <button onClick={() => setShowModal(false)} className="text-on-surface-variant hover:text-on-surface-variant p-1.5 rounded-lg hover:bg-surface-container-highest">
                 <X size={16} />
               </button>
             </div>
             <div className="p-4 space-y-4 overflow-y-auto flex-1">
               {/* Category tabs */}
               <div>
-                <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 mb-3">
+                <div className="flex gap-1 bg-surface-container-high rounded-lg p-0.5 mb-3">
                   {(['wa', 'email'] as const).map(cat => (
                     <button
                       key={cat}
@@ -1283,7 +1283,7 @@ function AutomationsTab() {
                         setClientSearch('')
                       }}
                       className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        tplCat === cat ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        tplCat === cat ? 'bg-surface-container text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'
                       }`}
                     >
                       {cat === 'wa' ? '💬 WhatsApp' : '✉️ Email'}
@@ -1291,7 +1291,7 @@ function AutomationsTab() {
                   ))}
                 </div>
                 {/* Template selection */}
-                <label className="block text-xs font-medium text-slate-600 mb-2">Şablon Seçin</label>
+                <label className="block text-xs font-medium text-on-surface-variant mb-2">Şablon Seçin</label>
                 <div className="grid grid-cols-2 gap-1.5">
                   {TEMPLATES.filter(t => t.cat === tplCat).map(t => (
                     <button
@@ -1306,12 +1306,12 @@ function AutomationsTab() {
                         setClientSearch('')
                       }}
                       className={`p-2.5 rounded-xl border-2 text-left transition-colors ${
-                        tplId === t.id ? 'border-orange-400 bg-orange-50' : 'border-slate-200 hover:border-slate-300'
+                        tplId === t.id ? 'border-orange-400 bg-orange-50' : 'border-outline hover:border-outline'
                       }`}
                     >
                       <div className="text-base mb-0.5">{t.icon}</div>
-                      <div className="text-xs font-semibold text-slate-800 leading-tight">{t.label}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{t.desc}</div>
+                      <div className="text-xs font-semibold text-on-surface leading-tight">{t.label}</div>
+                      <div className="text-[10px] text-on-surface-variant mt-0.5 leading-tight">{t.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -1320,41 +1320,41 @@ function AutomationsTab() {
               {/* Client multi-select (wa_targeted only) */}
               {tplId === 'wa_targeted' && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                    Müşteri Seçin <span className="text-slate-400">({selectedClients.length} seçili)</span>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5">
+                    Müşteri Seçin <span className="text-on-surface-variant">({selectedClients.length} seçili)</span>
                   </label>
                   <input
                     type="text"
                     value={clientSearch}
                     onChange={e => setClientSearch(e.target.value)}
                     placeholder="Müşteri ara..."
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs mb-1.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full px-3 py-1.5 border border-outline rounded-lg text-xs mb-1.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
-                  <div className="border border-slate-200 rounded-lg max-h-40 overflow-y-auto divide-y divide-slate-100">
+                  <div className="border border-outline rounded-lg max-h-40 overflow-y-auto divide-y divide-outline">
                     {clientList
                       .filter(c => c.full_name.toLowerCase().includes(clientSearch.toLowerCase()) || (c.phone || '').includes(clientSearch))
                       .map(c => (
-                        <label key={c.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                        <label key={c.id} className="flex items-center gap-2 px-3 py-2 hover:bg-surface-container-high cursor-pointer">
                           <input
                             type="checkbox"
                             checked={selectedClients.includes(c.id)}
                             onChange={e => setSelectedClients(prev =>
                               e.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id)
                             )}
-                            className="rounded border-slate-300 text-orange-500 focus:ring-orange-400"
+                            className="rounded border-outline text-orange-500 focus:ring-orange-400"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-slate-800 truncate">{c.full_name}</p>
-                            {c.phone && <p className="text-[10px] text-slate-400">{c.phone}</p>}
+                            <p className="text-xs font-medium text-on-surface truncate">{c.full_name}</p>
+                            {c.phone && <p className="text-[10px] text-on-surface-variant">{c.phone}</p>}
                           </div>
                         </label>
                       ))}
                     {clientList.filter(c => c.full_name.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
-                      <p className="text-xs text-slate-400 text-center py-3">Müşteri bulunamadı</p>
+                      <p className="text-xs text-on-surface-variant text-center py-3">Müşteri bulunamadı</p>
                     )}
                   </div>
                   {selectedClients.length > 0 && (
-                    <button onClick={() => setSelectedClients([])} className="mt-1 text-[10px] text-slate-400 hover:text-red-500">Seçimi temizle</button>
+                    <button onClick={() => setSelectedClients([])} className="mt-1 text-[10px] text-on-surface-variant hover:text-red-500">Seçimi temizle</button>
                   )}
                 </div>
               )}
@@ -1362,11 +1362,11 @@ function AutomationsTab() {
               {/* Property selector (wa_property_bot only) */}
               {tplId === 'wa_property_bot' && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Mülk Seçin</label>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Mülk Seçin</label>
                   <select
                     value={selectedPropertyId}
                     onChange={e => setSelectedPropertyId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                    className="w-full px-3 py-2 border border-outline rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 bg-surface-container"
                   >
                     <option value="">— Mülk seçin —</option>
                     {propertyList.map(p => (
@@ -1375,19 +1375,19 @@ function AutomationsTab() {
                       </option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-slate-400 mt-1">Bot bu mülkün bilgilerini Supabase&apos;den çekip müşteri sorularını yanıtlar</p>
+                  <p className="text-[10px] text-on-surface-variant mt-1">Bot bu mülkün bilgilerini Supabase&apos;den çekip müşteri sorularını yanıtlar</p>
                 </div>
               )}
 
               {/* System Prompt (AI bots only) */}
               {(tplId === 'wa_aibot' || tplId === 'wa_property_bot') && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">AI Sistem Promptu</label>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1">AI Sistem Promptu</label>
                   <textarea
                     value={systemPrompt}
                     onChange={e => setSystemPrompt(e.target.value)}
                     rows={4}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none font-mono"
+                    className="w-full px-3 py-2 border border-outline rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none font-mono"
                     placeholder="AI'nın nasıl davranacağını tanımlayan talimatlar..."
                   />
                 </div>
@@ -1396,12 +1396,12 @@ function AutomationsTab() {
               {/* Subject (email only) */}
               {tplCat === 'email' && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">E-posta Konusu</label>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1">E-posta Konusu</label>
                   <input
                     type="text"
                     value={subject}
                     onChange={e => setSubject(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full px-3 py-2 border border-outline rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
                     placeholder="E-posta konu satırı"
                   />
                 </div>
@@ -1410,17 +1410,17 @@ function AutomationsTab() {
               {/* Message — hide for property bot (AI handles everything) */}
               {tplId !== 'wa_property_bot' && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1">
                     {tplCat === 'email' ? 'E-posta İçeriği' : tplId === 'wa_aibot' ? 'Kullanıcı Prompt Şablonu' : 'Mesaj Şablonu'}
                   </label>
                   <textarea
                     value={message}
                     onChange={e => setMessage(e.target.value)}
                     rows={3}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                    className="w-full px-3 py-2 border border-outline rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                   />
                   {tplId !== 'wa_aibot' && (
-                    <p className="text-[10px] text-slate-400 mt-1">Değişkenler: &#123;name&#125;, &#123;phone&#125;, &#123;email&#125;</p>
+                    <p className="text-[10px] text-on-surface-variant mt-1">Değişkenler: &#123;name&#125;, &#123;phone&#125;, &#123;email&#125;</p>
                   )}
                 </div>
               )}
@@ -1429,8 +1429,8 @@ function AutomationsTab() {
             </div>
 
             {/* Sticky footer buttons */}
-            <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 flex gap-2">
-              <button onClick={() => setShowModal(false)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50">İptal</button>
+            <div className="px-4 py-3 border-t border-outline flex-shrink-0 flex gap-2">
+              <button onClick={() => setShowModal(false)} className="flex-1 py-2.5 border border-outline rounded-xl text-sm text-on-surface-variant hover:bg-surface-container-high">İptal</button>
               <button
                 onClick={handleCreate}
                 disabled={
@@ -1498,32 +1498,32 @@ function FeaturesTab() {
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
+      <div className="bg-primary-container border border-primary/20 rounded-xl px-4 py-3 text-sm text-primary">
         <strong>Not:</strong> Admin hesabı tüm özelliklere her zaman erişir. Burada açıp kapattığınız özellikler sadece danışman ve müdür rollerini etkiler.
       </div>
 
       <div className="card p-0 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-outline">
           <Puzzle size={15} className="text-purple-600" />
-          <h2 className="font-semibold text-slate-800 text-sm">Özellik Yönetimi</h2>
+          <h2 className="font-semibold text-on-surface text-sm">Özellik Yönetimi</h2>
         </div>
 
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-outline">
           {features.map(feat => (
-            <div key={feat.id} className="flex items-center gap-4 p-4 hover:bg-slate-50">
+            <div key={feat.id} className="flex items-center gap-4 p-4 hover:bg-surface-container-high">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="font-medium text-slate-900 text-sm">{feat.label}</p>
-                  <code className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{feat.route}</code>
+                  <p className="font-medium text-on-surface text-sm">{feat.label}</p>
+                  <code className="text-[10px] text-on-surface-variant bg-surface-container-high px-1.5 py-0.5 rounded">{feat.route}</code>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">{feat.description}</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">{feat.description}</p>
               </div>
               <button
                 onClick={() => toggleFeature(feat)}
@@ -1532,11 +1532,11 @@ function FeaturesTab() {
                 title={feat.is_enabled ? 'Aktif — kapat' : 'Kapalı — aç'}
               >
                 {saving === feat.feature_key ? (
-                  <Loader2 size={24} className="animate-spin text-slate-400" />
+                  <Loader2 size={24} className="animate-spin text-on-surface-variant" />
                 ) : feat.is_enabled ? (
                   <ToggleRight size={28} className="text-green-500" />
                 ) : (
-                  <ToggleLeft size={28} className="text-slate-300" />
+                  <ToggleLeft size={28} className="text-on-surface-variant" />
                 )}
               </button>
             </div>
@@ -1628,7 +1628,7 @@ function CreditsTab() {
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -1637,7 +1637,7 @@ function CreditsTab() {
     <div className="space-y-5">
       {/* Kredi Ayarları */}
       <div className="card space-y-4">
-        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+        <h3 className="font-semibold text-on-surface flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-yellow-50 flex items-center justify-center">
             <Coins size={14} className="text-yellow-600" />
           </div>
@@ -1645,28 +1645,28 @@ function CreditsTab() {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-on-surface mb-1">
               Hoş Geldin Kredisi
-              <span className="text-slate-400 font-normal ml-1.5 text-xs">— Yeni kayıt olan danışmana verilen ücretsiz kredi</span>
+              <span className="text-on-surface-variant font-normal ml-1.5 text-xs">— Yeni kayıt olan danışmana verilen ücretsiz kredi</span>
             </label>
             <input
               type="number"
               value={initialCredits}
               onChange={e => setInitialCredits(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               min="0"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-on-surface mb-1">
               Belge Başına Maliyet
-              <span className="text-slate-400 font-normal ml-1.5 text-xs">— Her belge oluşturmada kesilecek kredi</span>
+              <span className="text-on-surface-variant font-normal ml-1.5 text-xs">— Her belge oluşturmada kesilecek kredi</span>
             </label>
             <input
               type="number"
               value={costPerDoc}
               onChange={e => setCostPerDoc(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               min="0"
             />
           </div>
@@ -1680,7 +1680,7 @@ function CreditsTab() {
           <button
             onClick={saveSettings}
             disabled={savingSettings}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
           >
             {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             Kaydet
@@ -1690,7 +1690,7 @@ function CreditsTab() {
 
       {/* Kredi Yükleme */}
       <div className="card space-y-4">
-        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+        <h3 className="font-semibold text-on-surface flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-green-50 flex items-center justify-center">
             <Plus size={14} className="text-green-600" />
           </div>
@@ -1698,11 +1698,11 @@ function CreditsTab() {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Danışman</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1">Danışman</label>
             <select
               value={grantId || ''}
               onChange={e => setGrantId(e.target.value || null)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="">Seçin...</option>
               {consultants.filter(c => c.role !== 'admin').map(c => (
@@ -1713,24 +1713,24 @@ function CreditsTab() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
-              Miktar <span className="text-slate-400">(+ yükle, - düş)</span>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1">
+              Miktar <span className="text-on-surface-variant">(+ yükle, - düş)</span>
             </label>
             <input
               type="number"
               value={grantAmount}
               onChange={e => setGrantAmount(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="10"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Açıklama (opsiyonel)</label>
+            <label className="block text-xs font-medium text-on-surface-variant mb-1">Açıklama (opsiyonel)</label>
             <input
               type="text"
               value={grantDesc}
               onChange={e => setGrantDesc(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="Kredi yükleme"
             />
           </div>
@@ -1744,25 +1744,25 @@ function CreditsTab() {
             {granting ? <Loader2 size={14} className="animate-spin" /> : <Coins size={14} />}
             Uygula
           </button>
-          {msg && <span className="text-xs text-slate-600">{msg}</span>}
+          {msg && <span className="text-xs text-on-surface-variant">{msg}</span>}
         </div>
       </div>
 
       {/* Danışman Kredi Tablosu */}
       <div className="card p-0 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-outline">
           <Coins size={15} className="text-yellow-500" />
-          <h2 className="font-semibold text-slate-800 text-sm">Danışman Kredi Bakiyeleri</h2>
+          <h2 className="font-semibold text-on-surface text-sm">Danışman Kredi Bakiyeleri</h2>
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-outline">
           {consultants.filter(c => c.role !== 'admin').map(c => (
-            <div key={c.id} className="flex items-center gap-4 p-4 hover:bg-slate-50">
+            <div key={c.id} className="flex items-center gap-4 p-4 hover:bg-surface-container-high">
               <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0 text-yellow-700 font-semibold text-sm">
                 {c.full_name.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-slate-900 text-sm">{c.full_name}</p>
-                <p className="text-xs text-slate-500">{c.email}</p>
+                <p className="font-medium text-on-surface text-sm">{c.full_name}</p>
+                <p className="text-xs text-on-surface-variant">{c.email}</p>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-50 border border-yellow-200">
                 <Coins size={13} className="text-yellow-600" />
@@ -1772,7 +1772,7 @@ function CreditsTab() {
             </div>
           ))}
           {consultants.filter(c => c.role !== 'admin').length === 0 && (
-            <div className="text-center py-8 text-slate-400 text-sm">
+            <div className="text-center py-8 text-on-surface-variant text-sm">
               Henüz danışman yok
             </div>
           )}
@@ -1800,12 +1800,12 @@ export default function AdminPage() {
   return (
     <div className="p-3 sm:p-6 max-w-3xl mx-auto">
       <div className="mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Yönetim Paneli</h1>
-        <p className="text-slate-500 text-xs sm:text-sm mt-0.5">Danışman yönetimi, özellikler, krediler ve sistem ayarları</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-on-surface">Yönetim Paneli</h1>
+        <p className="text-on-surface-variant text-xs sm:text-sm mt-0.5">Danışman yönetimi, özellikler, krediler ve sistem ayarları</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-4 sm:mb-5 overflow-x-auto">
+      <div className="flex gap-1 bg-surface-container-high rounded-xl p-1 mb-4 sm:mb-5 overflow-x-auto">
         {tabs.map(t => {
           const Icon = t.icon
           return (
@@ -1813,7 +1813,7 @@ export default function AdminPage() {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-w-0 ${
-                tab === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                tab === t.key ? 'bg-surface-container text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'
               }`}
             >
               <Icon size={13} /> <span className="hidden sm:inline">{t.label}</span><span className="sm:hidden">{t.shortLabel}</span>

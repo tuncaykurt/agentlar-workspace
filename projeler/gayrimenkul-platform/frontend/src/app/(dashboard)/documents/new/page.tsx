@@ -36,23 +36,23 @@ function ClientExtraFields({
 }) {
   const missing = !client.tc_no || !client.address || !client.email
   const [open, setOpen] = useState(missing)
-  const inp = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+  const inp = 'w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary'
 
   return (
-    <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden">
+    <div className="mt-2 border border-outline rounded-lg overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 bg-slate-50 hover:bg-slate-100"
+        className="w-full flex items-center justify-between px-3 py-2 text-xs text-on-surface-variant bg-surface-container-high hover:bg-surface-container-highest"
       >
         <span>{missing ? '⚠️ Eksik bilgiler var — tıkla' : 'Belge için ek bilgiler'}</span>
         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="p-3 space-y-2 bg-white">
+        <div className="p-3 space-y-2 bg-surface-container">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">TC / Vergi No</label>
+              <label className="block text-xs text-on-surface-variant mb-1">TC / Vergi No</label>
               <input
                 type="text"
                 value={extraData.tc_no}
@@ -62,7 +62,7 @@ function ClientExtraFields({
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">E-posta</label>
+              <label className="block text-xs text-on-surface-variant mb-1">E-posta</label>
               <input
                 type="email"
                 value={extraData.email}
@@ -72,7 +72,7 @@ function ClientExtraFields({
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Adres</label>
+              <label className="block text-xs text-on-surface-variant mb-1">Adres</label>
               <input
                 type="text"
                 value={extraData.address}
@@ -85,7 +85,7 @@ function ClientExtraFields({
           <button
             type="button"
             onClick={onSaveToContact}
-            className="text-xs text-blue-600 hover:underline"
+            className="text-xs text-primary hover:underline"
           >
             💾 Rehbere kaydet
           </button>
@@ -130,15 +130,15 @@ function ClientSearch({
   if (value) {
     return (
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+        <label className="block text-sm font-medium text-on-surface mb-1">{label}</label>
+        <div className="flex items-center gap-2 px-3 py-2 bg-primary-container border border-primary/20 rounded-lg">
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-900">
+            <p className="text-sm font-medium text-on-surface">
               {value.salutation ? value.salutation + ' ' : ''}{value.full_name}
             </p>
-            {value.phone && <p className="text-xs text-slate-500">{value.phone}</p>}
+            {value.phone && <p className="text-xs text-on-surface-variant">{value.phone}</p>}
           </div>
-          <button onClick={() => onChange(null)} className="text-slate-400 hover:text-slate-600 p-1">
+          <button onClick={() => onChange(null)} className="text-on-surface-variant hover:text-on-surface-variant p-1">
             <X size={14} />
           </button>
         </div>
@@ -148,35 +148,35 @@ function ClientSearch({
 
   return (
     <div ref={ref}>
-      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      <label className="block text-sm font-medium text-on-surface mb-1">{label}</label>
       <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
         <input
           type="text"
           value={q}
           onChange={e => handleSearch(e.target.value)}
           onFocus={() => q.length >= 2 && setOpen(true)}
           placeholder="İsim veya telefon ara..."
-          className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full pl-8 pr-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
         {open && results.length > 0 && (
-          <div className="absolute top-full left-0 right-0 z-20 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-52 overflow-auto">
+          <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1 max-h-52 overflow-auto">
             {results.map(c => (
               <button
                 key={c.id}
                 onMouseDown={() => { onChange(c); setQ(''); setOpen(false) }}
-                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-100 last:border-0"
+                className="w-full text-left px-3 py-2 hover:bg-surface-container-high text-sm border-b border-outline last:border-0"
               >
-                <span className="font-medium text-slate-900">
+                <span className="font-medium text-on-surface">
                   {c.salutation ? c.salutation + ' ' : ''}{c.full_name}
                 </span>
-                {c.phone && <span className="text-slate-400 ml-2 text-xs">{c.phone}</span>}
+                {c.phone && <span className="text-on-surface-variant ml-2 text-xs">{c.phone}</span>}
               </button>
             ))}
           </div>
         )}
         {open && results.length === 0 && q.length >= 2 && (
-          <div className="absolute top-full left-0 right-0 z-20 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 px-3 py-2 text-sm text-slate-400">
+          <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1 px-3 py-2 text-sm text-on-surface-variant">
             Sonuç bulunamadı
           </div>
         )}
@@ -222,15 +222,15 @@ function PropertySearch({ value, onChange }: { value: Property | null; onChange:
   if (value) {
     return (
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Mülk <span className="text-slate-400">(opsiyonel)</span></label>
+        <label className="block text-sm font-medium text-on-surface mb-1">Mülk <span className="text-on-surface-variant">(opsiyonel)</span></label>
         <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-900">{value.title}</p>
+            <p className="text-sm font-medium text-on-surface">{value.title}</p>
             {(value.city || value.district) && (
-              <p className="text-xs text-slate-500">{[value.city, value.district].filter(Boolean).join(', ')}</p>
+              <p className="text-xs text-on-surface-variant">{[value.city, value.district].filter(Boolean).join(', ')}</p>
             )}
           </div>
-          <button onClick={() => onChange(null)} className="text-slate-400 hover:text-slate-600 p-1">
+          <button onClick={() => onChange(null)} className="text-on-surface-variant hover:text-on-surface-variant p-1">
             <X size={14} />
           </button>
         </div>
@@ -240,28 +240,28 @@ function PropertySearch({ value, onChange }: { value: Property | null; onChange:
 
   return (
     <div ref={ref}>
-      <label className="block text-sm font-medium text-slate-700 mb-1">Mülk <span className="text-slate-400">(opsiyonel)</span></label>
+      <label className="block text-sm font-medium text-on-surface mb-1">Mülk <span className="text-on-surface-variant">(opsiyonel)</span></label>
       <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
         <input
           type="text"
           value={q}
           onChange={e => handleSearch(e.target.value)}
           onFocus={() => fetchProperties(q)}
           placeholder="Mülk adı ara..."
-          className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full pl-8 pr-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
         {open && results.length > 0 && (
-          <div className="absolute top-full left-0 right-0 z-20 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-52 overflow-auto">
+          <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1 max-h-52 overflow-auto">
             {results.map(p => (
               <button
                 key={p.id}
                 onMouseDown={() => { onChange(p); setQ(''); setOpen(false) }}
-                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-100 last:border-0"
+                className="w-full text-left px-3 py-2 hover:bg-surface-container-high text-sm border-b border-outline last:border-0"
               >
-                <span className="font-medium text-slate-900">{p.title}</span>
+                <span className="font-medium text-on-surface">{p.title}</span>
                 {(p.city || p.district) && (
-                  <span className="text-slate-400 ml-2 text-xs">{[p.city, p.district].filter(Boolean).join(', ')}</span>
+                  <span className="text-on-surface-variant ml-2 text-xs">{[p.city, p.district].filter(Boolean).join(', ')}</span>
                 )}
               </button>
             ))}
@@ -1085,8 +1085,8 @@ export default function NewDocumentPage() {
     if (w) { w.focus() }
   }
 
-  const inp = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-  const lbl = 'block text-sm font-medium text-slate-700 mb-1'
+  const inp = 'w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary'
+  const lbl = 'block text-sm font-medium text-on-surface mb-1'
   const row2 = 'grid grid-cols-1 sm:grid-cols-2 gap-4'
 
   const mainClientLabel =
@@ -1101,28 +1101,28 @@ export default function NewDocumentPage() {
   const showSecondClient = docType !== 'authorization'
 
   const typeColorMap: Record<string, string> = {
-    blue:   'border-blue-400 bg-blue-50',
+    blue:   'border-primary bg-primary-container',
     green:  'border-green-400 bg-green-50',
     purple: 'border-purple-400 bg-purple-50',
     orange: 'border-orange-400 bg-orange-50',
   }
   const typeColorMapOff: Record<string, string> = {
-    blue:   'border-slate-200 hover:border-blue-200 hover:bg-blue-50/40',
-    green:  'border-slate-200 hover:border-green-200 hover:bg-green-50/40',
-    purple: 'border-slate-200 hover:border-purple-200 hover:bg-purple-50/40',
-    orange: 'border-slate-200 hover:border-orange-200 hover:bg-orange-50/40',
+    blue:   'border-outline hover:border-primary/20 hover:bg-primary-container/40',
+    green:  'border-outline hover:border-green-200 hover:bg-green-50/40',
+    purple: 'border-outline hover:border-purple-200 hover:bg-purple-50/40',
+    orange: 'border-outline hover:border-orange-200 hover:bg-orange-50/40',
   }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/documents" className="text-slate-400 hover:text-slate-600">
+        <Link href="/documents" className="text-on-surface-variant hover:text-on-surface-variant">
           <ArrowLeft size={20} />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Belge Oluştur</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Sözleşme veya yetki belgesi hazırla</p>
+          <h1 className="text-2xl font-bold text-on-surface">Belge Oluştur</h1>
+          <p className="text-on-surface-variant text-sm mt-0.5">Sözleşme veya yetki belgesi hazırla</p>
         </div>
       </div>
 
@@ -1130,7 +1130,7 @@ export default function NewDocumentPage() {
 
         {/* Belge Tipi */}
         <div className="card">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">Belge Tipi</h2>
+          <h2 className="text-sm font-semibold text-on-surface mb-3">Belge Tipi</h2>
           <div className="grid grid-cols-2 gap-3">
             {DOC_TYPES.map(t => (
               <button
@@ -1140,8 +1140,8 @@ export default function NewDocumentPage() {
                   docType === t.value ? typeColorMap[t.color] : typeColorMapOff[t.color]
                 }`}
               >
-                <span className="font-semibold text-sm text-slate-900">{t.label}</span>
-                <span className="text-xs text-slate-500 mt-0.5">{t.desc}</span>
+                <span className="font-semibold text-sm text-on-surface">{t.label}</span>
+                <span className="text-xs text-on-surface-variant mt-0.5">{t.desc}</span>
               </button>
             ))}
           </div>
@@ -1149,7 +1149,7 @@ export default function NewDocumentPage() {
 
         {/* Genel Bilgiler */}
         <div className="card space-y-4">
-          <h2 className="text-sm font-semibold text-slate-700">Genel Bilgiler</h2>
+          <h2 className="text-sm font-semibold text-on-surface">Genel Bilgiler</h2>
           <div>
             <label className={lbl}>Belge Başlığı</label>
             <input type="text" value={title} onChange={e => setTitle(e.target.value)} className={inp} />
@@ -1165,7 +1165,7 @@ export default function NewDocumentPage() {
 
         {/* Taraflar */}
         <div className="card space-y-4">
-          <h2 className="text-sm font-semibold text-slate-700">Taraflar</h2>
+          <h2 className="text-sm font-semibold text-on-surface">Taraflar</h2>
           <div>
             <ClientSearch label={mainClientLabel} value={mainClient} onChange={setMainClient} />
             {mainClient && (
@@ -1195,7 +1195,7 @@ export default function NewDocumentPage() {
 
         {/* Tip-spesifik alanlar */}
         <div className="card space-y-4">
-          <h2 className="text-sm font-semibold text-slate-700">
+          <h2 className="text-sm font-semibold text-on-surface">
             {DOC_TYPES.find(t => t.value === docType)?.label} Detayları
           </h2>
 
@@ -1230,8 +1230,8 @@ export default function NewDocumentPage() {
                       onClick={() => setMulkTipi(mulkTipi === o.val ? '' : o.val)}
                       className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                         (mulkTipi || property?.property_type) === o.val
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'border-slate-300 text-slate-600 hover:border-blue-300'
+                          ? 'bg-primary text-white border-primary'
+                          : 'border-outline text-on-surface-variant hover:border-primary/30'
                       }`}
                     >{o.label}</button>
                   ))}
@@ -1273,7 +1273,7 @@ export default function NewDocumentPage() {
               {yetkiTuru === 'Kiralama' && (
                 <div className={row2}>
                   <div>
-                    <label className={lbl}>Kira Bedeli (₺) <span className="text-slate-400">+ KDV otomatik eklenir</span></label>
+                    <label className={lbl}>Kira Bedeli (₺) <span className="text-on-surface-variant">+ KDV otomatik eklenir</span></label>
                     <MoneyInput value={kiraBedeli} onChange={setKiraBedeli} className={inp} placeholder="0" />
                   </div>
                   <div>
@@ -1291,29 +1291,29 @@ export default function NewDocumentPage() {
                 <label className={lbl}>Tapu Kayıt Bilgileri</label>
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">İl</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">İl</label>
                     <input type="text" value={yIl} onChange={e => setYIl(e.target.value)} className={inp} placeholder="Bursa" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">İlçe</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">İlçe</label>
                     <input type="text" value={yIlce} onChange={e => setYIlce(e.target.value)} className={inp} placeholder="Nilüfer" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Mahalle</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Mahalle</label>
                     <input type="text" value={yMahalle} onChange={e => setYMahalle(e.target.value)} className={inp} placeholder="Beşevler" />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Ada</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Ada</label>
                     <input type="text" value={yAda} onChange={e => setYAda(e.target.value)} className={inp} placeholder="103" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Parsel</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Parsel</label>
                     <input type="text" value={yParsel} onChange={e => setYParsel(e.target.value)} className={inp} placeholder="1" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Pafta</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Pafta</label>
                     <input type="text" value={yPafta} onChange={e => setYPafta(e.target.value)} className={inp} placeholder="—" />
                   </div>
                 </div>
@@ -1329,7 +1329,7 @@ export default function NewDocumentPage() {
                 </div>
               </div>
               <div>
-                <label className={lbl}>Ek Madde <span className="text-slate-400">(sözleşmeye özel eklenti)</span></label>
+                <label className={lbl}>Ek Madde <span className="text-on-surface-variant">(sözleşmeye özel eklenti)</span></label>
                 <textarea
                   value={ekMadde}
                   onChange={e => setEkMadde(e.target.value)}
@@ -1367,15 +1367,15 @@ export default function NewDocumentPage() {
                 <label className={lbl}>Taşınmaz Bilgileri</label>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Ada</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Ada</label>
                     <input type="text" value={ada} onChange={e => setAda(e.target.value)} className={inp} placeholder="103" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Parsel</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Parsel</label>
                     <input type="text" value={parsel} onChange={e => setParsel(e.target.value)} className={inp} placeholder="58" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Pafta</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Pafta</label>
                     <input type="text" value={pafta} onChange={e => setPafta(e.target.value)} className={inp} placeholder="—" />
                   </div>
                 </div>
@@ -1384,7 +1384,7 @@ export default function NewDocumentPage() {
               {/* Peşin Ödenen + Hizmet Tapuda */}
               <div className={row2}>
                 <div>
-                  <label className={lbl}>Peşin Ödenen (₺) <span className="text-slate-400">satış bedelinden</span></label>
+                  <label className={lbl}>Peşin Ödenen (₺) <span className="text-on-surface-variant">satış bedelinden</span></label>
                   <MoneyInput value={pesinOdenen} onChange={setPesinOdenen} className={inp} placeholder="0" />
                 </div>
                 <div>
@@ -1394,40 +1394,40 @@ export default function NewDocumentPage() {
               </div>
               {/* Tapuda ödenecek */}
               <div>
-                <label className={lbl}>Tapuda Ödenecek (₺) <span className="text-xs font-normal text-slate-400">— otomatik: satış − satıcıdan hizmet bedeli</span></label>
+                <label className={lbl}>Tapuda Ödenecek (₺) <span className="text-xs font-normal text-on-surface-variant">— otomatik: satış − satıcıdan hizmet bedeli</span></label>
                 <MoneyInput value={tapudaOdenecek} onChange={setTapudaOdenecek} className={inp} placeholder="0" />
               </div>
 
               {/* Hizmet bedeli */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                <p className="text-sm font-semibold text-slate-700">Hizmet Bedeli (Komisyon) <span className="text-xs font-normal text-slate-400">— Toplam: kapora otomatik doldurulur, elle değiştirilebilir</span></p>
+              <div className="bg-surface-container-high border border-outline rounded-xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-on-surface">Hizmet Bedeli (Komisyon) <span className="text-xs font-normal text-on-surface-variant">— Toplam: kapora otomatik doldurulur, elle değiştirilebilir</span></p>
                 <div className={row2}>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Alıcı Komisyon Oranı (%)</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Alıcı Komisyon Oranı (%)</label>
                     <input type="number" value={komisyonAlici} onChange={e => setKomisyonAlici(e.target.value)} className={inp} step="0.5" min="0" max="10" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Satıcı Komisyon Oranı (%)</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Satıcı Komisyon Oranı (%)</label>
                     <input type="number" value={komisyonSatici} onChange={e => setKomisyonSatici(e.target.value)} className={inp} step="0.5" min="0" max="10" />
                   </div>
                 </div>
                 <div className={row2}>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Alıcıdan Hizmet Bedeli (₺ +KDV)</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Alıcıdan Hizmet Bedeli (₺ +KDV)</label>
                     <MoneyInput value={hizmetBedeliAlici} onChange={setHizmetBedeliAlici} className={inp} placeholder="0" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Satıcıdan Hizmet Bedeli (₺ +KDV)</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Satıcıdan Hizmet Bedeli (₺ +KDV)</label>
                     <MoneyInput value={hizmetBedeliSatici} onChange={setHizmetBedeliSatici} className={inp} placeholder="0" />
                   </div>
                 </div>
                 <div className={row2}>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Toplam Hizmet Bedeli (₺) — kapora = hizmet bedeli</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Toplam Hizmet Bedeli (₺) — kapora = hizmet bedeli</label>
                     <MoneyInput value={hizmetBedeli} onChange={setHizmetBedeli} className={`${inp} font-semibold`} placeholder="0" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Ceza Miktarı (₺) — vazgeçme</label>
+                    <label className="block text-xs text-on-surface-variant mb-1">Ceza Miktarı (₺) — vazgeçme</label>
                     <MoneyInput value={cezaMiktari} onChange={v => { cezaUserEdited.current = true; setCezaMiktari(v) }} className={inp} placeholder="0" />
                   </div>
                 </div>
@@ -1526,7 +1526,7 @@ export default function NewDocumentPage() {
           )}
 
           <div>
-            <label className={lbl}>Özel Şartlar <span className="text-slate-400">(belgede görünür)</span></label>
+            <label className={lbl}>Özel Şartlar <span className="text-on-surface-variant">(belgede görünür)</span></label>
             <textarea
               value={ozelSartlar}
               onChange={e => setOzelSartlar(e.target.value)}
@@ -1538,7 +1538,7 @@ export default function NewDocumentPage() {
 
         {/* İç Notlar */}
         <div className="card">
-          <label className={lbl}>İç Notlar <span className="text-slate-400">(belgede görünmez)</span></label>
+          <label className={lbl}>İç Notlar <span className="text-on-surface-variant">(belgede görünmez)</span></label>
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
@@ -1561,15 +1561,15 @@ export default function NewDocumentPage() {
         {/* Aksiyonlar */}
         <div className="flex items-center gap-3 justify-end pb-6">
           {!isAdmin && (
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 mr-auto">
+            <div className="flex items-center gap-1.5 text-xs text-on-surface-variant mr-auto">
               <Coins size={14} className="text-yellow-500" />
-              <span>Bakiye: <strong className="text-slate-700">{creditBalance}</strong></span>
-              <span className="text-slate-400">| Maliyet: {creditCostPerDocument} kredi</span>
+              <span>Bakiye: <strong className="text-on-surface">{creditBalance}</strong></span>
+              <span className="text-on-surface-variant">| Maliyet: {creditCostPerDocument} kredi</span>
             </div>
           )}
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-outline rounded-lg text-sm font-medium text-on-surface hover:bg-surface-container-high transition-colors"
           >
             <Printer size={15} /> Önizle &amp; Yazdır
           </button>

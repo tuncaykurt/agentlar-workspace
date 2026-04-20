@@ -11,12 +11,12 @@ import {
 
 const channelConfig: Record<string, { icon: React.ElementType; label: string; color: string }> = {
   whatsapp: { icon: MessageSquare, label: 'WhatsApp', color: 'text-green-600 bg-green-50' },
-  call_inbound: { icon: PhoneCall, label: 'Gelen Çağrı', color: 'text-blue-600 bg-blue-50' },
+  call_inbound: { icon: PhoneCall, label: 'Gelen Çağrı', color: 'text-primary bg-primary-container' },
   call_outbound: { icon: Phone, label: 'Giden Çağrı', color: 'text-purple-600 bg-purple-50' },
   email: { icon: Mail, label: 'E-posta', color: 'text-orange-600 bg-orange-50' },
-  meeting: { icon: Calendar, label: 'Toplantı', color: 'text-slate-600 bg-slate-100' },
+  meeting: { icon: Calendar, label: 'Toplantı', color: 'text-on-surface-variant bg-surface-container-high' },
   sms: { icon: MessageSquare, label: 'SMS', color: 'text-teal-600 bg-teal-50' },
-  note: { icon: FileText, label: 'Not', color: 'text-slate-500 bg-slate-50' },
+  note: { icon: FileText, label: 'Not', color: 'text-on-surface-variant bg-surface-container-high' },
 }
 
 function formatDate(d: string) {
@@ -81,8 +81,8 @@ export default function CommunicationsPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">İletişim Geçmişi</h1>
-        <p className="text-slate-500 text-sm mt-1">Tüm müşteri iletişimleriniz tek ekranda</p>
+        <h1 className="text-2xl font-bold text-on-surface">İletişim Geçmişi</h1>
+        <p className="text-on-surface-variant text-sm mt-1">Tüm müşteri iletişimleriniz tek ekranda</p>
       </div>
 
       {/* Özet */}
@@ -92,12 +92,12 @@ export default function CommunicationsPage() {
           return (
             <div key={s.label} className="stat-card">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-slate-500">{s.label}</p>
+                <p className="text-xs text-on-surface-variant">{s.label}</p>
                 <div className={`w-8 h-8 rounded-lg bg-${s.color}-50 flex items-center justify-center`}>
                   <Icon size={15} className={`text-${s.color}-600`} />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-slate-900">{s.value}</p>
+              <p className="text-2xl font-bold text-on-surface">{s.value}</p>
             </div>
           )
         })}
@@ -107,20 +107,20 @@ export default function CommunicationsPage() {
       <div className="card mb-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <input
               type="text"
               placeholder="Musteri adi, telefon veya icerik ara..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-9 pr-4 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
           <div className="flex gap-2">
             <select
               value={filterChannel}
               onChange={e => setFilterChannel(e.target.value)}
-              className="border border-slate-200 rounded-lg text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-outline rounded-lg text-sm px-3 py-2 bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="all">Tüm Kanallar</option>
               {Object.entries(channelConfig).map(([k, v]) => (
@@ -130,7 +130,7 @@ export default function CommunicationsPage() {
             <select
               value={filterDirection}
               onChange={e => setFilterDirection(e.target.value)}
-              className="border border-slate-200 rounded-lg text-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-outline rounded-lg text-sm px-3 py-2 bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="all">Yön</option>
               <option value="inbound">Gelen</option>
@@ -144,21 +144,21 @@ export default function CommunicationsPage() {
       <div className="card p-0 overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-on-surface-variant">
             <MessageSquare size={36} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">İletişim kaydı bulunamadı</p>
             <p className="text-xs mt-1">WhatsApp ve çağrı entegrasyonunu n8n'de aktif edin</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-outline">
             {filtered.map(interaction => {
               const ch = channelConfig[interaction.channel] || channelConfig.note
               const Icon = ch.icon
               return (
-                <div key={interaction.id} className="flex items-start gap-4 p-4 hover:bg-slate-50 transition-colors">
+                <div key={interaction.id} className="flex items-start gap-4 p-4 hover:bg-surface-container-high transition-colors">
                   {/* Kanal İkonu */}
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${ch.color}`}>
                     <Icon size={15} />
@@ -168,29 +168,29 @@ export default function CommunicationsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       {interaction.client?.full_name && (
-                        <span className="font-medium text-slate-900 text-sm">
+                        <span className="font-medium text-on-surface text-sm">
                           {interaction.client.full_name}
                         </span>
                       )}
-                      <span className="text-xs text-slate-400">{ch.label}</span>
+                      <span className="text-xs text-on-surface-variant">{ch.label}</span>
                       {interaction.direction === 'inbound' ? (
-                        <ArrowDownLeft size={12} className="text-blue-500" />
+                        <ArrowDownLeft size={12} className="text-primary" />
                       ) : interaction.direction === 'outbound' ? (
                         <ArrowUpRight size={12} className="text-green-500" />
                       ) : null}
                     </div>
                     {interaction.content && (
-                      <p className="text-sm text-slate-600 leading-relaxed line-clamp-2">
+                      <p className="text-sm text-on-surface-variant leading-relaxed line-clamp-2">
                         {interaction.content}
                       </p>
                     )}
                     {interaction.duration_seconds && (
-                      <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                      <p className="text-xs text-on-surface-variant mt-0.5 flex items-center gap-1">
                         <Clock size={10} />
                         Süre: {formatDuration(interaction.duration_seconds)}
                         {interaction.recording_url && (
                           <a href={interaction.recording_url} target="_blank"
-                            className="ml-2 text-blue-500 hover:underline">
+                            className="ml-2 text-primary hover:underline">
                             Kaydı Dinle
                           </a>
                         )}
@@ -200,9 +200,9 @@ export default function CommunicationsPage() {
 
                   {/* Tarih */}
                   <div className="text-right flex-shrink-0">
-                    <p className="text-xs text-slate-400">{formatDate(interaction.created_at)}</p>
+                    <p className="text-xs text-on-surface-variant">{formatDate(interaction.created_at)}</p>
                     {interaction.client?.phone && (
-                      <p className="text-xs text-slate-300 mt-0.5">{interaction.client.phone}</p>
+                      <p className="text-xs text-on-surface-variant mt-0.5">{interaction.client.phone}</p>
                     )}
                   </div>
                 </div>
