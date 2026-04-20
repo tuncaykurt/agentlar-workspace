@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, Boolean, DateTime, Integer, Enum
+from sqlalchemy import Column, String, Float, Boolean, DateTime, Integer, Enum, BigInteger, UniqueConstraint, Index
 from sqlalchemy.sql import func
 from core.database import Base
 import enum
@@ -50,3 +50,27 @@ class Trade(Base):
     exchange_order_id = Column(String, nullable=True)
     opened_at = Column(DateTime(timezone=True), server_default=func.now())
     closed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class OHLCV(Base):
+    """
+    Geçmiş mum verileri.
+    Her symbol + exchange + timeframe + timestamp kombinasyonu benzersiz.
+    """
+    __tablename__ = "ohlcv"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    exchange = Column(String, nullable=False)              # bitget, mexc, binance
+    symbol = Column(String, nullable=False)                # BTC/USDT:USDT
+    timeframe = Column(String, nullable=False)             # 1m, 5m, 15m, 1h, 4h, 1d
+    timestamp = Column(BigInteger, nullable=False)         # Unix ms (borsadan gelen)
+    open = Column(Float, nullable=False)
+    high = Column(Float, nullable=False)
+    low = Column(Float, nullable=False)
+    close = Column(Float, nullable=False)
+    volume = Column(Float, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("exchange", "symbol", "timeframe", "timestamp", name="uq_ohlcv"),
+        Index("ix_ohlcv_lookup", "exchange", "symbol", "timeframe", "timestamp"),
+    )

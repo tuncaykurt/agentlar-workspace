@@ -13,6 +13,7 @@ from bot.risk_manager import RiskManager
 from ai.indicators import calculate_all, generate_signal, volume_change_pct
 from ai.openrouter import quick_filter, deep_analysis
 from ai.market_context import collect_full_context
+from services.data_fetcher import DataFetcher
 from core.redis_client import get_redis
 import json
 
@@ -21,6 +22,7 @@ class BotEngine:
     def __init__(self, bot_config: dict, exchange_client):
         self.config = bot_config
         self.exchange = exchange_client
+        self.data_fetcher = DataFetcher(exchange_client)
         self.running = False
         self.paper_trades: list = []
         self.signal_history: list = []
@@ -57,8 +59,8 @@ class BotEngine:
                     await asyncio.sleep(30)   # 30sn'de bir kontrol
                     continue
 
-                # 1. Veri çek (1s mum)
-                ohlcv = await self.exchange.get_ohlcv(symbol, "1h", 100)
+                # 1. Veri çek (Redis → DB → Borsa, otomatik kayıt)
+                ohlcv = await self.data_fetcher.get_ohlcv(symbol, "1h", 200)
                 if len(ohlcv) < 60:
                     await asyncio.sleep(60)
                     continue

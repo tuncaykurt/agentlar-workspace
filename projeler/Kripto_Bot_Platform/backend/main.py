@@ -4,27 +4,68 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
-from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges
+from core.database import engine, Base
+from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data
 from api.websocket import market_ws, bot_status_ws
 from exchange.bitget_client import bitget
+from services.data_fetcher import DataFetcher
+
+
+async def _init_db():
+    """Uygulama başlarken tabloları oluştur (OHLCV dahil)."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    print("[Main] Veritabanı tabloları hazır.")
+
+
+async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
+    """
+    Arka planda periyodik veri senkronizasyonu.
+    Her 5 dakikada eksik mumları doldurur.
+    """
+    timeframes = ["1h", "4h", "1d"]
+    # İlk çalışmada son 7 günü doldur (hızlı başlangıç)
+    try:
+        await fetcher.sync_all(symbols, timeframes)
+        print(f"[DataSync] İlk senkronizasyon tamamlandı.")
+    except Exception as e:
+        print(f"[DataSync] İlk senkronizasyon hatası: {e}")
+
+    # Sonra 5 dakikada bir senkronize et
+    while True:
+        await asyncio.sleep(300)
+        try:
+            count = await fetcher.sync_all(symbols, timeframes)
+            if count > 0:
+                print(f"[DataSync] {count} yeni mum eklendi.")
+        except Exception as e:
+            print(f"[DataSync] Senkronizasyon hatası: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Uygulama başlarken: Bitget WebSocket'i arka planda başlat
-    # API key yoksa veya bağlantı kurulamazsa uygulama yine de ayağa kalkar
+    # 1. Veritabanı tablolarını oluştur
+    await _init_db()
+
     symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT"]
     tasks = []
+
     try:
         if settings.BITGET_API_KEY:
+            # 2. WebSocket akışlarını başlat
             for sym in symbols:
                 tasks.append(asyncio.create_task(bitget.subscribe_kline(sym, "1m")))
                 tasks.append(asyncio.create_task(bitget.subscribe_ticker(sym)))
             print(f"[Main] {len(symbols)} sembol için veri akışı başlatıldı.")
+
+            # 3. Arka plan veri senkronizasyonu başlat
+            fetcher = DataFetcher(bitget)
+            tasks.append(asyncio.create_task(_start_data_sync(fetcher, symbols)))
+            print("[Main] Arka plan veri senkronizasyonu başlatıldı.")
         else:
             print("[Main] BITGET_API_KEY tanımlı değil — WebSocket başlatılmadı.")
     except Exception as e:
-        print(f"[Main] WebSocket başlatma hatası (devam ediliyor): {e}")
+        print(f"[Main] Başlatma hatası (devam ediliyor): {e}")
 
     yield
 
@@ -59,6 +100,7 @@ app.include_router(market.router, prefix="/api")
 app.include_router(ai_analysis.router, prefix="/api")
 app.include_router(chart.router, prefix="/api")
 app.include_router(signals.router, prefix="/api")
+app.include_router(data.router, prefix="/api")
 
 
 # WebSocket routes
