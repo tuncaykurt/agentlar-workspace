@@ -7,20 +7,23 @@ import {
   LayoutDashboard, Users, Building2, DollarSign,
   MessageSquare, Megaphone, FileText, Share2,
   UserCircle, Settings, LogOut, BookUser, Menu, X,
-  Store,
+  Store, TrendingUp, Coins,
 } from 'lucide-react'
+import { useFeatures } from '@/lib/features'
 
+// featureKey maps to feature_config.feature_key in DB
 const navItems = [
-  { href: '/dashboard',      label: 'Dashboard',    icon: LayoutDashboard },
-  { href: '/crm',            label: 'CRM',          icon: Users },
-  { href: '/rehber',         label: 'Rehber',       icon: BookUser },
-  { href: '/portfolio',      label: 'Portföy',      icon: Building2 },
-  { href: '/sahibinden',    label: 'Sahibinden İlanlar', icon: Store },
-  { href: '/finance',        label: 'Finans',       icon: DollarSign },
-  { href: '/communications', label: 'İletişim',     icon: MessageSquare },
-  { href: '/campaigns',      label: 'Kampanyalar',  icon: Megaphone },
-  { href: '/documents',      label: 'Belgeler',     icon: FileText },
-  { href: '/social',         label: 'Sosyal Medya', icon: Share2 },
+  { href: '/dashboard',      label: 'Dashboard',          icon: LayoutDashboard, featureKey: 'dashboard' },
+  { href: '/crm',            label: 'CRM',                icon: Users,           featureKey: 'crm' },
+  { href: '/rehber',         label: 'Rehber',             icon: BookUser,        featureKey: 'rehber' },
+  { href: '/portfolio',      label: 'Portföy',            icon: Building2,       featureKey: 'portfolio' },
+  { href: '/sahibinden',     label: 'Sahibinden İlanlar', icon: Store,           featureKey: 'sahibinden' },
+  { href: '/finance',        label: 'Finans',             icon: DollarSign,      featureKey: 'finance' },
+  { href: '/communications', label: 'İletişim',           icon: MessageSquare,   featureKey: 'communications' },
+  { href: '/campaigns',      label: 'Kampanyalar',        icon: Megaphone,       featureKey: 'campaigns' },
+  { href: '/documents',      label: 'Belgeler',           icon: FileText,        featureKey: 'documents' },
+  { href: '/social',         label: 'Sosyal Medya',       icon: Share2,          featureKey: 'social' },
+  { href: '/piyasa',         label: 'Piyasa',             icon: TrendingUp,      featureKey: 'piyasa' },
 ]
 
 const bottomItems = [
@@ -31,11 +34,21 @@ const bottomItems = [
 /** Nav links — shared between desktop sidebar and mobile drawer */
 function SidebarLinks({ onNav }: { onNav?: () => void }) {
   const pathname = usePathname()
+  const { hasFeature, isAdmin, creditBalance, loading } = useFeatures()
+
+  const visibleItems = navItems.filter(item => hasFeature(item.featureKey))
+
+  // Only admin sees the admin panel
+  const visibleBottom = bottomItems.filter(item => {
+    if (item.href === '/admin') return isAdmin || loading
+    return true
+  })
+
   return (
     <>
       {/* Scrollable nav — flex-1 fills remaining height */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {navItems.map(({ href, label, icon: Icon }) => (
+        {visibleItems.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
@@ -50,7 +63,15 @@ function SidebarLinks({ onNav }: { onNav?: () => void }) {
 
       {/* Bottom items — always visible, never scrolled away */}
       <div className="flex-shrink-0 px-3 py-4 border-t border-slate-700 space-y-1">
-        {bottomItems.map(({ href, label, icon: Icon }) => (
+        {/* Credit balance */}
+        {!isAdmin && !loading && (
+          <div className="flex items-center gap-2 px-3 py-2 mb-1 rounded-lg bg-slate-700/50">
+            <Coins size={15} className="text-yellow-400" />
+            <span className="text-xs text-slate-300">Kredi:</span>
+            <span className="text-xs font-semibold text-yellow-400">{creditBalance}</span>
+          </div>
+        )}
+        {visibleBottom.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
@@ -78,7 +99,7 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* ─── DESKTOP sidebar (md+) ───────────────────────────────────────────
+      {/* ─── DESKTOP sidebar (md+) ───────���───────────────────────────────────
           sticky + h-screen: stays in viewport no matter how long the page is
           overflow-hidden: inner nav scrolls, outer wrapper clips        */}
       <aside className="hidden md:flex flex-col flex-shrink-0 w-64 h-screen sticky top-0 bg-slate-800 overflow-hidden">
@@ -99,7 +120,7 @@ export default function Sidebar() {
         <SidebarLinks />
       </aside>
 
-      {/* ─── MOBILE top header bar (hamburger) ─────────────────────────────── */}
+      {/* ─── MOBILE top header bar (hamburger) ──────���──────────────────────── */}
       <header className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center gap-3 px-4 h-14 bg-slate-800 border-b border-slate-700">
         <button
           onClick={() => setOpen(true)}
@@ -118,7 +139,7 @@ export default function Sidebar() {
         </div>
       </header>
 
-      {/* ─── MOBILE backdrop ─────────────────────────────────────────────────── */}
+      {/* ─── MOBILE backdrop ─────────────��───────────────────────────────────── */}
       {open && (
         <div
           className="md:hidden fixed inset-0 z-40 bg-black/60"
@@ -126,7 +147,7 @@ export default function Sidebar() {
         />
       )}
 
-      {/* ─── MOBILE slide-in drawer ──────────────────────────────────────────── */}
+      {/* ─── MOBILE slide-in drawer ───────────────���─────────────────────────���── */}
       <aside
         className={`
           md:hidden fixed inset-y-0 left-0 z-50

@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import type { Client, Property, Consultant, DocumentType } from '@/lib/types'
-import { ArrowLeft, Search, Printer, Save, X, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Search, Printer, Save, X, ChevronDown, Coins } from 'lucide-react'
+import { useFeatures } from '@/lib/features'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -815,7 +816,9 @@ function generatePrintHTML(params: {
 
 export default function NewDocumentPage() {
   const router = useRouter()
+  const { isAdmin, creditBalance, creditCostPerDocument, deductCredit } = useFeatures()
 
+  const [creditError, setCreditError] = useState('')
   const [docType, setDocType] = useState<DocumentType>('authorization')
   const [title, setTitle] = useState('')
   const [officeName, setOfficeName] = useState('Ambiance Gayrimenkul')
@@ -1011,7 +1014,32 @@ export default function NewDocumentPage() {
 
   async function handleSave() {
     if (!title) return
+    setCreditError('')
     setSaving(true)
+
+    // Credit check (admin bypasses)
+    if (!isAdmin) {
+      try {
+        const creditRes = await fetch('/api/credits/use', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ document_title: title }),
+        })
+        const creditData = await creditRes.json()
+        if (!creditRes.ok) {
+          setCreditError(creditData.error || 'Kredi hatası')
+          setSaving(false)
+          return
+        }
+        // Update local credit state
+        deductCredit(creditData.cost || creditCostPerDocument)
+      } catch {
+        setCreditError('Kredi kontrolü yapılamadı')
+        setSaving(false)
+        return
+      }
+    }
+
     const supabase = createClient()
     const { error } = await supabase.from('documents').insert({
       doc_type: docType,
@@ -1519,8 +1547,26 @@ export default function NewDocumentPage() {
           />
         </div>
 
+        {/* Kredi bilgisi ve hata */}
+        {creditError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg flex items-center gap-2">
+            <Coins size={16} />
+            {creditError}
+            {creditError === 'Yetersiz kredi' && (
+              <span className="text-xs text-red-500 ml-1">— Kredi yüklemek için yöneticinizle iletişime geçin.</span>
+            )}
+          </div>
+        )}
+
         {/* Aksiyonlar */}
-        <div className="flex gap-3 justify-end pb-6">
+        <div className="flex items-center gap-3 justify-end pb-6">
+          {!isAdmin && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 mr-auto">
+              <Coins size={14} className="text-yellow-500" />
+              <span>Bakiye: <strong className="text-slate-700">{creditBalance}</strong></span>
+              <span className="text-slate-400">| Maliyet: {creditCostPerDocument} kredi</span>
+            </div>
+          )}
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
@@ -1529,7 +1575,7 @@ export default function NewDocumentPage() {
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || !title}
+            disabled={saving || !title || (!isAdmin && creditBalance < creditCostPerDocument)}
             className="flex items-center gap-2 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save size={15} /> {saving ? 'Kaydediliyor...' : 'Taslak Kaydet'}

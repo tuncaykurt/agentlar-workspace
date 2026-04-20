@@ -9,7 +9,8 @@ import {
   MessageCircle, Building2, Globe,
   Eye, EyeOff, Save, RefreshCw, Wifi, WifiOff,
   QrCode, X, Smartphone, Upload, Trash2,
-  Zap,
+  Zap, ToggleLeft, ToggleRight, Coins, Plus, Minus,
+  Puzzle,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1451,47 +1452,379 @@ function AutomationsTab() {
   )
 }
 
+// ─── Features Tab ────────────────────────────────────────────────────────────
+
+type FeatureRow = {
+  id: string
+  feature_key: string
+  label: string
+  description: string
+  route: string
+  sort_order: number
+  enabled_for_roles: string[]
+  is_enabled: boolean
+}
+
+function FeaturesTab() {
+  const [features, setFeatures] = useState<FeatureRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState<string | null>(null)
+
+  useEffect(() => { loadFeatures() }, [])
+
+  async function loadFeatures() {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('feature_config')
+      .select('*')
+      .order('sort_order')
+    if (data) setFeatures(data as FeatureRow[])
+    setLoading(false)
+  }
+
+  async function toggleFeature(feat: FeatureRow) {
+    setSaving(feat.feature_key)
+    const supabase = createClient()
+    await supabase
+      .from('feature_config')
+      .update({ is_enabled: !feat.is_enabled })
+      .eq('id', feat.id)
+    setFeatures(prev => prev.map(f =>
+      f.id === feat.id ? { ...f, is_enabled: !f.is_enabled } : f
+    ))
+    setSaving(null)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
+        <strong>Not:</strong> Admin hesabı tüm özelliklere her zaman erişir. Burada açıp kapattığınız özellikler sadece danışman ve müdür rollerini etkiler.
+      </div>
+
+      <div className="card p-0 overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+          <Puzzle size={15} className="text-purple-600" />
+          <h2 className="font-semibold text-slate-800 text-sm">Özellik Yönetimi</h2>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          {features.map(feat => (
+            <div key={feat.id} className="flex items-center gap-4 p-4 hover:bg-slate-50">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-slate-900 text-sm">{feat.label}</p>
+                  <code className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{feat.route}</code>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">{feat.description}</p>
+              </div>
+              <button
+                onClick={() => toggleFeature(feat)}
+                disabled={saving === feat.feature_key}
+                className="flex-shrink-0"
+                title={feat.is_enabled ? 'Aktif — kapat' : 'Kapalı — aç'}
+              >
+                {saving === feat.feature_key ? (
+                  <Loader2 size={24} className="animate-spin text-slate-400" />
+                ) : feat.is_enabled ? (
+                  <ToggleRight size={28} className="text-green-500" />
+                ) : (
+                  <ToggleLeft size={28} className="text-slate-300" />
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Credits Tab ─────────────────────────────────────────────────────────────
+
+function CreditsTab() {
+  const [consultants, setConsultants] = useState<(Consultant & { credit_balance?: number })[]>([])
+  const [loading, setLoading] = useState(true)
+  const [grantId, setGrantId] = useState<string | null>(null)
+  const [grantAmount, setGrantAmount] = useState('')
+  const [grantDesc, setGrantDesc] = useState('')
+  const [granting, setGranting] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  // Credit settings
+  const [initialCredits, setInitialCredits] = useState('5')
+  const [costPerDoc, setCostPerDoc] = useState('1')
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  async function loadData() {
+    const supabase = createClient()
+    const [{ data: cons }, { data: settings }] = await Promise.all([
+      supabase.from('consultants').select('*').order('full_name'),
+      supabase.from('settings').select('key, value').in('key', ['initial_free_credits', 'credit_cost_per_document']),
+    ])
+    if (cons) setConsultants(cons as (Consultant & { credit_balance?: number })[])
+    for (const s of settings || []) {
+      const val = String(s.value).replace(/^"|"$/g, '')
+      if (s.key === 'initial_free_credits') setInitialCredits(val)
+      if (s.key === 'credit_cost_per_document') setCostPerDoc(val)
+    }
+    setLoading(false)
+  }
+
+  async function handleGrant() {
+    if (!grantId || !grantAmount) return
+    setGranting(true)
+    setMsg('')
+    try {
+      const res = await fetch('/api/credits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          consultant_id: grantId,
+          amount: parseInt(grantAmount, 10),
+          description: grantDesc || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setMsg(`${data.consultant_name}: yeni bakiye ${data.new_balance} kredi`)
+        setGrantId(null)
+        setGrantAmount('')
+        setGrantDesc('')
+        loadData()
+      } else {
+        setMsg(data.error || 'Hata oluştu')
+      }
+    } catch {
+      setMsg('Bağlantı hatası')
+    }
+    setGranting(false)
+  }
+
+  async function saveSettings() {
+    setSavingSettings(true)
+    const supabase = createClient()
+    await supabase.from('settings').upsert([
+      { key: 'initial_free_credits', value: parseInt(initialCredits, 10) || 5, updated_at: new Date().toISOString() },
+      { key: 'credit_cost_per_document', value: parseInt(costPerDoc, 10) || 1, updated_at: new Date().toISOString() },
+    ], { onConflict: 'key' })
+    setSavingSettings(false)
+    setSettingsSaved(true)
+    setTimeout(() => setSettingsSaved(false), 2000)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Kredi Ayarları */}
+      <div className="card space-y-4">
+        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-yellow-50 flex items-center justify-center">
+            <Coins size={14} className="text-yellow-600" />
+          </div>
+          Kredi Ayarları
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Hoş Geldin Kredisi
+              <span className="text-slate-400 font-normal ml-1.5 text-xs">— Yeni kayıt olan danışmana verilen ücretsiz kredi</span>
+            </label>
+            <input
+              type="number"
+              value={initialCredits}
+              onChange={e => setInitialCredits(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              min="0"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Belge Başına Maliyet
+              <span className="text-slate-400 font-normal ml-1.5 text-xs">— Her belge oluşturmada kesilecek kredi</span>
+            </label>
+            <input
+              type="number"
+              value={costPerDoc}
+              onChange={e => setCostPerDoc(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              min="0"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-1">
+          {settingsSaved && (
+            <span className="flex items-center gap-1 text-xs text-green-600">
+              <CheckCircle size={12} /> Kaydedildi
+            </span>
+          )}
+          <button
+            onClick={saveSettings}
+            disabled={savingSettings}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Kaydet
+          </button>
+        </div>
+      </div>
+
+      {/* Kredi Yükleme */}
+      <div className="card space-y-4">
+        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-green-50 flex items-center justify-center">
+            <Plus size={14} className="text-green-600" />
+          </div>
+          Kredi Yükle / Düş
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Danışman</label>
+            <select
+              value={grantId || ''}
+              onChange={e => setGrantId(e.target.value || null)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Seçin...</option>
+              {consultants.filter(c => c.role !== 'admin').map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.full_name} ({c.credit_balance ?? 0} kredi)
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              Miktar <span className="text-slate-400">(+ yükle, - düş)</span>
+            </label>
+            <input
+              type="number"
+              value={grantAmount}
+              onChange={e => setGrantAmount(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="10"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Açıklama (opsiyonel)</label>
+            <input
+              type="text"
+              value={grantDesc}
+              onChange={e => setGrantDesc(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Kredi yükleme"
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleGrant}
+            disabled={granting || !grantId || !grantAmount}
+            className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+          >
+            {granting ? <Loader2 size={14} className="animate-spin" /> : <Coins size={14} />}
+            Uygula
+          </button>
+          {msg && <span className="text-xs text-slate-600">{msg}</span>}
+        </div>
+      </div>
+
+      {/* Danışman Kredi Tablosu */}
+      <div className="card p-0 overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+          <Coins size={15} className="text-yellow-500" />
+          <h2 className="font-semibold text-slate-800 text-sm">Danışman Kredi Bakiyeleri</h2>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {consultants.filter(c => c.role !== 'admin').map(c => (
+            <div key={c.id} className="flex items-center gap-4 p-4 hover:bg-slate-50">
+              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0 text-yellow-700 font-semibold text-sm">
+                {c.full_name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-slate-900 text-sm">{c.full_name}</p>
+                <p className="text-xs text-slate-500">{c.email}</p>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-50 border border-yellow-200">
+                <Coins size={13} className="text-yellow-600" />
+                <span className="text-sm font-semibold text-yellow-700">{c.credit_balance ?? 0}</span>
+                <span className="text-xs text-yellow-500">kredi</span>
+              </div>
+            </div>
+          ))}
+          {consultants.filter(c => c.role !== 'admin').length === 0 && (
+            <div className="text-center py-8 text-slate-400 text-sm">
+              Henüz danışman yok
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+type AdminTab = 'consultants' | 'automations' | 'features' | 'credits' | 'settings'
+
 export default function AdminPage() {
-  const [tab, setTab] = useState<'consultants' | 'automations' | 'settings'>('consultants')
+  const [tab, setTab] = useState<AdminTab>('consultants')
+
+  const tabs: { key: AdminTab; label: string; shortLabel: string; icon: React.ElementType }[] = [
+    { key: 'consultants', label: 'Danışmanlar', shortLabel: 'Ekip',       icon: Users },
+    { key: 'features',    label: 'Özellikler',  shortLabel: 'Özellik',    icon: Puzzle },
+    { key: 'credits',     label: 'Krediler',     shortLabel: 'Kredi',      icon: Coins },
+    { key: 'automations', label: 'Otomasyonlar', shortLabel: 'Otomasyon',  icon: Zap },
+    { key: 'settings',    label: 'Ayarlar',      shortLabel: 'Ayarlar',    icon: Settings },
+  ]
 
   return (
     <div className="p-3 sm:p-6 max-w-3xl mx-auto">
       <div className="mb-4 sm:mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Yönetim Paneli</h1>
-        <p className="text-slate-500 text-xs sm:text-sm mt-0.5">Danışman yönetimi ve sistem ayarları</p>
+        <p className="text-slate-500 text-xs sm:text-sm mt-0.5">Danışman yönetimi, özellikler, krediler ve sistem ayarları</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-4 sm:mb-5">
-        <button
-          onClick={() => setTab('consultants')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-            tab === 'consultants' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <Users size={13} /> <span className="hidden xs:inline">Danışmanlar</span><span className="xs:hidden">Ekip</span>
-        </button>
-        <button
-          onClick={() => setTab('automations')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-            tab === 'automations' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <Zap size={13} /> <span className="hidden xs:inline">Otomasyonlar</span><span className="xs:hidden">Otomasyon</span>
-        </button>
-        <button
-          onClick={() => setTab('settings')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-            tab === 'settings' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <Settings size={13} /> Ayarlar
-        </button>
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-4 sm:mb-5 overflow-x-auto">
+        {tabs.map(t => {
+          const Icon = t.icon
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-w-0 ${
+                tab === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Icon size={13} /> <span className="hidden sm:inline">{t.label}</span><span className="sm:hidden">{t.shortLabel}</span>
+            </button>
+          )
+        })}
       </div>
 
       {tab === 'consultants' && <ConsultantsTab />}
+      {tab === 'features' && <FeaturesTab />}
+      {tab === 'credits' && <CreditsTab />}
       {tab === 'automations' && <AutomationsTab />}
       {tab === 'settings' && <SettingsTab />}
     </div>
