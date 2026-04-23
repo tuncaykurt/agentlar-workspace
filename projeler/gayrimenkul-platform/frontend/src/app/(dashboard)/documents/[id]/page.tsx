@@ -61,8 +61,9 @@ const docTypeLabels: Record<string, string> = {
   authorization:   'Yetki Belgesi',
   sales_contract:  'Satış Sözleşmesi',
   rental_contract: 'Kira Sözleşmesi',
-  offer_letter:    'Teklif Mektubu',
-  other:           'Diğer',
+  offer_letter:       'Teklif Mektubu',
+  showing_agreement:  'Yer Gösterme Belgesi',
+  other:              'Diğer',
 }
 
 const STATUS_OPTIONS: SignatureStatus[] = ['draft', 'sent', 'viewed', 'signed', 'declined', 'expired']
@@ -784,37 +785,91 @@ function buildPrintHTML(doc: DocRow, officeName: string, sigRequests: SigRequest
     showing_agreement: {
       title: 'YER GÖSTERME BELGESİ',
       body: `
-        <div style="font-size:14px;line-height:1.7;text-align:justify;margin-bottom:20px;">
-          <p style="margin-bottom:12px;">Aşağıda cinsi ve adresi belirtilen gayrimenkulleri (satılık/kiralık) <strong>${officeName}</strong> yetkilisi <strong>${doc.consultant?.full_name || '_______________'}</strong> aracılığıyla, şirket portföyünden bizzat yerinde görerek gezdim.</p>
-          <p style="margin-bottom:12px;">Bu gayrimenkulleri satın almam veya kiralamam halinde <strong>${officeName}</strong>'e, satış/kira bedeli üzerinden %2 (Artı KDV) veya bir aylık kira bedeli (Artı KDV) Hizmet Bedeli ödemeyi peşinen kabul ve taahhüt ediyorum.</p>
-          <p style="margin-bottom:12px;">Aynı gayrimenkulleri kendim, eşim, çocuklarım, annem, babam, kardeşlerim veya ortağı bulunduğum şirket veya 3. dereceye kadar akrabalarım adına satın almam/kiralamam durumunda da bu sözleşme hükümlerinin aynen geçerli olacağını ve Hizmet Bedelini ödemeyi kabul ediyorum.</p>
-          <p style="margin-bottom:12px;">Bu belge, Borçlar Kanunu'nun ilgili maddeleri gereğince her iki tarafın özgür iradesiyle okunup anlaşılarak elektronik olarak imzalanmıştır.</p>
+        <div style="font-family: Arial, sans-serif; font-size: 11px; line-height: 1.4; color: #000; padding: 0;">
+          <h2 style="text-align: center; background-color: #001f5b; color: white; padding: 4px; margin: 0 0 10px 0; font-size: 13px; display: inline-block; width: 100%; box-sizing: border-box;">GAYRİMENKUL GÖSTERME BELGESİ</h2>
+          
+          <h3 style="color: #0070c0; border-bottom: 1px solid #0070c0; padding-bottom: 2px; margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase;">Satın Alacak/Kiralayacak Kişi/Firma Bilgileri</h3>
+          <table style="width: 100%; margin-bottom: 10px; font-weight: bold; font-size: 11px;">
+            <tr><td style="width: 250px; padding: 2px 0;">Adı/Soyadı:</td><td style="color: blue;">${clientName(doc.client)}</td></tr>
+            <tr><td style="padding: 2px 0;">T.C. Kimlik No/ V.D. No/Yabancı Kimlik No:</td><td style="color: blue;">${data.main_tc_no || '____________________'}</td></tr>
+            <tr><td style="padding: 2px 0;">Firma:</td><td style="color: blue;">${data.firma || '____________________'}</td></tr>
+            <tr><td style="padding: 2px 0;">E-Mail:</td><td style="color: blue;">${doc.client?.email || '____________________'}</td></tr>
+            <tr><td style="padding: 2px 0;">Adres:</td><td style="color: blue;">${data.main_address || doc.client?.address || '____________________'}</td></tr>
+            <tr><td style="padding: 2px 0;">Telefon:</td><td style="color: blue;">${doc.client?.phone || '____________________'}</td></tr>
+          </table>
+
+          <h3 style="color: #0070c0; border-bottom: 1px solid #0070c0; padding-bottom: 2px; margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase;">Gayrimenkulün Özellikleri</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px; text-align: center;">
+            <tr>
+              <th style="border: 1px solid #000; padding: 3px; width: 25%;"></th>
+              <th style="border: 1px solid #000; padding: 3px; width: 50%;"></th>
+              <th style="border: 1px solid #000; padding: 3px; width: 25%;">İMZA</th>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 3px; font-weight: bold; text-align: left;">CİNSİ</td>
+              <td style="border: 1px solid #000; padding: 3px; color: blue;">${doc.property?.property_type === 'rental' ? 'Kiralık' : 'Satılık'} ${propType}</td>
+              <td style="border: 1px solid #000; padding: 3px;"></td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 3px; font-weight: bold; text-align: left;">ADRESİ</td>
+              <td style="border: 1px solid #000; padding: 3px; color: blue;">${propAddr}</td>
+              <td style="border: 1px solid #000; padding: 3px;"></td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 3px; font-weight: bold; text-align: left;">SATIŞ BEDELİ</td>
+              <td style="border: 1px solid #000; padding: 3px; color: blue;">${doc.property?.property_type !== 'rental' && doc.property?.price ? money(doc.property.price.toString()) + ' ' + (doc.property.currency || 'TL') : ''}</td>
+              <td style="border: 1px solid #000; padding: 3px;"></td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 3px; font-weight: bold; text-align: left;">AYLIK KİRA BEDELİ</td>
+              <td style="border: 1px solid #000; padding: 3px; color: blue;">${doc.property?.property_type === 'rental' && doc.property?.price ? money(doc.property.price.toString()) + ' ' + (doc.property.currency || 'TL') : ''}</td>
+              <td style="border: 1px solid #000; padding: 3px;"></td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 3px; font-weight: bold; text-align: left;">TAPU BİLGİLERİ</td>
+              <td style="border: 1px solid #000; padding: 3px; color: blue;">${data.tapu_bilgileri || ''}</td>
+              <td style="border: 1px solid #000; padding: 3px;"></td>
+            </tr>
+          </table>
+
+          <h3 style="margin: 0 0 5px 0; font-size: 11px;">SATIN ALMAK AMACI İLE GÖRME / KİRALAMAK AMACI İLE GÖRME</h3>
+          <div style="text-align: justify; margin-bottom: 8px; font-size: 10px;">
+            Yukarıda adresi belirtilen taşınmazı belirtilen tarihte satın almak/kiralamak amacı ile <strong style="color: blue;">${officeName}</strong> aracılığı ile <strong style="color: blue;">${created}</strong> tarihinde gezip, görüp inceledim. Söz konusu taşınmazı <strong style="color: blue;">${data.hizmet_suresi_ay || '12'} ay</strong> süre içerisinde şahsım, eşim, nişanlım, sözlüm, ortağım, temsil ettiğim gerçek veya tüzel kişi, usul veya füruum, 3. dereceye kadar (bu derece dâhil) kan ve sıhri hısımlarım ile ortağı veya çalışanı olduğum şirket, şirketin ortakları, şirketin ortak olduğu tüzel kişiler satın aldığı/kiraladığı takdirde taşınmazın yukarıda yazılı satış bedelinin <strong style="color: blue;">%${data.hizmet_bedeli_yuzde || '2'} + KDV</strong>'sine isabet eden bedeli; kiralaması halinde ise taşınmazın yukarıda yazılı bir aylık kira bedeline isabet eden bedeli + KDV hizmet bedeli olarak <strong style="color: blue;">${officeName}</strong>'e ödemeyi kabul ve taahhüt ediyorum. Gayrimenkulü görme işleminin yapılması ve imzalanmasından sonra <strong style="color: blue;">${officeName}</strong>'in devre dışı bırakılarak yukarıdaki taşınmazla ilgili satın alma/kiralama yapılması hâlinde veya <strong style="color: blue;">${officeName}</strong> tarafından ilgilenilen veya elektronik ortamda gösterilen taşınmazın başka bir kişi, kurum, kuruluş aracılığıyla satın alınması/kiralanması hâlinde <strong style="color: blue;">${officeName}</strong>'in yukarıda belirtilen hizmet bedeli alacağına hak kazanacağını peşinen kabul, beyan ve taahhüt ediyorum. İhtilaf hâlinde <strong style="color: blue;">${data.mahkeme_sehri || 'İstanbul'}</strong> Mahkeme ve İcra Dairelerinin yetkilerini kabul ediyorum.
+          </div>
+
+          <div style="margin-bottom: 10px; font-size: 10px;">İşbu belge birer nüshası taraflarda kalacak şekilde dijital imzalı belge olarak düzenlenmiştir.</div>
+
+          <table style="width: 100%; margin-bottom: 10px; font-size: 10px;">
+            <tr>
+              <td style="width: 100px; vertical-align: middle;">
+                <div style="transform: scale(0.7); transform-origin: left center;">\${logoHtml}</div>
+              </td>
+              <td style="vertical-align: middle;">
+                <strong>${officeName}</strong><br>
+                Ofis Adresi: <span style="color: blue;">${officeAddress || '_________________'}</span><br>
+                Telefon Numarası: <span style="color: blue;">${(doc.consultant as any)?.wa_phone || '_________________'}</span>
+              </td>
+            </tr>
+          </table>
+
+          <table style="width: 100%; font-size: 10px; margin-bottom: 10px; font-weight: bold;">
+            <tr>
+              <td style="width: 50%; vertical-align: top;">
+                GAYRİMENKULÜ GÖREN KİŞİ<br><br>
+                Ad/Soyad: <span style="color: blue;">${clientName(doc.client)}</span><br><br>
+                Yetki Belgesi Numarası: <span style="color: blue;">${data.yetki_belgesi_no || ''}</span><br><br>
+                E-Posta: <span style="color: blue;">${doc.client?.email || ''}</span>
+              </td>
+              <td style="width: 50%; vertical-align: top;">
+                Sözleşmeli İşletme ${officeName}<br><br>
+              </td>
+            </tr>
+          </table>
         </div>
-        <h2>Yer Gösterilen Gayrimenkuller</h2>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px;">
-          <tr>
-            <th style="border:1px solid #000;padding:8px;text-align:left;background:#f5f5f5;">Cinsi (Satılık/Kiralık)</th>
-            <th style="border:1px solid #000;padding:8px;text-align:left;background:#f5f5f5;">Adres / Konum</th>
-            <th style="border:1px solid #000;padding:8px;text-align:left;background:#f5f5f5;">Fiyatı</th>
-          </tr>
-          <tr>
-            <td style="border:1px solid #000;padding:8px;">${doc.property?.property_type === 'rental' ? 'Kiralık' : 'Satılık'} ${propType}</td>
-            <td style="border:1px solid #000;padding:8px;">${propAddr}</td>
-            <td style="border:1px solid #000;padding:8px;">${doc.property?.price ? money(doc.property.price.toString()) + ' ' + (doc.property.currency || 'TL') : '___'}</td>
-          </tr>
-        </table>
-        <h2>Müşteri Bilgileri</h2>
-        <table style="width:100%;font-size:14px;">
-          <tr><td style="width:120px;font-weight:bold;">Ad Soyad:</td><td>${clientName(doc.client)}</td></tr>
-          <tr><td style="font-weight:bold;">TC No:</td><td>${data.main_tc_no || '_______________'}</td></tr>
-          <tr><td style="font-weight:bold;">Telefon:</td><td>${doc.client?.phone || '_______________'}</td></tr>
-          <tr><td style="font-weight:bold;">Adres:</td><td>${data.main_address || doc.client?.address || '_______________'}</td></tr>
-        </table>
-        ${data.ozel_sartlar ? `<div style="margin-top:20px;"><strong>ÖZEL ŞARTLAR:</strong><p>${data.ozel_sartlar}</p></div>` : ''}
       `,
       sigs: `
-        <div class="sig">${sigArea('main', clientName(doc.client))}<div class="sig-line">Müşteri<br><strong>${clientName(doc.client)}</strong></div></div>
-        <div class="sig"><div class="sig-area"></div><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
+        <div class="sig" style="margin-top:0;">${sigArea('main', clientName(doc.client))}<div class="sig-line">Müşteri<br><strong>${clientName(doc.client)}</strong></div></div>
+        <div class="sig" style="margin-top:0;"><div class="sig-area"></div><div class="sig-line">Danışman<br><strong>${doc.consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
       `,
     },
   }

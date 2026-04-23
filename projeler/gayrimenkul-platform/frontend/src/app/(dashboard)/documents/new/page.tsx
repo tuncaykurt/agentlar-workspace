@@ -31,8 +31,8 @@ function ClientExtraFields({
   onSaveToContact,
 }: {
   client: Client
-  extraData: { tc_no: string; address: string; email: string }
-  onChange: (d: { tc_no: string; address: string; email: string }) => void
+  extraData: { tc_no: string; address: string; email: string; firma: string }
+  onChange: (d: { tc_no: string; address: string; email: string; firma: string }) => void
   onSaveToContact: () => void
 }) {
   const missing = !client.tc_no || !client.address || !client.email
@@ -51,7 +51,7 @@ function ClientExtraFields({
       </button>
       {open && (
         <div className="p-3 space-y-2 bg-surface-container">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <label className="block text-xs text-on-surface-variant mb-1">TC / Vergi No</label>
               <input
@@ -80,6 +80,16 @@ function ClientExtraFields({
                 onChange={e => onChange({ ...extraData, address: e.target.value })}
                 className={inp}
                 placeholder="Mahalle, sokak, şehir"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-on-surface-variant mb-1">Firma / Kurum (Varsa)</label>
+              <input
+                type="text"
+                value={extraData.firma || ''}
+                onChange={e => onChange({ ...extraData, firma: e.target.value })}
+                className={inp}
+                placeholder="Örn: ABC Ltd. Şti."
               />
             </div>
           </div>
@@ -326,7 +336,7 @@ function generatePrintHTML(params: {
   mainClient: Client | null
   secondClient: Client | null
   property: Property | null
-  consultant: Pick<Consultant, 'id' | 'full_name'> | null
+  consultant: Pick<Consultant, 'id' | 'full_name' | 'wa_phone'> | null
   templateData: TemplateData
   officeName: string
   officeLegalName?: string
@@ -486,6 +496,10 @@ function generatePrintHTML(params: {
       .auth-sig-label { font-size:11px; font-weight:bold; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px; }
       .auth-sig-box { border-top:2px solid #333; padding-top:8px; min-height:75px; font-size:11px; }
     </style>`
+
+  const logoHtml = officeLogo
+    ? `<img src="${officeLogo}" style="height:50px;max-width:200px;object-fit:contain;">`
+    : `<div style="font-weight:bold;font-size:16px;color:#1a3a6b;">${officeName}</div>`
 
   const docTypeConfigs: Record<string, { title: string; body: string; sigs: string }> = {
     authorization: {
@@ -776,13 +790,99 @@ function generatePrintHTML(params: {
         <div class="sig"><div class="sig-line">Danışman<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
       `,
     },
+    showing_agreement: {
+      title: 'YER GÖSTERME BELGESİ',
+      body: `
+        <div style="font-family: Arial, sans-serif; font-size: 10px; line-height: 1.3; color: #000; padding: 0;">
+          <h2 style="text-align: center; background-color: #001f5b; color: white; padding: 3px; margin: 0 0 6px 0; font-size: 12px; display: inline-block; width: 100%; box-sizing: border-box;">GAYRİMENKUL GÖSTERME BELGESİ</h2>
+          
+          <h3 style="color: #0070c0; border-bottom: 1px solid #0070c0; padding-bottom: 2px; margin: 0 0 4px 0; font-size: 10px; text-transform: uppercase;">Satın Alacak/Kiralayacak Kişi/Firma Bilgileri</h3>
+          <table style="width: 100%; margin-bottom: 6px; font-weight: bold; font-size: 10px;">
+            <tr><td style="width: 250px; padding: 1px 0;">Adı/Soyadı:</td><td style="color: blue;">${clientName(mainClient)}</td></tr>
+            <tr><td style="padding: 1px 0;">T.C. Kimlik No/ V.D. No/Yabancı Kimlik No:</td><td style="color: blue;">${templateData.main_tc_no || '____________________'}</td></tr>
+            <tr><td style="padding: 1px 0;">Firma:</td><td style="color: blue;">${templateData.firma || '____________________'}</td></tr>
+            <tr><td style="padding: 1px 0;">E-Mail:</td><td style="color: blue;">${mainClient?.email || '____________________'}</td></tr>
+            <tr><td style="padding: 1px 0;">Adres:</td><td style="color: blue;">${templateData.main_address || mainClient?.address || '____________________'}</td></tr>
+            <tr><td style="padding: 1px 0;">Telefon:</td><td style="color: blue;">${mainClient?.phone || '____________________'}</td></tr>
+          </table>
+
+          <h3 style="color: #0070c0; border-bottom: 1px solid #0070c0; padding-bottom: 2px; margin: 0 0 4px 0; font-size: 10px; text-transform: uppercase;">Gayrimenkulün Özellikleri</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 9px; text-align: center;">
+            <tr>
+              <th style="border: 1px solid #000; padding: 2px; width: 25%;"></th>
+              <th style="border: 1px solid #000; padding: 2px; width: 50%;"></th>
+              <th style="border: 1px solid #000; padding: 2px; width: 25%;">İMZA</th>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">CİNSİ</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${(property?.property_type as string) === 'rental' ? 'Kiralık' : 'Satılık'} ${propType}</td>
+              <td style="border: 1px solid #000; padding: 2px;"></td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">ADRESİ</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${propAddress}</td>
+              <td style="border: 1px solid #000; padding: 2px;"></td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">SATIŞ BEDELİ</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${(property?.property_type as string) !== 'rental' && property?.price ? money(property.price.toString()) + ' ' + (property.currency || 'TL') : ''}</td>
+              <td style="border: 1px solid #000; padding: 2px;"></td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">AYLIK KİRA BEDELİ</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${(property?.property_type as string) === 'rental' && property?.price ? money(property.price.toString()) + ' ' + (property.currency || 'TL') : ''}</td>
+              <td style="border: 1px solid #000; padding: 2px;"></td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">TAPU BİLGİLERİ</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${templateData.tapu_bilgileri || ''}</td>
+              <td style="border: 1px solid #000; padding: 2px;"></td>
+            </tr>
+          </table>
+
+          <h3 style="margin: 0 0 3px 0; font-size: 10px;">SATIN ALMAK AMACI İLE GÖRME / KİRALAMAK AMACI İLE GÖRME</h3>
+          <div style="text-align: justify; margin-bottom: 6px; font-size: 9px; line-height: 1.2;">
+            Yukarıda adresi belirtilen taşınmazı belirtilen tarihte satın almak/kiralamak amacı ile <strong style="color: blue;">${officeName}</strong> aracılığı ile <strong style="color: blue;">${today}</strong> tarihinde gezip, görüp inceledim. Söz konusu taşınmazı <strong style="color: blue;">${templateData.hizmet_suresi_ay || '12'} ay</strong> süre içerisinde şahsım, eşim, nişanlım, sözlüm, ortağım, temsil ettiğim gerçek veya tüzel kişi, usul veya füruum, 3. dereceye kadar (bu derece dâhil) kan ve sıhri hısımlarım ile ortağı veya çalışanı olduğum şirket, şirketin ortakları, şirketin ortak olduğu tüzel kişiler satın aldığı/kiraladığı takdirde taşınmazın yukarıda yazılı satış bedelinin <strong style="color: blue;">%${templateData.hizmet_bedeli_yuzde || '2'} + KDV</strong>'sine isabet eden bedeli; kiralaması halinde ise taşınmazın yukarıda yazılı bir aylık kira bedeline isabet eden bedeli + KDV hizmet bedeli olarak <strong style="color: blue;">${officeName}</strong>'e ödemeyi kabul ve taahhüt ediyorum. Gayrimenkulü görme işleminin yapılması ve imzalanmasından sonra <strong style="color: blue;">${officeName}</strong>'in devre dışı bırakılarak yukarıdaki taşınmazla ilgili satın alma/kiralama yapılması hâlinde veya <strong style="color: blue;">${officeName}</strong> tarafından ilgilenilen veya elektronik ortamda gösterilen taşınmazın başka bir kişi, kurum, kuruluş aracılığıyla satın alınması/kiralanması hâlinde <strong style="color: blue;">${officeName}</strong>'in yukarıda belirtilen hizmet bedeli alacağına hak kazanacağını peşinen kabul, beyan ve taahhüt ediyorum. İhtilaf hâlinde <strong style="color: blue;">${templateData.mahkeme_sehri || 'İstanbul'}</strong> Mahkeme ve İcra Dairelerinin yetkilerini kabul ediyorum.
+          </div>
+
+          <div style="margin-bottom: 6px; font-size: 9px;">İşbu belge birer nüshası taraflarda kalacak şekilde dijital imzalı belge olarak düzenlenmiştir.</div>
+
+          <table style="width: 100%; margin-bottom: 6px; font-size: 9px;">
+            <tr>
+              <td style="width: 100px; vertical-align: middle;">
+                <div style="transform: scale(0.6); transform-origin: left center;">${logoHtml}</div>
+              </td>
+              <td style="vertical-align: middle; line-height: 1.2;">
+                <strong>${officeName}</strong><br>
+                Ofis Adresi: <span style="color: blue;">${officeAddress || '_________________'}</span><br>
+                Telefon Numarası: <span style="color: blue;">${consultant?.wa_phone || '_________________'}</span>
+              </td>
+            </tr>
+          </table>
+
+          <table style="width: 100%; font-size: 9px; margin-bottom: 0px; font-weight: bold;">
+            <tr>
+              <td style="width: 50%; vertical-align: top;">
+                GAYRİMENKULÜ GÖREN KİŞİ<br><br>
+                Ad/Soyad: <span style="color: blue;">${clientName(mainClient)}</span><br><br>
+                Yetki Belgesi Numarası: <span style="color: blue;">${templateData.yetki_belgesi_no || ''}</span><br><br>
+                E-Posta: <span style="color: blue;">${mainClient?.email || ''}</span>
+              </td>
+              <td style="width: 50%; vertical-align: top;">
+                Sözleşmeli İşletme ${officeName}<br><br>
+              </td>
+            </tr>
+          </table>
+        </div>
+      `,
+      sigs: `
+        <div class="sig" style="margin-top:5px;"><div class="sig-line" style="padding-top:10px;">Müşteri<br><strong>${clientName(mainClient)}</strong></div></div>
+        <div class="sig" style="margin-top:5px;"><div class="sig-line" style="padding-top:10px;">Danışman<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
+      `,
+    },
   }
 
   const cfg = docTypeConfigs[docType] || docTypeConfigs.authorization
-
-  const logoHtml = officeLogo
-    ? `<img src="${officeLogo}" style="height:70px;max-width:220px;object-fit:contain;">`
-    : `<div style="font-weight:bold;font-size:18px;color:#1a3a6b;">${officeName}</div>`
 
   return `<!DOCTYPE html>
 <html lang="tr">
@@ -791,29 +891,33 @@ function generatePrintHTML(params: {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>${cfg.title}</title>
   <style>${styles}
-    .letterhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-    .letterhead img { max-height: 70px; max-width: 220px; object-fit: contain; }
-    .letterhead-text { text-align: right; font-size: 11px; color: #444; line-height: 1.6; }
-    @media print { .no-print { display: none !important; } body { padding: 20px; } }
+    .letterhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .letterhead img { max-height: 50px; max-width: 200px; object-fit: contain; }
+    .letterhead-text { text-align: right; font-size: 10px; color: #444; line-height: 1.4; }
+    @media print { 
+      @page { margin: 10mm; } /* Reduced margins to fit more content */
+      .no-print { display: none !important; } 
+      body { padding: 0px; font-size: 11px; } 
+    }
   </style>
 </head>
 <body>
-  <div class="no-print" style="text-align:right;margin-bottom:20px;">
+  <div class="no-print" style="text-align:right;margin-bottom:10px;">
     <button class="print-btn" onclick="window.print()">🖨️ Yazdır</button>
     <button class="pdf-btn" onclick="document.title='Belge Ön İzleme';window.print()">⬇️ PDF İndir</button>
   </div>
-  ${docType !== 'authorization' ? `  <div class="letterhead">
+  ${docType !== 'authorization' && docType !== 'showing_agreement' ? `  <div class="letterhead">
     ${logoHtml}
         <div class="letterhead-text">
       <strong>${officeLegalName || officeName}</strong><br>
       ${officeAddress ? officeAddress.replace(/\n/g, '<br>') : ''}<br>
-      <span style="font-size:10px;color:#666;">Mersis No: ${officeMersis || '_______________'}</span>
+      <span style="font-size:9px;color:#666;">Mersis No: ${officeMersis || '_______________'}</span>
     </div>
   </div>` : ''}
-  <h1>${cfg.title}</h1>
-  ${docType === 'sales_contract' ? `<div class="sub" style="font-size:13px;font-weight:bold;letter-spacing:1px;color:#333;">PROTOKOL YAZISI</div>` : ''}
-  <div class="sub">${today}</div>
-  <hr class="divider">
+  ${docType !== 'showing_agreement' ? `<h1>${cfg.title}</h1>` : ''}
+  ${docType === 'sales_contract' ? `<div class="sub" style="font-size:12px;font-weight:bold;letter-spacing:1px;color:#333;">PROTOKOL YAZISI</div>` : ''}
+  ${docType !== 'showing_agreement' ? `<div class="sub">${today}</div>` : ''}
+  ${docType !== 'showing_agreement' ? `<hr class="divider">` : ''}
   ${cfg.body}
   <div class="sigs">${cfg.sigs}</div>
 </body>
@@ -842,8 +946,8 @@ export default function NewDocumentPage() {
   const [secondClient, setSecondClient] = useState<Client | null>(null)
   const [property, setProperty] = useState<Property | null>(null)
 
-  type ExtraFields = { tc_no: string; address: string; email: string }
-  const emptyExtra = (): ExtraFields => ({ tc_no: '', address: '', email: '' })
+  type ExtraFields = { tc_no: string; address: string; email: string; firma: string }
+  const emptyExtra = (): ExtraFields => ({ tc_no: '', address: '', email: '', firma: '' })
   const [mainExtra, setMainExtra] = useState<ExtraFields>(emptyExtra())
   const [secondExtra, setSecondExtra] = useState<ExtraFields>(emptyExtra())
 
@@ -908,6 +1012,13 @@ export default function NewDocumentPage() {
   const [kullanimAmaci, setKullanimAmaci] = useState('KONUT')
   const [demirbasListesi, setDemirbasListesi] = useState('')
   const [tahliyeTarihi, setTahliyeTarihi] = useState('')
+
+  // Showing agreement extra
+  const [hizmetBedeliYuzde, setHizmetBedeliYuzde] = useState('2')
+  const [hizmetSuresiAy, setHizmetSuresiAy] = useState('12')
+  const [mahkemeSehri, setMahkemeSehri] = useState('İstanbul')
+  const [tapuBilgileri, setTapuBilgileri] = useState('')
+  const [yetkiBelgesiNo, setYetkiBelgesiNo] = useState('')
   const [taahhutTarihi, setTaahhutTarihi] = useState('')
   const [kontratAdres, setKontratAdres] = useState('')
   const [kiralananAdres, setKiralananAdres] = useState('')
@@ -949,7 +1060,7 @@ export default function NewDocumentPage() {
   // Pre-fill extra fields when client is selected
   useEffect(() => {
     if (mainClient) {
-      setMainExtra({ tc_no: mainClient.tc_no || '', address: mainClient.address || '', email: mainClient.email || '' })
+      setMainExtra({ tc_no: mainClient.tc_no || '', address: mainClient.address || '', email: mainClient.email || '', firma: '' })
     } else {
       setMainExtra(emptyExtra())
     }
@@ -957,7 +1068,7 @@ export default function NewDocumentPage() {
 
   useEffect(() => {
     if (secondClient) {
-      setSecondExtra({ tc_no: secondClient.tc_no || '', address: secondClient.address || '', email: secondClient.email || '' })
+      setSecondExtra({ tc_no: secondClient.tc_no || '', address: secondClient.address || '', email: secondClient.email || '', firma: '' })
     } else {
       setSecondExtra(emptyExtra())
     }
@@ -1017,12 +1128,13 @@ export default function NewDocumentPage() {
   }
 
   function getTemplateData(): TemplateData {
-    const mainInfo = { main_tc_no: mainExtra.tc_no, main_address: mainExtra.address, main_email: mainExtra.email }
-    const secondInfo = { second_tc_no: secondExtra.tc_no, second_address: secondExtra.address, second_email: secondExtra.email }
+    const mainInfo = { main_tc_no: mainExtra.tc_no, main_address: mainExtra.address, main_email: mainExtra.email, firma: mainExtra.firma }
+    const secondInfo = { second_tc_no: secondExtra.tc_no, second_address: secondExtra.address, second_email: secondExtra.email, firma: secondExtra.firma }
     const base: TemplateData = { ozel_sartlar: ozelSartlar, ...mainInfo, ...secondInfo }
     if (docType === 'authorization') return { ...base, yetki_turu: yetkiTuru, komisyon_orani: komisyonOrani, komisyon_turu: komisyonTuru, ek_madde: ekMadde, mulk_tipi: mulkTipi, kira_bedeli: kiraBedeli, baslangic_tarihi: baslangicTarihi, yetki_suresi_gun: yetkiSuresiGun, satis_tutari: satisTutari, odeme_sekli: odemeSekli, ada: yAda, parsel: yParsel, pafta: yPafta, il: yIl, ilce: yIlce, mahalle: yMahalle }
     if (docType === 'sales_contract') return { ...base, satis_bedeli: satisBedeli, kapora, kapora_tarihi: kaporaTarihi, teslim_tarihi: teslimTarihi, tapuda_odenecek: tapudaOdenecek, pesin_odenen: pesinOdenen, hizmet_tapuda: hizmetTapuda, komisyon_alici: komisyonAlici, komisyon_satici: komisyonSatici, hizmet_bedeli_alici: hizmetBedeliAlici, hizmet_bedeli_satici: hizmetBedeliSatici, hizmet_bedeli: hizmetBedeli, ceza_miktari: cezaMiktari, ada: ada, parsel: parsel, pafta: pafta }
     if (docType === 'rental_contract') return { ...base, aylik_kira: aylikKira, depozito, kira_baslangic: kiraBaslangic, kira_suresi_ay: kiraSuresiAy, odeme_gunu: odemeGunu, banka_adi: bankaAdi, hesap_adi: hesapAdi, iban: ibanNo, artis_orani: artisOrani, kullanim_amaci: kullanimAmaci, demirbas_listesi: demirbasListesi, tahliye_tarihi: tahliyeTarihi, taahhut_tarihi: taahhutTarihi, kontrat_adres: kontratAdres, kiralanan_adres: kiralananAdres }
+    if (docType === 'showing_agreement') return { ...base, hizmet_bedeli_yuzde: hizmetBedeliYuzde, hizmet_suresi_ay: hizmetSuresiAy, mahkeme_sehri: mahkemeSehri, tapu_bilgileri: tapuBilgileri, yetki_belgesi_no: yetkiBelgesiNo }
     return { ...base, teklif_bedeli: teklifBedeli, gecerlilik_tarihi: gecerlilikTarihi }
   }
 
@@ -1087,7 +1199,7 @@ export default function NewDocumentPage() {
     const html = generatePrintHTML({
       docType, title,
       mainClient, secondClient, property,
-      consultant: consultant as Pick<Consultant, 'id' | 'full_name'> | null,
+      consultant: consultant as Pick<Consultant, 'id' | 'full_name' | 'wa_phone'> | null,
       templateData: getTemplateData(),
       officeName,
       officeLegalName,
@@ -1122,12 +1234,14 @@ export default function NewDocumentPage() {
     green:  'border-green-400 bg-green-50',
     purple: 'border-purple-400 bg-purple-50',
     orange: 'border-orange-400 bg-orange-50',
+    indigo: 'border-indigo-400 bg-indigo-50',
   }
   const typeColorMapOff: Record<string, string> = {
     blue:   'border-outline hover:border-primary/20 hover:bg-primary-container/40',
     green:  'border-outline hover:border-green-200 hover:bg-green-50/40',
     purple: 'border-outline hover:border-purple-200 hover:bg-purple-50/40',
     orange: 'border-outline hover:border-orange-200 hover:bg-orange-50/40',
+    indigo: 'border-outline hover:border-indigo-200 hover:bg-indigo-50/40',
   }
 
   return (
@@ -1525,6 +1639,35 @@ export default function NewDocumentPage() {
                   <label className={lbl}>Taahhütname İmza Tarihi</label>
                   <input type="date" value={taahhutTarihi} onChange={e => setTaahhutTarihi(e.target.value)} className={inp} />
                 </div>
+              </div>
+            </>
+          )}
+
+          {docType === 'showing_agreement' && (
+            <>
+              <div className={row2}>
+                <div>
+                  <label className={lbl}>Hizmet Süresi (Ay)</label>
+                  <input type="number" value={hizmetSuresiAy} onChange={e => setHizmetSuresiAy(e.target.value)} className={inp} min="1" />
+                </div>
+                <div>
+                  <label className={lbl}>Hizmet Bedeli (%)</label>
+                  <input type="number" value={hizmetBedeliYuzde} onChange={e => setHizmetBedeliYuzde(e.target.value)} className={inp} min="0" step="0.5" />
+                </div>
+              </div>
+              <div className={row2}>
+                <div>
+                  <label className={lbl}>Mahkeme Şehri</label>
+                  <input type="text" value={mahkemeSehri} onChange={e => setMahkemeSehri(e.target.value)} className={inp} placeholder="İstanbul" />
+                </div>
+                <div>
+                  <label className={lbl}>Yetki Belgesi No</label>
+                  <input type="text" value={yetkiBelgesiNo} onChange={e => setYetkiBelgesiNo(e.target.value)} className={inp} placeholder="000000" />
+                </div>
+              </div>
+              <div>
+                <label className={lbl}>Tapu Bilgileri (Opsiyonel)</label>
+                <input type="text" value={tapuBilgileri} onChange={e => setTapuBilgileri(e.target.value)} className={inp} placeholder="Ada/Parsel veya diğer tapu detayları" />
               </div>
             </>
           )}
