@@ -35,6 +35,8 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             try {
+              // Skip dark mode on /sign/ pages (external signing links should always be light)
+              if (window.location.pathname.startsWith('/sign/')) return;
               var t = localStorage.getItem('theme');
               if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');

@@ -778,7 +778,7 @@ export async function GET(req: NextRequest) {
       try {
         const detail = await n8nFetch(cfg, 'GET', `/workflows/${wf.id}`)
         const webhookNode = (detail.nodes || []).find(
-          (n: { type: string }) => n.type === 'n8n-nodes-base.webhook'
+          (n: any) => n.type === 'n8n-nodes-base.webhook'
         )
         const webhookPath = webhookNode?.parameters?.path || ''
         const webhookUrl = webhookPath ? `${n8nBase}/webhook/${webhookPath}` : ''
@@ -945,8 +945,8 @@ export async function POST(req: NextRequest) {
 
     // Check for conflicting workflows with same webhook path and remove them
     try {
-      const webhookNode = (workflow.nodes || []).find(
-        (n: { type: string }) => n.type === 'n8n-nodes-base.webhook'
+      const webhookNode: any = (workflow.nodes || []).find(
+        (n: any) => n.type === 'n8n-nodes-base.webhook'
       )
       const newWebhookPath = webhookNode?.parameters?.path
       if (newWebhookPath) {
@@ -956,7 +956,7 @@ export async function POST(req: NextRequest) {
           try {
             const detail = await n8nFetch(cfg, 'GET', `/workflows/${wf.id}`)
             const wh = (detail.nodes || []).find(
-              (n: { type: string }) => n.type === 'n8n-nodes-base.webhook'
+              (n: any) => n.type === 'n8n-nodes-base.webhook'
             )
             if (wh?.parameters?.path === newWebhookPath) {
               if (wf.active) {

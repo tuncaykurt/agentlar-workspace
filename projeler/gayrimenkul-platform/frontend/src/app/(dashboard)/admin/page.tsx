@@ -16,7 +16,7 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type SettingKey =
-  | 'office_name' | 'office_legal_name' | 'office_phone' | 'office_address' | 'office_logo' | 'office_commission_rate' | 'office_mersis'
+  | 'office_name' | 'office_legal_name' | 'office_phone' | 'office_address' | 'office_logo' | 'office_commission_rate' | 'office_mersis' | 'office_jurisdiction'
   | 'default_follow_up_days' | 'whatsapp_welcome_template'
   | 'evolution_api_url' | 'evolution_api_key' | 'evolution_instance' | 'app_url'
   | 'n8n_url' | 'n8n_api_key'
@@ -53,6 +53,7 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; color: string; s
       { key: 'office_name',             label: 'Ofis Kısa Adı',           type: 'text',     placeholder: 'Ambiance Gayrimenkul',        desc: 'WA mesajları ve başlıklarda kullanılır' },
       { key: 'office_legal_name',       label: 'Yasal Ünvan',             type: 'text',     placeholder: 'Ambiance Gayrimenkul Yatırım Ortaklığı İnşaat San. Ltd. Şti.', desc: 'Belge sağ üst köşesinde görünür' },
       { key: 'office_mersis',           label: 'Mersis No',               type: 'text',     placeholder: '0068090568900012',            desc: 'Belge başlığında görünür' },
+      { key: 'office_jurisdiction',      label: 'Yetkili Mahkeme (Şehir)', type: 'text',     placeholder: 'Bursa',                       desc: 'Sözleşme uyuşmazlıklarında yetkili merci' },
       { key: 'office_phone',            label: 'Ofis Telefonu',           type: 'text',     placeholder: '0224 xxx xx xx',              desc: '' },
       { key: 'office_address',          label: 'Ofis Adresi',             type: 'textarea', placeholder: 'Ahmet Yesevi Mah. Hudut Sok. Central Balat Sitesi 1/C\nNilüfer / BURSA', desc: '' },
       { key: 'office_logo',             label: 'Ofis Logosu',             type: 'logo',     placeholder: '', desc: 'Belgelerin sol üstünde görünür (PNG/JPG)' },

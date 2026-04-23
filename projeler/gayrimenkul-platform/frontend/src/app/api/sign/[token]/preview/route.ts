@@ -50,24 +50,25 @@ type SigRow = { signer_role: string; status: string; signature_data: string | nu
 
 function sigArea(signatures: SigRow[], role: string): string {
   const req = signatures.find(r => r.signer_role === role && r.status === 'signed')
-  if (!req) return ''
+  if (!req) return '<div class="sig-area sig-area-empty" style="min-height:50px;"></div>'
   if (req.signature_type === 'drawn' && req.signature_data?.startsWith('data:image')) {
-    return `<div style="margin:4px 0;"><img src="${req.signature_data}" alt="İmza" style="max-height:60px;max-width:180px;object-fit:contain;" /></div>`
+    return `<div class="sig-area" style="display:block !important;visibility:visible !important;overflow:visible !important;min-height:50px;margin-bottom:6px;text-align:center;"><img src="${req.signature_data}" alt="İmza" style="display:inline-block !important;visibility:visible !important;max-height:70px;max-width:200px;height:auto;width:auto;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;" /></div>`
   }
   if (req.signature_type === 'typed' && req.signature_data) {
-    return `<div style="margin:4px 0;font-family:'Brush Script MT',cursive;font-size:22px;color:#1a237e;">${req.signature_data}</div>`
+    return `<div class="sig-area" style="display:block !important;visibility:visible !important;min-height:50px;margin-bottom:6px;font-family:'Brush Script MT','Segoe Script','Dancing Script',cursive;font-size:24px;color:#1a237e;text-align:center;line-height:1.4;">${req.signature_data}</div>`
   }
-  return ''
+  return '<div class="sig-area sig-area-empty" style="min-height:50px;"></div>'
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function generateDocHTML(doc: any, settings: Record<string, string>, signatures: SigRow[] = []) {
   const data = (doc.template_data || {}) as Record<string, string | null>
-  const officeName = settings.office_name || 'Ambiance Gayrimenkul'
+  const officeName = settings.office_name || '_______________'
   const officeLegalName = settings.office_legal_name || officeName
   const officeAddress = settings.office_address || ''
   const officeLogo = settings.office_logo || ''
-  const officeMersis = settings.office_mersis || '0068090568900012'
+  const officeMersis = settings.office_mersis || '_______________'
+  const officeJurisdiction = settings.office_jurisdiction || '_______________'
   const today = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })
 
   const secondName = data.second_client_name || '_______________'
@@ -90,8 +91,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
 
   const baseStyles = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { overflow-x: hidden; }
-    body { font-family: 'Times New Roman', Times, serif; max-width: 860px; margin: 0 auto; padding: 32px 28px; color: #111; font-size: 16px; line-height: 1.9; overflow-x: hidden; word-break: break-word; }
+    html { overflow-x: hidden; background-color: #fff; color-scheme: light; }
+    body { font-family: 'Times New Roman', Times, serif; max-width: 860px; margin: 0 auto; padding: 32px 28px; color: #111; background-color: #fff; font-size: 16px; line-height: 1.9; overflow-x: hidden; word-break: break-word; }
     h1 { font-size: 21px; text-align: center; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 8px; }
     .sub { text-align: center; font-size: 15px; color: #555; margin-bottom: 6px; }
     .divider { border: none; border-top: 2px solid #111; margin: 14px 0 22px; }
@@ -99,8 +100,11 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
     table { width: 100%; border-collapse: collapse; margin-bottom: 14px; min-width: 0; }
     table td { padding: 5px 8px; vertical-align: top; font-size: 15px; word-break: break-word; }
     .sigs { display: flex; justify-content: space-around; margin-top: 52px; gap: 16px; flex-wrap: wrap; page-break-inside: avoid; }
-    .sig { text-align: center; flex: 1; min-width: 120px; page-break-inside: avoid; }
-    .sig-line { border-top: 1px solid #000; padding-top: 8px; font-size: 14px; min-height: 64px; }
+    .sig { text-align: center; flex: 1; min-width: 140px; page-break-inside: avoid; overflow: visible; }
+    .sig-area { display: block !important; visibility: visible !important; overflow: visible !important; }
+    .sig-area img { display: inline-block !important; visibility: visible !important; }
+    .sig-line { border-top: 1px solid #000; padding-top: 8px; font-size: 14px; min-height: 40px; overflow: visible; }
+    .sig-name { font-weight: bold; margin-top: 4px; }
     p { font-size: 16px; }
     @media screen and (max-width: 640px) {
       body { font-size: 16px; padding: 20px 16px; line-height: 1.85; }
@@ -135,7 +139,12 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       body { padding: 0 4px; font-size: 13px; max-width: 100%; }
       table td { font-size: 12px; }
       h1 { font-size: 16px; }
-      .sig-area img { display: block !important; max-height: 56px !important; max-width: 180px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .sigs { page-break-inside: avoid; margin-top: 36px; }
+      .sig { page-break-inside: avoid; overflow: visible !important; }
+      .sig-area { display: block !important; visibility: visible !important; overflow: visible !important; }
+      .sig-area img { display: inline-block !important; visibility: visible !important; max-height: 60px !important; max-width: 180px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+      .sig-area-empty { min-height: 40px !important; }
+      .sig-line { overflow: visible !important; min-height: 30px; }
     }`
 
   const jsBlock = `<script>function pdfDownload(t,d){var el=document.createElement('style');el.id='__pdf_fit';el.textContent='@page{size:A4;margin:6mm 4mm}@media print{body{zoom:0.68;padding:10px 8px;max-width:100%;}}';document.head.appendChild(el);document.title=t;window.print();setTimeout(function(){var s=document.getElementById('__pdf_fit');if(s)s.parentNode.removeChild(s);},500);}<\/script>`
@@ -157,17 +166,17 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div style="line-height:1.9;font-size:15px;">
         <p style="margin-bottom:12px;text-align:justify;"><strong>1-</strong> ALICI ile SATICI yukarıda bahsi geçen gayrimenkulün satışı hususunda aşağıdaki şartlarla anlaşmayı kabul eder. SATICI, sahibi bulunduğu veya satmaya yetkili olduğu bu mülkün satışını <strong>${money(data.satis_bedeli)} (${numToWords(data.satis_bedeli)})</strong> olarak kabul etmiştir. Satış bedeline mahsuben ALICI'dan <strong>${money(data.kapora)}</strong> kaparo olarak alınmıştır.${data.hizmet_tapuda ? ` Hizmet bedelinin kalan <strong>${money(data.hizmet_tapuda)}</strong> Tapu işlemleri sırasında alınacaktır.` : ''} Satış bedelinin <strong>${money(data.pesin_odenen)}</strong> peşinen ödenmiş olup, geri kalanı da <strong>${money(data.tapuda_odenecek)}</strong> tapuda ödenecektir.</p>
         <p style="margin-bottom:12px;text-align:justify;"><strong>2-</strong> Bu anlaşma imzalandıktan sonra, Borçlar Kanununun ilgili maddesine göre taraflardan ALICI gayrimenkulü almaktan vazgeçtiği takdirde verdiği kaporayı geri almayacaktır.</p>
-        <p style="margin-bottom:12px;text-align:justify;"><strong>3-</strong> ALICI ve SATICI kendilerine bu anlaşmayı sağlayan <strong>Coldwell Banker Ambiance Gayrimenkul</strong>'e işbu sözleşmenin imzalanmasıyla yukarıdaki satış bedeli üzerinden <strong>(%${data.komisyon_alici || '2'} + %${data.komisyon_satici || '2'}) + KDV</strong> komisyon ücretini hiçbir ihtara ve ihbara gerek kalmadan ödemeyi peşinen kabul ve taahhüt eder.</p>
-        <p style="margin-bottom:12px;text-align:justify;"><strong>4-</strong> ALICI ve SATICI'nın her biri, daha sonra alım ve/veya satımdan vazgeçerlerse veya Coldwell Banker Ambiance Gayrimenkul'ün dışında gelişen herhangi bir nedenle tapudaki satışı gerçekleştiremezseler; vazgeçen ve/veya satışa engel çıkartan taraf hem kendi ödeyeceği, hem de diğer tarafın ödeyeceği komisyon ücretinin tamamını <strong>(% ${(parseFloat(String(data.komisyon_alici||2))+parseFloat(String(data.komisyon_satici||2))).toFixed(0)} + KDV)</strong> Coldwell Banker Ambiance Gayrimenkul'a ödemeyi peşinen kabul ve taahhüt eder.</p>
+        <p style="margin-bottom:12px;text-align:justify;"><strong>3-</strong> ALICI ve SATICI kendilerine bu anlaşmayı sağlayan <strong>${officeName}</strong>'e işbu sözleşmenin imzalanmasıyla yukarıdaki satış bedeli üzerinden <strong>(%${data.komisyon_alici || '2'} + %${data.komisyon_satici || '2'}) + KDV</strong> komisyon ücretini hiçbir ihtara ve ihbara gerek kalmadan ödemeyi peşinen kabul ve taahhüt eder.</p>
+        <p style="margin-bottom:12px;text-align:justify;"><strong>4-</strong> ALICI ve SATICI'nın her biri, daha sonra alım ve/veya satımdan vazgeçerlerse veya ${officeName}'in dışında gelişen herhangi bir nedenle tapudaki satışı gerçekleştiremezseler; vazgeçen ve/veya satışa engel çıkartan taraf hem kendi ödeyeceği, hem de diğer tarafın ödeyeceği komisyon ücretinin tamamını <strong>(% ${(parseFloat(String(data.komisyon_alici||2))+parseFloat(String(data.komisyon_satici||2))).toFixed(0)} + KDV)</strong> ${officeName}'a ödemeyi peşinen kabul ve taahhüt eder.</p>
         <p style="margin-bottom:12px;text-align:justify;"><strong>5-</strong> Satıştan vazgeçen ve/veya satışa engel çıkartan tarafın diğer tarafa ödeyeceği ceza miktarı <strong>${money(data.ceza_miktari)}</strong>'dir.</p>
-        <p style="margin-bottom:12px;text-align:justify;"><strong>6-</strong> Dijital olarak tanzim edilen işbu sözleşme yukarıdaki hükümler ve sözleşmeye eklenecek ekleri (var ise) ile birlikte geçerli olmak üzere taraflarca kayıtsız, şartsız kabul edilmiş olup, sözleşmeden doğacak ihtilaflarda merci T.C. Bursa mahkeme ve icra daireleri yetkilidir.</p>
+        <p style="margin-bottom:12px;text-align:justify;"><strong>6-</strong> Dijital olarak tanzim edilen işbu sözleşme yukarıdaki hükümler ve sözleşmeye eklenecek ekleri (var ise) ile birlikte geçerli olmak üzere taraflarca kayıtsız, şartsız kabul edilmiş olup, sözleşmeden doğacak ihtilaflarda merci T.C. ${officeJurisdiction} mahkeme ve icra daireleri yetkilidir.</p>
         ${data.ozel_sartlar ? `<p style="margin-bottom:12px;text-align:justify;"><strong>EK MADDE:</strong> ${data.ozel_sartlar}</p>` : ''}
       </div>`
 
     const sigs = `
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}SATICI<br><strong>${clientName(doc.client)}</strong></div></div>
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'second')}ALICI<br><strong>${secondName}</strong></div></div>
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
+      <div class="sig">${sigArea(signatures, 'main')}<div class="sig-line">SATICI<br><strong>${clientName(doc.client)}</strong></div></div>
+      <div class="sig">${sigArea(signatures, 'second')}<div class="sig-line">ALICI<br><strong>${secondName}</strong></div></div>
+      <div class="sig">${sigArea(signatures, 'consultant')}<div class="sig-line">Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>${officeName}</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL SATIŞ SÖZLEŞMESİ</title><style>${baseStyles}</style>${jsBlock}</head><body>
       <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Satış Sözleşmesi','sales_contract')">⬇️ PDF İndir</button></div>
@@ -207,9 +216,9 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       </table></div>`
 
     const sigs = `
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}KİRAYA VEREN<br><strong>${clientName(doc.client)}</strong></div></div>
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'second')}KİRACI<br><strong>${secondName}</strong></div></div>
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
+      <div class="sig">${sigArea(signatures, 'main')}<div class="sig-line">KİRAYA VEREN<br><strong>${clientName(doc.client)}</strong></div></div>
+      <div class="sig">${sigArea(signatures, 'second')}<div class="sig-line">KİRACI<br><strong>${secondName}</strong></div></div>
+      <div class="sig">${sigArea(signatures, 'consultant')}<div class="sig-line">Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>${officeName}</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL KİRA SÖZLEŞMESİ</title><style>${baseStyles}</style>${jsBlock}</head><body>
       <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Kira Sözleşmesi','rental_contract')">⬇️ PDF İndir</button></div>
@@ -309,18 +318,18 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       </table></div>
       <div style="margin-top:8px;">
         <p class="clause"><strong>1. KONU:</strong> Müşteri ile ${officeName}, yukarıda belirtilen gayrimenkulün ${data.yetki_turu || 'satış'}ına aracılık edilmesi işlemi için karşılıklı olarak anlaşılmıştır.</p>
-        <p class="clause"><strong>2. TANITIM YETKİSİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak satış işlemi amacıyla internet, basın, yayın ve medyaya da dahil olmak üzere tanıtım faaliyetlerinde bulunması hakkında ve gayrimenkulün giriş müşahedesi yapılmasını Ambiance Gayrimenkul'e kabul ve taahhüt eder.</p>
-        <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları Ambiance Gayrimenkul'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması halinde %${data.komisyon_orani || '2'} + KDV komisyon miktarını Ambiance Gayrimenkul'e ödemeyi kabul eder.</p>
-        <p class="clause"><strong>4. İŞLEM YETKİSİ:</strong> Müşteri, gayrimenkulünün üzerinde işlem yapma yetkisi bulunmayan üçüncü kişilerin sebep olacağı zararı önlemek amacıyla Ambiance Gayrimenkul'in gerekli tedbirleri almasına izin vermeyi kabul eder.</p>
+        <p class="clause"><strong>2. TANITIM YETKİSİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak satış işlemi amacıyla internet, basın, yayın ve medyaya da dahil olmak üzere tanıtım faaliyetlerinde bulunması hakkında ve gayrimenkulün giriş müşahedesi yapılmasını ${officeName}'e kabul ve taahhüt eder.</p>
+        <p class="clause"><strong>3. YETKİ:</strong> Müşteri, gayrimenkulü ile ilgili olarak kendisine gelen tüm başvuruları ${officeName}'e bildirmeyi ve sözleşme süresi dolmadan başka bir gayrimenkul şirketi ile çalışmamayı kabul ve taahhüt eder. Sözleşmeyi süresinden önce feshetmesi ya da başka bir şirkete sattırması halinde %${data.komisyon_orani || '2'} + KDV komisyon miktarını ${officeName}'e ödemeyi kabul eder.</p>
+        <p class="clause"><strong>4. İŞLEM YETKİSİ:</strong> Müşteri, gayrimenkulünün üzerinde işlem yapma yetkisi bulunmayan üçüncü kişilerin sebep olacağı zararı önlemek amacıyla ${officeName}'in gerekli tedbirleri almasına izin vermeyi kabul eder.</p>
         <p class="clause"><strong>5. SÜRE:</strong> İşbu sözleşme imzalandığı tarihten itibaren <strong>${data.yetki_suresi_gun || '90'} gün</strong> süreyle geçerlidir. Bitiş: <strong>${sureSon}</strong>. Sözleşme süresi içinde taşınmaz satılır/kiralanırsa komisyon tutarı tahsil edilecektir.</p>
-        <p class="clause"><strong>6. SÜRENİN BİTİMİ:</strong> Sözleşme süresinin dolmasından sonra ${data.yetki_suresi_gun || '90'} gün içinde Ambiance Gayrimenkul'in tanıştırdığı kişiyle işlem yapılması halinde komisyon miktarının 2 katı + KDV hizmet bedeli olarak ödenir.</p>
-        <p class="clause"><strong>7. İHTİLAF:</strong> Bu sözleşmenin uygulanmasından doğacak uyuşmazlıklarda Bursa (Merkez) Mahkemeleri ve İcra Daireleri yetkilidir. Doğacak damga vergisi, resim, pul ve harçların tamamı müşteriye aittir.</p>
+        <p class="clause"><strong>6. SÜRENİN BİTİMİ:</strong> Sözleşme süresinin dolmasından sonra ${data.yetki_suresi_gun || '90'} gün içinde ${officeName}'in tanıştırdığı kişiyle işlem yapılması halinde komisyon miktarının 2 katı + KDV hizmet bedeli olarak ödenir.</p>
+        <p class="clause"><strong>7. İHTİLAF:</strong> Bu sözleşmenin uygulanmasından doğacak uyuşmazlıklarda ${officeJurisdiction} Mahkemeleri ve İcra Daireleri yetkilidir. Doğacak damga vergisi, resim, pul ve harçların tamamı müşteriye aittir.</p>
         ${data.ek_madde ? `<p class="clause"><strong>EK MADDE:</strong> ${data.ek_madde}</p>` : ''}
       </div>`
 
     const sigs = `
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}MÜŞTERİ<br><strong>${clientName(doc.client)}</strong></div></div>
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}GAYRİMENKUL DANIŞMANI<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Adına İmza</div></div>`
+      <div class="sig">${sigArea(signatures, 'main')}<div class="sig-line">MÜŞTERİ<br><strong>${clientName(doc.client)}</strong></div></div>
+      <div class="sig">${sigArea(signatures, 'consultant')}<div class="sig-line">GAYRİMENKUL DANIŞMANI<br><strong>${consultant?.full_name || '___'}</strong><br>${officeName} Adına İmza</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ARACILIK SÖZLEŞMESİ</title><style>${baseStyles}</style>${jsBlock}</head><body>
       <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Aracılık Sözleşmesi','authorization')">⬇️ PDF İndir</button></div>
@@ -345,8 +354,8 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       ${data.ozel_sartlar ? `<p style="margin-top:12px;font-size:15px;line-height:1.8;text-align:justify;"><strong>Özel Şartlar:</strong> ${data.ozel_sartlar}</p>` : ''}`
 
     const sigs = `
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'main')}TEKLİF EDEN<br><strong>${clientName(doc.client)}</strong></div></div>
-      <div class="sig"><div class="sig-line">${sigArea(signatures, 'consultant')}Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>Ambiance Gayrimenkul</div></div>`
+      <div class="sig">${sigArea(signatures, 'main')}<div class="sig-line">TEKLİF EDEN<br><strong>${clientName(doc.client)}</strong></div></div>
+      <div class="sig">${sigArea(signatures, 'consultant')}<div class="sig-line">Danışman<br><strong>${consultant?.full_name || '___'}</strong><br>${officeName}</div></div>`
 
     return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GAYRİMENKUL ALIM TEKLİF MEKTUBU</title><style>${baseStyles}</style>${jsBlock}</head><body>
       <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Teklif Mektubu','offer_letter')">⬇️ PDF İndir</button></div>
@@ -356,6 +365,75 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <hr class="divider">
       ${body}
       <div class="sigs">${sigs}</div>
+    </body></html>`
+  }
+
+  // ── Showing agreement (Yer Gösterme) ───────────────────────────────────────
+  if (doc.doc_type === 'showing_agreement') {
+    const logoHtml = officeLogo
+      ? `<img src="${officeLogo}" style="max-height:80px;max-width:240px;object-fit:contain;display:block;" />`
+      : `<div style="font-weight:bold;font-size:16px;color:#111;">${officeName}</div>`
+
+    const body = `
+      <div style="font-size:13px;line-height:1.6;text-align:justify;">
+        <p style="margin-bottom:8px;">Aşağıda özellikleri belirtilen taşınmaz/taşınmazlar, <strong>${officeName}</strong> (${officeAddress ? officeAddress + ' ' : ''}Mersis: ${settings.office_mersis || '---'}) yetkili personeli <strong>${consultant?.full_name || '___'}</strong> tarafından, aşağıda bilgileri ve imzası bulunan <strong>MÜŞTERİ</strong>'ye mahallinde gösterilmiştir.</p>
+        
+        <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+          <tr>
+            <td style="border:1px solid #ccc;padding:4px;font-weight:bold;width:120px;background:#f9f9f9;">Müşteri Adı Soyadı</td>
+            <td style="border:1px solid #ccc;padding:4px;">${clientName(doc.client)}</td>
+            <td style="border:1px solid #ccc;padding:4px;font-weight:bold;width:100px;background:#f9f9f9;">TC Kimlik / VKN</td>
+            <td style="border:1px solid #ccc;padding:4px;">${data.main_tc_no || doc.client?.tc_no || '___'}</td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #ccc;padding:4px;font-weight:bold;background:#f9f9f9;">Telefon</td>
+            <td style="border:1px solid #ccc;padding:4px;">${doc.client?.phone || '___'}</td>
+            <td style="border:1px solid #ccc;padding:4px;font-weight:bold;background:#f9f9f9;">Tarih / Saat</td>
+            <td style="border:1px solid #ccc;padding:4px;">${fmtDate(new Date().toISOString())} / ${new Date().toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}</td>
+          </tr>
+        </table>
+
+        <div style="font-weight:bold;font-size:14px;margin-bottom:4px;border-bottom:1px solid #000;padding-bottom:2px;">Gösterilen Taşınmaz(lar)</div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px;">
+          <tr style="background:#eee;">
+            <th style="border:1px solid #ccc;padding:4px;text-align:left;">İl / İlçe / Mahalle</th>
+            <th style="border:1px solid #ccc;padding:4px;text-align:left;">Ada/Parsel veya Adres</th>
+            <th style="border:1px solid #ccc;padding:4px;text-align:left;">Talep Edilen Bedel</th>
+          </tr>
+          <tr>
+            <td style="border:1px solid #ccc;padding:4px;">${prop ? [prop.city, prop.district, prop.neighborhood].filter(Boolean).join(' / ') : (data.il_ilce || '___')}</td>
+            <td style="border:1px solid #ccc;padding:4px;">${prop?.address || data.adres_ada_parsel || '___'}</td>
+            <td style="border:1px solid #ccc;padding:4px;">${data.talep_edilen_bedel ? money(data.talep_edilen_bedel) : (prop?.price ? money(prop.price) + ' ' + prop.currency : '___')}</td>
+          </tr>
+        </table>
+
+        <p style="margin-bottom:6px;"><strong>MÜŞTERİ'NİN BEYAN VE TAAHHÜTLERİ:</strong></p>
+        <ol style="margin:0 0 12px 0;padding-left:20px;">
+          <li style="margin-bottom:4px;">Yukarıda bilgileri yer alan taşınmaz(lar)ı <strong>${officeName}</strong> aracılığıyla gezdiğimi ve gördüğümü beyan ederim.</li>
+          <li style="margin-bottom:4px;">Gezdirilen taşınmaz(lar)ı ben, eşim, usul ve füruum (anne, baba, çocuklar vb.), kan ve sıhri hısımlarım, ortağı olduğum, idarecisi veya çalışanı olduğum şirketler veya yönlendireceğim üçüncü şahıslar adına satın almam/kiralamam halinde;</li>
+          <li style="margin-bottom:4px;"><strong>${officeName}</strong>'e, satış halinde satış bedelinin <strong>%2 + KDV</strong>'si oranında Hizmet Bedeli, kiralama halinde <strong>Bir Aylık Kira Bedeli + KDV</strong> oranında Hizmet Bedeli ödemeyi kabul ve taahhüt ederim.</li>
+          <li style="margin-bottom:4px;">Hizmet bedelini ödememek için veya komisyoncuyu devre dışı bırakarak mal sahibi ile doğrudan veya dolaylı olarak anlaşmam halinde veya bir başka emlak ofisi vasıtasıyla işlemi gerçekleştirmem halinde dahi yukarıda belirtilen hizmet bedellerini <strong>iki katı</strong> olarak <strong>${officeName}</strong>'e cezai şart olarak ödemeyi peşinen kabul ve taahhüt ederim.</li>
+          <li style="margin-bottom:4px;">İhtilaf vukuunda <strong>${officeJurisdiction}</strong> Mahkemeleri ve İcra Daireleri yetkili olacaktır.</li>
+        </ol>
+      </div>`
+
+    const sigs = `
+      <div class="sig">${sigArea(signatures, 'main')}<div class="sig-line">MÜŞTERİ<br><strong>${clientName(doc.client)}</strong></div></div>
+      <div class="sig">${sigArea(signatures, 'consultant')}<div class="sig-line">Gayrimenkul Danışmanı<br><strong>${consultant?.full_name || '___'}</strong><br>${officeName}</div></div>`
+
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>YER GÖSTERME BELGESİ</title><style>${baseStyles} body{padding:20px 40px;} h1{font-size:18px;margin-bottom:10px;}</style>${jsBlock}</head><body>
+      <div class="no-print print-bar"><button class="print-btn" onclick="window.print()">🖨️ Yazdır</button><button class="pdf-btn" onclick="pdfDownload('Yer Gösterme Belgesi','showing_agreement')">⬇️ PDF İndir</button></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:2px solid #111;padding-bottom:12px;">
+        ${logoHtml}
+        <div style="text-align:right;font-size:12px;color:#555;">
+          <strong>${officeName}</strong><br>
+          ${officeAddress ? officeAddress + '<br>' : ''}
+          Tel: ${settings.office_phone || '---'}
+        </div>
+      </div>
+      <h1 style="text-align:center;text-decoration:underline;">YER GÖSTERME BELGESİ</h1>
+      ${body}
+      <div class="sigs" style="margin-top:20px;">${sigs}</div>
     </body></html>`
   }
 
@@ -394,7 +472,7 @@ export async function GET(
     supabase
       .from('settings')
       .select('key, value')
-      .in('key', ['office_name', 'office_legal_name', 'office_address', 'office_logo', 'office_mersis']),
+      .in('key', ['office_name', 'office_legal_name', 'office_address', 'office_logo', 'office_mersis', 'office_jurisdiction', 'office_phone']),
     supabase
       .from('signature_requests')
       .select('signer_role, status, signature_data, signature_type, signer_name')

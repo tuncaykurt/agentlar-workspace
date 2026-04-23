@@ -20,6 +20,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    // Respect forced light theme (e.g., /sign/ pages)
+    const forceLight = document.documentElement.getAttribute('data-force-light') === 'true'
+    if (forceLight) {
+      setTheme('light')
+      document.documentElement.classList.remove('dark')
+      setMounted(true)
+      return
+    }
+
     const stored = localStorage.getItem('theme') as Theme | null
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
     const initial = stored || (prefersDark ? 'dark' : 'light')
