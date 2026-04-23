@@ -40,6 +40,8 @@ export interface Consultant {
   wa_phone?: string
   evolution_instance_key?: string
   wa_connected_at?: string
+  ticari_yetki_belgesi_no?: string
+  office_phone?: string
   is_active: boolean
   created_at: string
   updated_at: string

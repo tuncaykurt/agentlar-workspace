@@ -336,7 +336,7 @@ function generatePrintHTML(params: {
   mainClient: Client | null
   secondClient: Client | null
   property: Property | null
-  consultant: Pick<Consultant, 'id' | 'full_name' | 'wa_phone'> | null
+  consultant: Pick<Consultant, 'id' | 'full_name' | 'wa_phone' | 'office_phone' | 'ticari_yetki_belgesi_no' | 'phone' | 'email' | 'address'> | null
   templateData: TemplateData
   officeName: string
   officeLegalName?: string
@@ -664,7 +664,7 @@ function generatePrintHTML(params: {
       sigs: `
         <div class="sig"><div class="sig-line">SATICI<br><strong>${clientName(mainClient)}</strong></div></div>
         <div class="sig"><div class="sig-line">ALICI<br><strong>${clientName(secondClient)}</strong></div></div>
-        <div class="sig"><div class="sig-line">Danışman<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
+        <div class="sig"><div class="sig-line">Gayrimenkul Danışmanı<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
       `,
     },
     rental_contract: {
@@ -763,7 +763,7 @@ function generatePrintHTML(params: {
       sigs: `
         <div class="sig"><div class="sig-line">KİRAYA VEREN<br><strong>${clientName(mainClient)}</strong></div></div>
         <div class="sig"><div class="sig-line">KİRACI<br><strong>${clientName(secondClient)}</strong></div></div>
-        <div class="sig"><div class="sig-line">Danışman<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
+        <div class="sig"><div class="sig-line">Gayrimenkul Danışmanı<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
       `,
     },
     offer_letter: {
@@ -787,7 +787,7 @@ function generatePrintHTML(params: {
       `,
       sigs: `
         <div class="sig"><div class="sig-line">Teklif Eden (Alıcı)<br><strong>${clientName(mainClient)}</strong></div></div>
-        <div class="sig"><div class="sig-line">Danışman<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
+        <div class="sig"><div class="sig-line">Gayrimenkul Danışmanı<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
       `,
     },
     showing_agreement: {
@@ -809,34 +809,44 @@ function generatePrintHTML(params: {
           <h3 style="color: #0070c0; border-bottom: 1px solid #0070c0; padding-bottom: 2px; margin: 0 0 4px 0; font-size: 10px; text-transform: uppercase;">Gayrimenkulün Özellikleri</h3>
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 9px; text-align: center;">
             <tr>
-              <th style="border: 1px solid #000; padding: 2px; width: 25%;"></th>
-              <th style="border: 1px solid #000; padding: 2px; width: 50%;"></th>
-              <th style="border: 1px solid #000; padding: 2px; width: 25%;">İMZA</th>
+              <th style="border: 1px solid #000; padding: 2px; width: 35%;"></th>
+              <th style="border: 1px solid #000; padding: 2px;"></th>
             </tr>
             <tr>
               <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">CİNSİ</td>
               <td style="border: 1px solid #000; padding: 2px; color: blue;">${(property?.property_type as string) === 'rental' ? 'Kiralık' : 'Satılık'} ${propType}</td>
-              <td style="border: 1px solid #000; padding: 2px;"></td>
             </tr>
             <tr>
               <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">ADRESİ</td>
               <td style="border: 1px solid #000; padding: 2px; color: blue;">${propAddress}</td>
-              <td style="border: 1px solid #000; padding: 2px;"></td>
             </tr>
             <tr>
               <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">SATIŞ BEDELİ</td>
               <td style="border: 1px solid #000; padding: 2px; color: blue;">${(property?.property_type as string) !== 'rental' && property?.price ? money(property.price.toString()) + ' ' + (property.currency || 'TL') : ''}</td>
-              <td style="border: 1px solid #000; padding: 2px;"></td>
             </tr>
             <tr>
               <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">AYLIK KİRA BEDELİ</td>
               <td style="border: 1px solid #000; padding: 2px; color: blue;">${(property?.property_type as string) === 'rental' && property?.price ? money(property.price.toString()) + ' ' + (property.currency || 'TL') : ''}</td>
-              <td style="border: 1px solid #000; padding: 2px;"></td>
             </tr>
             <tr>
-              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">TAPU BİLGİLERİ</td>
-              <td style="border: 1px solid #000; padding: 2px; color: blue;">${templateData.tapu_bilgileri || ''}</td>
-              <td style="border: 1px solid #000; padding: 2px;"></td>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">İL</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${templateData.tapu_il || property?.city || ''}</td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">İLÇE</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${templateData.tapu_ilce || property?.district || ''}</td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">MAHALLE</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${templateData.tapu_mahalle || property?.neighborhood || ''}</td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">ADA</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${templateData.tapu_ada || ''}</td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #000; padding: 2px; font-weight: bold; text-align: left;">PARSEL</td>
+              <td style="border: 1px solid #000; padding: 2px; color: blue;">${templateData.tapu_parsel || ''}</td>
             </tr>
           </table>
 
@@ -849,35 +859,33 @@ function generatePrintHTML(params: {
 
           <table style="width: 100%; margin-bottom: 6px; font-size: 9px;">
             <tr>
-              <td style="width: 100px; vertical-align: middle;">
-                <div style="transform: scale(0.6); transform-origin: left center;">${logoHtml}</div>
+              <td style="width: 80px; vertical-align: middle;">
+                <div style="transform: scale(0.9); transform-origin: left center;">${logoHtml}</div>
               </td>
-              <td style="vertical-align: middle; line-height: 1.2;">
-                <strong>${officeName}</strong><br>
+              <td style="vertical-align: middle; line-height: 1.4; padding-left: 6px;">
+                <strong style="font-size: 11px;">${officeName}</strong><br>
                 Ofis Adresi: <span style="color: blue;">${officeAddress || '_________________'}</span><br>
-                Telefon Numarası: <span style="color: blue;">${consultant?.wa_phone || '_________________'}</span>
+                Telefon: <span style="color: blue;">${(consultant as any)?.office_phone || '_________________'}</span>
               </td>
             </tr>
           </table>
 
           <table style="width: 100%; font-size: 9px; margin-bottom: 0px; font-weight: bold;">
             <tr>
-              <td style="width: 50%; vertical-align: top;">
-                GAYRİMENKULÜ GÖREN KİŞİ<br><br>
-                Ad/Soyad: <span style="color: blue;">${clientName(mainClient)}</span><br><br>
-                Yetki Belgesi Numarası: <span style="color: blue;">${templateData.yetki_belgesi_no || ''}</span><br><br>
-                E-Posta: <span style="color: blue;">${mainClient?.email || ''}</span>
-              </td>
-              <td style="width: 50%; vertical-align: top;">
-                Sözleşmeli İşletme ${officeName}<br><br>
+              <td style="width: 100%; vertical-align: top;">
+                GAYRİMENKULÜ GÖSTEREN DANIŞMAN<br><br>
+                Ad/Soyad: <span style="color: blue;">${consultant?.full_name || '_______________'}</span><br><br>
+                Ticari Taşınmaz Yetki Belgesi No: <span style="color: blue;">${(consultant as any)?.ticari_yetki_belgesi_no || templateData.yetki_belgesi_no || ''}</span><br><br>
+                E-Posta: <span style="color: blue;">${(consultant as any)?.email || ''}</span><br><br>
+                Telefon: <span style="color: blue;">${(consultant as any)?.office_phone || (consultant as any)?.wa_phone || ''}</span>
               </td>
             </tr>
           </table>
         </div>
       `,
       sigs: `
-        <div class="sig" style="margin-top:5px;"><div class="sig-line" style="padding-top:10px;">Müşteri<br><strong>${clientName(mainClient)}</strong></div></div>
-        <div class="sig" style="margin-top:5px;"><div class="sig-line" style="padding-top:10px;">Danışman<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
+        <div class="sig" style="margin-top:5px;"><div class="sig-line" style="padding-top:10px;">Alıcı Müşteri Adayı<br><strong>${clientName(mainClient)}</strong></div></div>
+        <div class="sig" style="margin-top:5px;"><div class="sig-line" style="padding-top:10px;">Gayrimenkul Danışmanı<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
       `,
     },
   }
@@ -939,7 +947,7 @@ export default function NewDocumentPage() {
   const [officeMersis, setOfficeMersis] = useState('')
   const [officeJurisdiction, setOfficeJurisdiction] = useState('')
   const [officeLogo, setOfficeLogo] = useState('')
-  const [consultants, setConsultants] = useState<Pick<Consultant, 'id' | 'full_name'>[]>([])
+  const [consultants, setConsultants] = useState<Pick<Consultant, 'id' | 'full_name' | 'wa_phone' | 'office_phone' | 'ticari_yetki_belgesi_no' | 'phone' | 'email' | 'address'>[]>([])
   const [consultantId, setConsultantId] = useState('')
 
   const [mainClient, setMainClient] = useState<Client | null>(null)
@@ -1017,7 +1025,11 @@ export default function NewDocumentPage() {
   const [hizmetBedeliYuzde, setHizmetBedeliYuzde] = useState('2')
   const [hizmetSuresiAy, setHizmetSuresiAy] = useState('12')
   const [mahkemeSehri, setMahkemeSehri] = useState('İstanbul')
-  const [tapuBilgileri, setTapuBilgileri] = useState('')
+  const [tapuIl, setTapuIl] = useState('')
+  const [tapuIlce, setTapuIlce] = useState('')
+  const [tapuMahalle, setTapuMahalle] = useState('')
+  const [tapuAda, setTapuAda] = useState('')
+  const [tapuParsel, setTapuParsel] = useState('')
   const [yetkiBelgesiNo, setYetkiBelgesiNo] = useState('')
   const [taahhutTarihi, setTaahhutTarihi] = useState('')
   const [kontratAdres, setKontratAdres] = useState('')
@@ -1027,7 +1039,7 @@ export default function NewDocumentPage() {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.from('consultants').select('id, full_name').eq('is_active', true)
+    supabase.from('consultants').select('id, full_name, wa_phone, office_phone, ticari_yetki_belgesi_no, phone, email, address').eq('is_active', true)
       .then(({ data }) => {
         if (data) {
           setConsultants(data as typeof consultants)
@@ -1134,7 +1146,10 @@ export default function NewDocumentPage() {
     if (docType === 'authorization') return { ...base, yetki_turu: yetkiTuru, komisyon_orani: komisyonOrani, komisyon_turu: komisyonTuru, ek_madde: ekMadde, mulk_tipi: mulkTipi, kira_bedeli: kiraBedeli, baslangic_tarihi: baslangicTarihi, yetki_suresi_gun: yetkiSuresiGun, satis_tutari: satisTutari, odeme_sekli: odemeSekli, ada: yAda, parsel: yParsel, pafta: yPafta, il: yIl, ilce: yIlce, mahalle: yMahalle }
     if (docType === 'sales_contract') return { ...base, satis_bedeli: satisBedeli, kapora, kapora_tarihi: kaporaTarihi, teslim_tarihi: teslimTarihi, tapuda_odenecek: tapudaOdenecek, pesin_odenen: pesinOdenen, hizmet_tapuda: hizmetTapuda, komisyon_alici: komisyonAlici, komisyon_satici: komisyonSatici, hizmet_bedeli_alici: hizmetBedeliAlici, hizmet_bedeli_satici: hizmetBedeliSatici, hizmet_bedeli: hizmetBedeli, ceza_miktari: cezaMiktari, ada: ada, parsel: parsel, pafta: pafta }
     if (docType === 'rental_contract') return { ...base, aylik_kira: aylikKira, depozito, kira_baslangic: kiraBaslangic, kira_suresi_ay: kiraSuresiAy, odeme_gunu: odemeGunu, banka_adi: bankaAdi, hesap_adi: hesapAdi, iban: ibanNo, artis_orani: artisOrani, kullanim_amaci: kullanimAmaci, demirbas_listesi: demirbasListesi, tahliye_tarihi: tahliyeTarihi, taahhut_tarihi: taahhutTarihi, kontrat_adres: kontratAdres, kiralanan_adres: kiralananAdres }
-    if (docType === 'showing_agreement') return { ...base, hizmet_bedeli_yuzde: hizmetBedeliYuzde, hizmet_suresi_ay: hizmetSuresiAy, mahkeme_sehri: mahkemeSehri, tapu_bilgileri: tapuBilgileri, yetki_belgesi_no: yetkiBelgesiNo }
+    if (docType === 'showing_agreement') {
+      const tapuBilgileri = [tapuIl, tapuIlce, tapuMahalle, tapuAda ? 'Ada: ' + tapuAda : '', tapuParsel ? 'Parsel: ' + tapuParsel : ''].filter(Boolean).join(' / ')
+      return { ...base, hizmet_bedeli_yuzde: hizmetBedeliYuzde, hizmet_suresi_ay: hizmetSuresiAy, mahkeme_sehri: mahkemeSehri, tapu_bilgileri: tapuBilgileri, tapu_il: tapuIl, tapu_ilce: tapuIlce, tapu_mahalle: tapuMahalle, tapu_ada: tapuAda, tapu_parsel: tapuParsel, yetki_belgesi_no: yetkiBelgesiNo }
+    }
     return { ...base, teklif_bedeli: teklifBedeli, gecerlilik_tarihi: gecerlilikTarihi }
   }
 
@@ -1199,7 +1214,7 @@ export default function NewDocumentPage() {
     const html = generatePrintHTML({
       docType, title,
       mainClient, secondClient, property,
-      consultant: consultant as Pick<Consultant, 'id' | 'full_name' | 'wa_phone'> | null,
+      consultant: consultant as Pick<Consultant, 'id' | 'full_name' | 'wa_phone' | 'office_phone' | 'ticari_yetki_belgesi_no' | 'phone' | 'email' | 'address'> | null,
       templateData: getTemplateData(),
       officeName,
       officeLegalName,
@@ -1221,13 +1236,14 @@ export default function NewDocumentPage() {
   const mainClientLabel =
     docType === 'authorization' ? 'Mülk Sahibi' :
     docType === 'sales_contract' ? 'Satıcı' :
-    docType === 'rental_contract' ? 'Kiraya Veren' : 'Alıcı'
+    docType === 'rental_contract' ? 'Kiraya Veren' :
+    docType === 'showing_agreement' ? 'Alıcı Müşteri Adayı' : 'Alıcı'
 
   const secondClientLabel =
     docType === 'sales_contract' ? 'Alıcı' :
     docType === 'rental_contract' ? 'Kiracı' : 'Diğer Taraf'
 
-  const showSecondClient = docType !== 'authorization'
+  const showSecondClient = docType !== 'authorization' && docType !== 'showing_agreement'
 
   const typeColorMap: Record<string, string> = {
     blue:   'border-primary bg-primary-container',
@@ -1660,14 +1676,31 @@ export default function NewDocumentPage() {
                   <label className={lbl}>Mahkeme Şehri</label>
                   <input type="text" value={mahkemeSehri} onChange={e => setMahkemeSehri(e.target.value)} className={inp} placeholder="İstanbul" />
                 </div>
-                <div>
-                  <label className={lbl}>Yetki Belgesi No</label>
-                  <input type="text" value={yetkiBelgesiNo} onChange={e => setYetkiBelgesiNo(e.target.value)} className={inp} placeholder="000000" />
-                </div>
               </div>
               <div>
-                <label className={lbl}>Tapu Bilgileri (Opsiyonel)</label>
-                <input type="text" value={tapuBilgileri} onChange={e => setTapuBilgileri(e.target.value)} className={inp} placeholder="Ada/Parsel veya diğer tapu detayları" />
+                <label className={lbl}>Tapu Bilgileri</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-on-surface-variant mb-1">İl</label>
+                    <input type="text" value={tapuIl} onChange={e => setTapuIl(e.target.value)} className={inp} placeholder="İstanbul" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-on-surface-variant mb-1">İlçe</label>
+                    <input type="text" value={tapuIlce} onChange={e => setTapuIlce(e.target.value)} className={inp} placeholder="Kadıköy" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-on-surface-variant mb-1">Mahalle</label>
+                    <input type="text" value={tapuMahalle} onChange={e => setTapuMahalle(e.target.value)} className={inp} placeholder="Moda Mah." />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-on-surface-variant mb-1">Ada No</label>
+                    <input type="text" value={tapuAda} onChange={e => setTapuAda(e.target.value)} className={inp} placeholder="123" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-on-surface-variant mb-1">Parsel No</label>
+                    <input type="text" value={tapuParsel} onChange={e => setTapuParsel(e.target.value)} className={inp} placeholder="45" />
+                  </div>
+                </div>
               </div>
             </>
           )}

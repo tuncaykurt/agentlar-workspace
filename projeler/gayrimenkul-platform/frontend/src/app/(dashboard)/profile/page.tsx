@@ -274,6 +274,8 @@ export default function ProfilePage() {
     instagram_handle: '',
     facebook_page: '',
     linkedin_url: '',
+    ticari_yetki_belgesi_no: '',
+    office_phone: '',
   })
 
   // Yeni sertifika ekleme
@@ -305,6 +307,8 @@ export default function ProfilePage() {
         instagram_handle: data.instagram_handle || '',
         facebook_page: data.facebook_page || '',
         linkedin_url: data.linkedin_url || '',
+        ticari_yetki_belgesi_no: (data as any).ticari_yetki_belgesi_no || '',
+        office_phone: (data as any).office_phone || '',
       })
       setCertifications(Array.isArray(data.certifications) ? data.certifications : [])
     }
@@ -470,6 +474,20 @@ export default function ProfilePage() {
               <label className="block text-sm font-medium text-on-surface mb-1">TC Kimlik No</label>
               <input value={form.id_number} onChange={e => setForm(f => ({ ...f, id_number: e.target.value }))}
                 placeholder="12345678901"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <label className="block text-sm font-medium text-on-surface mb-1">Ticari Taşınmaz Yetki Belgesi No</label>
+              <input value={form.ticari_yetki_belgesi_no} onChange={e => setForm(f => ({ ...f, ticari_yetki_belgesi_no: e.target.value }))}
+                placeholder="00000000"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-on-surface mb-1">Ofis Telefonu</label>
+              <input value={form.office_phone} onChange={e => setForm(f => ({ ...f, office_phone: e.target.value }))}
+                placeholder="+902121234567"
                 className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
