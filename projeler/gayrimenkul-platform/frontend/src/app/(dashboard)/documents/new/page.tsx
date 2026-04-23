@@ -31,8 +31,8 @@ function ClientExtraFields({
   onSaveToContact,
 }: {
   client: Client
-  extraData: { tc_no: string; address: string; email: string; firma: string }
-  onChange: (d: { tc_no: string; address: string; email: string; firma: string }) => void
+  extraData: { full_name: string; tc_no: string; address: string; email: string; firma: string }
+  onChange: (d: { full_name: string; tc_no: string; address: string; email: string; firma: string }) => void
   onSaveToContact: () => void
 }) {
   const missing = !client.tc_no || !client.address || !client.email
@@ -52,6 +52,16 @@ function ClientExtraFields({
       {open && (
         <div className="p-3 space-y-2 bg-surface-container">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-on-surface-variant mb-1">Ad Soyad (Belgede Görünecek)</label>
+              <input
+                type="text"
+                value={extraData.full_name}
+                onChange={e => onChange({ ...extraData, full_name: e.target.value })}
+                className={inp}
+                placeholder="Örn: Ahmet Yılmaz"
+              />
+            </div>
             <div>
               <label className="block text-xs text-on-surface-variant mb-1">TC / Vergi No</label>
               <input
@@ -437,7 +447,7 @@ function generatePrintHTML(params: {
 
   // Reusable party block — uses template_data for extra fields if available
   const partyRows = (label: string, c: Client | null, prefix: 'main' | 'second') => `
-    <tr><td>${label}:</td><td>${clientName(c)}</td></tr>
+    <tr><td>${label}:</td><td>${templateData[`${prefix}_full_name`] || clientName(c)}</td></tr>
     <tr><td>Telefon:</td><td>${c?.phone || '_______________'}</td></tr>
     <tr><td>E-posta:</td><td>${templateData[`${prefix}_email`] || c?.email || '_______________'}</td></tr>
     <tr><td>TC / Vergi No:</td><td>${templateData[`${prefix}_tc_no`] || c?.tc_no || '_______________'}</td></tr>
@@ -884,7 +894,7 @@ function generatePrintHTML(params: {
         </div>
       `,
       sigs: `
-        <div class="sig" style="margin-top:5px;"><div class="sig-line" style="padding-top:10px;">Alıcı Müşteri Adayı<br><strong>${clientName(mainClient)}</strong></div></div>
+        <div class="sig" style="margin-top:5px;"><div class="sig-line" style="padding-top:10px;">Alıcı Müşteri Adayı<br><strong>${templateData.main_full_name || clientName(mainClient)}</strong></div></div>
         <div class="sig" style="margin-top:5px;"><div class="sig-line" style="padding-top:10px;">Gayrimenkul Danışmanı<br><strong>${consultant?.full_name || '_______________'}</strong><br>${officeName}</div></div>
       `,
     },
@@ -954,8 +964,8 @@ export default function NewDocumentPage() {
   const [secondClient, setSecondClient] = useState<Client | null>(null)
   const [property, setProperty] = useState<Property | null>(null)
 
-  type ExtraFields = { tc_no: string; address: string; email: string; firma: string }
-  const emptyExtra = (): ExtraFields => ({ tc_no: '', address: '', email: '', firma: '' })
+  type ExtraFields = { full_name: string; tc_no: string; address: string; email: string; firma: string }
+  const emptyExtra = (): ExtraFields => ({ full_name: '', tc_no: '', address: '', email: '', firma: '' })
   const [mainExtra, setMainExtra] = useState<ExtraFields>(emptyExtra())
   const [secondExtra, setSecondExtra] = useState<ExtraFields>(emptyExtra())
 
@@ -1043,7 +1053,11 @@ export default function NewDocumentPage() {
       .then(({ data }) => {
         if (data) {
           setConsultants(data as typeof consultants)
-          if (data[0]) setConsultantId(data[0].id)
+          if (loggedInConsultantId && data.find(c => c.id === loggedInConsultantId)) {
+            setConsultantId(loggedInConsultantId)
+          } else if (data[0]) {
+            setConsultantId(data[0].id)
+          }
         }
       })
     const settingsKeys = ['office_name', 'office_legal_name', 'office_address', 'office_mersis', 'office_jurisdiction', 'office_logo']
@@ -1072,7 +1086,7 @@ export default function NewDocumentPage() {
   // Pre-fill extra fields when client is selected
   useEffect(() => {
     if (mainClient) {
-      setMainExtra({ tc_no: mainClient.tc_no || '', address: mainClient.address || '', email: mainClient.email || '', firma: '' })
+      setMainExtra({ full_name: mainClient.full_name || '', tc_no: mainClient.tc_no || '', address: mainClient.address || '', email: mainClient.email || '', firma: '' })
     } else {
       setMainExtra(emptyExtra())
     }
@@ -1080,7 +1094,7 @@ export default function NewDocumentPage() {
 
   useEffect(() => {
     if (secondClient) {
-      setSecondExtra({ tc_no: secondClient.tc_no || '', address: secondClient.address || '', email: secondClient.email || '', firma: '' })
+      setSecondExtra({ full_name: secondClient.full_name || '', tc_no: secondClient.tc_no || '', address: secondClient.address || '', email: secondClient.email || '', firma: '' })
     } else {
       setSecondExtra(emptyExtra())
     }
@@ -1131,6 +1145,7 @@ export default function NewDocumentPage() {
   async function saveExtraToClient(clientId: string, extra: ExtraFields) {
     const supabase = createClient()
     const update: Record<string, string> = {}
+    if (extra.full_name) update.full_name = extra.full_name
     if (extra.tc_no) update.tc_no = extra.tc_no
     if (extra.address) update.address = extra.address
     if (extra.email) update.email = extra.email
@@ -1140,8 +1155,8 @@ export default function NewDocumentPage() {
   }
 
   function getTemplateData(): TemplateData {
-    const mainInfo = { main_tc_no: mainExtra.tc_no, main_address: mainExtra.address, main_email: mainExtra.email, firma: mainExtra.firma }
-    const secondInfo = { second_tc_no: secondExtra.tc_no, second_address: secondExtra.address, second_email: secondExtra.email, firma: secondExtra.firma }
+    const mainInfo = { main_tc_no: mainExtra.tc_no, main_address: mainExtra.address, main_email: mainExtra.email, firma: mainExtra.firma, main_full_name: mainExtra.full_name }
+    const secondInfo = { second_tc_no: secondExtra.tc_no, second_address: secondExtra.address, second_email: secondExtra.email, firma: secondExtra.firma, second_full_name: secondExtra.full_name }
     const base: TemplateData = { ozel_sartlar: ozelSartlar, ...mainInfo, ...secondInfo }
     if (docType === 'authorization') return { ...base, yetki_turu: yetkiTuru, komisyon_orani: komisyonOrani, komisyon_turu: komisyonTuru, ek_madde: ekMadde, mulk_tipi: mulkTipi, kira_bedeli: kiraBedeli, baslangic_tarihi: baslangicTarihi, yetki_suresi_gun: yetkiSuresiGun, satis_tutari: satisTutari, odeme_sekli: odemeSekli, ada: yAda, parsel: yParsel, pafta: yPafta, il: yIl, ilce: yIlce, mahalle: yMahalle }
     if (docType === 'sales_contract') return { ...base, satis_bedeli: satisBedeli, kapora, kapora_tarihi: kaporaTarihi, teslim_tarihi: teslimTarihi, tapuda_odenecek: tapudaOdenecek, pesin_odenen: pesinOdenen, hizmet_tapuda: hizmetTapuda, komisyon_alici: komisyonAlici, komisyon_satici: komisyonSatici, hizmet_bedeli_alici: hizmetBedeliAlici, hizmet_bedeli_satici: hizmetBedeliSatici, hizmet_bedeli: hizmetBedeli, ceza_miktari: cezaMiktari, ada: ada, parsel: parsel, pafta: pafta }

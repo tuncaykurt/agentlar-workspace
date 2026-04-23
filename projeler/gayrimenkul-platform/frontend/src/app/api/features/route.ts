@@ -26,7 +26,7 @@ export async function GET() {
   // 2. Get consultant profile
   const { data: consultant } = await supabase
     .from('consultants')
-    .select('id, role, credit_balance')
+    .select('id, role, credit_balance, is_active')
     .eq('user_id', user.id)
     .single()
 
@@ -93,5 +93,6 @@ export async function GET() {
     credit_cost_per_document: settings.credit_cost_per_document ?? 1,
     initial_free_credits: settings.initial_free_credits ?? 5,
     is_admin: isAdmin,
+    is_active: consultant.is_active,
   })
 }

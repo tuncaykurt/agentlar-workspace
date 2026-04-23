@@ -99,7 +99,13 @@ export default function LoginPage() {
             </button>
           </form>
           <p className="text-center text-xs text-on-surface-variant mt-6">
-            Hesap oluşturmak için yöneticinizle iletişime geçin.
+            Hesabınız yok mu?{' '}
+            <button
+              onClick={() => router.push('/register')}
+              className="text-primary hover:underline font-medium"
+            >
+              Kayıt Ol
+            </button>
           </p>
         </div>
       </div>

@@ -10,6 +10,7 @@ interface FeatureState {
   creditBalance: number
   creditCostPerDocument: number
   consultantId: string | null
+  isActive: boolean
   hasFeature: (key: string) => boolean
   refreshFeatures: () => Promise<void>
   deductCredit: (amount: number) => void
@@ -23,6 +24,7 @@ const FeatureContext = createContext<FeatureState>({
   creditBalance: 0,
   creditCostPerDocument: 1,
   consultantId: null,
+  isActive: true, // Default to true to prevent flickering before load
   hasFeature: () => false,
   refreshFeatures: async () => {},
   deductCredit: () => {},
@@ -36,6 +38,7 @@ export function FeatureProvider({ children }: { children: ReactNode }) {
   const [creditBalance, setCreditBalance] = useState(0)
   const [creditCostPerDocument, setCreditCostPerDocument] = useState(1)
   const [consultantId, setConsultantId] = useState<string | null>(null)
+  const [isActive, setIsActive] = useState(true)
 
   async function fetchFeatures() {
     try {
@@ -48,6 +51,7 @@ export function FeatureProvider({ children }: { children: ReactNode }) {
       setCreditBalance(data.credit_balance ?? 0)
       setCreditCostPerDocument(data.credit_cost_per_document ?? 1)
       setConsultantId(data.consultant_id || null)
+      setIsActive(data.is_active ?? true)
     } catch {
       // silent fail — will show all features as fallback
     } finally {
@@ -81,6 +85,7 @@ export function FeatureProvider({ children }: { children: ReactNode }) {
       creditBalance,
       creditCostPerDocument,
       consultantId,
+      isActive,
       hasFeature,
       refreshFeatures: fetchFeatures,
       deductCredit,
