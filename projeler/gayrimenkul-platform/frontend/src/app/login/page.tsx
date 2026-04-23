@@ -22,7 +22,11 @@ export default function LoginPage() {
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
     if (authError) {
-      setError('E-posta veya şifre hatalı.')
+      if (authError.message.includes('Email not confirmed')) {
+        setError('Lütfen e-posta adresinize gönderilen onay linkine tıklayın.')
+      } else {
+        setError('E-posta veya şifre hatalı.')
+      }
       setLoading(false)
       return
     }
