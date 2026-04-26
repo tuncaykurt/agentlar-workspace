@@ -516,6 +516,16 @@ ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS kyc_status TEXT;
 ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS kyc_verified_at TIMESTAMPTZ;
     `,
   },
+  {
+    id: '016_kvkk_consent',
+    sql: `
+ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS kvkk_consent BOOLEAN DEFAULT FALSE;
+ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS kvkk_consent_at TIMESTAMPTZ;
+ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS kyc_data JSONB;
+ALTER TABLE consultants ADD COLUMN IF NOT EXISTS kvkk_consent BOOLEAN DEFAULT FALSE;
+ALTER TABLE consultants ADD COLUMN IF NOT EXISTS kvkk_consent_at TIMESTAMPTZ;
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────

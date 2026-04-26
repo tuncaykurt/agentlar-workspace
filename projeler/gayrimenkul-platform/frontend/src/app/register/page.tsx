@@ -3,7 +3,19 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Building2, Mail, Lock, Loader2, Eye, EyeOff, User } from 'lucide-react'
+import { Building2, Mail, Lock, Loader2, Eye, EyeOff, User, ChevronDown, ChevronUp } from 'lucide-react'
+
+const KVKK_TEXT = `6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") kapsamında, veri sorumlusu sıfatıyla platform yöneticisi tarafından aşağıdaki kişisel verileriniz işlenecektir.
+
+İşlenen Kişisel Veriler: Ad soyad, e-posta adresi, telefon numarası, adres, TC Kimlik Numarası, vergi numarası, kimlik belgesi görselleri, vergi levhası, yetki belgesi, mesleki sertifikalar, profil fotoğrafı, WhatsApp iletişim bilgileri.
+
+İşleme Amaçları: Danışman hesabının oluşturulması ve yönetimi; gayrimenkul belge, sözleşme ve imzalama süreçlerinin yürütülmesi; yasal yükümlülüklerin (Türk Ticaret Kanunu, Vergi Mevzuatı, Tapu Mevzuatı) yerine getirilmesi; müşteri iletişimi ve platform hizmetlerinin iyileştirilmesi.
+
+Veri Aktarımı: Kişisel verileriniz; iş süreçlerinin yürütülmesi amacıyla platform altyapı sağlayıcılarına ve yasal zorunluluk halinde yetkili kamu kurum ve kuruluşlarına aktarılabilir.
+
+Saklama Süresi: İş ilişkisinin sona ermesinden itibaren 10 yıl süreyle saklanacak; akabinde silinecek veya anonim hale getirilecektir.
+
+Haklarınız (KVKK Madde 11): Verilerinize erişim, yanlış verilerin düzeltilmesi, silinmesi veya yok edilmesi, aktarım bilgisi talep etme, işlemeye itiraz etme ve otomatik işlem sonuçlarına itiraz etme haklarına sahipsiniz. Başvuru için lütfen platform yöneticisiyle iletişime geçin.`
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -14,20 +26,31 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [kvkkAgreed, setKvkkAgreed] = useState(false)
+  const [kvkkExpanded, setKvkkExpanded] = useState(false)
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
+    if (!kvkkAgreed) {
+      setError('Devam edebilmek için KVKK Aydınlatma Metnini onaylamanız gerekmektedir.')
+      return
+    }
+
     setLoading(true)
     setError('')
     setSuccess(false)
 
     const supabase = createClient()
+    const consentAt = new Date().toISOString()
+
     const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
+          kvkk_consent: true,
+          kvkk_consent_at: consentAt,
         },
       },
     })
@@ -39,9 +62,14 @@ export default function RegisterPage() {
     }
 
     if (data.user) {
+      // Update consultant record with KVKK consent (trigger creates record)
+      await fetch('/api/auth/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: data.user.id, consentAt }),
+      })
+
       setSuccess(true)
-      // Otomatik giriş yapılabilir veya onay beklediği için login'e yönlendirilebilir
-      // Ancak şu anda sistem otomatik is_active = false atıyor, dashboard guard'a düşecek
       setTimeout(() => {
         router.push('/dashboard')
         router.refresh()
@@ -66,7 +94,7 @@ export default function RegisterPage() {
         {/* Form */}
         <div className="bg-surface-container rounded-2xl shadow-xl p-8">
           <h2 className="text-xl font-bold text-on-surface mb-6">Hesap Oluştur</h2>
-          
+
           {success ? (
             <div className="text-center py-4">
               <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -131,6 +159,34 @@ export default function RegisterPage() {
                 </div>
               </div>
 
+              {/* KVKK Consent */}
+              <div className="border border-outline rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setKvkkExpanded(!kvkkExpanded)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 bg-surface-container-high text-sm font-medium text-on-surface hover:bg-surface-container transition-colors"
+                >
+                  <span>KVKK Aydınlatma Metni</span>
+                  {kvkkExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+                {kvkkExpanded && (
+                  <div className="px-3 py-3 bg-surface text-xs text-on-surface-variant leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap border-t border-outline">
+                    {KVKK_TEXT}
+                  </div>
+                )}
+                <label className="flex items-start gap-2.5 px-3 py-3 cursor-pointer border-t border-outline bg-surface">
+                  <input
+                    type="checkbox"
+                    checked={kvkkAgreed}
+                    onChange={e => setKvkkAgreed(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-blue-600 shrink-0"
+                  />
+                  <span className="text-xs text-on-surface leading-relaxed">
+                    <strong>KVKK Aydınlatma Metnini</strong> okudum, anladım ve kişisel verilerimin belirtilen amaçlarla işlenmesine <strong>açık rıza veriyorum.</strong>
+                  </span>
+                </label>
+              </div>
+
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-lg">
                   {error}
@@ -139,8 +195,8 @@ export default function RegisterPage() {
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-primary hover:bg-primary-hover text-white py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={loading || !kvkkAgreed}
+                className="w-full bg-primary hover:bg-primary-hover text-white py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? <><Loader2 size={16} className="animate-spin" /> Kaydediliyor...</> : 'Kayıt Ol'}
               </button>

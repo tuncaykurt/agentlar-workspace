@@ -19,6 +19,63 @@ function serviceClient() {
   )
 }
 
+async function ensureWebhookRegistered(appUrl: string): Promise<void> {
+  const supabase = serviceClient()
+  const webhookUrl = `${appUrl}/api/didit/webhook`
+
+  // Check if already registered
+  const { data } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'didit_webhook_url')
+    .maybeSingle()
+
+  const cached = data?.value ? String(data.value).replace(/^"|"$/g, '') : ''
+  if (cached === webhookUrl) {
+    console.log('[didit] Webhook already registered:', webhookUrl)
+    return
+  }
+
+  // List existing destinations to avoid duplicates
+  const listRes = await fetch(`${DIDIT_BASE}/webhook/destinations/`, {
+    headers: { 'x-api-key': apiKey() },
+  })
+
+  if (listRes.ok) {
+    const listBody = await listRes.json()
+    const destinations = Array.isArray(listBody) ? listBody : (listBody?.results ?? [])
+    const existing = destinations.find((d: { url?: string }) => d.url === webhookUrl)
+    if (existing) {
+      console.log('[didit] Webhook destination already exists:', existing.uuid)
+      await supabase.from('settings').upsert({ key: 'didit_webhook_url', value: webhookUrl }, { onConflict: 'key' })
+      return
+    }
+  }
+
+  // Register new webhook destination
+  const regRes = await fetch(`${DIDIT_BASE}/webhook/destinations/`, {
+    method: 'POST',
+    headers: { 'x-api-key': apiKey(), 'content-type': 'application/json' },
+    body: JSON.stringify({
+      label: 'Gayrimenkul Platform KYC Webhook',
+      url: webhookUrl,
+      subscribed_events: ['session.status.updated'],
+      enabled: true,
+      webhook_version: 'v3',
+    }),
+  })
+
+  const regBody = await regRes.text()
+  console.log('[didit] Webhook registration status:', regRes.status, 'body:', regBody.slice(0, 300))
+
+  if (regRes.ok) {
+    await supabase.from('settings').upsert({ key: 'didit_webhook_url', value: webhookUrl }, { onConflict: 'key' })
+    console.log('[didit] Webhook registered successfully:', webhookUrl)
+  } else {
+    console.warn('[didit] Webhook registration failed (non-fatal):', regBody)
+  }
+}
+
 async function getOrCreateWorkflow(): Promise<string> {
   const supabase = serviceClient()
 
@@ -98,8 +155,9 @@ export async function createVerificationSession(signToken: string): Promise<{
   session_token: string
   url: string
 }> {
-  const workflowId = await getOrCreateWorkflow()
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
+  await ensureWebhookRegistered(appUrl)
+  const workflowId = await getOrCreateWorkflow()
 
   const body = {
     workflow_id: workflowId,

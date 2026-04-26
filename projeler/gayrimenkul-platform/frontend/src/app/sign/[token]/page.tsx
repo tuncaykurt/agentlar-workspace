@@ -2,7 +2,27 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { CheckCircle, XCircle, PenLine, Type, Trash2, AlertCircle, ShieldCheck, Loader2 } from 'lucide-react'
+import { CheckCircle, XCircle, PenLine, Type, Trash2, AlertCircle, ShieldCheck, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+
+const KVKK_SIGNING_TEXT = `6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") kapsamında veri sorumlusu tarafından aşağıdaki kişisel verileriniz işlenecektir.
+
+İşlenen Kişisel Veriler:
+• Kimlik verileri: Ad, soyad
+• İletişim verileri: Telefon numarası
+• İşlem güvenliği verileri: Elektronik imza (çizili veya yazılı ad), işlem IP adresi, işlem tarih ve saati, cihaz/tarayıcı bilgisi
+• KYC kimlik doğrulama kapsamında (zorunlu olması halinde): TC Kimlik No / Pasaport numarası, doğum tarihi, belge görseli — DiDit Teknoloji A.Ş. tarafından işlenmektedir
+
+İşleme Amaçları:
+• Elektronik imzalı belge ve sözleşmelerin oluşturulması ve arşivlenmesi
+• İmzacı kimliğinin 5070 sayılı Elektronik İmza Kanunu kapsamında tespit edilmesi
+• Uyuşmazlık durumunda hukuki ispat ve savunma hakkının kullanılması
+• Yasal yükümlülüklerin (Türk Borçlar Kanunu, Tapu Kanunu vb.) yerine getirilmesi
+
+Veri Aktarımı: Verileriniz; KYC hizmeti için DiDit'e ve yasal zorunluluk halinde yetkili kamu kurum ve kuruluşlarına aktarılabilir.
+
+Saklama Süresi: İmzalı belgeler ve ilgili kişisel veriler imza tarihinden itibaren 10 yıl saklanacak; akabinde silinecek veya anonim hale getirilecektir.
+
+Haklarınız (KVKK Md.11): Verilerinize erişim, düzeltme, silme, aktarım bilgisi talep etme ve işlemeye itiraz etme haklarına sahipsiniz.`
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -345,6 +365,9 @@ export default function SignPage() {
   const [kycLoading, setKycLoading] = useState(false)
   const [kycError, setKycError] = useState('')
 
+  const [kvkkAgreed, setKvkkAgreed] = useState(false)
+  const [kvkkExpanded, setKvkkExpanded] = useState(false)
+
   const getCanvasDataURL = useRef<(() => string | null) | null>(null)
 
   useEffect(() => {
@@ -444,7 +467,7 @@ export default function SignPage() {
       const res = await fetch(`/api/sign/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signatureData, signatureType }),
+        body: JSON.stringify({ signatureData, signatureType, kvkkConsent: true }),
       })
 
       const result = await res.json()
@@ -712,7 +735,35 @@ export default function SignPage() {
           )}
         </div>
 
-        {/* Onay Checkbox */}
+        {/* KVKK Consent */}
+        <div className="border border-outline rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setKvkkExpanded(!kvkkExpanded)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-surface-container-high text-sm font-medium text-on-surface hover:bg-surface-container transition-colors"
+          >
+            <span>KVKK Aydınlatma Metni ve Açık Rıza</span>
+            {kvkkExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          {kvkkExpanded && (
+            <div className="px-4 py-3 bg-surface text-xs text-on-surface-variant leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap border-t border-outline">
+              {KVKK_SIGNING_TEXT}
+            </div>
+          )}
+          <label className="flex items-start gap-3 px-4 py-3 border-t border-outline bg-surface cursor-pointer">
+            <input
+              type="checkbox"
+              checked={kvkkAgreed}
+              onChange={e => setKvkkAgreed(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-blue-600 shrink-0"
+            />
+            <span className="text-xs text-on-surface leading-relaxed">
+              <strong>KVKK Aydınlatma Metnini</strong> okudum, anladım; kişisel verilerimin ve KYC kapsamındaki kimlik verilerimin belirtilen amaçlarla işlenmesine <strong>açık rıza veriyorum.</strong>
+            </span>
+          </label>
+        </div>
+
+        {/* Belge Onay Checkbox */}
         <label className="flex items-start gap-3 bg-surface-container rounded-xl border border-outline p-4 cursor-pointer">
           <div className="relative mt-0.5">
             <input
@@ -744,9 +795,15 @@ export default function SignPage() {
             Kimlik doğrulamanızı tamamladıktan sonra imzalayabilirsiniz.
           </div>
         )}
+        {!kvkkAgreed && (
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-800">
+            <AlertCircle size={14} className="shrink-0" />
+            KVKK Aydınlatma Metnini onaylamanız gerekmektedir.
+          </div>
+        )}
         <button
           onClick={handleSubmit}
-          disabled={submitting || !agreed || kycBlocked}
+          disabled={submitting || !agreed || !kvkkAgreed || kycBlocked}
           className="w-full py-4 bg-primary text-white font-semibold rounded-xl text-base hover:bg-primary-hover active:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {submitting ? 'İmzalanıyor...' : 'Belgeyi İmzala'}

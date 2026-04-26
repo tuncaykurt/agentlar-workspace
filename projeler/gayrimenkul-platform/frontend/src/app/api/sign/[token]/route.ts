@@ -86,14 +86,18 @@ export async function POST(
   }
 
   // 2. Parse body
-  let body: { signatureData?: string; signatureType?: string }
+  let body: { signatureData?: string; signatureType?: string; kvkkConsent?: boolean }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Geçersiz istek.' }, { status: 400 })
   }
 
-  const { signatureData, signatureType } = body
+  const { signatureData, signatureType, kvkkConsent } = body
+
+  if (!kvkkConsent) {
+    return NextResponse.json({ error: 'KVKK onayı olmadan imzalanamaz.' }, { status: 403 })
+  }
 
   if (!signatureData) {
     return NextResponse.json({ error: 'İmza verisi eksik.' }, { status: 400 })
@@ -125,6 +129,8 @@ export async function POST(
       signed_at: now,
       ip_address: ip,
       user_agent: userAgent,
+      kvkk_consent: true,
+      kvkk_consent_at: now,
     })
     .eq('id', sigReq.id)
 
