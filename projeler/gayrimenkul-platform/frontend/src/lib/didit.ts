@@ -26,7 +26,7 @@ async function getOrCreateWorkflow(): Promise<string> {
   const { data } = await supabase
     .from('settings')
     .select('value')
-    .eq('key', 'didit_workflow_id')
+    .eq('key', 'didit_workflow_id_v2')
     .maybeSingle()
 
   if (data?.value) {
@@ -53,7 +53,7 @@ async function getOrCreateWorkflow(): Promise<string> {
       console.log('[didit] Found existing workflow:', existing.uuid)
       await supabase
         .from('settings')
-        .upsert({ key: 'didit_workflow_id', value: existing.uuid }, { onConflict: 'key' })
+        .upsert({ key: 'didit_workflow_id_v2', value: existing.uuid }, { onConflict: 'key' })
       return existing.uuid
     }
   } else {
@@ -70,7 +70,6 @@ async function getOrCreateWorkflow(): Promise<string> {
       features: [
         { feature: 'OCR' },
         { feature: 'LIVENESS' },
-        { feature: 'FACE_MATCH' },
       ],
     }),
   })
@@ -88,7 +87,7 @@ async function getOrCreateWorkflow(): Promise<string> {
 
   await supabase
     .from('settings')
-    .upsert({ key: 'didit_workflow_id', value: workflowId }, { onConflict: 'key' })
+    .upsert({ key: 'didit_workflow_id_v2', value: workflowId }, { onConflict: 'key' })
 
   console.log('[didit] Created workflow:', workflowId)
   return workflowId
