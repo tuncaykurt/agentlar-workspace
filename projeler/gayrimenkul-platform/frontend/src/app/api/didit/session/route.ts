@@ -45,6 +45,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ already_approved: true })
   }
 
+  if (!process.env.DIDIT_API_KEY) {
+    console.error('[didit] DIDIT_API_KEY env var eksik')
+    return NextResponse.json({ error: 'KYC servisi yapılandırılmamış (DIDIT_API_KEY eksik)' }, { status: 503 })
+  }
+
   try {
     const session = await createVerificationSession(token)
 
@@ -55,7 +60,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: session.url, session_id: session.session_id })
   } catch (e) {
-    console.error('[didit] Session creation error:', e)
-    return NextResponse.json({ error: 'Doğrulama oturumu oluşturulamadı' }, { status: 500 })
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[didit] Session creation error:', msg)
+    return NextResponse.json({ error: `Doğrulama oturumu oluşturulamadı: ${msg}` }, { status: 500 })
   }
 }
