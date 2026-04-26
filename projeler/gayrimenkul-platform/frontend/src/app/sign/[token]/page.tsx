@@ -394,7 +394,12 @@ export default function SignPage() {
       setDoc(docInfo)
 
       setKycRequired(!!docInfo.kyc_required)
-      setKycStatus((req as SignRequest).kyc_status || null)
+      const loadedKycStatus = (req as SignRequest).kyc_status || null
+      setKycStatus(loadedKycStatus)
+      // If a session already exists (user returning from DiDit), auto-start polling
+      if ((req as SignRequest).kyc_session_id && loadedKycStatus !== 'approved') {
+        setKycStarted(true)
+      }
 
       setState('ready')
     } catch {
@@ -432,7 +437,9 @@ export default function SignPage() {
       if (!res.ok) { setKycError(data.error || 'Doğrulama başlatılamadı.'); return }
       if (data.already_approved) { setKycStatus('approved'); return }
       setKycStarted(true)
-      window.open(data.url, '_blank', 'noopener,noreferrer')
+      // Redirect in same window — avoids in-app browser (WhatsApp/Facebook)
+      // DiDit will redirect back to callback URL (/sign/token) after completion
+      window.location.href = data.url
     } catch {
       setKycError('Bağlantı hatası. Lütfen tekrar deneyin.')
     } finally {
