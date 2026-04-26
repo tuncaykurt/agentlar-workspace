@@ -22,6 +22,7 @@ function serviceClient() {
 async function getOrCreateWorkflow(): Promise<string> {
   const supabase = serviceClient()
 
+  // Check settings cache first
   const { data } = await supabase
     .from('settings')
     .select('value')
@@ -30,24 +31,34 @@ async function getOrCreateWorkflow(): Promise<string> {
 
   if (data?.value) {
     const val = String(data.value).replace(/^"|"$/g, '')
-    if (val) return val
+    if (val) {
+      console.log('[didit] Using cached workflow_id:', val)
+      return val
+    }
   }
 
-  // Try existing workflows first
+  // List existing workflows
   const listRes = await fetch(`${DIDIT_BASE}/workflows/`, {
     headers: { 'x-api-key': apiKey() },
   })
 
+  console.log('[didit] GET /workflows/ status:', listRes.status)
+
   if (listRes.ok) {
     const workflows = await listRes.json()
+    console.log('[didit] Workflows response:', JSON.stringify(workflows).slice(0, 300))
     const list = Array.isArray(workflows) ? workflows : (workflows?.results ?? [])
     const existing = list[0]
     if (existing?.uuid) {
+      console.log('[didit] Found existing workflow:', existing.uuid)
       await supabase
         .from('settings')
         .upsert({ key: 'didit_workflow_id', value: existing.uuid }, { onConflict: 'key' })
       return existing.uuid
     }
+  } else {
+    const listErr = await listRes.text()
+    console.warn('[didit] GET /workflows/ failed:', listRes.status, listErr)
   }
 
   // Create new workflow
@@ -73,19 +84,22 @@ async function getOrCreateWorkflow(): Promise<string> {
     }),
   })
 
+  const createBody = await createRes.text()
+  console.log('[didit] POST /workflows/ status:', createRes.status, 'body:', createBody.slice(0, 300))
+
   if (!createRes.ok) {
-    const err = await createRes.text()
-    throw new Error(`DiDit workflow creation failed: ${err}`)
+    throw new Error(`DiDit workflow creation failed (${createRes.status}): ${createBody}`)
   }
 
-  const workflow = await createRes.json()
+  const workflow = JSON.parse(createBody)
   const workflowId: string = workflow.uuid || workflow.id
-  if (!workflowId) throw new Error('DiDit workflow ID missing in response')
+  if (!workflowId) throw new Error(`DiDit workflow ID missing. Response: ${createBody}`)
 
   await supabase
     .from('settings')
     .upsert({ key: 'didit_workflow_id', value: workflowId }, { onConflict: 'key' })
 
+  console.log('[didit] Created workflow:', workflowId)
   return workflowId
 }
 
@@ -97,20 +111,42 @@ export async function createVerificationSession(signToken: string): Promise<{
   const workflowId = await getOrCreateWorkflow()
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
 
-  const res = await fetch(`${DIDIT_BASE}/sessions/`, {
-    method: 'POST',
-    headers: { 'x-api-key': apiKey(), 'content-type': 'application/json' },
-    body: JSON.stringify({
-      workflow_id: workflowId,
-      vendor_data: signToken,
-      callback: `${appUrl}/api/didit/webhook`,
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`DiDit session creation failed: ${err}`)
+  const body = {
+    workflow_id: workflowId,
+    vendor_data: signToken,
+    callback: `${appUrl}/api/didit/webhook`,
   }
 
-  return res.json()
+  console.log('[didit] Creating session, workflow_id:', workflowId, 'callback:', body.callback)
+
+  // Try without trailing slash first (some proxies reject POST with trailing slash)
+  const res = await fetch(`${DIDIT_BASE}/sessions`, {
+    method: 'POST',
+    headers: { 'x-api-key': apiKey(), 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  const resText = await res.text()
+  console.log('[didit] POST /sessions status:', res.status, 'body:', resText.slice(0, 500))
+
+  if (!res.ok) {
+    // Retry with trailing slash
+    if (res.status === 405) {
+      console.log('[didit] 405 without slash, retrying with trailing slash...')
+      const res2 = await fetch(`${DIDIT_BASE}/sessions/`, {
+        method: 'POST',
+        headers: { 'x-api-key': apiKey(), 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const res2Text = await res2.text()
+      console.log('[didit] POST /sessions/ status:', res2.status, 'body:', res2Text.slice(0, 500))
+      if (!res2.ok) {
+        throw new Error(`DiDit session creation failed: ${res2Text}`)
+      }
+      return JSON.parse(res2Text)
+    }
+    throw new Error(`DiDit session creation failed: ${resText}`)
+  }
+
+  return JSON.parse(resText)
 }
