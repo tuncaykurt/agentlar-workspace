@@ -171,7 +171,9 @@ export async function POST(
     type ConsultantWA = { id: string; full_name: string; phone: string; email?: string; wa_instance: string }
     const rawConsultant = doc?.consultant
     const consultant = (Array.isArray(rawConsultant) ? rawConsultant[0] : rawConsultant) as unknown as ConsultantWA | null
-    const evolutionInstance = consultant?.wa_instance || process.env.EVOLUTION_INSTANCE || ''
+    const derivedInstance = consultant?.wa_instance ||
+      (consultant?.id ? `gayr-${consultant.id.replace(/-/g, '').slice(0, 12)}` : null)
+    const evolutionInstance = derivedInstance || process.env.EVOLUTION_INSTANCE || ''
 
     if (evolutionInstance && evoUrl && evoKey) {
       const docTitle = doc?.title || 'Belge'
