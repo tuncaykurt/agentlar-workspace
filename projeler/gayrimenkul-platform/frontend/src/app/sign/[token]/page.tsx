@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { CheckCircle, XCircle, PenLine, Type, Trash2, AlertCircle, ShieldCheck, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import { CheckCircle, XCircle, PenLine, Type, Trash2, AlertCircle, ShieldCheck, Loader2, ChevronDown, ChevronUp, X } from 'lucide-react'
 
 const KVKK_SIGNING_TEXT = `6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") kapsamında veri sorumlusu tarafından aşağıdaki kişisel verileriniz işlenecektir.
 
@@ -365,6 +365,7 @@ export default function SignPage() {
   const [kycLoading, setKycLoading] = useState(false)
   const [kycError, setKycError] = useState('')
   const [kycUrl, setKycUrl] = useState<string | null>(null)
+  const [kycIframeOpen, setKycIframeOpen] = useState(false)
 
   const [kvkkAgreed, setKvkkAgreed] = useState(false)
   const [kvkkExpanded, setKvkkExpanded] = useState(false)
@@ -408,6 +409,22 @@ export default function SignPage() {
     }
   }
 
+  // Listen for DiDit postMessage completion event (iframe mode)
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (event.origin !== 'https://verify.didit.me') return
+      if (event.data?.type === 'didit:verification:complete') {
+        setKycIframeOpen(false)
+        const status = event.data.status as string
+        if (status === 'Approved') setKycStatus('approved')
+        else if (status === 'Declined') setKycStatus('declined')
+        else setKycStarted(true) // keep polling for pending
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
   // Poll for KYC approval after user starts DiDit flow
   useEffect(() => {
     if (!kycStarted || kycStatus === 'approved') return
@@ -439,9 +456,7 @@ export default function SignPage() {
       if (data.already_approved) { setKycStatus('approved'); return }
       setKycStarted(true)
       setKycUrl(data.url)
-      // Redirect in same window — avoids in-app browser (WhatsApp/Facebook)
-      // DiDit will redirect back to callback URL (/sign/token) after completion
-      window.location.href = data.url
+      setKycIframeOpen(true)
     } catch {
       setKycError('Bağlantı hatası. Lütfen tekrar deneyin.')
     } finally {
@@ -588,6 +603,29 @@ export default function SignPage() {
 
   return (
     <div className="min-h-screen bg-surface-container-high">
+
+      {/* DiDit KYC iFrame Overlay */}
+      {kycIframeOpen && kycUrl && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black">
+          <div className="flex items-center justify-between px-4 py-3 bg-gray-900 shrink-0">
+            <p className="text-white text-sm font-semibold">Kimlik Doğrulama</p>
+            <button
+              onClick={() => setKycIframeOpen(false)}
+              className="text-white/70 hover:text-white p-1"
+              aria-label="Kapat"
+            >
+              <X size={22} />
+            </button>
+          </div>
+          <iframe
+            src={kycUrl}
+            className="flex-1 w-full border-0"
+            allow="camera; microphone; fullscreen; autoplay; encrypted-media"
+            allowFullScreen
+          />
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-surface-container border-b border-outline px-4 py-3 text-center">
         {officeLogo
@@ -679,29 +717,21 @@ export default function SignPage() {
                       </div>
                     )}
                     <div className="flex gap-2">
+                      {kycUrl && (
+                        <button
+                          onClick={() => setKycIframeOpen(true)}
+                          className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 transition-colors"
+                        >
+                          Doğrulamayı Aç
+                        </button>
+                      )}
                       <button
-                        onClick={() => { setKycStarted(false); setKycUrl(null); handleStartKyc() }}
+                        onClick={() => { setKycStarted(false); setKycUrl(null); setKycIframeOpen(false) }}
                         className="flex-1 py-2 border border-amber-300 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
                       >
                         Yeniden Başlat
                       </button>
-                      <button
-                        onClick={() => window.location.reload()}
-                        className="flex-1 py-2 border border-amber-300 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
-                      >
-                        Durumu Yenile
-                      </button>
                     </div>
-                    {kycUrl && (
-                      <a
-                        href={kycUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block text-center text-xs text-amber-700 underline underline-offset-2 mt-1"
-                      >
-                        Doğrulama sayfası açılmadıysa buraya tıklayın →
-                      </a>
-                    )}
                   </>
                 )}
               </>
