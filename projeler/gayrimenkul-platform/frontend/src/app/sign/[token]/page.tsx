@@ -364,6 +364,7 @@ export default function SignPage() {
   const [kycStarted, setKycStarted] = useState(false)
   const [kycLoading, setKycLoading] = useState(false)
   const [kycError, setKycError] = useState('')
+  const [kycUrl, setKycUrl] = useState<string | null>(null)
 
   const [kvkkAgreed, setKvkkAgreed] = useState(false)
   const [kvkkExpanded, setKvkkExpanded] = useState(false)
@@ -437,6 +438,7 @@ export default function SignPage() {
       if (!res.ok) { setKycError(data.error || 'Doğrulama başlatılamadı.'); return }
       if (data.already_approved) { setKycStatus('approved'); return }
       setKycStarted(true)
+      setKycUrl(data.url)
       // Redirect in same window — avoids in-app browser (WhatsApp/Facebook)
       // DiDit will redirect back to callback URL (/sign/token) after completion
       window.location.href = data.url
@@ -678,10 +680,10 @@ export default function SignPage() {
                     )}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => { setKycStarted(false); handleStartKyc() }}
+                        onClick={() => { setKycStarted(false); setKycUrl(null); handleStartKyc() }}
                         className="flex-1 py-2 border border-amber-300 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
                       >
-                        Yeniden Aç
+                        Yeniden Başlat
                       </button>
                       <button
                         onClick={() => window.location.reload()}
@@ -690,6 +692,16 @@ export default function SignPage() {
                         Durumu Yenile
                       </button>
                     </div>
+                    {kycUrl && (
+                      <a
+                        href={kycUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-center text-xs text-amber-700 underline underline-offset-2 mt-1"
+                      >
+                        Doğrulama sayfası açılmadıysa buraya tıklayın →
+                      </a>
+                    )}
                   </>
                 )}
               </>
