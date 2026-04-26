@@ -177,6 +177,10 @@ export async function createVerificationSession(signToken: string): Promise<{
     workflow_id: workflowId,
     vendor_data: signToken,
     callback: `${appUrl}/sign/${signToken}`,
+    language: 'tr',
+    expected_details: {
+      id_country: 'TUR',
+    },
   }
 
   console.log('[didit] Creating session, workflow_id:', workflowId, 'callback:', body.callback)
