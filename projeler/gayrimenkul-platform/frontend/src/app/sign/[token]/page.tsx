@@ -643,7 +643,7 @@ export default function SignPage() {
                       </p>
                       <p className="flex items-center gap-2">
                         <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">2</span>
-                        Aşağıdaki butona tıklayın — açılan ekranda <strong>Türkiye</strong> seçili gelecektir
+                        Aşağıdaki butona tıklayın — açılan ekranda ülke olarak <strong>Türkiye</strong> seçin
                       </p>
                       <p className="flex items-center gap-2">
                         <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">3</span>
