@@ -973,10 +973,7 @@ export default function DocumentDetailPage() {
       setDoc(docRes.data as DocRow)
       setNewStatus(docRes.data.signature_status)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const c = (docRes.data as any).consultant
-      const derivedInstance = c?.wa_instance ||
-        (c?.id ? `gayr-${c.id.replace(/-/g, '').slice(0, 12)}` : null)
-      setConsultantInstance(derivedInstance)
+      setConsultantInstance((docRes.data as any).consultant?.wa_instance || null)
     }
     if (sigsRes.data) setSigRequests(sigsRes.data as SigRequest[])
 

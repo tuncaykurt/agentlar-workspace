@@ -11,16 +11,10 @@ function serviceClient() {
   )
 }
 
-// Build deterministic instance name from consultant ID — same formula as /api/whatsapp/consultant
-function deriveInstance(consultantId: string) {
-  return `gayr-${consultantId.replace(/-/g, '').slice(0, 12)}`
-}
-
 // Resolve which Evolution instance to use:
 // 1. body param (passed from document page)
-// 2. logged-in consultant's wa_instance from DB
-// 3. derived from consultant ID (deterministic)
-// 4. EVOLUTION_INSTANCE env var (last resort)
+// 2. logged-in consultant's wa_instance from DB (exact value, no derivation)
+// 3. EVOLUTION_INSTANCE env var (last resort)
 async function resolveInstance(req: NextRequest, bodyInstance?: string): Promise<string> {
   if (bodyInstance) return bodyInstance
 
@@ -36,13 +30,11 @@ async function resolveInstance(req: NextRequest, bodyInstance?: string): Promise
 
     const { data: consultant } = await serviceClient()
       .from('consultants')
-      .select('id, wa_instance')
+      .select('wa_instance')
       .eq('user_id', user.id)
       .single()
 
-    if (!consultant) return process.env.EVOLUTION_INSTANCE || ''
-
-    return consultant.wa_instance || deriveInstance(consultant.id)
+    return consultant?.wa_instance || process.env.EVOLUTION_INSTANCE || ''
   } catch {
     return process.env.EVOLUTION_INSTANCE || ''
   }
