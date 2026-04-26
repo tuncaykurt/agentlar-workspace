@@ -549,108 +549,10 @@ export default function SignPage() {
     )
   }
 
-  // ── KYC Gate (required but not approved) ──────────────────────────────────
+  // ── Ready: show signing form (with optional KYC section inline) ──────────
 
-  if (state === 'ready' && kycRequired && kycStatus !== 'approved') {
-    return (
-      <div className="min-h-screen bg-surface-container-high">
-        <div className="bg-surface-container border-b border-outline px-4 py-3 text-center">
-          {officeLogo
-            ? <img src={officeLogo} alt={officeName} className="h-10 max-w-[160px] object-contain mx-auto mb-1" />
-            : <p className="text-xs text-on-surface-variant">{officeName}</p>
-          }
-          <p className="text-sm font-semibold text-on-surface">Elektronik İmza</p>
-        </div>
-
-        <div className="max-w-lg mx-auto p-4 pt-8 space-y-4">
-          {doc && sigReq && <DocSummary doc={doc} signerRole={sigReq.signer_role} token={token} />}
-
-          <div className="bg-surface-container rounded-2xl border border-outline p-6 text-center space-y-4">
-            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
-              <ShieldCheck size={32} className="text-amber-600" />
-            </div>
-
-            {!kycStarted ? (
-              <>
-                <div>
-                  <h2 className="text-lg font-bold text-on-surface mb-1">Kimlik Doğrulama Gerekli</h2>
-                  <p className="text-sm text-on-surface-variant leading-relaxed">
-                    Bu belgeyi imzalamadan önce kimliğinizi doğrulamanız gerekmektedir.
-                    Doğrulama DiDit platformu üzerinden güvenli biçimde gerçekleştirilir.
-                  </p>
-                </div>
-                <div className="text-left bg-surface-container-high rounded-xl p-3 space-y-2 text-xs text-on-surface-variant">
-                  <p className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-bold shrink-0">1</span>
-                    Kimlik belgenizi (TC Kimlik veya Pasaport) hazırlayın
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-bold shrink-0">2</span>
-                    Aşağıdaki butona tıklayarak doğrulamayı başlatın
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-bold shrink-0">3</span>
-                    Doğrulama tamamlandığında bu sayfaya dönün ve imzalayın
-                  </p>
-                </div>
-                {kycError && (
-                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700 text-left">
-                    <AlertCircle size={14} className="shrink-0" />
-                    {kycError}
-                  </div>
-                )}
-                <button
-                  onClick={handleStartKyc}
-                  disabled={kycLoading}
-                  className="w-full py-3.5 bg-primary text-white font-semibold rounded-xl text-sm hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {kycLoading
-                    ? <><Loader2 size={16} className="animate-spin" /> Hazırlanıyor...</>
-                    : <><ShieldCheck size={16} /> Kimliğimi Doğrula</>}
-                </button>
-              </>
-            ) : (
-              <>
-                <div>
-                  <h2 className="text-lg font-bold text-on-surface mb-1">Doğrulama Devam Ediyor</h2>
-                  <p className="text-sm text-on-surface-variant leading-relaxed">
-                    Yeni sekmede açılan DiDit doğrulamasını tamamlayın.
-                    Tamamlandığında bu sayfa otomatik olarak güncellenecektir.
-                  </p>
-                </div>
-                <div className="flex items-center justify-center gap-2 text-amber-600">
-                  <Loader2 size={20} className="animate-spin" />
-                  <span className="text-sm font-medium">Doğrulama bekleniyor...</span>
-                </div>
-                {kycStatus === 'declined' && (
-                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700 text-left">
-                    <XCircle size={14} className="shrink-0" />
-                    Kimlik doğrulama reddedildi. Danışmanınızla iletişime geçin.
-                  </div>
-                )}
-                <button
-                  onClick={() => window.location.reload()}
-                  className="w-full py-3 border border-outline rounded-xl text-sm font-medium text-on-surface hover:bg-surface-container-high transition-colors"
-                >
-                  Durumu Kontrol Et (Sayfayı Yenile)
-                </button>
-                <button
-                  onClick={() => { setKycStarted(false); handleStartKyc() }}
-                  className="text-xs text-primary underline underline-offset-2"
-                >
-                  Doğrulama sekmesini yeniden aç
-                </button>
-              </>
-            )}
-          </div>
-
-          <p className="text-xs text-on-surface-variant text-center">{officeName}</p>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Ready: show signing form ───────────────────────────────────────────────
+  const kycApproved = kycStatus === 'approved'
+  const kycBlocked = kycRequired && !kycApproved
 
   return (
     <div className="min-h-screen bg-surface-container-high">
@@ -674,6 +576,94 @@ export default function SignPage() {
             <p className="text-xs text-on-surface-variant mb-0.5">İmzacı</p>
             <p className="font-semibold text-on-surface">{sigReq.signer_name}</p>
             {sigReq.signer_phone && <p className="text-sm text-on-surface-variant">{sigReq.signer_phone}</p>}
+          </div>
+        )}
+
+        {/* KYC Section — shown only when required */}
+        {kycRequired && (
+          <div className={`rounded-xl border p-4 space-y-3 ${kycApproved ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${kycApproved ? 'bg-green-100' : 'bg-amber-100'}`}>
+                {kycApproved
+                  ? <CheckCircle size={22} className="text-green-600" />
+                  : <ShieldCheck size={22} className="text-amber-600" />}
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${kycApproved ? 'text-green-800' : 'text-amber-800'}`}>
+                  {kycApproved ? 'Kimlik Doğrulandı' : 'Kimlik Doğrulama Gerekli'}
+                </p>
+                <p className={`text-xs ${kycApproved ? 'text-green-700' : 'text-amber-700'}`}>
+                  {kycApproved
+                    ? 'Kimliğiniz başarıyla doğrulandı. Artık imzalayabilirsiniz.'
+                    : 'İmzalamadan önce kimliğinizi DiDit ile doğrulamanız gerekmektedir.'}
+                </p>
+              </div>
+            </div>
+
+            {!kycApproved && (
+              <>
+                {!kycStarted ? (
+                  <>
+                    <div className="bg-white/70 rounded-lg p-3 space-y-1.5 text-xs text-amber-800">
+                      <p className="flex items-center gap-2">
+                        <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">1</span>
+                        TC Kimlik veya Pasaportunuzu hazırlayın
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">2</span>
+                        Aşağıdaki butona tıklayın, yeni sekmede doğrulamayı tamamlayın
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">3</span>
+                        Bu sayfaya dönerek imzalayın
+                      </p>
+                    </div>
+                    {kycError && (
+                      <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+                        <AlertCircle size={12} className="shrink-0" />
+                        {kycError}
+                      </div>
+                    )}
+                    <button
+                      onClick={handleStartKyc}
+                      disabled={kycLoading}
+                      className="w-full py-3 bg-amber-600 text-white font-semibold rounded-xl text-sm hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {kycLoading
+                        ? <><Loader2 size={15} className="animate-spin" /> Hazırlanıyor...</>
+                        : <><ShieldCheck size={15} /> Kimliğimi Doğrula</>}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 text-amber-700 text-sm">
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Doğrulama bekleniyor... Sayfa otomatik güncellenecek.</span>
+                    </div>
+                    {kycStatus === 'declined' && (
+                      <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+                        <XCircle size={12} className="shrink-0" />
+                        Kimlik doğrulama reddedildi. Danışmanınızla iletişime geçin.
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setKycStarted(false); handleStartKyc() }}
+                        className="flex-1 py-2 border border-amber-300 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
+                      >
+                        Yeniden Aç
+                      </button>
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="flex-1 py-2 border border-amber-300 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
+                      >
+                        Durumu Yenile
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -748,9 +738,15 @@ export default function SignPage() {
         )}
 
         {/* Submit */}
+        {kycBlocked && (
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800">
+            <ShieldCheck size={14} className="shrink-0" />
+            Kimlik doğrulamanızı tamamladıktan sonra imzalayabilirsiniz.
+          </div>
+        )}
         <button
           onClick={handleSubmit}
-          disabled={submitting || !agreed}
+          disabled={submitting || !agreed || kycBlocked}
           className="w-full py-4 bg-primary text-white font-semibold rounded-xl text-base hover:bg-primary-hover active:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {submitting ? 'İmzalanıyor...' : 'Belgeyi İmzala'}
