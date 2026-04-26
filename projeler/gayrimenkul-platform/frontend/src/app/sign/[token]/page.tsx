@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { CheckCircle, XCircle, PenLine, Type, Trash2, AlertCircle } from 'lucide-react'
+import { CheckCircle, XCircle, PenLine, Type, Trash2, AlertCircle, ShieldCheck, Loader2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,8 @@ type SignRequest = {
   status: string
   viewed_at: string | null
   signed_at: string | null
+  kyc_status: string | null
+  kyc_session_id: string | null
 }
 
 type DocInfo = {
@@ -23,6 +25,7 @@ type DocInfo = {
   title: string
   doc_type: string
   template_data: Record<string, string | null>
+  kyc_required?: boolean
   client?: { full_name: string; salutation?: string } | null
   property?: { title: string; city?: string } | null
 }
@@ -336,6 +339,12 @@ export default function SignPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
+  const [kycRequired, setKycRequired] = useState(false)
+  const [kycStatus, setKycStatus] = useState<string | null>(null)
+  const [kycStarted, setKycStarted] = useState(false)
+  const [kycLoading, setKycLoading] = useState(false)
+  const [kycError, setKycError] = useState('')
+
   const getCanvasDataURL = useRef<(() => string | null) | null>(null)
 
   useEffect(() => {
@@ -358,11 +367,53 @@ export default function SignPage() {
       if (req.status === 'signed') { setState('already_signed'); return }
 
       if (!docData) { setState('error'); return }
-      setDoc(docData as DocInfo)
+      const docInfo = docData as DocInfo
+      setDoc(docInfo)
+
+      setKycRequired(!!docInfo.kyc_required)
+      setKycStatus((req as SignRequest).kyc_status || null)
 
       setState('ready')
     } catch {
       setState('error')
+    }
+  }
+
+  // Poll for KYC approval after user starts DiDit flow
+  useEffect(() => {
+    if (!kycStarted || kycStatus === 'approved') return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/sign/${token}`)
+        if (!res.ok) return
+        const data = await res.json()
+        const newStatus = data.sigReq?.kyc_status as string | null
+        if (newStatus && newStatus !== kycStatus) setKycStatus(newStatus)
+      } catch {
+        // silently ignore polling errors
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [kycStarted, kycStatus, token])
+
+  async function handleStartKyc() {
+    setKycLoading(true)
+    setKycError('')
+    try {
+      const res = await fetch('/api/didit/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setKycError(data.error || 'Doğrulama başlatılamadı.'); return }
+      if (data.already_approved) { setKycStatus('approved'); return }
+      setKycStarted(true)
+      window.open(data.url, '_blank', 'noopener,noreferrer')
+    } catch {
+      setKycError('Bağlantı hatası. Lütfen tekrar deneyin.')
+    } finally {
+      setKycLoading(false)
     }
   }
 
@@ -493,6 +544,107 @@ export default function SignPage() {
             Belgeyi Görüntüle / PDF İndir
           </a>
           <p className="text-xs text-on-surface-variant mt-6">{officeName}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── KYC Gate (required but not approved) ──────────────────────────────────
+
+  if (state === 'ready' && kycRequired && kycStatus !== 'approved') {
+    return (
+      <div className="min-h-screen bg-surface-container-high">
+        <div className="bg-surface-container border-b border-outline px-4 py-3 text-center">
+          {officeLogo
+            ? <img src={officeLogo} alt={officeName} className="h-10 max-w-[160px] object-contain mx-auto mb-1" />
+            : <p className="text-xs text-on-surface-variant">{officeName}</p>
+          }
+          <p className="text-sm font-semibold text-on-surface">Elektronik İmza</p>
+        </div>
+
+        <div className="max-w-lg mx-auto p-4 pt-8 space-y-4">
+          {doc && sigReq && <DocSummary doc={doc} signerRole={sigReq.signer_role} token={token} />}
+
+          <div className="bg-surface-container rounded-2xl border border-outline p-6 text-center space-y-4">
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+              <ShieldCheck size={32} className="text-amber-600" />
+            </div>
+
+            {!kycStarted ? (
+              <>
+                <div>
+                  <h2 className="text-lg font-bold text-on-surface mb-1">Kimlik Doğrulama Gerekli</h2>
+                  <p className="text-sm text-on-surface-variant leading-relaxed">
+                    Bu belgeyi imzalamadan önce kimliğinizi doğrulamanız gerekmektedir.
+                    Doğrulama DiDit platformu üzerinden güvenli biçimde gerçekleştirilir.
+                  </p>
+                </div>
+                <div className="text-left bg-surface-container-high rounded-xl p-3 space-y-2 text-xs text-on-surface-variant">
+                  <p className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-bold shrink-0">1</span>
+                    Kimlik belgenizi (TC Kimlik veya Pasaport) hazırlayın
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-bold shrink-0">2</span>
+                    Aşağıdaki butona tıklayarak doğrulamayı başlatın
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-bold shrink-0">3</span>
+                    Doğrulama tamamlandığında bu sayfaya dönün ve imzalayın
+                  </p>
+                </div>
+                {kycError && (
+                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700 text-left">
+                    <AlertCircle size={14} className="shrink-0" />
+                    {kycError}
+                  </div>
+                )}
+                <button
+                  onClick={handleStartKyc}
+                  disabled={kycLoading}
+                  className="w-full py-3.5 bg-primary text-white font-semibold rounded-xl text-sm hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {kycLoading
+                    ? <><Loader2 size={16} className="animate-spin" /> Hazırlanıyor...</>
+                    : <><ShieldCheck size={16} /> Kimliğimi Doğrula</>}
+                </button>
+              </>
+            ) : (
+              <>
+                <div>
+                  <h2 className="text-lg font-bold text-on-surface mb-1">Doğrulama Devam Ediyor</h2>
+                  <p className="text-sm text-on-surface-variant leading-relaxed">
+                    Yeni sekmede açılan DiDit doğrulamasını tamamlayın.
+                    Tamamlandığında bu sayfa otomatik olarak güncellenecektir.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-2 text-amber-600">
+                  <Loader2 size={20} className="animate-spin" />
+                  <span className="text-sm font-medium">Doğrulama bekleniyor...</span>
+                </div>
+                {kycStatus === 'declined' && (
+                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700 text-left">
+                    <XCircle size={14} className="shrink-0" />
+                    Kimlik doğrulama reddedildi. Danışmanınızla iletişime geçin.
+                  </div>
+                )}
+                <button
+                  onClick={() => window.location.reload()}
+                  className="w-full py-3 border border-outline rounded-xl text-sm font-medium text-on-surface hover:bg-surface-container-high transition-colors"
+                >
+                  Durumu Kontrol Et (Sayfayı Yenile)
+                </button>
+                <button
+                  onClick={() => { setKycStarted(false); handleStartKyc() }}
+                  className="text-xs text-primary underline underline-offset-2"
+                >
+                  Doğrulama sekmesini yeniden aç
+                </button>
+              </>
+            )}
+          </div>
+
+          <p className="text-xs text-on-surface-variant text-center">{officeName}</p>
         </div>
       </div>
     )

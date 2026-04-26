@@ -17,7 +17,7 @@ export async function GET(
 
   const { data: sigReq, error } = await supabase
     .from('signature_requests')
-    .select('id, signer_name, signer_phone, signer_role, status, document_id, viewed_at, signed_at, token')
+    .select('id, signer_name, signer_phone, signer_role, status, document_id, viewed_at, signed_at, token, kyc_status, kyc_session_id')
     .eq('token', params.token)
     .single()
 
@@ -27,7 +27,7 @@ export async function GET(
 
   const { data: doc } = await supabase
     .from('documents')
-    .select('id, title, doc_type, template_data, client:clients(full_name, salutation), property:properties(title, city)')
+    .select('id, title, doc_type, template_data, kyc_required, client:clients(full_name, salutation), property:properties(title, city)')
     .eq('id', sigReq.document_id)
     .single()
 
@@ -72,6 +72,17 @@ export async function POST(
 
   if (sigReq.status === 'signed') {
     return NextResponse.json({ error: 'Bu belge zaten imzalanmış.' }, { status: 409 })
+  }
+
+  // 1b. KYC check — fetch document to see if kyc_required
+  const { data: kycDoc } = await supabase
+    .from('documents')
+    .select('kyc_required')
+    .eq('id', sigReq.document_id)
+    .single()
+
+  if (kycDoc?.kyc_required && sigReq.kyc_status !== 'approved') {
+    return NextResponse.json({ error: 'KYC kimlik doğrulaması tamamlanmadan imzalanamaz.' }, { status: 403 })
   }
 
   // 2. Parse body

@@ -507,6 +507,15 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
     `,
   },
+  {
+    id: '015_kyc_didit',
+    sql: `
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS kyc_required BOOLEAN DEFAULT FALSE;
+ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS kyc_session_id TEXT;
+ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS kyc_status TEXT;
+ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS kyc_verified_at TIMESTAMPTZ;
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────

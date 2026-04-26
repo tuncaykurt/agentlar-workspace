@@ -1045,6 +1045,7 @@ export default function NewDocumentPage() {
   const [kontratAdres, setKontratAdres] = useState('')
   const [kiralananAdres, setKiralananAdres] = useState('')
   const [notes, setNotes] = useState('')
+  const [kycRequired, setKycRequired] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -1213,6 +1214,7 @@ export default function NewDocumentPage() {
         second_client_phone: secondClient?.phone || null,
       },
       notes,
+      kyc_required: kycRequired,
       signature_status: 'draft',
     })
     setSaving(false)
@@ -1753,6 +1755,26 @@ export default function NewDocumentPage() {
             className={`${inp} min-h-[60px] resize-y`}
             placeholder="Dahili notlar..."
           />
+        </div>
+
+        {/* KYC Kimlik Doğrulama */}
+        <div className="card">
+          <h2 className="text-sm font-semibold text-on-surface mb-3">Kimlik Doğrulama (KYC)</h2>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={kycRequired}
+              onChange={e => setKycRequired(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-outline accent-primary shrink-0"
+            />
+            <div>
+              <span className="text-sm font-medium text-on-surface">İmzacılardan KYC doğrulaması iste</span>
+              <p className="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
+                Etkinleştirilirse imzacılar, belgeyi imzalamadan önce DiDit platformu üzerinden kimlik
+                ve yüz doğrulaması yapacak. Standart imzalama devam ediyor; bu ek bir güvenlik katmanıdır.
+              </p>
+            </div>
+          </label>
         </div>
 
         {/* Kredi bilgisi ve hata */}
