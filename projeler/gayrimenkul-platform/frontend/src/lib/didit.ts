@@ -79,9 +79,9 @@ async function ensureWebhookRegistered(appUrl: string): Promise<void> {
 async function getOrCreateWorkflow(): Promise<string> {
   const supabase = serviceClient()
 
-  // The verified working workflow: OCR + LIVENESS (published, no FACE_MATCH)
-  // UUID confirmed working via direct API test on 2026-04-26
-  const VERIFIED_WORKFLOW_ID = 'ef6a29e5-b39f-4448-9163-7a53d0164400'
+  // Workflow: OCR (TUR only) + LIVENESS, published, no FACE_MATCH
+  // accepted_countries:["TUR"] restricts dropdown to Turkey only
+  const VERIFIED_WORKFLOW_ID = '11261a38-c96f-4b87-8634-6e12c649a696'
 
   // Check settings cache — key v3 to bypass stale v1/v2 cache
   const { data } = await supabase

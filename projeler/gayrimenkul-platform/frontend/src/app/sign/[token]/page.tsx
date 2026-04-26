@@ -630,15 +630,15 @@ export default function SignPage() {
                     <div className="bg-white/70 rounded-lg p-3 space-y-1.5 text-xs text-amber-800">
                       <p className="flex items-center gap-2">
                         <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">1</span>
-                        TC Kimlik veya Pasaportunuzu hazırlayın
+                        TC Kimlik Kartı veya Pasaportunuzu hazırlayın
                       </p>
                       <p className="flex items-center gap-2">
                         <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">2</span>
-                        Aşağıdaki butona tıklayın, yeni sekmede doğrulamayı tamamlayın
+                        Aşağıdaki butona tıklayın — açılan ekranda <strong>Türkiye</strong> seçili gelecektir
                       </p>
                       <p className="flex items-center gap-2">
                         <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">3</span>
-                        Bu sayfaya dönerek imzalayın
+                        Doğrulama tamamlandığında bu sayfaya dönün ve imzalayın
                       </p>
                     </div>
                     {kycError && (
