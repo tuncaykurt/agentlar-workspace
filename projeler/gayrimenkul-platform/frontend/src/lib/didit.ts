@@ -61,26 +61,17 @@ async function getOrCreateWorkflow(): Promise<string> {
     console.warn('[didit] GET /workflows/ failed:', listRes.status, listErr)
   }
 
-  // Create new workflow
+  // Create new workflow — features is an ordered array of objects (not a boolean map)
   const createRes = await fetch(`${DIDIT_BASE}/workflows/`, {
     method: 'POST',
     headers: { 'x-api-key': apiKey(), 'content-type': 'application/json' },
     body: JSON.stringify({
-      name: 'KYC Kimlik Doğrulama',
-      features: {
-        id_verification: true,
-        passive_liveness: true,
-        face_match: true,
-        aml_screening: false,
-        nfc: false,
-        ip_analysis: true,
-        phone_verification: false,
-        email_verification: false,
-        proof_of_address: false,
-        age_estimation: false,
-        database_validation: false,
-        questionnaire: false,
-      },
+      workflow_label: 'KYC Kimlik Doğrulama',
+      features: [
+        { feature: 'OCR' },
+        { feature: 'LIVENESS' },
+        { feature: 'FACE_MATCH' },
+      ],
     }),
   })
 
@@ -114,38 +105,23 @@ export async function createVerificationSession(signToken: string): Promise<{
   const body = {
     workflow_id: workflowId,
     vendor_data: signToken,
-    callback: `${appUrl}/api/didit/webhook`,
+    callback: `${appUrl}/sign/${signToken}`,
   }
 
   console.log('[didit] Creating session, workflow_id:', workflowId, 'callback:', body.callback)
 
-  // Try without trailing slash first (some proxies reject POST with trailing slash)
-  const res = await fetch(`${DIDIT_BASE}/sessions`, {
+  // Correct endpoint: POST /v3/session/ (singular, trailing slash required)
+  const res = await fetch(`${DIDIT_BASE}/session/`, {
     method: 'POST',
     headers: { 'x-api-key': apiKey(), 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
 
   const resText = await res.text()
-  console.log('[didit] POST /sessions status:', res.status, 'body:', resText.slice(0, 500))
+  console.log('[didit] POST /session/ status:', res.status, 'body:', resText.slice(0, 500))
 
   if (!res.ok) {
-    // Retry with trailing slash
-    if (res.status === 405) {
-      console.log('[didit] 405 without slash, retrying with trailing slash...')
-      const res2 = await fetch(`${DIDIT_BASE}/sessions/`, {
-        method: 'POST',
-        headers: { 'x-api-key': apiKey(), 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const res2Text = await res2.text()
-      console.log('[didit] POST /sessions/ status:', res2.status, 'body:', res2Text.slice(0, 500))
-      if (!res2.ok) {
-        throw new Error(`DiDit session creation failed: ${res2Text}`)
-      }
-      return JSON.parse(res2Text)
-    }
-    throw new Error(`DiDit session creation failed: ${resText}`)
+    throw new Error(`DiDit session creation failed (${res.status}): ${resText}`)
   }
 
   return JSON.parse(resText)
