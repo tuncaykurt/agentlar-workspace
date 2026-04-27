@@ -526,6 +526,13 @@ ALTER TABLE consultants ADD COLUMN IF NOT EXISTS kvkk_consent BOOLEAN DEFAULT FA
 ALTER TABLE consultants ADD COLUMN IF NOT EXISTS kvkk_consent_at TIMESTAMPTZ;
     `,
   },
+  {
+    id: '017_otp_verification',
+    sql: `
+ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS otp_code TEXT;
+ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMPTZ;
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────
