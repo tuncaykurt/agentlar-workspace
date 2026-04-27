@@ -21,44 +21,26 @@ export async function GET() {
 
   const results: Record<string, unknown> = {}
 
-  // 1. Get cached workflow from settings
-  const supabase = serviceClient()
-  const { data: cachedV4 } = await supabase.from('settings').select('value').eq('key', 'didit_workflow_id_v4').maybeSingle()
-  results.cached_workflow_v4 = cachedV4?.value ?? null
+  // 1. Check billing balance
+  const balanceRes = await fetch(`${DIDIT_BASE}/billing/balance/`, {
+    headers: { 'x-api-key': apikey },
+  })
+  results.balance_status = balanceRes.status
+  results.balance = balanceRes.ok ? await balanceRes.json() : await balanceRes.text()
 
-  // 2. List all workflows
+  // 2. Get cached workflow from settings
+  const supabase = serviceClient()
+  for (const ver of ['v5', 'v6', 'v7']) {
+    const { data } = await supabase.from('settings').select('value').eq('key', `didit_workflow_id_${ver}`).maybeSingle()
+    results[`cached_workflow_${ver}`] = data?.value ?? null
+  }
+
+  // 3. List all workflows
   const listRes = await fetch(`${DIDIT_BASE}/workflows/`, {
     headers: { 'x-api-key': apikey },
   })
-  const listBody = listRes.ok ? await listRes.json() : { error: listRes.status }
   results.workflows_list_status = listRes.status
-  results.workflows = listBody
-
-  // 3. Create sessions for all 3 KYC TR workflows to get live test URLs
-  const kycTrWorkflows = [
-    '11261a38-c96f-4b87-8634-6e12c649a696',
-    'f3bb8ed0-487f-45e1-b195-e92c683caf38',
-    '26a7ebe9-9fbd-4fdc-b749-df9064e6857d',
-  ]
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
-  const sessionResults: Record<string, unknown>[] = []
-
-  for (const wfId of kycTrWorkflows) {
-    const sRes = await fetch(`${DIDIT_BASE}/session/`, {
-      method: 'POST',
-      headers: { 'x-api-key': apikey, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        workflow_id: wfId,
-        vendor_data: `debug-${wfId.slice(0, 8)}`,
-        callback: `${appUrl}/sign/debug`,
-      }),
-    })
-    const sText = await sRes.text()
-    let sBody: Record<string, unknown> = {}
-    try { sBody = JSON.parse(sText) } catch { sBody = { raw: sText.slice(0, 300) } }
-    sessionResults.push({ workflow_id: wfId, status: sRes.status, url: sBody.url, session_token: sBody.session_token, session_id: sBody.session_id })
-  }
-  results.kyc_tr_sessions = sessionResults
+  results.workflows = listRes.ok ? await listRes.json() : await listRes.text()
 
   return NextResponse.json(results, { status: 200 })
 }
