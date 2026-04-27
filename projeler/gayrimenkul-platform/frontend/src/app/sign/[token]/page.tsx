@@ -361,11 +361,10 @@ export default function SignPage() {
 
   const [kycRequired, setKycRequired] = useState(false)
   const [kycStatus, setKycStatus] = useState<string | null>(null)
-  const [kycStep, setKycStep] = useState<'idle' | 'otp_sent'>('idle')
+  const [kycStarted, setKycStarted] = useState(false)
+  const [kycUrl, setKycUrl] = useState('')
   const [kycLoading, setKycLoading] = useState(false)
   const [kycError, setKycError] = useState('')
-  const [otpValue, setOtpValue] = useState('')
-  const [maskedPhone, setMaskedPhone] = useState('')
 
   const [kvkkAgreed, setKvkkAgreed] = useState(false)
   const [kvkkExpanded, setKvkkExpanded] = useState(false)
@@ -405,40 +404,35 @@ export default function SignPage() {
     }
   }
 
-  async function handleSendOtp() {
+  useEffect(() => {
+    if (!kycStarted || kycStatus === 'approved') return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/sign/${token}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.sigReq?.kyc_status === 'approved') setKycStatus('approved')
+        }
+      } catch { /* ignore */ }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [kycStarted, kycStatus, token])
+
+  async function handleStartKyc() {
     setKycLoading(true)
     setKycError('')
     try {
-      const res = await fetch('/api/kyc/send-otp', {
+      const res = await fetch('/api/didit/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
       })
       const data = await res.json()
-      if (!res.ok) { setKycError(data.error || 'Kod gönderilemedi.'); return }
+      if (!res.ok) { setKycError(data.error || 'Doğrulama başlatılamadı.'); return }
       if (data.already_approved) { setKycStatus('approved'); return }
-      setMaskedPhone(data.masked_phone || '')
-      setKycStep('otp_sent')
-    } catch {
-      setKycError('Bağlantı hatası. Lütfen tekrar deneyin.')
-    } finally {
-      setKycLoading(false)
-    }
-  }
-
-  async function handleVerifyOtp() {
-    if (!otpValue.trim()) { setKycError('Lütfen kodu girin.'); return }
-    setKycLoading(true)
-    setKycError('')
-    try {
-      const res = await fetch('/api/kyc/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, otp: otpValue.trim() }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setKycError(data.error || 'Doğrulama başarısız.'); return }
-      setKycStatus('approved')
+      setKycUrl(data.url)
+      setKycStarted(true)
+      window.open(data.url, '_blank')
     } catch {
       setKycError('Bağlantı hatası. Lütfen tekrar deneyin.')
     } finally {
@@ -609,7 +603,7 @@ export default function SignPage() {
           </div>
         )}
 
-        {/* KYC Section — WhatsApp OTP */}
+        {/* KYC Section — DiDit Identity Verification */}
         {kycRequired && (
           <div className={`rounded-xl border p-4 space-y-3 ${kycApproved ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
             <div className="flex items-center gap-3">
@@ -624,8 +618,8 @@ export default function SignPage() {
                 </p>
                 <p className={`text-xs ${kycApproved ? 'text-green-700' : 'text-amber-700'}`}>
                   {kycApproved
-                    ? 'Telefon numaranız doğrulandı. Artık imzalayabilirsiniz.'
-                    : 'Kayıtlı telefon numaranıza WhatsApp ile 6 haneli kod gönderilecektir.'}
+                    ? 'Kimliğiniz başarıyla doğrulandı. Artık imzalayabilirsiniz.'
+                    : 'İmzalamadan önce kimlik doğrulama (KYC) yapmanız gerekmektedir.'}
                 </p>
               </div>
             </div>
@@ -639,47 +633,30 @@ export default function SignPage() {
                   </div>
                 )}
 
-                {kycStep === 'idle' && (
+                {!kycStarted ? (
                   <button
-                    onClick={handleSendOtp}
+                    onClick={handleStartKyc}
                     disabled={kycLoading}
                     className="w-full py-3 bg-amber-600 text-white font-semibold rounded-xl text-sm hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {kycLoading
-                      ? <><Loader2 size={15} className="animate-spin" /> Gönderiliyor...</>
-                      : <><ShieldCheck size={15} /> WhatsApp Doğrulama Kodu Gönder</>}
+                      ? <><Loader2 size={15} className="animate-spin" /> Hazırlanıyor...</>
+                      : <><ShieldCheck size={15} /> Kimliğimi Doğrula</>}
                   </button>
-                )}
-
-                {kycStep === 'otp_sent' && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-amber-800">
-                      <strong>{maskedPhone || 'Kayıtlı numaranıza'}</strong> WhatsApp ile 6 haneli kod gönderildi.
-                    </p>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={otpValue}
-                      onChange={e => setOtpValue(e.target.value.replace(/\D/g, ''))}
-                      placeholder="_ _ _ _ _ _"
-                      className="w-full px-4 py-3 border-2 border-amber-300 rounded-xl text-center text-2xl font-bold tracking-widest focus:outline-none focus:border-amber-500 bg-white"
-                    />
-                    <button
-                      onClick={handleVerifyOtp}
-                      disabled={kycLoading || otpValue.length !== 6}
-                      className="w-full py-3 bg-amber-600 text-white font-semibold rounded-xl text-sm hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-100 rounded-lg px-3 py-2">
+                      <Loader2 size={12} className="animate-spin shrink-0" />
+                      Doğrulama sayfası açıldı. Tamamladıktan sonra bu sayfa otomatik güncellenecektir.
+                    </div>
+                    <a
+                      href={kycUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block text-center text-xs text-amber-700 underline underline-offset-2"
                     >
-                      {kycLoading
-                        ? <><Loader2 size={15} className="animate-spin" /> Doğrulanıyor...</>
-                        : 'Kodu Onayla'}
-                    </button>
-                    <button
-                      onClick={() => { setKycStep('idle'); setOtpValue(''); setKycError('') }}
-                      className="w-full py-2 text-xs text-amber-700 underline underline-offset-2"
-                    >
-                      Kodu almadım — tekrar gönder
-                    </button>
+                      Sayfa açılmadıysa buraya tıklayın →
+                    </a>
                   </div>
                 )}
               </>
