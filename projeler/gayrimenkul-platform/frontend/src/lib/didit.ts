@@ -79,14 +79,14 @@ async function ensureWebhookRegistered(appUrl: string): Promise<void> {
 async function getOrCreateWorkflow(): Promise<string> {
   const supabase = serviceClient()
 
-  // KYC TR workflow — Turkey-specific, OCR + LIVENESS
+  // KYC workflow — OCR + LIVENESS + FACE_MATCH (Standard KYC)
   const VERIFIED_WORKFLOW_ID = '11261a38-c96f-4b87-8634-6e12c649a696'
 
-  // Check settings cache — key v5 to bypass stale caches
+  // Check settings cache — key v6 to force new workflow with proper config
   const { data } = await supabase
     .from('settings')
     .select('value')
-    .eq('key', 'didit_workflow_id_v5')
+    .eq('key', 'didit_workflow_id_v6')
     .maybeSingle()
 
   if (data?.value) {
@@ -108,7 +108,7 @@ async function getOrCreateWorkflow(): Promise<string> {
       console.log('[didit] Using verified workflow:', VERIFIED_WORKFLOW_ID)
       await supabase
         .from('settings')
-        .upsert({ key: 'didit_workflow_id_v5', value: VERIFIED_WORKFLOW_ID }, { onConflict: 'key' })
+        .upsert({ key: 'didit_workflow_id_v6', value: VERIFIED_WORKFLOW_ID }, { onConflict: 'key' })
       return VERIFIED_WORKFLOW_ID
     }
   }
@@ -129,18 +129,22 @@ async function getOrCreateWorkflow(): Promise<string> {
       console.log('[didit] Found suitable workflow:', suitable.uuid)
       await supabase
         .from('settings')
-        .upsert({ key: 'didit_workflow_id_v5', value: suitable.uuid }, { onConflict: 'key' })
+        .upsert({ key: 'didit_workflow_id_v6', value: suitable.uuid }, { onConflict: 'key' })
       return suitable.uuid
     }
   }
 
-  // Create new published workflow (OCR + LIVENESS only)
+  // Create new published workflow (OCR + LIVENESS + FACE_MATCH — Standard KYC per Didit docs)
   const createRes = await fetch(`${DIDIT_BASE}/workflows/`, {
     method: 'POST',
     headers: { 'x-api-key': apiKey(), 'content-type': 'application/json' },
     body: JSON.stringify({
-      workflow_label: 'Kimlik Dogrulama KYC',
-      features: [{ feature: 'OCR' }, { feature: 'LIVENESS' }],
+      workflow_label: 'Gayrimenkul KYC',
+      features: [
+        { feature: 'OCR', config: { duplicated_user_action: 'review' } },
+        { feature: 'LIVENESS', config: { face_liveness_method: 'passive' } },
+        { feature: 'FACE_MATCH' },
+      ],
     }),
   })
 
@@ -157,7 +161,7 @@ async function getOrCreateWorkflow(): Promise<string> {
 
   await supabase
     .from('settings')
-    .upsert({ key: 'didit_workflow_id_v5', value: workflowId }, { onConflict: 'key' })
+    .upsert({ key: 'didit_workflow_id_v6', value: workflowId }, { onConflict: 'key' })
 
   console.log('[didit] Created workflow:', workflowId)
   return workflowId
@@ -178,10 +182,6 @@ export async function createVerificationSession(signToken: string): Promise<{
     callback: `${appUrl}/sign/${signToken}`,
     callback_method: 'both',
     language: 'tr',
-    expected_details: {
-      id_country: 'TUR',
-      expected_document_types: ['ID'],
-    },
   }
 
   console.log('[didit] Creating session, workflow_id:', workflowId, 'callback:', body.callback)
