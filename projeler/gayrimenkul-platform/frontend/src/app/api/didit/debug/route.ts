@@ -34,36 +34,31 @@ export async function GET() {
   results.workflows_list_status = listRes.status
   results.workflows = listBody
 
-  // 3. Fetch details of known workflow
-  const knownId = 'ef6a29e5-b39f-4448-9163-7a53d0164400'
-  const wRes = await fetch(`${DIDIT_BASE}/workflows/${knownId}/`, {
-    headers: { 'x-api-key': apikey },
-  })
-  const wBody = wRes.ok ? await wRes.json() : { error: wRes.status, body: await wRes.text() }
-  results.known_workflow_details = wBody
-
-  // 3b. Fetch details of KYC TR workflow
-  const kycTrId = '11261a38-c96f-4b87-8634-6e12c649a696'
-  const kycTrRes = await fetch(`${DIDIT_BASE}/workflows/${kycTrId}/`, {
-    headers: { 'x-api-key': apikey },
-  })
-  const kycTrBody = kycTrRes.ok ? await kycTrRes.json() : { error: kycTrRes.status, body: await kycTrRes.text() }
-  results.kyc_tr_workflow_details = kycTrBody
-
-  // 4. Create a test session with KYC TR workflow
+  // 3. Create sessions for all 3 KYC TR workflows to get live test URLs
+  const kycTrWorkflows = [
+    '11261a38-c96f-4b87-8634-6e12c649a696',
+    'f3bb8ed0-487f-45e1-b195-e92c683caf38',
+    '26a7ebe9-9fbd-4fdc-b749-df9064e6857d',
+  ]
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
-  const testSessionRes = await fetch(`${DIDIT_BASE}/session/`, {
-    method: 'POST',
-    headers: { 'x-api-key': apikey, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      workflow_id: kycTrId,
-      vendor_data: 'debug-test-kyc-tr',
-      callback: `${appUrl}/sign/debug`,
-    }),
-  })
-  const testSessionText = await testSessionRes.text()
-  results.test_session_status = testSessionRes.status
-  results.test_session_body = testSessionText.slice(0, 1000)
+  const sessionResults: Record<string, unknown>[] = []
+
+  for (const wfId of kycTrWorkflows) {
+    const sRes = await fetch(`${DIDIT_BASE}/session/`, {
+      method: 'POST',
+      headers: { 'x-api-key': apikey, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflow_id: wfId,
+        vendor_data: `debug-${wfId.slice(0, 8)}`,
+        callback: `${appUrl}/sign/debug`,
+      }),
+    })
+    const sText = await sRes.text()
+    let sBody: Record<string, unknown> = {}
+    try { sBody = JSON.parse(sText) } catch { sBody = { raw: sText.slice(0, 300) } }
+    sessionResults.push({ workflow_id: wfId, status: sRes.status, url: sBody.url, session_token: sBody.session_token, session_id: sBody.session_id })
+  }
+  results.kyc_tr_sessions = sessionResults
 
   return NextResponse.json(results, { status: 200 })
 }
