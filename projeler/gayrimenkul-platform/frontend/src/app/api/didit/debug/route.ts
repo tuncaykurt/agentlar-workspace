@@ -42,14 +42,22 @@ export async function GET() {
   const wBody = wRes.ok ? await wRes.json() : { error: wRes.status, body: await wRes.text() }
   results.known_workflow_details = wBody
 
-  // 4. Create a test session with the known workflow to see full response
+  // 3b. Fetch details of KYC TR workflow
+  const kycTrId = '11261a38-c96f-4b87-8634-6e12c649a696'
+  const kycTrRes = await fetch(`${DIDIT_BASE}/workflows/${kycTrId}/`, {
+    headers: { 'x-api-key': apikey },
+  })
+  const kycTrBody = kycTrRes.ok ? await kycTrRes.json() : { error: kycTrRes.status, body: await kycTrRes.text() }
+  results.kyc_tr_workflow_details = kycTrBody
+
+  // 4. Create a test session with KYC TR workflow
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
   const testSessionRes = await fetch(`${DIDIT_BASE}/session/`, {
     method: 'POST',
     headers: { 'x-api-key': apikey, 'content-type': 'application/json' },
     body: JSON.stringify({
-      workflow_id: knownId,
-      vendor_data: 'debug-test',
+      workflow_id: kycTrId,
+      vendor_data: 'debug-test-kyc-tr',
       callback: `${appUrl}/sign/debug`,
     }),
   })
