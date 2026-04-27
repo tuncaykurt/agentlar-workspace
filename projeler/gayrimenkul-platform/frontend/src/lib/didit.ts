@@ -79,14 +79,11 @@ async function ensureWebhookRegistered(appUrl: string): Promise<void> {
 async function getOrCreateWorkflow(): Promise<string> {
   const supabase = serviceClient()
 
-  // KYC workflow — OCR + LIVENESS + FACE_MATCH (Standard KYC)
-  const VERIFIED_WORKFLOW_ID = '11261a38-c96f-4b87-8634-6e12c649a696'
-
-  // Check settings cache — key v6 to force new workflow with proper config
+  // Check settings cache — v7 forces fresh workflow with proper OCR+LIVENESS+FACE_MATCH config
   const { data } = await supabase
     .from('settings')
     .select('value')
-    .eq('key', 'didit_workflow_id_v6')
+    .eq('key', 'didit_workflow_id_v7')
     .maybeSingle()
 
   if (data?.value) {
@@ -94,43 +91,6 @@ async function getOrCreateWorkflow(): Promise<string> {
     if (val) {
       console.log('[didit] Using cached workflow_id:', val)
       return val
-    }
-  }
-
-  // Verify the known working workflow still exists and is published
-  const checkRes = await fetch(`${DIDIT_BASE}/workflows/${VERIFIED_WORKFLOW_ID}/`, {
-    headers: { 'x-api-key': apiKey() },
-  })
-
-  if (checkRes.ok) {
-    const w = await checkRes.json()
-    if (w.status === 'published') {
-      console.log('[didit] Using verified workflow:', VERIFIED_WORKFLOW_ID)
-      await supabase
-        .from('settings')
-        .upsert({ key: 'didit_workflow_id_v6', value: VERIFIED_WORKFLOW_ID }, { onConflict: 'key' })
-      return VERIFIED_WORKFLOW_ID
-    }
-  }
-
-  // Fallback: list published workflows without FACE_MATCH
-  const listRes = await fetch(`${DIDIT_BASE}/workflows/`, {
-    headers: { 'x-api-key': apiKey() },
-  })
-
-  if (listRes.ok) {
-    const workflows = await listRes.json()
-    const list: Array<{ uuid: string; status: string; features: string }> =
-      Array.isArray(workflows) ? workflows : (workflows?.results ?? [])
-    const suitable = list.find(
-      (w: { uuid: string; status: string; features: string }) => w.status === 'published'
-    )
-    if (suitable?.uuid) {
-      console.log('[didit] Found suitable workflow:', suitable.uuid)
-      await supabase
-        .from('settings')
-        .upsert({ key: 'didit_workflow_id_v6', value: suitable.uuid }, { onConflict: 'key' })
-      return suitable.uuid
     }
   }
 
@@ -161,7 +121,7 @@ async function getOrCreateWorkflow(): Promise<string> {
 
   await supabase
     .from('settings')
-    .upsert({ key: 'didit_workflow_id_v6', value: workflowId }, { onConflict: 'key' })
+    .upsert({ key: 'didit_workflow_id_v7', value: workflowId }, { onConflict: 'key' })
 
   console.log('[didit] Created workflow:', workflowId)
   return workflowId
