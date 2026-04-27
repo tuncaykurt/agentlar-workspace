@@ -179,7 +179,7 @@ export async function createVerificationSession(signToken: string): Promise<{
     callback_method: 'both',
     language: 'tr',
     expected_details: {
-      id_country: 'TR',
+      id_country: 'TUR',
       expected_document_types: ['ID'],
     },
   }
