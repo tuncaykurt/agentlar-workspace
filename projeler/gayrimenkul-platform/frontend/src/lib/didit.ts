@@ -79,11 +79,11 @@ async function ensureWebhookRegistered(appUrl: string): Promise<void> {
 async function getOrCreateWorkflow(): Promise<string> {
   const supabase = serviceClient()
 
-  // Check settings cache — v7 forces fresh workflow with proper OCR+LIVENESS+FACE_MATCH config
+  // Check settings cache
   const { data } = await supabase
     .from('settings')
     .select('value')
-    .eq('key', 'didit_workflow_id_v7')
+    .eq('key', 'didit_workflow_id_v8')
     .maybeSingle()
 
   if (data?.value) {
@@ -94,7 +94,28 @@ async function getOrCreateWorkflow(): Promise<string> {
     }
   }
 
-  // Create new published workflow (OCR + LIVENESS + FACE_MATCH — Standard KYC per Didit docs)
+  // List published workflows — prefer one created in Business Console
+  const listRes = await fetch(`${DIDIT_BASE}/workflows/`, {
+    headers: { 'x-api-key': apiKey() },
+  })
+
+  if (listRes.ok) {
+    const body = await listRes.json()
+    const list = Array.isArray(body) ? body : (body?.results ?? [])
+    console.log('[didit] Found', list.length, 'workflows')
+
+    // Find first published workflow
+    const published = list.find((w: { status?: string }) => w.status === 'published')
+    if (published?.uuid) {
+      console.log('[didit] Using published workflow:', published.uuid, published.workflow_label)
+      await supabase
+        .from('settings')
+        .upsert({ key: 'didit_workflow_id_v8', value: published.uuid }, { onConflict: 'key' })
+      return published.uuid
+    }
+  }
+
+  // Fallback: create new published workflow (OCR + LIVENESS + FACE_MATCH)
   const createRes = await fetch(`${DIDIT_BASE}/workflows/`, {
     method: 'POST',
     headers: { 'x-api-key': apiKey(), 'content-type': 'application/json' },
@@ -121,7 +142,7 @@ async function getOrCreateWorkflow(): Promise<string> {
 
   await supabase
     .from('settings')
-    .upsert({ key: 'didit_workflow_id_v7', value: workflowId }, { onConflict: 'key' })
+    .upsert({ key: 'didit_workflow_id_v8', value: workflowId }, { onConflict: 'key' })
 
   console.log('[didit] Created workflow:', workflowId)
   return workflowId
