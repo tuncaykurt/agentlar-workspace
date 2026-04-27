@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = getServiceClient()
 
-  // Retrieve identity data from DiDit when approved
+  // Retrieve identity data + photos from DiDit when approved
   let kycIdentityData: Record<string, unknown> | null = null
   if (kycStatus === 'approved' && sessionId && process.env.DIDIT_API_KEY) {
     try {
@@ -68,8 +68,8 @@ export async function POST(req: NextRequest) {
       if (sessionRes.ok) {
         const sessionData = await sessionRes.json()
         console.log('[didit-webhook] Session data retrieved for identity extract')
-        // Extract key identity fields from id_verifications array
-        const idVerification = sessionData.id_verifications?.[0] ?? sessionData
+        const idVerification = (sessionData.id_verifications?.[0] ?? {}) as Record<string, unknown>
+        const livenessCheck = (Array.isArray(sessionData.liveness_checks) ? sessionData.liveness_checks[0] : null) ?? {} as Record<string, unknown>
         kycIdentityData = {
           session_id: sessionId,
           full_name: idVerification.full_name,
@@ -83,11 +83,57 @@ export async function POST(req: NextRequest) {
           gender: idVerification.gender,
           expiration_date: idVerification.expiration_date,
         }
-        // Remove nulls
         Object.keys(kycIdentityData).forEach(k => {
           if ((kycIdentityData as Record<string, unknown>)[k] == null) delete (kycIdentityData as Record<string, unknown>)[k]
         })
         console.log('[didit-webhook] Identity data:', JSON.stringify(kycIdentityData))
+
+        // Download ID photos + selfie → save to Supabase Storage
+        const { data: sigReqRow } = await supabase
+          .from('signature_requests')
+          .select('id')
+          .eq('token', signToken)
+          .single()
+
+        if (sigReqRow) {
+          const { error: bucketErr } = await supabase.storage.createBucket('kyc-media', {
+            public: true,
+            fileSizeLimit: 5242880,
+            allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+          })
+          if (bucketErr && !bucketErr.message.includes('already exists')) {
+            console.warn('[didit-webhook] Bucket create warning:', bucketErr.message)
+          }
+
+          const imagesToSave = [
+            { key: 'id_front', url: idVerification.front_image as string | undefined },
+            { key: 'id_back',  url: idVerification.back_image  as string | undefined },
+            { key: 'selfie',   url: livenessCheck.reference_image as string | undefined },
+          ]
+
+          for (const img of imagesToSave) {
+            if (!img.url) continue
+            try {
+              const imgRes = await fetch(img.url)
+              if (!imgRes.ok) { console.warn(`[didit-webhook] Image fetch failed ${img.key}: ${imgRes.status}`); continue }
+              const buffer = Buffer.from(await imgRes.arrayBuffer())
+              const ext = img.url.split('?')[0].endsWith('.png') ? 'png' : 'jpg'
+              const storagePath = `${sigReqRow.id}/${img.key}.${ext}`
+              const { error: upErr } = await supabase.storage
+                .from('kyc-media')
+                .upload(storagePath, buffer, { contentType: `image/${ext}`, upsert: true })
+              if (!upErr) {
+                const { data: urlData } = supabase.storage.from('kyc-media').getPublicUrl(storagePath)
+                ;(kycIdentityData as Record<string, unknown>)[`${img.key}_url`] = urlData.publicUrl
+                console.log(`[didit-webhook] Saved ${img.key}:`, urlData.publicUrl)
+              } else {
+                console.warn(`[didit-webhook] Storage upload error ${img.key}:`, upErr.message)
+              }
+            } catch (imgErr) {
+              console.warn(`[didit-webhook] Failed saving ${img.key}:`, imgErr)
+            }
+          }
+        }
       }
     } catch (e) {
       console.warn('[didit-webhook] Failed to retrieve identity data:', e)

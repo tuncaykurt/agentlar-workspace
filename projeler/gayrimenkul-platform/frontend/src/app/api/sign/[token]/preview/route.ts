@@ -46,7 +46,17 @@ function clientName(c?: { full_name: string; salutation?: string } | null) {
   return `${c.salutation ? c.salutation + ' ' : ''}${c.full_name}`.trim()
 }
 
-type SigRow = { signer_role: string; status: string; signature_data: string | null; signature_type: string | null; signer_name: string }
+type SigRow = {
+  signer_role: string
+  status: string
+  signature_data: string | null
+  signature_type: string | null
+  signer_name: string
+  kyc_data?: Record<string, string> | null
+  ip_address?: string | null
+  kyc_status?: string | null
+  kyc_verified_at?: string | null
+}
 
 function sigArea(signatures: SigRow[], role: string): string {
   const req = signatures.find(r => r.signer_role === role && r.status === 'signed')
@@ -58,6 +68,36 @@ function sigArea(signatures: SigRow[], role: string): string {
     return `<div class="sig-area" style="display:block !important;visibility:visible !important;min-height:50px;margin-bottom:6px;font-family:'Brush Script MT','Segoe Script','Dancing Script',cursive;font-size:24px;color:#1a237e;text-align:center;line-height:1.4;">${req.signature_data}</div>`
   }
   return '<div class="sig-area sig-area-empty" style="min-height:50px;"></div>'
+}
+
+function kycSection(signatures: SigRow[]): string {
+  const kycSigs = signatures.filter(s => s.kyc_data && s.kyc_status === 'approved')
+  if (kycSigs.length === 0) return ''
+  const rows = kycSigs.map(sig => {
+    const kd = (sig.kyc_data || {}) as Record<string, string>
+    const hasImages = kd.id_front_url || kd.id_back_url || kd.selfie_url
+    return `<div style="margin-top:8px;border:1px solid #1a3a6b;border-radius:3px;overflow:hidden;page-break-inside:avoid;">
+      <div style="background:#1a3a6b;color:#fff;padding:3px 10px;font-size:9.5px;font-family:sans-serif;display:flex;align-items:center;justify-content:space-between;">
+        <span>&#10003; K&#304;ML&#304;K DO&#286;RULAMASI (DiDit KYC) &mdash; ${sig.signer_name}</span>
+        <span style="font-size:8.5px;opacity:0.9;">${sig.ip_address ? 'IP: ' + sig.ip_address + '&nbsp;&nbsp;' : ''}${sig.kyc_verified_at ? fmtDate(sig.kyc_verified_at) : ''}</span>
+      </div>
+      <div style="display:flex;gap:10px;padding:5px 8px;align-items:flex-start;background:#f0f4ff;">
+        <div style="flex:1;font-family:sans-serif;font-size:9.5px;line-height:1.75;color:#111;">
+          ${kd.full_name ? '<div><strong>Ad Soyad:</strong> ' + kd.full_name + '</div>' : ''}
+          ${kd.personal_number ? '<div><strong>TC No:</strong> ' + kd.personal_number + '</div>' : ''}
+          ${kd.date_of_birth ? '<div><strong>Do&#287;um Tarihi:</strong> ' + kd.date_of_birth + '</div>' : ''}
+          ${kd.document_type ? '<div><strong>Belge T&#252;r&#252;:</strong> ' + kd.document_type + '</div>' : ''}
+          ${kd.nationality ? '<div><strong>Uyruk:</strong> ' + kd.nationality + '</div>' : ''}
+        </div>
+        ${hasImages ? '<div style="display:flex;gap:5px;align-items:center;flex-shrink:0;">'
+          + (kd.id_front_url ? '<div style="text-align:center;"><img src="' + kd.id_front_url + '" style="max-height:68px;max-width:105px;display:block;border:1px solid #bbb;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact;" /><div style="font-family:sans-serif;font-size:7.5px;color:#666;margin-top:2px;">Kimlik &#214;n</div></div>' : '')
+          + (kd.id_back_url ? '<div style="text-align:center;"><img src="' + kd.id_back_url + '" style="max-height:68px;max-width:105px;display:block;border:1px solid #bbb;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact;" /><div style="font-family:sans-serif;font-size:7.5px;color:#666;margin-top:2px;">Kimlik Arka</div></div>' : '')
+          + (kd.selfie_url ? '<div style="text-align:center;"><img src="' + kd.selfie_url + '" style="max-height:68px;max-width:68px;display:block;border:1px solid #bbb;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact;" /><div style="font-family:sans-serif;font-size:7.5px;color:#666;margin-top:2px;">Selfie</div></div>' : '')
+          + '</div>' : ''}
+      </div>
+    </div>`
+  }).join('')
+  return `<div style="margin-top:14px;">${rows}</div>`
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -186,6 +226,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sub">${fmtDate(new Date().toISOString())}</div>
       <hr class="divider">
       ${body}
+      ${kycSection(signatures)}
       <div class="sigs">${sigs}</div>
     </body></html>`
   }
@@ -227,6 +268,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sub">${today}</div>
       <hr class="divider">
       ${body}
+      ${kycSection(signatures)}
       <div class="sigs">${sigs}</div>
     </body></html>`
   }
@@ -338,6 +380,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div style="text-align:right;font-size:13px;color:#333;margin-bottom:2px;">Düzenlenme: ${today}</div>
       <hr class="divider">
       ${body}
+      ${kycSection(signatures)}
       <div class="sigs">${sigs}</div>
     </body></html>`
   }
@@ -364,6 +407,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       <div class="sub">${fmtDate(new Date().toISOString())}</div>
       <hr class="divider">
       ${body}
+      ${kycSection(signatures)}
       <div class="sigs">${sigs}</div>
     </body></html>`
   }
@@ -433,6 +477,7 @@ function generateDocHTML(doc: any, settings: Record<string, string>, signatures:
       </div>
       <h1 style="text-align:center;text-decoration:underline;">YER GÖSTERME BELGESİ</h1>
       ${body}
+      ${kycSection(signatures)}
       <div class="sigs" style="margin-top:20px;">${sigs}</div>
     </body></html>`
   }
@@ -475,7 +520,7 @@ export async function GET(
       .in('key', ['office_name', 'office_legal_name', 'office_address', 'office_logo', 'office_mersis', 'office_jurisdiction', 'office_phone']),
     supabase
       .from('signature_requests')
-      .select('signer_role, status, signature_data, signature_type, signer_name')
+      .select('signer_role, status, signature_data, signature_type, signer_name, kyc_data, ip_address, kyc_status, kyc_verified_at')
       .eq('document_id', sigReq.document_id),
   ])
 
@@ -488,7 +533,7 @@ export async function GET(
     settings[row.key] = String(row.value || '').replace(/^"|"$/g, '')
   }
 
-  const signatures = (sigsRes.data || []) as { signer_role: string; status: string; signature_data: string | null; signature_type: string | null; signer_name: string }[]
+  const signatures = (sigsRes.data || []) as SigRow[]
 
   const html = generateDocHTML(docRes.data, settings, signatures)
   return new NextResponse(html, {
