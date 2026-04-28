@@ -23,10 +23,10 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // 2. Get consultant profile
+  // 2. Get consultant profile (only columns guaranteed to exist from migration 001 + 006)
   const { data: consultant } = await supabase
     .from('consultants')
-    .select('id, role, credit_balance, is_active, full_name, wa_phone, office_phone, ticari_yetki_belgesi_no, phone, email, address')
+    .select('id, role, credit_balance, is_active, full_name, phone, email, address, wa_phone')
     .eq('user_id', user.id)
     .single()
 
@@ -89,8 +89,6 @@ export async function GET() {
     consultant_id: consultant.id,
     consultant_full_name: consultant.full_name,
     consultant_wa_phone: consultant.wa_phone,
-    consultant_office_phone: consultant.office_phone,
-    consultant_ticari_yetki_belgesi_no: consultant.ticari_yetki_belgesi_no,
     consultant_phone: consultant.phone,
     consultant_email: consultant.email,
     consultant_address: consultant.address,

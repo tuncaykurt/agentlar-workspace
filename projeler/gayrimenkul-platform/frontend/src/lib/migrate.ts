@@ -538,6 +538,13 @@ ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMP
     sql: `ALTER TABLE clients ADD COLUMN IF NOT EXISTS birth_date DATE;`,
   },
   {
+    id: '020_consultant_extra_columns',
+    sql: `
+ALTER TABLE consultants ADD COLUMN IF NOT EXISTS office_phone TEXT;
+ALTER TABLE consultants ADD COLUMN IF NOT EXISTS ticari_yetki_belgesi_no TEXT;
+    `,
+  },
+  {
     id: '019_fix_rls_all_tables',
     sql: `
 DO $$ DECLARE tbl text; BEGIN

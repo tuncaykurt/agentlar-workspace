@@ -6,8 +6,6 @@ export interface ConsultantData {
   id: string
   full_name: string
   wa_phone?: string
-  office_phone?: string
-  ticari_yetki_belgesi_no?: string
   phone?: string
   email?: string
   address?: string
@@ -72,8 +70,6 @@ export function FeatureProvider({ children }: { children: ReactNode }) {
           id: data.consultant_id,
           full_name: data.consultant_full_name || '',
           wa_phone: data.consultant_wa_phone,
-          office_phone: data.consultant_office_phone,
-          ticari_yetki_belgesi_no: data.consultant_ticari_yetki_belgesi_no,
           phone: data.consultant_phone,
           email: data.consultant_email,
           address: data.consultant_address,
