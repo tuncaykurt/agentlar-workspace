@@ -438,10 +438,10 @@ export default function RehberPage() {
                         {/* Bilgi */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-medium text-on-surface truncate">{contact.full_name}</span>
                             {contact.salutation && (
                               <span className="text-xs text-indigo-600 font-medium">{contact.salutation}</span>
                             )}
-                            <span className="text-sm font-medium text-on-surface truncate">{contact.full_name}</span>
                             <span className={`text-xs px-1.5 py-0.5 rounded-full ${typeColors[contact.client_type] || 'bg-surface-container-high text-on-surface-variant'}`}>
                               {typeLabels[contact.client_type] || contact.client_type}
                             </span>
@@ -528,12 +528,8 @@ export default function RehberPage() {
             </div>
 
             <div className="px-5 py-4 space-y-3">
-              {/* Hitap + İsim */}
+              {/* İsim + Hitap */}
               <div className="flex gap-2">
-                <div className="w-40 flex-shrink-0">
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1">Hitap Şekli</label>
-                  <SalutationInput value={editForm.salutation} onChange={v => setEditForm(f => ({ ...f, salutation: v }))} />
-                </div>
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-on-surface-variant mb-1">Ad Soyad *</label>
                   <input
@@ -541,6 +537,10 @@ export default function RehberPage() {
                     onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))}
                     className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
+                </div>
+                <div className="w-36 flex-shrink-0">
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1">Hitap Şekli</label>
+                  <SalutationInput value={editForm.salutation} onChange={v => setEditForm(f => ({ ...f, salutation: v }))} />
                 </div>
               </div>
 
@@ -625,7 +625,7 @@ export default function RehberPage() {
             </div>
 
             <div className="px-5 py-4 space-y-3">
-              {/* Hitap + İsim */}
+              {/* İsim + Hitap */}
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-on-surface-variant mb-1">Ad Soyad *</label>
@@ -634,10 +634,11 @@ export default function RehberPage() {
                     onChange={e => setCreateForm(f => ({ ...f, full_name: e.target.value }))}
                     placeholder="Ad Soyad"
                     className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    autoFocus
                   />
                 </div>
                 <div className="w-36 flex-shrink-0">
-                  <label className="block text-xs font-medium text-on-surface-variant mb-1">Hitap Şekli</label>
+                  <label className="block text-xs font-medium text-on-surface-variant mb-1">Hitap</label>
                   <SalutationInput value={createForm.salutation} onChange={v => setCreateForm(f => ({ ...f, salutation: v }))} />
                 </div>
               </div>

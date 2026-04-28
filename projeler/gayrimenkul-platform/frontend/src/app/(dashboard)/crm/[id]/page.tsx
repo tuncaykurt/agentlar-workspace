@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import type { Client, Interaction, FollowUp, Document, LeadStatus } from '@/lib/types'
@@ -50,8 +50,8 @@ function formatDateShort(d: string) {
   return new Date(d).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
+export default function ClientDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params
   const [client, setClient] = useState<Client | null>(null)
   const [interactions, setInteractions] = useState<Interaction[]>([])
   const [followUps, setFollowUps] = useState<FollowUp[]>([])
