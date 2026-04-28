@@ -137,14 +137,17 @@ function ClientSearch({
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
   const [newEmail, setNewEmail] = useState('')
+  const [newTcNo, setNewTcNo] = useState('')
+  const [newAddress, setNewAddress] = useState('')
+  const [newBirthDate, setNewBirthDate] = useState('')
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false)
-        setShowNewForm(false)
       }
     }
     document.addEventListener('mousedown', handler)
@@ -153,12 +156,11 @@ function ClientSearch({
 
   async function handleSearch(term: string) {
     setQ(term)
-    setShowNewForm(false)
     if (term.length < 2) { setResults([]); setOpen(false); return }
     const supabase = createClient()
     const { data } = await supabase
       .from('clients')
-      .select('id, full_name, salutation, phone, email, tc_no, address, client_type')
+      .select('id, full_name, salutation, phone, email, tc_no, address, birth_date, client_type')
       .or(`full_name.ilike.%${term}%,phone.ilike.%${term}%`)
       .eq('is_active', true)
       .limit(8)
@@ -170,13 +172,18 @@ function ClientSearch({
     setNewName(q)
     setNewPhone('')
     setNewEmail('')
+    setNewTcNo('')
+    setNewAddress('')
+    setNewBirthDate('')
+    setCreateError('')
     setShowNewForm(true)
-    setOpen(true)
+    setOpen(false)
   }
 
   async function handleCreateClient() {
     if (!newName.trim()) return
     setCreating(true)
+    setCreateError('')
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const { data: consultant } = await supabase
@@ -191,21 +198,25 @@ function ClientSearch({
         full_name: newName.trim(),
         phone: newPhone.trim() || null,
         email: newEmail.trim() || null,
+        tc_no: newTcNo.trim() || null,
+        address: newAddress.trim() || null,
+        birth_date: newBirthDate || null,
         client_type: 'buyer',
         lead_status: 'new',
         source: 'other',
         assigned_consultant_id: consultant?.id || null,
       })
-      .select('id, full_name, salutation, phone, email, tc_no, address, client_type')
+      .select('id, full_name, salutation, phone, email, tc_no, address, birth_date, client_type')
       .single()
 
     setCreating(false)
-    if (!error && newClient) {
-      onChange(newClient as Client)
-      setShowNewForm(false)
-      setOpen(false)
-      setQ('')
+    if (error || !newClient) {
+      setCreateError('Kayıt oluşturulamadı. Tekrar deneyin.')
+      return
     }
+    onChange(newClient as Client)
+    setShowNewForm(false)
+    setQ('')
   }
 
   if (value) {
@@ -227,6 +238,115 @@ function ClientSearch({
     )
   }
 
+  // ── Yeni müşteri oluşturma formu (inline, dropdown değil) ──
+  if (showNewForm) {
+    const inp = 'w-full px-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary'
+    return (
+      <div>
+        <label className="block text-sm font-medium text-on-surface mb-1">{label}</label>
+        <div className="border border-primary/40 rounded-xl p-4 space-y-3 bg-primary-container/20">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-on-surface">Yeni Müşteri Kaydı</p>
+            <button
+              type="button"
+              onClick={() => setShowNewForm(false)}
+              className="text-on-surface-variant hover:text-on-surface"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-xs text-on-surface-variant mb-1">Ad Soyad *</label>
+            <input
+              type="text"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="Ahmet Yılmaz"
+              className={inp}
+              autoFocus
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-on-surface-variant mb-1">Telefon</label>
+              <input
+                type="tel"
+                value={newPhone}
+                onChange={e => setNewPhone(e.target.value)}
+                placeholder="05XX XXX XXXX"
+                className={inp}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-on-surface-variant mb-1">E-posta</label>
+              <input
+                type="email"
+                value={newEmail}
+                onChange={e => setNewEmail(e.target.value)}
+                placeholder="ornek@mail.com"
+                className={inp}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-on-surface-variant mb-1">TC / Vergi No</label>
+              <input
+                type="text"
+                value={newTcNo}
+                onChange={e => setNewTcNo(e.target.value)}
+                placeholder="11 haneli TC"
+                className={inp}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-on-surface-variant mb-1">Doğum Tarihi</label>
+              <input
+                type="date"
+                value={newBirthDate}
+                onChange={e => setNewBirthDate(e.target.value)}
+                className={inp}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-on-surface-variant mb-1">Adres</label>
+              <input
+                type="text"
+                value={newAddress}
+                onChange={e => setNewAddress(e.target.value)}
+                placeholder="Mahalle, sokak, şehir"
+                className={inp}
+              />
+            </div>
+          </div>
+
+          {createError && (
+            <p className="text-xs text-red-500">{createError}</p>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowNewForm(false)}
+              className="px-4 py-2 text-sm text-on-surface-variant border border-outline rounded-lg hover:bg-surface-container-high"
+            >
+              İptal
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateClient}
+              disabled={creating || !newName.trim()}
+              className="flex-1 bg-primary text-white text-sm py-2 rounded-lg disabled:opacity-50 hover:bg-primary/90 transition-colors"
+            >
+              {creating ? 'Kaydediliyor...' : 'Kaydet ve Seç'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Arama modu ──
   return (
     <div ref={ref}>
       <label className="block text-sm font-medium text-on-surface mb-1">{label}</label>
@@ -240,7 +360,7 @@ function ClientSearch({
           placeholder="Kayıtlı müşteri seç veya ara..."
           className="w-full pl-8 pr-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
-        {open && results.length > 0 && !showNewForm && (
+        {open && results.length > 0 && (
           <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1 max-h-52 overflow-auto">
             {results.map(c => (
               <button
@@ -256,63 +376,19 @@ function ClientSearch({
             ))}
           </div>
         )}
-        {open && results.length === 0 && q.length >= 2 && !showNewForm && (
+        {open && results.length === 0 && q.length >= 2 && (
           <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1">
             <p className="px-3 py-2 text-sm text-on-surface-variant">Sonuç bulunamadı</p>
           </div>
         )}
-        {open && showNewForm && (
-          <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1 p-3 space-y-2">
-            <p className="text-xs font-medium text-on-surface mb-1">Yeni Müşteri</p>
-            <input
-              type="text"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              placeholder="Ad Soyad *"
-              className="w-full px-2 py-1.5 border border-outline rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-              autoFocus
-            />
-            <input
-              type="tel"
-              value={newPhone}
-              onChange={e => setNewPhone(e.target.value)}
-              placeholder="Telefon"
-              className="w-full px-2 py-1.5 border border-outline rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-            <input
-              type="email"
-              value={newEmail}
-              onChange={e => setNewEmail(e.target.value)}
-              placeholder="E-posta"
-              className="w-full px-2 py-1.5 border border-outline rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-            <div className="flex gap-2 pt-1">
-              <button
-                onMouseDown={handleCreateClient}
-                disabled={creating || !newName.trim()}
-                className="flex-1 bg-primary text-white text-xs py-1.5 rounded disabled:opacity-50"
-              >
-                {creating ? 'Kaydediliyor...' : 'Kaydet ve Seç'}
-              </button>
-              <button
-                onMouseDown={() => { setShowNewForm(false); setOpen(false) }}
-                className="px-3 text-xs text-on-surface-variant hover:text-on-surface border border-outline rounded"
-              >
-                İptal
-              </button>
-            </div>
-          </div>
-        )}
       </div>
-      {!showNewForm && (
-        <button
-          type="button"
-          onMouseDown={openNewForm}
-          className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-primary text-primary hover:bg-primary-container rounded-lg text-sm font-medium transition-colors"
-        >
-          <span className="text-base leading-none">+</span> Yeni müşteri ekle
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={openNewForm}
+        className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-primary text-primary hover:bg-primary-container rounded-lg text-sm font-medium transition-colors"
+      >
+        <span className="text-base leading-none">+</span> Yeni müşteri ekle
+      </button>
     </div>
   )
 }
