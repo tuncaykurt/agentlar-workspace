@@ -1236,9 +1236,13 @@ export default function NewDocumentPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    // Consultants — service role API (bypasses RLS on consultants table)
+    // Consultants — service role API (bypasses RLS), falls back to own record
     fetch('/api/consultants/list')
-      .then(r => r.json())
+      .then(async r => {
+        const json = await r.json()
+        if (!r.ok) throw new Error(json.error || r.statusText)
+        return json
+      })
       .then(({ consultants: data }) => {
         if (data?.length) {
           setConsultants(data as typeof consultants)
@@ -1249,6 +1253,7 @@ export default function NewDocumentPage() {
           }
         }
       })
+      .catch(err => console.error('[consultants/list] fetch failed:', err))
 
     // Settings — no RLS, client-side is fine
     const supabase = createClient()
