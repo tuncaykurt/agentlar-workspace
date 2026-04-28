@@ -101,13 +101,23 @@ export async function GET(req: NextRequest) {
     }
 
     // Get today's birthday contacts
-    const { data: contacts } = await supabase
+    const { data: consultantRole } = await supabase
+      .from('consultants').select('role').eq('id', consultant.id).single()
+    const isAdminC = consultantRole?.role === 'admin'
+
+    let clientQ = supabase
       .from('clients')
       .select('id, full_name, salutation, phone, birth_date')
       .eq('is_active', true)
-      .eq('assigned_consultant_id', consultant.id)
       .not('birth_date', 'is', null)
       .not('phone', 'is', null)
+      .neq('phone', '')
+
+    if (!isAdminC) {
+      clientQ = clientQ.or(`assigned_consultant_id.eq.${consultant.id},assigned_consultant_id.is.null`)
+    }
+
+    const { data: contacts } = await clientQ
 
     const todayContacts = (contacts || []).filter(c => {
       if (!c.birth_date) return false

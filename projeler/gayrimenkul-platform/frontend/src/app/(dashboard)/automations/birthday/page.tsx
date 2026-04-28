@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: Config = {
   is_enabled: false,
   trigger_time: '09:00',
   system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilere kısa, samimi ve kişisel doğum günü mesajları yazıyorsun.',
-  message_template: 'Merhaba {hitap} {ad}, doğum gününüz kutlu olsun! 🎂\n\nSizi her zaman düşünüyoruz. İyi ki varsınız!',
+  message_template: 'Merhaba {ad} {hitap}, doğum gününüz kutlu olsun! 🎂\n\nSizi her zaman düşünüyoruz. İyi ki varsınız!',
   contact_filter: 'all',
   selected_contact_ids: [],
 }

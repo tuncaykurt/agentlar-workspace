@@ -99,13 +99,23 @@ export async function POST(req: NextRequest) {
     config = { contact_filter: 'all', message_template: 'Merhaba {hitap} {ad}, doğum gününüz kutlu olsun! 🎂', selected_contact_ids: [] }
   }
 
-  // Build contact query
+  // Check if admin
+  const { data: consultantFull } = await supabase
+    .from('consultants').select('role').eq('id', consultant.id).single()
+  const isAdmin = consultantFull?.role === 'admin'
+
+  // Build contact query — admin tüm kişileri görür, diğerleri assigned + null atanmışları
   let contactQuery = supabase
     .from('clients')
     .select('id, full_name, salutation, phone, birth_date')
     .eq('is_active', true)
-    .eq('assigned_consultant_id', consultant.id)
     .not('phone', 'is', null)
+    .neq('phone', '')
+
+  if (!isAdmin) {
+    // assigned_consultant_id eşleşen VEYA null olanları dahil et
+    contactQuery = contactQuery.or(`assigned_consultant_id.eq.${consultant.id},assigned_consultant_id.is.null`)
+  }
 
   if (!force) {
     contactQuery = contactQuery.not('birth_date', 'is', null)
