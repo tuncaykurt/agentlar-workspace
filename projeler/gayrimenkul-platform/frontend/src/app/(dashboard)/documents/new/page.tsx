@@ -1236,18 +1236,22 @@ export default function NewDocumentPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    const supabase = createClient()
-    supabase.from('consultants').select('id, full_name, wa_phone, office_phone, ticari_yetki_belgesi_no, phone, email, address')
-      .then(({ data }) => {
-        if (data) {
+    // Consultants — service role API (bypasses RLS on consultants table)
+    fetch('/api/consultants/list')
+      .then(r => r.json())
+      .then(({ consultants: data }) => {
+        if (data?.length) {
           setConsultants(data as typeof consultants)
-          if (loggedInConsultantId && data.find(c => c.id === loggedInConsultantId)) {
+          if (loggedInConsultantId && data.find((c: { id: string }) => c.id === loggedInConsultantId)) {
             setConsultantId(loggedInConsultantId)
-          } else if (data[0]) {
+          } else {
             setConsultantId(data[0].id)
           }
         }
       })
+
+    // Settings — no RLS, client-side is fine
+    const supabase = createClient()
     const settingsKeys = ['office_name', 'office_legal_name', 'office_address', 'office_mersis', 'office_jurisdiction', 'office_logo']
     supabase.from('settings').select('key, value').in('key', settingsKeys)
       .then(({ data }) => {
