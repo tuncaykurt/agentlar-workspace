@@ -26,7 +26,7 @@ export async function GET() {
   // 2. Get consultant profile
   const { data: consultant } = await supabase
     .from('consultants')
-    .select('id, role, credit_balance, is_active')
+    .select('id, role, credit_balance, is_active, full_name, wa_phone, office_phone, ticari_yetki_belgesi_no, phone, email, address')
     .eq('user_id', user.id)
     .single()
 
@@ -87,6 +87,13 @@ export async function GET() {
 
   return NextResponse.json({
     consultant_id: consultant.id,
+    consultant_full_name: consultant.full_name,
+    consultant_wa_phone: consultant.wa_phone,
+    consultant_office_phone: consultant.office_phone,
+    consultant_ticari_yetki_belgesi_no: consultant.ticari_yetki_belgesi_no,
+    consultant_phone: consultant.phone,
+    consultant_email: consultant.email,
+    consultant_address: consultant.address,
     role: consultant.role,
     credit_balance: consultant.credit_balance ?? 0,
     enabled_features: enabledFeatures,

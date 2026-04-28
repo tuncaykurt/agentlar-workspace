@@ -2,6 +2,18 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 
+export interface ConsultantData {
+  id: string
+  full_name: string
+  wa_phone?: string
+  office_phone?: string
+  ticari_yetki_belgesi_no?: string
+  phone?: string
+  email?: string
+  address?: string
+  role?: string
+}
+
 interface FeatureState {
   loading: boolean
   role: string
@@ -10,6 +22,7 @@ interface FeatureState {
   creditBalance: number
   creditCostPerDocument: number
   consultantId: string | null
+  consultantData: ConsultantData | null
   isActive: boolean
   hasFeature: (key: string) => boolean
   refreshFeatures: () => Promise<void>
@@ -24,7 +37,8 @@ const FeatureContext = createContext<FeatureState>({
   creditBalance: 0,
   creditCostPerDocument: 1,
   consultantId: null,
-  isActive: true, // Default to true to prevent flickering before load
+  consultantData: null,
+  isActive: true,
   hasFeature: () => false,
   refreshFeatures: async () => {},
   deductCredit: () => {},
@@ -38,6 +52,7 @@ export function FeatureProvider({ children }: { children: ReactNode }) {
   const [creditBalance, setCreditBalance] = useState(0)
   const [creditCostPerDocument, setCreditCostPerDocument] = useState(1)
   const [consultantId, setConsultantId] = useState<string | null>(null)
+  const [consultantData, setConsultantData] = useState<ConsultantData | null>(null)
   const [isActive, setIsActive] = useState(true)
 
   async function fetchFeatures() {
@@ -52,6 +67,19 @@ export function FeatureProvider({ children }: { children: ReactNode }) {
       setCreditCostPerDocument(data.credit_cost_per_document ?? 1)
       setConsultantId(data.consultant_id || null)
       setIsActive(data.is_active ?? true)
+      if (data.consultant_id) {
+        setConsultantData({
+          id: data.consultant_id,
+          full_name: data.consultant_full_name || '',
+          wa_phone: data.consultant_wa_phone,
+          office_phone: data.consultant_office_phone,
+          ticari_yetki_belgesi_no: data.consultant_ticari_yetki_belgesi_no,
+          phone: data.consultant_phone,
+          email: data.consultant_email,
+          address: data.consultant_address,
+          role: data.role,
+        })
+      }
     } catch {
       // silent fail — will show all features as fallback
     } finally {
@@ -85,6 +113,7 @@ export function FeatureProvider({ children }: { children: ReactNode }) {
       creditBalance,
       creditCostPerDocument,
       consultantId,
+      consultantData,
       isActive,
       hasFeature,
       refreshFeatures: fetchFeatures,

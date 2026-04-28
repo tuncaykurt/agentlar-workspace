@@ -1133,7 +1133,7 @@ function generatePrintHTML(params: {
 
 export default function NewDocumentPage() {
   const router = useRouter()
-  const { isAdmin, creditBalance, creditCostPerDocument, deductCredit, consultantId: loggedInConsultantId } = useFeatures()
+  const { isAdmin, creditBalance, creditCostPerDocument, deductCredit, consultantId: loggedInConsultantId, consultantData } = useFeatures()
 
   const [creditError, setCreditError] = useState('')
   const [docType, setDocType] = useState<DocumentType>('authorization')
@@ -1235,40 +1235,31 @@ export default function NewDocumentPage() {
   const [kycRequired, setKycRequired] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // consultantData comes from features context (same API that shows Kredi balance — guaranteed to work)
   useEffect(() => {
-    const supabase = createClient()
+    if (!consultantData) return
+    setConsultants([consultantData as typeof consultants[0]])
+    setConsultantId(consultantData.id)
+  }, [consultantData])
 
-    // Own consultant record — same query the features API uses, always works
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase
-        .from('consultants')
-        .select('id, full_name, wa_phone, office_phone, ticari_yetki_belgesi_no, phone, email, address, role')
-        .eq('user_id', user.id)
-        .single()
-        .then(({ data }) => {
-          if (data) {
-            setConsultants([data])
-            setConsultantId(data.id)
-          }
-        })
+  // Admin: also load all consultants list
+  useEffect(() => {
+    if (!isAdmin) return
+    fetch('/api/consultants/list')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (json?.consultants?.length) {
+          setConsultants(json.consultants)
+          const mine = json.consultants.find((c: { id: string }) => c.id === loggedInConsultantId)
+          setConsultantId(mine ? mine.id : json.consultants[0].id)
+        }
+      })
+      .catch(() => {})
+  }, [isAdmin, loggedInConsultantId])
 
-      // Admin: also fetch all consultants via service role API
-      if (isAdmin) {
-        fetch('/api/consultants/list')
-          .then(r => r.ok ? r.json() : null)
-          .then(json => {
-            if (json?.consultants?.length) {
-              setConsultants(json.consultants)
-              const mine = json.consultants.find((c: { id: string }) => c.id === loggedInConsultantId)
-              setConsultantId(mine ? mine.id : json.consultants[0].id)
-            }
-          })
-          .catch(() => {})
-      }
-    })
-
+  useEffect(() => {
     // Settings — no RLS, client-side is fine
+    const supabase = createClient()
     const settingsKeys = ['office_name', 'office_legal_name', 'office_address', 'office_mersis', 'office_jurisdiction', 'office_logo']
     supabase.from('settings').select('key, value').in('key', settingsKeys)
       .then(({ data }) => {
@@ -1282,7 +1273,7 @@ export default function NewDocumentPage() {
           if (row.key === 'office_logo' && v) setOfficeLogo(v)
         })
       })
-  }, [isAdmin])
+  }, [])
 
   // Auto-generate title
   useEffect(() => {
