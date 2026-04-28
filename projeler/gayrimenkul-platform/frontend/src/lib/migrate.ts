@@ -545,6 +545,32 @@ ALTER TABLE consultants ADD COLUMN IF NOT EXISTS ticari_yetki_belgesi_no TEXT;
     `,
   },
   {
+    id: '021_consultant_docs_bucket',
+    sql: `
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('consultant-docs', 'consultant-docs', true)
+ON CONFLICT (id) DO NOTHING;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "consultant_docs_upload" ON storage.objects;
+  CREATE POLICY "consultant_docs_upload" ON storage.objects
+    FOR INSERT TO authenticated WITH CHECK (bucket_id = 'consultant-docs');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "consultant_docs_update" ON storage.objects;
+  CREATE POLICY "consultant_docs_update" ON storage.objects
+    FOR UPDATE TO authenticated USING (bucket_id = 'consultant-docs');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "consultant_docs_read" ON storage.objects;
+  CREATE POLICY "consultant_docs_read" ON storage.objects
+    FOR SELECT USING (bucket_id = 'consultant-docs');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+    `,
+  },
+  {
     id: '019_fix_rls_all_tables',
     sql: `
 DO $$ DECLARE tbl text; BEGIN

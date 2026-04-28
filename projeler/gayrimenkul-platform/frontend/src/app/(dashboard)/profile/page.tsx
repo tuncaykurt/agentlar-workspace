@@ -263,6 +263,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     full_name: '',
@@ -352,6 +353,35 @@ export default function ProfilePage() {
 
   function removeCert(index: number) {
     setCertifications(c => c.filter((_, i) => i !== index))
+  }
+
+  async function handleDocUpload(field: string) {
+    if (!consultant) return
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.pdf,.jpg,.jpeg,.png'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      setUploadingDoc(field)
+      try {
+        const supabase = createClient()
+        const ext = file.name.split('.').pop()
+        const path = `${consultant.id}/${field}.${ext}`
+        const { error: upErr } = await supabase.storage
+          .from('consultant-docs')
+          .upload(path, file, { upsert: true })
+        if (upErr) { alert('Yükleme hatası: ' + upErr.message); return }
+        const { data: { publicUrl } } = supabase.storage
+          .from('consultant-docs')
+          .getPublicUrl(path)
+        await supabase.from('consultants').update({ [field]: publicUrl }).eq('id', consultant.id)
+        setConsultant(c => c ? { ...c, [field]: publicUrl } : c)
+      } finally {
+        setUploadingDoc(null)
+      }
+    }
+    input.click()
   }
 
   if (loading) {
@@ -504,18 +534,26 @@ export default function ProfilePage() {
                   <FileText size={15} className="text-on-surface-variant" />
                   <span className="text-sm text-on-surface">{doc.label}</span>
                 </div>
-                {doc.url ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-green-600 flex items-center gap-1">
-                      <CheckCircle size={12} /> Yüklendi
-                    </span>
-                    <a href={doc.url} target="_blank" className="text-xs text-primary hover:underline">Görüntüle</a>
-                  </div>
-                ) : (
-                  <button className="text-xs text-primary flex items-center gap-1 hover:text-primary-hover">
-                    <Upload size={12} /> Yükle
+                <div className="flex items-center gap-2">
+                  {doc.url && (
+                    <>
+                      <span className="text-xs text-green-600 flex items-center gap-1">
+                        <CheckCircle size={12} /> Yüklendi
+                      </span>
+                      <a href={doc.url} target="_blank" className="text-xs text-primary hover:underline">Görüntüle</a>
+                    </>
+                  )}
+                  <button
+                    onClick={() => handleDocUpload(doc.field)}
+                    disabled={uploadingDoc === doc.field}
+                    className="text-xs text-primary flex items-center gap-1 hover:underline disabled:opacity-50"
+                  >
+                    {uploadingDoc === doc.field
+                      ? <><Loader2 size={12} className="animate-spin" /> Yükleniyor...</>
+                      : <><Upload size={12} /> {doc.url ? 'Değiştir' : 'Yükle'}</>
+                    }
                   </button>
-                )}
+                </div>
               </div>
             ))}
           </div>
