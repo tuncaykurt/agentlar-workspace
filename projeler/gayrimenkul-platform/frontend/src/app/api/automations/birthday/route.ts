@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       message_template: body.message_template,
       contact_filter: body.contact_filter,
       selected_contact_ids: body.selected_contact_ids || [],
+      selected_model: body.selected_model || '',
       updated_at: new Date().toISOString(),
     }, { onConflict: 'consultant_id' })
 

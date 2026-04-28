@@ -53,6 +53,45 @@ function buildMessage(template: string, contact: { full_name: string; salutation
     .replace(/\s+/g, ' ')
 }
 
+async function buildAIMessage(
+  contact: { full_name: string; salutation?: string },
+  systemPrompt: string,
+  template: string,
+  model: string,
+): Promise<string> {
+  const key = process.env.OPENROUTER_API_KEY
+  if (!key || !model) return buildMessage(template, contact)
+
+  const ad = contact.full_name.trim().split(' ')[0] || contact.full_name
+  const hitap = contact.salutation || ''
+  const userMsg = `Müşteri adı: ${contact.full_name}${hitap ? ` (Hitap: ${hitap})` : ''}. Şablon: "${template.replace(/\{ad\}/gi, ad).replace(/\{adsoyad\}/gi, contact.full_name).replace(/\{hitap\}/gi, hitap)}". Bu şablonu temel alarak kişiye özel, samimi bir doğum günü WhatsApp mesajı yaz. Sadece mesajı yaz, başka bir şey ekleme.`
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || '',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 200,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMsg },
+        ],
+      }),
+      signal: AbortSignal.timeout(15000),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      return data?.choices?.[0]?.message?.content?.trim() || buildMessage(template, contact)
+    }
+  } catch { /* fallback */ }
+  return buildMessage(template, contact)
+}
+
 // POST — run automation manually (from UI "Şimdi Gönder" button)
 // body: { force?: boolean, test_contact_ids?: string[] }
 // force=true → doğum günü tarihi kontrolü atlanır (test modu)
@@ -144,9 +183,13 @@ export async function POST(req: NextRequest) {
   const detail: { name: string; phone: string; ok: boolean; error?: string }[] = []
   let sent = 0, failed = 0
 
+  const useAI = !!(config.selected_model && process.env.OPENROUTER_API_KEY)
+
   for (const contact of targets) {
     if (!contact.phone) continue
-    const message = buildMessage(config.message_template, contact)
+    const message = useAI
+      ? await buildAIMessage(contact, config.system_prompt, config.message_template, config.selected_model)
+      : buildMessage(config.message_template, contact)
     const result = await sendWhatsApp(contact.phone, message, consultant.wa_instance)
     detail.push({ name: contact.full_name, phone: contact.phone, ok: result.ok, error: result.error })
     if (result.ok) sent++; else failed++
