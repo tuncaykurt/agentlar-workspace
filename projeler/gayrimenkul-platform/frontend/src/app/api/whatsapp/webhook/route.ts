@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import Anthropic from '@anthropic-ai/sdk'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,22 +118,40 @@ export async function POST(req: NextRequest) {
 
   const messages = (history || []).reverse()
 
-  // Generate AI response
+  // Generate AI response via OpenRouter
   let aiReply = ''
-  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  const openrouterKey = process.env.OPENROUTER_API_KEY
+  const model = config.selected_model || 'anthropic/claude-haiku-4-5'
 
-  if (anthropicKey) {
+  if (openrouterKey) {
     try {
-      const anthropic = new Anthropic({ apiKey: anthropicKey })
-      const response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 500,
-        system: config.system_prompt,
-        messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openrouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud',
+          'X-Title': 'Gayrimenkul Platform Chatbot',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 500,
+          messages: [
+            { role: 'system', content: config.system_prompt },
+            ...messages.map((m: any) => ({ role: m.role, content: m.content })),
+          ],
+        }),
+        signal: AbortSignal.timeout(30000),
       })
-      aiReply = (response.content[0] as any)?.text || ''
+      if (res.ok) {
+        const data = await res.json()
+        aiReply = data?.choices?.[0]?.message?.content || ''
+      } else {
+        console.error('[chatbot] OpenRouter error:', res.status, await res.text())
+        aiReply = 'Şu anda size yardımcı olamıyorum, lütfen daha sonra tekrar deneyin.'
+      }
     } catch (e) {
-      console.error('[chatbot] Anthropic error:', e)
+      console.error('[chatbot] OpenRouter fetch error:', e)
       aiReply = 'Şu anda size yardımcı olamıyorum, lütfen daha sonra tekrar deneyin.'
     }
   } else {

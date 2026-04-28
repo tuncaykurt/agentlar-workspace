@@ -1,20 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bot, Save, Clock, MessageSquare, ToggleLeft, ToggleRight, Loader2, CheckCircle, Info } from 'lucide-react'
-
-const WEBHOOK_URL = 'https://gayrimenkul.yapayzekaotomasyon.cloud/api/whatsapp/webhook'
-
-const DEFAULT: Config = {
-  is_enabled: false,
-  auto_reply_enabled: true,
-  system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun. Mülk alım-satım, kiralama konularında yardımcı oluyorsun. Randevu almak isteyenlere danışmanın müsait olduğunu belirt ve telefon numarasını paylaş.',
-  working_hours_enabled: false,
-  working_hours_start: '09:00',
-  working_hours_end: '18:00',
-  outside_hours_message: 'Mesai saatlerimiz dışındasınız (09:00-18:00). Yarın size döneceğiz.',
-  max_history_messages: 10,
-}
+import { Bot, Save, Clock, MessageSquare, ToggleLeft, ToggleRight, Loader2, CheckCircle, Info, Cpu } from 'lucide-react'
 
 interface Config {
   is_enabled: boolean
@@ -25,6 +12,25 @@ interface Config {
   working_hours_end: string
   outside_hours_message: string
   max_history_messages: number
+  selected_model: string
+}
+
+interface ORModel {
+  id: string
+  name: string
+  pricing?: { prompt: string }
+}
+
+const DEFAULT: Config = {
+  is_enabled: false,
+  auto_reply_enabled: true,
+  system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun. Mülk alım-satım, kiralama konularında yardımcı oluyorsun. Randevu almak isteyenlere danışmanın müsait olduğunu belirt ve telefon numarasını paylaş.',
+  working_hours_enabled: false,
+  working_hours_start: '09:00',
+  working_hours_end: '18:00',
+  outside_hours_message: 'Mesai saatlerimiz dışındasınız (09:00-18:00). Yarın size döneceğiz.',
+  max_history_messages: 10,
+  selected_model: 'anthropic/claude-haiku-4-5',
 }
 
 export default function ChatbotPage() {
@@ -32,6 +38,9 @@ export default function ChatbotPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [models, setModels] = useState<ORModel[]>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelSearch, setModelSearch] = useState('')
 
   useEffect(() => {
     fetch('/api/automations/chatbot').then(r => r.json()).then(({ config: c }) => {
@@ -39,6 +48,18 @@ export default function ChatbotPage() {
       setLoading(false)
     })
   }, [])
+
+  async function fetchModels() {
+    setModelsLoading(true)
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models')
+      const data = await res.json()
+      const list: ORModel[] = (data?.data || [])
+        .sort((a: ORModel, b: ORModel) => a.name.localeCompare(b.name))
+      setModels(list)
+    } catch { /* ignore */ }
+    setModelsLoading(false)
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -109,6 +130,53 @@ export default function ChatbotPage() {
 
         {config.is_enabled && (
           <>
+            {/* Model Seçimi */}
+            <div className="card">
+              <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                <Cpu size={16} /> AI Modeli
+              </h2>
+              <p className="text-xs text-on-surface-variant mb-3">
+                OpenRouter üzerinden yüzlerce model kullanabilirsiniz. Seçili: <code className="bg-surface-container-high px-1 rounded">{config.selected_model}</code>
+              </p>
+              {models.length === 0 ? (
+                <button onClick={fetchModels} disabled={modelsLoading}
+                  className="text-sm text-primary hover:underline flex items-center gap-1 disabled:opacity-50">
+                  {modelsLoading ? <Loader2 size={14} className="animate-spin" /> : null}
+                  {modelsLoading ? 'Modeller yükleniyor...' : 'Modelleri Listele'}
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Model ara... (örn: claude, gpt, llama)"
+                    value={modelSearch}
+                    onChange={e => setModelSearch(e.target.value)}
+                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <div className="max-h-52 overflow-y-auto border border-outline rounded-lg divide-y divide-outline">
+                    {models
+                      .filter(m => !modelSearch || m.id.toLowerCase().includes(modelSearch.toLowerCase()) || m.name.toLowerCase().includes(modelSearch.toLowerCase()))
+                      .map(m => {
+                        const isFree = m.pricing?.prompt === '0'
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => set({ selected_model: m.id })}
+                            className={`w-full text-left px-3 py-2 hover:bg-surface-container-high text-sm transition-colors flex items-center justify-between ${config.selected_model === m.id ? 'bg-primary-container' : ''}`}
+                          >
+                            <div>
+                              <span className={`font-medium ${config.selected_model === m.id ? 'text-primary' : 'text-on-surface'}`}>{m.name}</span>
+                              <span className="text-xs text-on-surface-variant ml-2">{m.id}</span>
+                            </div>
+                            {isFree && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Ücretsiz</span>}
+                          </button>
+                        )
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Sistem Promptu */}
             <div className="card">
               <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">

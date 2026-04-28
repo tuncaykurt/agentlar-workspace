@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
     working_hours_end: body.working_hours_end,
     outside_hours_message: body.outside_hours_message,
     max_history_messages: body.max_history_messages,
+    selected_model: body.selected_model,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'consultant_id' })
 

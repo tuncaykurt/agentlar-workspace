@@ -147,6 +147,15 @@ export async function POST() {
     if (connectRes.ok) {
       const connectData = await connectRes.json()
       const base64 = connectData?.base64 || connectData?.qrcode?.base64 || null
+
+      // Always ensure webhook is registered
+      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`
+      fetch(`${url}/webhook/set/${instName}`, {
+        method: 'POST',
+        headers: { apikey: key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookUrl, webhook_by_events: false, webhook_base64: false, events: ['MESSAGES_UPSERT'] }),
+      }).catch(() => {})
+
       if (base64) {
         return NextResponse.json({ instanceName: instName, base64, created: false })
       }
@@ -178,6 +187,19 @@ export async function POST() {
       createData?.qrcode?.base64 ||
       createData?.base64 ||
       null
+
+    // Auto-register webhook for this instance
+    const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`
+    fetch(`${url}/webhook/set/${instName}`, {
+      method: 'POST',
+      headers: { apikey: key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: webhookUrl,
+        webhook_by_events: false,
+        webhook_base64: false,
+        events: ['MESSAGES_UPSERT'],
+      }),
+    }).catch(() => { /* non-critical */ })
 
     return NextResponse.json({ instanceName: instName, base64, created: true })
   } catch (err: unknown) {

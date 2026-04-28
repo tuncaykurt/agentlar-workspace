@@ -591,6 +591,10 @@ ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS last_run_date DA
     `,
   },
   {
+    id: '024_chatbot_model',
+    sql: `ALTER TABLE whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS selected_model TEXT DEFAULT 'anthropic/claude-haiku-4-5';`,
+  },
+  {
     id: '023_whatsapp_chatbot',
     sql: `
 CREATE TABLE IF NOT EXISTS whatsapp_chatbot_config (
