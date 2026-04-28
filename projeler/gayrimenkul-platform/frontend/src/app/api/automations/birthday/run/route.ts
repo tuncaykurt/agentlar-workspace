@@ -99,50 +99,45 @@ export async function POST(req: NextRequest) {
     config = { contact_filter: 'all', message_template: 'Merhaba {hitap} {ad}, doğum gününüz kutlu olsun! 🎂', selected_contact_ids: [] }
   }
 
-  // Check if admin
-  const { data: consultantFull } = await supabase
-    .from('consultants').select('role').eq('id', consultant.id).single()
-  const isAdmin = consultantFull?.role === 'admin'
+  let targets: { id: string; full_name: string; salutation?: string; phone: string; birth_date?: string }[] = []
 
-  // Build contact query — admin tüm kişileri görür, diğerleri assigned + null atanmışları
-  let contactQuery = supabase
-    .from('clients')
-    .select('id, full_name, salutation, phone, birth_date')
-    .eq('is_active', true)
-    .not('phone', 'is', null)
-    .neq('phone', '')
-
-  if (!isAdmin) {
-    // assigned_consultant_id eşleşen VEYA null olanları dahil et
-    contactQuery = contactQuery.or(`assigned_consultant_id.eq.${consultant.id},assigned_consultant_id.is.null`)
-  }
-
-  if (!force) {
-    contactQuery = contactQuery.not('birth_date', 'is', null)
-  }
-
-  const { data: allContacts } = await contactQuery
-  if (!allContacts?.length) {
-    return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Telefon numarası kayıtlı müşteri yok. Rehber\'den müşteri ekleyin.' })
-  }
-
-  let targets = allContacts
-
-  if (!force) {
-    targets = allContacts.filter(c => c.birth_date?.slice(5, 10) === mmdd)
-    if (!targets.length) {
-      return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: `Bugün (${mmdd}) doğum günü olan müşteri yok. Test için "Şimdi Gönder" butonu tüm kişilere gönderir.` })
-    }
-  }
-
-  // Contact filter — specific modda seçili olanlar, all modda hepsi
   if (config.contact_filter === 'specific') {
+    // Specific mod: seçili ID'leri direkt çek, assignment filtresi yok
     if (!config.selected_contact_ids?.length) {
       return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: '"Belirli kişiler seç" modunda en az bir kişi seçin ve Kaydet\'e basın.' })
     }
-    targets = targets.filter((c: any) => config.selected_contact_ids.includes(c.id))
+    const { data: selected } = await supabase
+      .from('clients')
+      .select('id, full_name, salutation, phone, birth_date')
+      .in('id', config.selected_contact_ids)
+      .eq('is_active', true)
+    targets = (selected || []).filter(c => c.phone && c.phone.trim() !== '')
     if (!targets.length) {
-      return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Seçili kişilerin telefon numarası kayıtlı değil veya sistemde bulunamadı.' })
+      return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Seçili kişilerin telefon numarası kayıtlı değil.' })
+    }
+  } else {
+    // All mod: bu consultant'a atanmış kişiler
+    const { data: assigned } = await supabase
+      .from('clients')
+      .select('id, full_name, salutation, phone, birth_date')
+      .eq('is_active', true)
+      .eq('assigned_consultant_id', consultant.id)
+    const { data: unassigned } = await supabase
+      .from('clients')
+      .select('id, full_name, salutation, phone, birth_date')
+      .eq('is_active', true)
+      .is('assigned_consultant_id', null)
+    const all = [...(assigned || []), ...(unassigned || [])].filter(c => c.phone && c.phone.trim() !== '')
+    if (!all.length) {
+      return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Telefon numarası kayıtlı müşteri bulunamadı.' })
+    }
+    if (!force) {
+      targets = all.filter(c => c.birth_date?.slice(5, 10) === mmdd)
+      if (!targets.length) {
+        return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: `Bugün (${mmdd}) doğum günü olan müşteri yok.` })
+      }
+    } else {
+      targets = all
     }
   }
 
