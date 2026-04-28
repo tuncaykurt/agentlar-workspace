@@ -81,15 +81,22 @@ export async function POST(req: NextRequest) {
     }, { status: 400 })
   }
 
-  // Load this consultant's config
-  const { data: config } = await supabase
-    .from('birthday_automation_config')
-    .select('*')
-    .eq('consultant_id', consultant.id)
-    .single()
+  // Config: UI'dan gelen inline config öncelikli, yoksa DB'den oku
+  const inlineConfig = body.config  // UI mevcut state'ini gönderebilir
+  let config: any = inlineConfig
 
   if (!config) {
-    return NextResponse.json({ error: 'Otomasyon ayarı bulunamadı. Önce kaydedin.' }, { status: 404 })
+    const { data: dbConfig } = await supabase
+      .from('birthday_automation_config')
+      .select('*')
+      .eq('consultant_id', consultant.id)
+      .single()
+    config = dbConfig
+  }
+
+  if (!config) {
+    // Kayıt yok, varsayılan ayarlarla tüm kişilere gönder
+    config = { contact_filter: 'all', message_template: 'Merhaba {hitap} {ad}, doğum gününüz kutlu olsun! 🎂', selected_contact_ids: [] }
   }
 
   // Build contact query
@@ -100,33 +107,33 @@ export async function POST(req: NextRequest) {
     .eq('assigned_consultant_id', consultant.id)
     .not('phone', 'is', null)
 
-  // In force (test) mode: no birth_date filter needed
   if (!force) {
     contactQuery = contactQuery.not('birth_date', 'is', null)
   }
 
   const { data: allContacts } = await contactQuery
   if (!allContacts?.length) {
-    return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Telefon numarası kayıtlı müşteri yok' })
+    return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Telefon numarası kayıtlı müşteri yok. Rehber\'den müşteri ekleyin.' })
   }
 
   let targets = allContacts
 
   if (!force) {
-    // Normal mod: sadece bugün doğum günü olanlar
     targets = allContacts.filter(c => c.birth_date?.slice(5, 10) === mmdd)
     if (!targets.length) {
-      return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: `Bugün (${mmdd}) doğum günü olan müşteri yok` })
+      return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: `Bugün (${mmdd}) doğum günü olan müşteri yok. Test için "Şimdi Gönder" butonu tüm kişilere gönderir.` })
     }
   }
 
-  // Contact filter
-  if (config.contact_filter === 'specific' && config.selected_contact_ids?.length) {
-    targets = targets.filter(c => config.selected_contact_ids.includes(c.id))
-  }
-
-  if (!targets.length) {
-    return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Seçili kişi bulunamadı' })
+  // Contact filter — specific modda seçili olanlar, all modda hepsi
+  if (config.contact_filter === 'specific') {
+    if (!config.selected_contact_ids?.length) {
+      return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: '"Belirli kişiler seç" modunda en az bir kişi seçin ve Kaydet\'e basın.' })
+    }
+    targets = targets.filter((c: any) => config.selected_contact_ids.includes(c.id))
+    if (!targets.length) {
+      return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Seçili kişilerin telefon numarası kayıtlı değil veya sistemde bulunamadı.' })
+    }
   }
 
   const detail: { name: string; phone: string; ok: boolean; error?: string }[] = []

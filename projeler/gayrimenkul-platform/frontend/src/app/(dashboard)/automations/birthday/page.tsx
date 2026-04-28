@@ -117,7 +117,7 @@ export default function BirthdayAutomationPage() {
     const res = await fetch('/api/automations/birthday/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ force: true }),
+      body: JSON.stringify({ force: true, config }),
     })
     setRunning(false)
     const data = await res.json().catch(() => ({}))
