@@ -242,7 +242,7 @@ export default function BirthdayAutomationPage() {
           <h2 className="font-semibold text-on-surface mb-3 flex items-center gap-2">
             <Clock size={16} /> Tetiklenme Zamanı
           </h2>
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-4">
             <div>
               <label className="block text-xs text-on-surface-variant mb-1">Gönderim Saati</label>
               <input
@@ -253,36 +253,14 @@ export default function BirthdayAutomationPage() {
               />
             </div>
             <div className="text-sm text-on-surface-variant">
-              <p>Her gün <strong className="text-on-surface">{config.trigger_time}</strong>'de kontrol edilir.</p>
-              {lastRunDate && (
+              <p>Her gün <strong className="text-on-surface">{config.trigger_time}</strong>'de gönderilir.</p>
+              {lastRunDate ? (
                 <p className="text-xs mt-1 text-green-600">
                   ✓ Son çalışma: {new Date(lastRunDate + 'T00:00:00').toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })}
                 </p>
+              ) : (
+                <p className="text-xs mt-1 text-on-surface-variant">Henüz çalışmadı</p>
               )}
-              {!lastRunDate && <p className="text-xs mt-1 text-on-surface-variant">Henüz çalışmadı</p>}
-            </div>
-          </div>
-
-          {/* Cron kurulum talimatı */}
-          <div className="bg-surface-container-high rounded-lg p-3 space-y-2">
-            <p className="text-xs font-semibold text-on-surface">Cron Kurulumu</p>
-            <p className="text-xs text-on-surface-variant">
-              Aşağıdaki URL&apos;yi <strong>her dakika</strong> çağıran bir cron job kurun.
-              Sistem sadece ayarlanan saatte ve günde bir kez çalışır.
-            </p>
-            <div className="bg-surface-container rounded p-2 font-mono text-xs text-on-surface break-all select-all">
-              GET https://gayrimenkul.yapayzekaotomasyon.cloud/api/automations/birthday/check
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-              <div className="bg-surface-container rounded p-2">
-                <p className="text-xs font-semibold text-on-surface mb-1">Coolify Cron</p>
-                <code className="text-xs text-on-surface-variant">* * * * *</code>
-                <p className="text-xs text-on-surface-variant mt-0.5">→ curl GET yukarıdaki URL</p>
-              </div>
-              <div className="bg-surface-container rounded p-2">
-                <p className="text-xs font-semibold text-on-surface mb-1">n8n Schedule</p>
-                <p className="text-xs text-on-surface-variant">Her 1 dakikada bir HTTP GET isteği</p>
-              </div>
             </div>
           </div>
         </div>
