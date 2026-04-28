@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import {
   Gift, Save, Play, Clock, MessageSquare, Users, User,
   CheckSquare, Square, Loader2, CheckCircle, AlertCircle,
-  ToggleLeft, ToggleRight, Search,
+  ToggleLeft, ToggleRight, Search, Cpu,
 } from 'lucide-react'
 
 interface Contact {
@@ -64,6 +64,9 @@ export default function BirthdayAutomationPage() {
   const [runResult, setRunResult] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [lastRunDate, setLastRunDate] = useState<string | null>(null)
+  const [models, setModels] = useState<{ id: string; name: string; pricing?: { prompt: string } }[]>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelSearch, setModelSearch] = useState('')
 
   useEffect(() => { loadAll() }, [])
 
@@ -81,6 +84,16 @@ export default function BirthdayAutomationPage() {
     }
     setLoading(false)
     void contactRes
+  }
+
+  async function fetchModels() {
+    setModelsLoading(true)
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models')
+      const data = await res.json()
+      setModels((data?.data || []).sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)))
+    } catch { /* ignore */ }
+    setModelsLoading(false)
   }
 
   async function loadContacts() {
@@ -297,6 +310,64 @@ export default function BirthdayAutomationPage() {
             <p className="text-xs text-on-surface-variant mb-1">Önizleme:</p>
             <p className="text-sm text-on-surface whitespace-pre-wrap">{previewMessage(config.message_template)}</p>
           </div>
+        </div>
+
+        {/* Sistem Promptu — müşteri cevap verince chatbot bu promptla devam eder */}
+        <div className="card">
+          <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+            <MessageSquare size={16} /> Chatbot Sistem Promptu
+          </h2>
+          <p className="text-xs text-on-surface-variant mb-3">
+            Müşteri doğum günü mesajına cevap verince chatbot bu prompt ve seçili modelle konuşmayı sürdürür.
+          </p>
+          <textarea
+            value={config.system_prompt}
+            onChange={e => setConfig(c => ({ ...c, system_prompt: e.target.value }))}
+            rows={3}
+            className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+          />
+        </div>
+
+        {/* AI Model Seçimi */}
+        <div className="card">
+          <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+            <Cpu size={16} /> Chatbot Modeli
+          </h2>
+          <p className="text-xs text-on-surface-variant mb-3">
+            Müşteri cevap verince kullanılacak AI modeli. İlk doğum günü mesajı her zaman sabittir.
+            {config.selected_model && <span className="ml-1 text-primary font-medium">Seçili: {config.selected_model}</span>}
+          </p>
+          {models.length === 0 ? (
+            <button onClick={fetchModels} disabled={modelsLoading}
+              className="text-sm text-primary hover:underline flex items-center gap-1.5 disabled:opacity-50">
+              {modelsLoading && <Loader2 size={14} className="animate-spin" />}
+              {modelsLoading ? 'Yükleniyor...' : 'Modelleri Listele'}
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <input type="text" placeholder="Model ara... (claude, gpt, llama...)"
+                value={modelSearch} onChange={e => setModelSearch(e.target.value)}
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              <div className="max-h-48 overflow-y-auto border border-outline rounded-lg divide-y divide-outline">
+                {models
+                  .filter(m => !modelSearch || m.id.toLowerCase().includes(modelSearch.toLowerCase()) || m.name.toLowerCase().includes(modelSearch.toLowerCase()))
+                  .map(m => {
+                    const isFree = m.pricing?.prompt === '0'
+                    const selected = config.selected_model === m.id
+                    return (
+                      <button key={m.id} onClick={() => setConfig(c => ({ ...c, selected_model: m.id }))}
+                        className={`w-full text-left px-3 py-2 hover:bg-surface-container-high text-sm flex items-center justify-between transition-colors ${selected ? 'bg-primary-container' : ''}`}>
+                        <div>
+                          <span className={`font-medium ${selected ? 'text-primary' : 'text-on-surface'}`}>{m.name}</span>
+                          <span className="text-xs text-on-surface-variant ml-2">{m.id}</span>
+                        </div>
+                        {isFree && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full flex-shrink-0">Ücretsiz</span>}
+                      </button>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Kişi Seçimi */}
