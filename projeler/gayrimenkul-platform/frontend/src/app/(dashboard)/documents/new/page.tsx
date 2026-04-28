@@ -1237,7 +1237,7 @@ export default function NewDocumentPage() {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.from('consultants').select('id, full_name, wa_phone, office_phone, ticari_yetki_belgesi_no, phone, email, address').eq('is_active', true)
+    supabase.from('consultants').select('id, full_name, wa_phone, office_phone, ticari_yetki_belgesi_no, phone, email, address')
       .then(({ data }) => {
         if (data) {
           setConsultants(data as typeof consultants)
@@ -1370,30 +1370,34 @@ export default function NewDocumentPage() {
     setCreditError('')
     setSaving(true)
 
-    // Step 1: Insert the document first
-    const supabase = createClient()
-    const { error: insertError } = await supabase.from('documents').insert({
-      doc_type: docType,
-      title,
-      client_id: mainClient?.id || null,
-      property_id: property?.id || null,
-      consultant_id: consultantId || null,
-      template_name: docType,
-      template_data: {
-        ...getTemplateData(),
-        second_client_id: secondClient?.id || null,
-        second_client_name: secondClient
-          ? `${secondClient.salutation ? secondClient.salutation + ' ' : ''}${secondClient.full_name}`.trim()
-          : null,
-        second_client_phone: secondClient?.phone || null,
-      },
-      notes,
-      kyc_required: kycRequired,
-      signature_status: 'draft',
+    // Step 1: Insert via server-side API route (service role — bypasses RLS)
+    const insertRes = await fetch('/api/documents/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        doc_type: docType,
+        title,
+        client_id: mainClient?.id || null,
+        property_id: property?.id || null,
+        consultant_id: consultantId || null,
+        template_name: docType,
+        template_data: {
+          ...getTemplateData(),
+          second_client_id: secondClient?.id || null,
+          second_client_name: secondClient
+            ? `${secondClient.salutation ? secondClient.salutation + ' ' : ''}${secondClient.full_name}`.trim()
+            : null,
+          second_client_phone: secondClient?.phone || null,
+        },
+        notes,
+        kyc_required: kycRequired,
+        signature_status: 'draft',
+      }),
     })
 
-    if (insertError) {
-      setCreditError('Belge kaydedilemedi: ' + insertError.message)
+    if (!insertRes.ok) {
+      const errData = await insertRes.json().catch(() => ({}))
+      setCreditError('Belge kaydedilemedi: ' + (errData.error || insertRes.statusText))
       setSaving(false)
       return
     }
