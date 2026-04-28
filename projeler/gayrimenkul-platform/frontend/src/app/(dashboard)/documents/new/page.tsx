@@ -31,8 +31,8 @@ function ClientExtraFields({
   onSaveToContact,
 }: {
   client: Client
-  extraData: { full_name: string; tc_no: string; address: string; email: string; firma: string }
-  onChange: (d: { full_name: string; tc_no: string; address: string; email: string; firma: string }) => void
+  extraData: { full_name: string; tc_no: string; address: string; email: string; firma: string; birth_date: string }
+  onChange: (d: { full_name: string; tc_no: string; address: string; email: string; firma: string; birth_date: string }) => void
   onSaveToContact: () => void
 }) {
   const missing = !client.tc_no || !client.address || !client.email
@@ -100,6 +100,15 @@ function ClientExtraFields({
                 onChange={e => onChange({ ...extraData, firma: e.target.value })}
                 className={inp}
                 placeholder="Örn: ABC Ltd. Şti."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-on-surface-variant mb-1">Doğum Tarihi</label>
+              <input
+                type="date"
+                value={extraData.birth_date || ''}
+                onChange={e => onChange({ ...extraData, birth_date: e.target.value })}
+                className={inp}
               />
             </div>
           </div>
@@ -228,7 +237,7 @@ function ClientSearch({
           value={q}
           onChange={e => handleSearch(e.target.value)}
           onFocus={() => q.length >= 2 && setOpen(true)}
-          placeholder="İsim veya telefon ara..."
+          placeholder="Kayıtlı müşteri seç veya ara..."
           className="w-full pl-8 pr-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
         {open && results.length > 0 && !showNewForm && (
@@ -245,23 +254,11 @@ function ClientSearch({
                 {c.phone && <span className="text-on-surface-variant ml-2 text-xs">{c.phone}</span>}
               </button>
             ))}
-            <button
-              onMouseDown={openNewForm}
-              className="w-full text-left px-3 py-2 hover:bg-surface-container-high text-sm text-primary border-t border-outline flex items-center gap-1.5"
-            >
-              <span className="text-base leading-none">+</span> Yeni müşteri ekle
-            </button>
           </div>
         )}
         {open && results.length === 0 && q.length >= 2 && !showNewForm && (
           <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1">
             <p className="px-3 py-2 text-sm text-on-surface-variant">Sonuç bulunamadı</p>
-            <button
-              onMouseDown={openNewForm}
-              className="w-full text-left px-3 py-2 hover:bg-surface-container-high text-sm text-primary border-t border-outline flex items-center gap-1.5"
-            >
-              <span className="text-base leading-none">+</span> &quot;{q}&quot; adıyla yeni müşteri ekle
-            </button>
           </div>
         )}
         {open && showNewForm && (
@@ -307,6 +304,15 @@ function ClientSearch({
           </div>
         )}
       </div>
+      {!showNewForm && (
+        <button
+          type="button"
+          onMouseDown={openNewForm}
+          className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-dashed border-primary text-primary hover:bg-primary-container rounded-lg text-sm font-medium transition-colors"
+        >
+          <span className="text-base leading-none">+</span> Yeni müşteri ekle
+        </button>
+      )}
     </div>
   )
 }
@@ -473,7 +479,7 @@ function generatePrintHTML(params: {
     v ? new Date(v).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' }) : '_______________'
 
   const clientName = (c: Client | null) =>
-    c ? `${c.salutation ? c.salutation + ' ' : ''}${c.full_name}` : '_______________'
+    c ? c.full_name : '_______________'
 
   const numToWords = (v: string | null | undefined): string => {
     if (!v) return '___'
@@ -1069,8 +1075,8 @@ export default function NewDocumentPage() {
   const [secondClient, setSecondClient] = useState<Client | null>(null)
   const [property, setProperty] = useState<Property | null>(null)
 
-  type ExtraFields = { full_name: string; tc_no: string; address: string; email: string; firma: string }
-  const emptyExtra = (): ExtraFields => ({ full_name: '', tc_no: '', address: '', email: '', firma: '' })
+  type ExtraFields = { full_name: string; tc_no: string; address: string; email: string; firma: string; birth_date: string }
+  const emptyExtra = (): ExtraFields => ({ full_name: '', tc_no: '', address: '', email: '', firma: '', birth_date: '' })
   const [mainExtra, setMainExtra] = useState<ExtraFields>(emptyExtra())
   const [secondExtra, setSecondExtra] = useState<ExtraFields>(emptyExtra())
 
@@ -1181,6 +1187,14 @@ export default function NewDocumentPage() {
       })
   }, [])
 
+  // When loggedInConsultantId becomes available (async), override the default selection
+  useEffect(() => {
+    if (!loggedInConsultantId || !consultants.length) return
+    if (consultants.find(c => c.id === loggedInConsultantId)) {
+      setConsultantId(loggedInConsultantId)
+    }
+  }, [loggedInConsultantId, consultants])
+
   // Auto-generate title
   useEffect(() => {
     const typeLabel = DOC_TYPES.find(t => t.value === docType)?.label || ''
@@ -1192,7 +1206,7 @@ export default function NewDocumentPage() {
   // Pre-fill extra fields when client is selected
   useEffect(() => {
     if (mainClient) {
-      setMainExtra({ full_name: mainClient.full_name || '', tc_no: mainClient.tc_no || '', address: mainClient.address || '', email: mainClient.email || '', firma: '' })
+      setMainExtra({ full_name: mainClient.full_name || '', tc_no: mainClient.tc_no || '', address: mainClient.address || '', email: mainClient.email || '', firma: '', birth_date: mainClient.birth_date || '' })
     } else {
       setMainExtra(emptyExtra())
     }
@@ -1200,7 +1214,7 @@ export default function NewDocumentPage() {
 
   useEffect(() => {
     if (secondClient) {
-      setSecondExtra({ full_name: secondClient.full_name || '', tc_no: secondClient.tc_no || '', address: secondClient.address || '', email: secondClient.email || '', firma: '' })
+      setSecondExtra({ full_name: secondClient.full_name || '', tc_no: secondClient.tc_no || '', address: secondClient.address || '', email: secondClient.email || '', firma: '', birth_date: secondClient.birth_date || '' })
     } else {
       setSecondExtra(emptyExtra())
     }
@@ -1255,6 +1269,7 @@ export default function NewDocumentPage() {
     if (extra.tc_no) update.tc_no = extra.tc_no
     if (extra.address) update.address = extra.address
     if (extra.email) update.email = extra.email
+    if (extra.birth_date) update.birth_date = extra.birth_date
     if (Object.keys(update).length > 0) {
       await supabase.from('clients').update(update).eq('id', clientId)
     }

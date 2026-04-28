@@ -533,6 +533,10 @@ ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS otp_code TEXT;
 ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMPTZ;
     `,
   },
+  {
+    id: '018_client_birth_date',
+    sql: `ALTER TABLE clients ADD COLUMN IF NOT EXISTS birth_date DATE;`,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────

@@ -61,6 +61,7 @@ export interface Client {
   email?: string
   tc_no?: string
   address?: string
+  birth_date?: string
   client_type: ClientType
   assigned_consultant_id?: string
   lead_status: LeadStatus

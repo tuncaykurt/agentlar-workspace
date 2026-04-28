@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import type { ClientType, LeadStatus, PropertyType, ListingSource } from '@/lib/types'
-import { ArrowLeft, Save, User, Phone, Mail, MapPin, Home, DollarSign } from 'lucide-react'
+import { ArrowLeft, Save, User, Phone, Mail, MapPin, Home, DollarSign, Calendar } from 'lucide-react'
 
 const clientTypes: { value: ClientType; label: string }[] = [
   { value: 'buyer', label: 'Alıcı' },
@@ -54,6 +54,7 @@ export default function NewClientPage() {
     salutation: '',
     phone: '',
     email: '',
+    birth_date: '',
     client_type: 'buyer' as ClientType,
     lead_status: 'new' as LeadStatus,
     source: 'other' as ListingSource,
@@ -97,6 +98,7 @@ export default function NewClientPage() {
       salutation: form.salutation.trim() || null,
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
+      birth_date: form.birth_date || null,
       client_type: form.client_type,
       lead_status: form.lead_status,
       source: form.source,
@@ -153,8 +155,20 @@ export default function NewClientPage() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 flex gap-3">
-              <div className="w-36">
-                <label className="block text-sm font-medium text-on-surface mb-1">Hitap Şekli</label>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-on-surface mb-1">
+                  Ad Soyad <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.full_name}
+                  onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
+                  placeholder="Ahmet Yılmaz"
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div className="w-32">
+                <label className="block text-sm font-medium text-on-surface mb-1">Hitap</label>
                 <select
                   value={form.salutation}
                   onChange={e => setForm(f => ({ ...f, salutation: e.target.value }))}
@@ -172,18 +186,6 @@ export default function NewClientPage() {
                   <option value="Doç.">Doç.</option>
                   <option value="Müh.">Müh.</option>
                 </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-on-surface mb-1">
-                  Ad Soyad <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.full_name}
-                  onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-                  placeholder="Ahmet Yılmaz"
-                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
               </div>
             </div>
             <div>
@@ -207,6 +209,17 @@ export default function NewClientPage() {
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                 placeholder="ahmet@email.com"
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-on-surface mb-1 flex items-center gap-1">
+                <Calendar size={13} /> Doğum Tarihi
+              </label>
+              <input
+                type="date"
+                value={form.birth_date}
+                onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))}
                 className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
