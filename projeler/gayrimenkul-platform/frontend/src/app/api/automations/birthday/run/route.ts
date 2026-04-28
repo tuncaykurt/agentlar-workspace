@@ -44,13 +44,14 @@ async function sendWhatsApp(phone: string, message: string, instance: string): P
 
 function buildMessage(template: string, contact: { full_name: string; salutation?: string }) {
   const ad = contact.full_name.trim().split(' ')[0] || contact.full_name
-  const hitap = contact.salutation || ''
+  const hitap = contact.salutation?.trim() || ''
   return template
     .replace(/\{ad\}/gi, ad)
     .replace(/\{adsoyad\}/gi, contact.full_name)
     .replace(/\{hitap\}/gi, hitap)
+    .replace(/\s+([,!?.:])/g, '$1')  // boş hitap sonrası "Ahmet ," → "Ahmet,"
+    .replace(/\s{2,}/g, ' ')          // çift boşlukları temizle
     .trim()
-    .replace(/\s+/g, ' ')
 }
 
 async function buildAIMessage(

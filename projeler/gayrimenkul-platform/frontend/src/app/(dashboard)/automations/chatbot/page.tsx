@@ -41,6 +41,8 @@ export default function ChatbotPage() {
   const [models, setModels] = useState<ORModel[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelSearch, setModelSearch] = useState('')
+  const [registeringWebhook, setRegisteringWebhook] = useState(false)
+  const [webhookStatus, setWebhookStatus] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/automations/chatbot').then(r => r.json()).then(({ config: c }) => {
@@ -48,6 +50,15 @@ export default function ChatbotPage() {
       setLoading(false)
     })
   }, [])
+
+  async function registerWebhook() {
+    setRegisteringWebhook(true)
+    setWebhookStatus(null)
+    // QR endpoint'ini çağırmak webhook'u yeniden kaydeder
+    const res = await fetch('/api/whatsapp/consultant', { method: 'POST' }).catch(() => null)
+    setRegisteringWebhook(false)
+    setWebhookStatus(res?.ok ? '✓ Webhook kaydedildi' : '✗ Hata — WhatsApp bağlı mı?')
+  }
 
   async function fetchModels() {
     setModelsLoading(true)
@@ -93,20 +104,29 @@ export default function ChatbotPage() {
       </div>
 
       <div className="space-y-5">
-        {/* Webhook kurulum */}
+        {/* Webhook kaydet */}
         <div className="card bg-blue-50 border-blue-200">
-          <div className="flex items-start gap-3">
-            <Info size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-blue-800 mb-1">Evolution API Webhook Kurulumu (tek seferlik)</p>
-              <p className="text-xs text-blue-700 mb-2">
-                Evolution API panelinden WhatsApp instance'ınızı seçin → Webhooks → aşağıdaki URL'yi ekleyin:
-              </p>
-              <div className="bg-white rounded px-3 py-2 font-mono text-xs text-blue-900 select-all break-all border border-blue-200">
-                {WEBHOOK_URL}
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <Info size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-blue-800">Webhook Bağlantısı</p>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  Gelen mesajların chatbot'a iletilmesi için webhook aktif olmalıdır.
+                  WhatsApp bağlıysa aşağıdaki butonla tek tıkla kaydedilir.
+                </p>
+                {webhookStatus && (
+                  <p className={`text-xs mt-1 font-medium ${webhookStatus.startsWith('✓') ? 'text-green-700' : 'text-red-600'}`}>
+                    {webhookStatus}
+                  </p>
+                )}
               </div>
-              <p className="text-xs text-blue-600 mt-1.5">Events: <strong>MESSAGES_UPSERT</strong> seçin</p>
             </div>
+            <button onClick={registerWebhook} disabled={registeringWebhook}
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {registeringWebhook ? <Loader2 size={12} className="animate-spin" /> : null}
+              {registeringWebhook ? 'Kaydediliyor...' : 'Webhook Kaydettir'}
+            </button>
           </div>
         </div>
 

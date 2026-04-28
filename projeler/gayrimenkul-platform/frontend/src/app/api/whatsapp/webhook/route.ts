@@ -80,21 +80,36 @@ export async function POST(req: NextRequest) {
 
   if (!consultant) return NextResponse.json({ ok: false, error: 'consultant not found for instance' })
 
-  // Load chatbot config
-  const { data: config } = await supabase
+  // Load chatbot config — whatsapp_chatbot_config önce, yoksa birthday_automation_config'e bak
+  const { data: chatbotConfig } = await supabase
     .from('whatsapp_chatbot_config')
     .select('*')
     .eq('consultant_id', consultant.id)
     .single()
 
-  if (!config?.is_enabled || !config?.auto_reply_enabled) {
+  const { data: birthdayConfig } = await supabase
+    .from('birthday_automation_config')
+    .select('system_prompt, selected_model')
+    .eq('consultant_id', consultant.id)
+    .single()
+
+  // Chatbot aktif mi? whatsapp_chatbot_config veya birthday ayarlarından birinde model varsa devam et
+  const hasChatbotConfig = chatbotConfig?.is_enabled && chatbotConfig?.auto_reply_enabled
+  const hasBirthdayModel = !!(birthdayConfig?.selected_model)
+
+  if (!hasChatbotConfig && !hasBirthdayModel) {
     return NextResponse.json({ ok: true, skipped: 'chatbot disabled' })
   }
 
-  // Check working hours
-  if (config.working_hours_enabled) {
-    if (!isInWorkingHours(config.working_hours_start, config.working_hours_end)) {
-      await sendWhatsApp(customerPhone, config.outside_hours_message, instanceName)
+  // Ayarları birleştir: chatbot_config öncelikli, yoksa birthday_config
+  const effectiveSystemPrompt = chatbotConfig?.system_prompt || birthdayConfig?.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
+  const effectiveModel = chatbotConfig?.selected_model || birthdayConfig?.selected_model || 'anthropic/claude-haiku-4-5'
+  const effectiveMaxHistory = chatbotConfig?.max_history_messages ?? 10
+
+  // Çalışma saati kontrolü (sadece chatbot_config varsa)
+  if (chatbotConfig?.working_hours_enabled) {
+    if (!isInWorkingHours(chatbotConfig.working_hours_start, chatbotConfig.working_hours_end)) {
+      await sendWhatsApp(customerPhone, chatbotConfig.outside_hours_message, instanceName)
       return NextResponse.json({ ok: true, sent: 'outside hours message' })
     }
   }
@@ -114,14 +129,13 @@ export async function POST(req: NextRequest) {
     .eq('consultant_id', consultant.id)
     .eq('customer_phone', customerPhone)
     .order('created_at', { ascending: false })
-    .limit(config.max_history_messages || 10)
+    .limit(effectiveMaxHistory)
 
   const messages = (history || []).reverse()
 
   // Generate AI response via OpenRouter
   let aiReply = ''
   const openrouterKey = process.env.OPENROUTER_API_KEY
-  const model = config.selected_model || 'anthropic/claude-haiku-4-5'
 
   if (openrouterKey) {
     try {
@@ -134,10 +148,10 @@ export async function POST(req: NextRequest) {
           'X-Title': 'Gayrimenkul Platform Chatbot',
         },
         body: JSON.stringify({
-          model,
+          model: effectiveModel,
           max_tokens: 500,
           messages: [
-            { role: 'system', content: config.system_prompt },
+            { role: 'system', content: effectiveSystemPrompt },
             ...messages.map((m: any) => ({ role: m.role, content: m.content })),
           ],
         }),
