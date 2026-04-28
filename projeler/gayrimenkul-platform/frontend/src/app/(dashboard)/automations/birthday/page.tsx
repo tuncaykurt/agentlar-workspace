@@ -117,16 +117,25 @@ export default function BirthdayAutomationPage() {
     const res = await fetch('/api/automations/birthday/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ force: true }),
     })
     setRunning(false)
-    if (res.ok) {
-      const data = await res.json()
-      const total = data.results?.reduce((s: number, r: any) => s + r.sent, 0) ?? 0
-      setRunResult(`Tamamlandı: ${total} mesaj gönderildi`)
-    } else {
-      setRunResult('Hata oluştu, tekrar deneyin.')
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setRunResult(`❌ ${data.error || 'Hata oluştu'}`)
+      return
     }
+    if (data.reason) {
+      setRunResult(`ℹ️ ${data.reason}`)
+      return
+    }
+    const lines = [`✅ ${data.sent} mesaj gönderildi${data.failed ? `, ${data.failed} başarısız` : ''}`]
+    if (data.detail?.length) {
+      data.detail.forEach((d: { name: string; ok: boolean; error?: string }) => {
+        lines.push(`${d.ok ? '✓' : '✗'} ${d.name}${d.error ? ` — ${d.error}` : ''}`)
+      })
+    }
+    setRunResult(lines.join('\n'))
   }
 
   function toggleContact(id: string) {
@@ -190,9 +199,10 @@ export default function BirthdayAutomationPage() {
       </div>
 
       {runResult && (
-        <div className={`mb-4 px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${runResult.includes('Hata') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-          {runResult.includes('Hata') ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
-          {runResult}
+        <div className={`mb-4 px-4 py-3 rounded-lg text-sm ${runResult.includes('❌') ? 'bg-red-50 text-red-700' : runResult.includes('ℹ️') ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+          {runResult.split('\n').map((line, i) => (
+            <p key={i} className={i === 0 ? 'font-medium' : 'text-xs mt-0.5 opacity-80'}>{line}</p>
+          ))}
         </div>
       )}
 

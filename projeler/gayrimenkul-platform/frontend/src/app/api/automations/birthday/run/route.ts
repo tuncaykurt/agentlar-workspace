@@ -11,19 +11,18 @@ function svc() {
 }
 
 function todayMMDD() {
-  const now = new Date()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
+  const now = new Date(Date.now() + 3 * 60 * 60 * 1000) // UTC+3
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(now.getUTCDate()).padStart(2, '0')
   return `${mm}-${dd}`
 }
 
-async function sendWhatsApp(phone: string, message: string, instance: string): Promise<boolean> {
+async function sendWhatsApp(phone: string, message: string, instance: string): Promise<{ ok: boolean; error?: string }> {
   const baseUrl = process.env.EVOLUTION_API_URL
   const apiKey = process.env.EVOLUTION_API_KEY
-  if (!baseUrl || !apiKey || !phone) return false
+  if (!baseUrl || !apiKey || !phone) return { ok: false, error: 'Evolution API yapılandırılmamış' }
 
-  const normalized = phone.replace(/\D/g, '')
-  let num = normalized
+  let num = phone.replace(/\D/g, '')
   if (num.startsWith('0')) num = '90' + num.slice(1)
   else if (!num.startsWith('90')) num = '90' + num
 
@@ -33,13 +32,18 @@ async function sendWhatsApp(phone: string, message: string, instance: string): P
       headers: { 'Content-Type': 'application/json', apikey: apiKey },
       body: JSON.stringify({ number: num + '@s.whatsapp.net', text: message }),
     })
-    return res.ok
-  } catch { return false }
+    if (!res.ok) {
+      const txt = await res.text().catch(() => res.statusText)
+      return { ok: false, error: `Evolution API ${res.status}: ${txt}` }
+    }
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Bağlantı hatası' }
+  }
 }
 
 function buildMessage(template: string, contact: { full_name: string; salutation?: string }) {
-  const parts = contact.full_name.trim().split(' ')
-  const ad = parts[0] || contact.full_name
+  const ad = contact.full_name.trim().split(' ')[0] || contact.full_name
   const hitap = contact.salutation || ''
   return template
     .replace(/\{ad\}/gi, ad)
@@ -49,82 +53,92 @@ function buildMessage(template: string, contact: { full_name: string; salutation
     .replace(/\s+/g, ' ')
 }
 
-// POST — run automation (called by cron or manually)
+// POST — run automation manually (from UI "Şimdi Gönder" button)
+// body: { force?: boolean, test_contact_ids?: string[] }
+// force=true → doğum günü tarihi kontrolü atlanır (test modu)
 export async function POST(req: NextRequest) {
-  // Allow cron calls with secret key OR authenticated users
-  const authHeader = req.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`
-
-  if (!isCron) {
-    const userSb = await createServerSupabaseClient()
-    const { data: { user } } = await userSb.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const userSb = await createServerSupabaseClient()
+  const { data: { user } } = await userSb.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))
+  const force: boolean = body.force === true
   const supabase = svc()
   const mmdd = todayMMDD()
 
-  // Load enabled configs (optionally filter to one consultant)
-  let configQuery = supabase
+  // Get current user's consultant
+  const { data: consultant } = await supabase
+    .from('consultants')
+    .select('id, wa_instance, wa_phone')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!consultant) return NextResponse.json({ error: 'Danışman bulunamadı' }, { status: 404 })
+
+  if (!consultant.wa_instance) {
+    return NextResponse.json({
+      error: 'WhatsApp bağlı değil. Profilim sayfasından WhatsApp\'ı bağlayın.',
+    }, { status: 400 })
+  }
+
+  // Load this consultant's config
+  const { data: config } = await supabase
     .from('birthday_automation_config')
     .select('*')
-    .eq('is_enabled', true)
+    .eq('consultant_id', consultant.id)
+    .single()
 
-  if (body.consultant_id) {
-    configQuery = configQuery.eq('consultant_id', body.consultant_id)
+  if (!config) {
+    return NextResponse.json({ error: 'Otomasyon ayarı bulunamadı. Önce kaydedin.' }, { status: 404 })
   }
 
-  const { data: configs } = await configQuery
-  if (!configs?.length) return NextResponse.json({ sent: 0, message: 'Aktif otomasyon yok' })
+  // Build contact query
+  let contactQuery = supabase
+    .from('clients')
+    .select('id, full_name, salutation, phone, birth_date')
+    .eq('is_active', true)
+    .eq('assigned_consultant_id', consultant.id)
+    .not('phone', 'is', null)
 
-  const results: { consultant_id: string; sent: number; failed: number }[] = []
-
-  for (const config of configs) {
-    // Get consultant's WA instance
-    const { data: consultant } = await supabase
-      .from('consultants')
-      .select('id, wa_instance, wa_phone')
-      .eq('id', config.consultant_id)
-      .single()
-
-    if (!consultant?.wa_instance) continue
-
-    // Find today's birthday contacts
-    let contactQuery = supabase
-      .from('clients')
-      .select('id, full_name, salutation, phone, birth_date')
-      .eq('is_active', true)
-      .eq('assigned_consultant_id', consultant.id)
-      .not('birth_date', 'is', null)
-      .not('phone', 'is', null)
-
-    const { data: contacts } = await contactQuery
-    if (!contacts?.length) continue
-
-    // Filter to today's birthdays (MM-DD match)
-    let todayContacts = contacts.filter(c => {
-      if (!c.birth_date) return false
-      const bd = c.birth_date.slice(5, 10) // "YYYY-MM-DD" → "MM-DD"
-      return bd === mmdd
-    })
-
-    // If specific contacts selected, further filter
-    if (config.contact_filter === 'specific' && config.selected_contact_ids?.length) {
-      todayContacts = todayContacts.filter(c => config.selected_contact_ids.includes(c.id))
-    }
-
-    let sent = 0, failed = 0
-    for (const contact of todayContacts) {
-      if (!contact.phone) continue
-      const message = buildMessage(config.message_template, contact)
-      const ok = await sendWhatsApp(contact.phone, message, consultant.wa_instance)
-      if (ok) sent++; else failed++
-    }
-
-    results.push({ consultant_id: consultant.id, sent, failed })
+  // In force (test) mode: no birth_date filter needed
+  if (!force) {
+    contactQuery = contactQuery.not('birth_date', 'is', null)
   }
 
-  return NextResponse.json({ results, date: mmdd })
+  const { data: allContacts } = await contactQuery
+  if (!allContacts?.length) {
+    return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Telefon numarası kayıtlı müşteri yok' })
+  }
+
+  let targets = allContacts
+
+  if (!force) {
+    // Normal mod: sadece bugün doğum günü olanlar
+    targets = allContacts.filter(c => c.birth_date?.slice(5, 10) === mmdd)
+    if (!targets.length) {
+      return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: `Bugün (${mmdd}) doğum günü olan müşteri yok` })
+    }
+  }
+
+  // Contact filter
+  if (config.contact_filter === 'specific' && config.selected_contact_ids?.length) {
+    targets = targets.filter(c => config.selected_contact_ids.includes(c.id))
+  }
+
+  if (!targets.length) {
+    return NextResponse.json({ sent: 0, failed: 0, detail: [], reason: 'Seçili kişi bulunamadı' })
+  }
+
+  const detail: { name: string; phone: string; ok: boolean; error?: string }[] = []
+  let sent = 0, failed = 0
+
+  for (const contact of targets) {
+    if (!contact.phone) continue
+    const message = buildMessage(config.message_template, contact)
+    const result = await sendWhatsApp(contact.phone, message, consultant.wa_instance)
+    detail.push({ name: contact.full_name, phone: contact.phone, ok: result.ok, error: result.error })
+    if (result.ok) sent++; else failed++
+  }
+
+  return NextResponse.json({ sent, failed, detail, date: mmdd, force })
 }
