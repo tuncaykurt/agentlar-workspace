@@ -178,16 +178,23 @@ export default function RehberPage() {
 
   async function fetchContacts() {
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: myConsultant } = await supabase.from('consultants').select('id, role').eq('user_id', user?.id ?? '').single()
+    const isAdmin = myConsultant?.role === 'admin'
+    const myId = myConsultant?.id
+
     const PAGE = 1000
     let all: Contact[] = []
     let from = 0
     while (true) {
-      const { data, error } = await supabase
+      let query = supabase
         .from('clients')
         .select('id, full_name, salutation, phone, email, birth_date, client_type, lead_status')
         .eq('is_active', true)
         .order('full_name', { ascending: true })
         .range(from, from + PAGE - 1)
+      if (!isAdmin && myId) query = query.eq('assigned_consultant_id', myId)
+      const { data, error } = await query
       if (error || !data || data.length === 0) break
       all = [...all, ...(data as Contact[])]
       if (data.length < PAGE) break

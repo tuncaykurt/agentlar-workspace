@@ -537,6 +537,25 @@ ALTER TABLE signature_requests ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMP
     id: '018_client_birth_date',
     sql: `ALTER TABLE clients ADD COLUMN IF NOT EXISTS birth_date DATE;`,
   },
+  {
+    id: '019_fix_rls_all_tables',
+    sql: `
+DO $$ DECLARE tbl text; BEGIN
+  FOR tbl IN
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public'
+      AND tablename NOT IN ('_schema_migrations')
+  LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
+    EXECUTE format('DROP POLICY IF EXISTS allow_authenticated ON %I', tbl);
+    EXECUTE format(
+      'CREATE POLICY allow_authenticated ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true)',
+      tbl
+    );
+  END LOOP;
+END $$;
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────

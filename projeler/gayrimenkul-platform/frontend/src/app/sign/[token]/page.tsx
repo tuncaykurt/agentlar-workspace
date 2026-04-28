@@ -404,19 +404,21 @@ export default function SignPage() {
     }
   }
 
+  // Poll whenever status is 'pending' — covers page reload after DiDit redirect
   useEffect(() => {
-    if (!kycStarted || kycStatus === 'approved') return
+    if (kycStatus !== 'pending') return
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/sign/${token}`)
         if (res.ok) {
-          const data = await res.json()
-          if (data.sigReq?.kyc_status === 'approved') setKycStatus('approved')
+          const d = await res.json()
+          const s: string | null = d.sigReq?.kyc_status ?? null
+          if (s && s !== 'pending') setKycStatus(s)
         }
       } catch { /* ignore */ }
-    }, 5000)
+    }, 3000)
     return () => clearInterval(interval)
-  }, [kycStarted, kycStatus, token])
+  }, [kycStatus, token])
 
   async function handleStartKyc() {
     setKycLoading(true)
@@ -432,6 +434,7 @@ export default function SignPage() {
       if (data.already_approved) { setKycStatus('approved'); return }
       setKycUrl(data.url)
       setKycStarted(true)
+      setKycStatus('pending')
       window.open(data.url, '_blank')
     } catch {
       setKycError('Bağlantı hatası. Lütfen tekrar deneyin.')
@@ -633,7 +636,7 @@ export default function SignPage() {
                   </div>
                 )}
 
-                {!kycStarted ? (
+                {kycStatus !== 'pending' && !kycStarted ? (
                   <button
                     onClick={handleStartKyc}
                     disabled={kycLoading}

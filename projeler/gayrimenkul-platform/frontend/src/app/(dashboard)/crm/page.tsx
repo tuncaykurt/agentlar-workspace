@@ -235,10 +235,16 @@ export default function CRMPage() {
 
   async function fetchStats() {
     const supabase = createClient()
-    const base = () => supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: myConsultant } = await supabase.from('consultants').select('id, role').eq('user_id', user?.id ?? '').single()
+    const isAdmin = myConsultant?.role === 'admin'
+    const myId = myConsultant?.id
+
+    const base = () => {
+      let q = supabase.from('clients').select('*', { count: 'exact', head: true }).eq('is_active', true)
+      if (!isAdmin && myId) q = q.eq('assigned_consultant_id', myId)
+      return q
+    }
 
     const [total, newLead, negotiating, won] = await Promise.all([
       base(),
@@ -256,6 +262,11 @@ export default function CRMPage() {
 
   async function fetchClients() {
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: myConsultant } = await supabase.from('consultants').select('id, role').eq('user_id', user?.id ?? '').single()
+    const isAdmin = myConsultant?.role === 'admin'
+    const myId = myConsultant?.id
+
     let query = supabase
       .from('clients')
       .select('*, consultant:consultants(full_name)')
@@ -263,6 +274,7 @@ export default function CRMPage() {
       .order('created_at', { ascending: false })
       .range(0, 9999)
 
+    if (!isAdmin && myId) query = query.eq('assigned_consultant_id', myId)
     if (filterStatus !== 'all') query = query.eq('lead_status', filterStatus)
     if (filterType !== 'all') query = query.eq('client_type', filterType)
 
