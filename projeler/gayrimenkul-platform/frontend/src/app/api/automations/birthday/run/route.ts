@@ -183,13 +183,9 @@ export async function POST(req: NextRequest) {
   const detail: { name: string; phone: string; ok: boolean; error?: string }[] = []
   let sent = 0, failed = 0
 
-  const useAI = !!(config.selected_model && process.env.OPENROUTER_API_KEY)
-
   for (const contact of targets) {
     if (!contact.phone) continue
-    const message = useAI
-      ? await buildAIMessage(contact, config.system_prompt, config.message_template, config.selected_model)
-      : buildMessage(config.message_template, contact)
+    const message = buildMessage(config.message_template, contact)
     const result = await sendWhatsApp(contact.phone, message, consultant.wa_instance)
     detail.push({ name: contact.full_name, phone: contact.phone, ok: result.ok, error: result.error })
     if (result.ok) sent++; else failed++
