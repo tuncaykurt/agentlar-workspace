@@ -1236,27 +1236,39 @@ export default function NewDocumentPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    // Consultants — service role API (bypasses RLS), falls back to own record
-    fetch('/api/consultants/list')
-      .then(async r => {
-        const json = await r.json()
-        if (!r.ok) throw new Error(json.error || r.statusText)
-        return json
-      })
-      .then(({ consultants: data }) => {
-        if (data?.length) {
-          setConsultants(data as typeof consultants)
-          if (loggedInConsultantId && data.find((c: { id: string }) => c.id === loggedInConsultantId)) {
-            setConsultantId(loggedInConsultantId)
-          } else {
-            setConsultantId(data[0].id)
+    const supabase = createClient()
+
+    // Own consultant record — same query the features API uses, always works
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase
+        .from('consultants')
+        .select('id, full_name, wa_phone, office_phone, ticari_yetki_belgesi_no, phone, email, address, role')
+        .eq('user_id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setConsultants([data])
+            setConsultantId(data.id)
           }
-        }
-      })
-      .catch(err => console.error('[consultants/list] fetch failed:', err))
+        })
+
+      // Admin: also fetch all consultants via service role API
+      if (isAdmin) {
+        fetch('/api/consultants/list')
+          .then(r => r.ok ? r.json() : null)
+          .then(json => {
+            if (json?.consultants?.length) {
+              setConsultants(json.consultants)
+              const mine = json.consultants.find((c: { id: string }) => c.id === loggedInConsultantId)
+              setConsultantId(mine ? mine.id : json.consultants[0].id)
+            }
+          })
+          .catch(() => {})
+      }
+    })
 
     // Settings — no RLS, client-side is fine
-    const supabase = createClient()
     const settingsKeys = ['office_name', 'office_legal_name', 'office_address', 'office_mersis', 'office_jurisdiction', 'office_logo']
     supabase.from('settings').select('key, value').in('key', settingsKeys)
       .then(({ data }) => {
@@ -1270,15 +1282,7 @@ export default function NewDocumentPage() {
           if (row.key === 'office_logo' && v) setOfficeLogo(v)
         })
       })
-  }, [])
-
-  // When loggedInConsultantId becomes available (async), override the default selection
-  useEffect(() => {
-    if (!loggedInConsultantId || !consultants.length) return
-    if (consultants.find(c => c.id === loggedInConsultantId)) {
-      setConsultantId(loggedInConsultantId)
-    }
-  }, [loggedInConsultantId, consultants])
+  }, [isAdmin])
 
   // Auto-generate title
   useEffect(() => {
