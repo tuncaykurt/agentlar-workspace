@@ -135,6 +135,7 @@ function ClientSearch({
   const [open, setOpen] = useState(false)
   const [showNewForm, setShowNewForm] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newSalutation, setNewSalutation] = useState('')
   const [newPhone, setNewPhone] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newTcNo, setNewTcNo] = useState('')
@@ -170,6 +171,7 @@ function ClientSearch({
 
   function openNewForm() {
     setNewName(q)
+    setNewSalutation('')
     setNewPhone('')
     setNewEmail('')
     setNewTcNo('')
@@ -196,6 +198,7 @@ function ClientSearch({
       .from('clients')
       .insert({
         full_name: newName.trim(),
+        salutation: newSalutation.trim() || null,
         phone: newPhone.trim() || null,
         email: newEmail.trim() || null,
         tc_no: newTcNo.trim() || null,
@@ -256,16 +259,31 @@ function ClientSearch({
             </button>
           </div>
 
-          <div>
-            <label className="block text-xs text-on-surface-variant mb-1">Ad Soyad *</label>
-            <input
-              type="text"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              placeholder="Ahmet Yılmaz"
-              className={inp}
-              autoFocus
-            />
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className="block text-xs text-on-surface-variant mb-1">Ad Soyad *</label>
+              <input
+                type="text"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="Ahmet Yılmaz"
+                className={inp}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-on-surface-variant mb-1">Hitap</label>
+              <select
+                value={newSalutation}
+                onChange={e => setNewSalutation(e.target.value)}
+                className={inp}
+              >
+                <option value="">Seçin</option>
+                {['Bey', 'Hanım', 'Dr.', 'Op. Dr.', 'Av.', 'Prof.'].map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
