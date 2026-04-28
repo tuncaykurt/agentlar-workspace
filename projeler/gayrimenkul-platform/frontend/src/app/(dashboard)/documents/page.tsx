@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
 import type { Document, SignatureStatus } from '@/lib/types'
 import {
   FileText, Plus, Search, CheckCircle, Clock,
@@ -42,16 +41,12 @@ export default function DocumentsPage() {
   useEffect(() => { fetchDocuments() }, [filterStatus])
 
   async function fetchDocuments() {
-    const supabase = createClient()
-    let query = supabase
-      .from('documents')
-      .select('*, client:clients(full_name), property:properties(title)')
-      .order('created_at', { ascending: false })
-
-    if (filterStatus !== 'all') query = query.eq('signature_status', filterStatus)
-
-    const { data, error } = await query
-    if (!error && data) setDocuments(data as typeof documents)
+    const params = filterStatus !== 'all' ? `?status=${filterStatus}` : ''
+    const res = await fetch(`/api/documents/list${params}`)
+    if (res.ok) {
+      const { documents: data } = await res.json()
+      setDocuments(data || [])
+    }
     setLoading(false)
   }
 
