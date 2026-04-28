@@ -582,10 +582,12 @@ CREATE TABLE IF NOT EXISTS birthday_automation_config (
   message_template TEXT DEFAULT 'Merhaba {hitap} {ad}, doğum gününüz kutlu olsun! 🎂',
   contact_filter TEXT DEFAULT 'all',
   selected_contact_ids UUID[] DEFAULT ARRAY[]::UUID[],
+  last_run_date DATE,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(consultant_id)
 );
+ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS last_run_date DATE;
     `,
   },
   {
