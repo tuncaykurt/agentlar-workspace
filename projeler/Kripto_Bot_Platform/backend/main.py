@@ -5,17 +5,21 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
 from core.database import engine, Base
-from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data
+from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest
 from api.websocket import market_ws, bot_status_ws
 from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
+from services.liquidation_collector import start_liquidation_collector
 
 
 async def _init_db():
-    """Uygulama başlarken tabloları oluştur (OHLCV dahil)."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("[Main] Veritabanı tabloları hazır.")
+    """Uygulama başlarken tabloları oluştur (OHLCV dahil). Hata olursa uygulama yine başlar."""
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("[Main] Veritabanı tabloları hazır.")
+    except Exception as e:
+        print(f"[Main] DB bağlantı hatası (uygulama devam ediyor): {e}")
 
 
 async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
@@ -44,7 +48,7 @@ async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Veritabanı tablolarını oluştur
+    # 1. Veritabanı tablolarını oluştur (hata olursa devam et)
     await _init_db()
 
     symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT"]
@@ -58,12 +62,22 @@ async def lifespan(app: FastAPI):
                 tasks.append(asyncio.create_task(bitget.subscribe_ticker(sym)))
             print(f"[Main] {len(symbols)} sembol için veri akışı başlatıldı.")
 
-            # 3. Arka plan veri senkronizasyonu başlat
-            fetcher = DataFetcher(bitget)
-            tasks.append(asyncio.create_task(_start_data_sync(fetcher, symbols)))
-            print("[Main] Arka plan veri senkronizasyonu başlatıldı.")
+            # 3. Arka plan veri senkronizasyonu başlat (DB erişilebilirse)
+            try:
+                fetcher = DataFetcher(bitget)
+                tasks.append(asyncio.create_task(_start_data_sync(fetcher, symbols)))
+                print("[Main] Arka plan veri senkronizasyonu başlatıldı.")
+            except Exception as e:
+                print(f"[Main] DataSync başlatılamadı (devam ediliyor): {e}")
         else:
             print("[Main] BITGET_API_KEY tanımlı değil — WebSocket başlatılmadı.")
+
+        # 4. Likidasyon collector başlat (Binance WS — her zaman, Coinglass — key varsa)
+        try:
+            liq_tasks = await start_liquidation_collector()
+            tasks.extend(liq_tasks)
+        except Exception as e:
+            print(f"[Main] LiqCollector başlatılamadı (devam ediliyor): {e}")
     except Exception as e:
         print(f"[Main] Başlatma hatası (devam ediliyor): {e}")
 
@@ -101,6 +115,7 @@ app.include_router(ai_analysis.router, prefix="/api")
 app.include_router(chart.router, prefix="/api")
 app.include_router(signals.router, prefix="/api")
 app.include_router(data.router, prefix="/api")
+app.include_router(backtest.router, prefix="/api")
 
 
 # WebSocket routes

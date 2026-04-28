@@ -15,6 +15,11 @@ from ai.openrouter import quick_filter, deep_analysis
 from ai.market_context import collect_full_context
 from services.data_fetcher import DataFetcher
 from core.redis_client import get_redis
+from bot.strategies.rsi_oversold import RSIOversoldStrategy
+from bot.strategies.macd_signal import MACDSignalStrategy
+from bot.strategies.bollinger_bounce import BollingerBounceStrategy
+from bot.strategies.ut_bot import UTBotStrategy
+from bot.strategies.supertrend import SupertrendStrategy
 import json
 
 
@@ -26,6 +31,8 @@ class BotEngine:
         self.running = False
         self.paper_trades: list = []
         self.signal_history: list = []
+        # Trailing stop state: {symbol: {side, entry, highest/lowest, trail_price}}
+        self._trailing: dict = {}
 
         self.risk = RiskManager(
             balance=bot_config.get("initial_balance", 1000),
@@ -59,16 +66,30 @@ class BotEngine:
                     await asyncio.sleep(30)   # 30sn'de bir kontrol
                     continue
 
+                # 0. Trailing stop kontrolü (aktif pozisyon varsa)
+                if symbol in self._trailing:
+                    try:
+                        ticker = await self.exchange.exchange.fetch_ticker(symbol)
+                        cur_price = float(ticker["last"])
+                        if await self._check_trailing_stop(symbol, cur_price):
+                            pos = await self._get_current_position(symbol)
+                            if pos:
+                                await self._close_position(symbol, pos)
+                                await self._alert(f"📊 Trailing Stop tetiklendi — {symbol} @ ${cur_price:,.2f}")
+                    except Exception as e:
+                        print(f"[Bot] Trailing stop kontrolü hatası: {e}")
+
                 # 1. Veri çek (Redis → DB → Borsa, otomatik kayıt)
                 ohlcv = await self.data_fetcher.get_ohlcv(symbol, "1h", 200)
                 if len(ohlcv) < 60:
                     await asyncio.sleep(60)
                     continue
 
-                # 2. Teknik indikatörler
+                # 2. Teknik indikatörler + strateji bazlı sinyal
                 ind = calculate_all(ohlcv)
-                signal = generate_signal(ind)
                 close = ind.get("close", 0)
+
+                signal = self._get_strategy_signal(strategy, ohlcv, ind)
 
                 ai_result = None
 
@@ -154,6 +175,66 @@ class BotEngine:
                 await self._alert(f"⚠️ Bot hatası: {e}")
                 await asyncio.sleep(60)
 
+    def _get_strategy_signal(self, strategy: str, ohlcv: list, ind: dict) -> str | None:
+        """Strateji bazlı sinyal üret."""
+        params = self.config.get("params", {})
+
+        if strategy == "ema_cross":
+            return generate_signal(ind)
+
+        elif strategy == "rsi_oversold":
+            strat = RSIOversoldStrategy(
+                rsi_period=int(params.get("rsi_period", 14)),
+                oversold=int(params.get("oversold", 30)),
+                overbought=int(params.get("overbought", 70)),
+                rsi_ema_filter=int(params.get("rsi_ema_filter", 200)),
+            )
+            result = strat.calculate(ohlcv)
+            return result.get("signal")
+
+        elif strategy == "macd_signal":
+            strat = MACDSignalStrategy(
+                fast=int(params.get("fast", 12)),
+                slow=int(params.get("slow", 26)),
+                signal=int(params.get("signal", 9)),
+                hist_threshold=float(params.get("hist_threshold", 0)),
+            )
+            result = strat.calculate(ohlcv)
+            return result.get("signal")
+
+        elif strategy == "bollinger_bounce":
+            strat = BollingerBounceStrategy(
+                period=int(params.get("period", 20)),
+                std_dev=float(params.get("std_dev", 2.0)),
+                squeeze=bool(params.get("squeeze", True)),
+            )
+            result = strat.calculate(ohlcv)
+            return result.get("signal")
+
+        elif strategy == "ut_bot":
+            strat = UTBotStrategy(
+                atr_period=int(params.get("atr_period", 10)),
+                atr_mult=float(params.get("atr_mult", 3.0)),
+                heikin_ashi=bool(params.get("heikin_ashi", False)),
+            )
+            result = strat.calculate(ohlcv)
+            return result.get("signal")
+
+        elif strategy == "supertrend":
+            strat = SupertrendStrategy(
+                period=int(params.get("period", 10)),
+                mult=float(params.get("mult", 3.0)),
+            )
+            result = strat.calculate(ohlcv)
+            return result.get("signal")
+
+        elif strategy == "funding_rate":
+            # Funding rate ayrı cycle'da çalışır ama fallback
+            return generate_signal(ind)
+
+        else:
+            return generate_signal(ind)
+
     async def _execute(self, side: str, price: float, qty: float, stop_loss: float, ai_result: dict):
         paper = self.config.get("paper_mode", True)
         mode = "📝 PAPER" if paper else "🟢 CANLI"
@@ -179,6 +260,12 @@ class BotEngine:
             await self.exchange.place_order(self.config["symbol"], side, qty, "market")
 
         self.signal_history.append(trade)
+
+        # Trailing stop başlat
+        params = self.config.get("params", {})
+        trail_pct = params.get("trailing_stop_pct", 0)
+        if trail_pct > 0:
+            self._init_trailing(self.config["symbol"], side, price, trail_pct)
 
         msg = (
             f"{mode} | {'🟢 LONG' if side == 'buy' else '🔴 SHORT'} | "
@@ -283,6 +370,19 @@ class BotEngine:
         Frontend'den Redis'e yazılan buy/sell sinyallerini okur ve işlem açar.
         Gelişmiş ayarlar: signal_mode, position_action, TP/SL, trailing stop
         """
+        # Trailing stop kontrolü
+        if symbol in self._trailing:
+            try:
+                ticker = await self.exchange.exchange.fetch_ticker(symbol)
+                cur_price = float(ticker["last"])
+                if await self._check_trailing_stop(symbol, cur_price):
+                    pos = await self._get_current_position(symbol)
+                    if pos:
+                        await self._close_position(symbol, pos)
+                        await self._alert(f"📊 Trailing Stop tetiklendi — {symbol} @ ${cur_price:,.2f}")
+            except Exception as e:
+                print(f"[Bot] Trailing stop kontrolü hatası: {e}")
+
         key = f"custom_signal:{symbol.replace('/', '_').replace(':', '_')}"
         raw = await redis.get(key)
         if not raw:
@@ -411,10 +511,71 @@ class BotEngine:
         try:
             side = "sell" if position["side"] == "long" else "buy"
             await self.exchange.place_order(symbol, side, position["size"], "market")
+            self._clear_trailing(symbol)
             print(f"[Bot {self.config['name']}] Pozisyon kapatıldı: {position['side']} @ {position['entry']}")
         except Exception as e:
             print(f"[Bot {self.config['name']}] Pozisyon kapatma hatası: {e}")
 
+    # ─── Trailing Stop Yönetimi ────────────────────────────────────
+
+    def _init_trailing(self, symbol: str, side: str, entry: float, trail_pct: float):
+        """Yeni pozisyon açıldığında trailing stop'u başlat."""
+        if trail_pct <= 0:
+            return
+        self._trailing[symbol] = {
+            "side": side,
+            "entry": entry,
+            "peak": entry,       # long: en yüksek, short: en düşük
+            "trail_pct": trail_pct,
+            "trail_price": entry * (1 - trail_pct / 100) if side == "buy" else entry * (1 + trail_pct / 100),
+            "activated": False,  # Kâra geçince aktifleşir
+        }
+
+    async def _check_trailing_stop(self, symbol: str, current_price: float) -> bool:
+        """
+        Trailing stop kontrolü. Fiyat lehine giderse stop'u çeker.
+        True dönerse pozisyon kapatılmalı.
+        """
+        ts = self._trailing.get(symbol)
+        if not ts:
+            return False
+
+        side = ts["side"]
+        trail_pct = ts["trail_pct"]
+
+        if side == "buy":  # Long pozisyon
+            # Fiyat yeni zirve yaptı mı?
+            if current_price > ts["peak"]:
+                ts["peak"] = current_price
+                ts["trail_price"] = current_price * (1 - trail_pct / 100)
+                ts["activated"] = True
+
+            # Trailing stop tetiklendi mi?
+            if ts["activated"] and current_price <= ts["trail_price"]:
+                print(f"[TrailingStop] {symbol} LONG kapatılıyor — peak: {ts['peak']:.2f}, trail: {ts['trail_price']:.2f}, current: {current_price:.2f}")
+                del self._trailing[symbol]
+                return True
+
+        else:  # Short pozisyon
+            # Fiyat yeni dip yaptı mı?
+            if current_price < ts["peak"]:
+                ts["peak"] = current_price
+                ts["trail_price"] = current_price * (1 + trail_pct / 100)
+                ts["activated"] = True
+
+            # Trailing stop tetiklendi mi?
+            if ts["activated"] and current_price >= ts["trail_price"]:
+                print(f"[TrailingStop] {symbol} SHORT kapatılıyor — peak: {ts['peak']:.2f}, trail: {ts['trail_price']:.2f}, current: {current_price:.2f}")
+                del self._trailing[symbol]
+                return True
+
+        return False
+
+    def _clear_trailing(self, symbol: str):
+        """Pozisyon kapatıldığında trailing state'i temizle."""
+        self._trailing.pop(symbol, None)
+
     def stop(self):
         self.running = False
+        self._trailing.clear()
         print(f"[Bot {self.config['name']}] Durduruldu.")

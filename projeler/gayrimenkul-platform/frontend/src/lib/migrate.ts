@@ -571,6 +571,24 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
     `,
   },
   {
+    id: '022_birthday_automation',
+    sql: `
+CREATE TABLE IF NOT EXISTS birthday_automation_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultant_id UUID REFERENCES consultants(id) ON DELETE CASCADE,
+  is_enabled BOOLEAN DEFAULT false,
+  trigger_time TEXT DEFAULT '09:00',
+  system_prompt TEXT DEFAULT 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilere kısa, samimi ve kişisel doğum günü mesajları yazıyorsun.',
+  message_template TEXT DEFAULT 'Merhaba {hitap} {ad}, doğum gününüz kutlu olsun! 🎂',
+  contact_filter TEXT DEFAULT 'all',
+  selected_contact_ids UUID[] DEFAULT ARRAY[]::UUID[],
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(consultant_id)
+);
+    `,
+  },
+  {
     id: '019_fix_rls_all_tables',
     sql: `
 DO $$ DECLARE tbl text; BEGIN

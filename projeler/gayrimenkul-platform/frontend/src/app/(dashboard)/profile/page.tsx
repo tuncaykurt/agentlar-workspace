@@ -443,6 +443,48 @@ export default function ProfilePage() {
           <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
             <User size={16} /> Kişisel Bilgiler
           </h2>
+
+          {/* Profil Fotoğrafı */}
+          <div className="flex items-center gap-4 mb-5">
+            <button
+              type="button"
+              onClick={() => handleDocUpload('profile_photo_url')}
+              disabled={uploadingDoc === 'profile_photo_url'}
+              className="relative group w-20 h-20 rounded-full overflow-hidden bg-surface-container-high border-2 border-outline hover:border-primary transition-colors flex-shrink-0"
+            >
+              {consultant?.profile_photo_url ? (
+                <img src={consultant.profile_photo_url} alt="Profil" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-2xl font-bold text-on-surface-variant">
+                  {form.full_name?.charAt(0)?.toLocaleUpperCase('tr-TR') || <User size={32} />}
+                </span>
+              )}
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                {uploadingDoc === 'profile_photo_url'
+                  ? <Loader2 size={20} className="text-white animate-spin" />
+                  : <Upload size={20} className="text-white" />
+                }
+              </div>
+            </button>
+            <div>
+              <p className="text-sm font-medium text-on-surface">Profil Fotoğrafı</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">Fotoğrafa tıklayarak yükle veya değiştir</p>
+              {consultant?.profile_photo_url && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const supabase = createClient()
+                    await supabase.from('consultants').update({ profile_photo_url: null }).eq('id', consultant.id)
+                    setConsultant(c => c ? { ...c, profile_photo_url: undefined } : c)
+                  }}
+                  className="text-xs text-red-500 hover:underline mt-1"
+                >
+                  Fotoğrafı kaldır
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-on-surface mb-1">Ad Soyad</label>

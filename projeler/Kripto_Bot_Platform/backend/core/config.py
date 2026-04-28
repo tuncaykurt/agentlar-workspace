@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     BITGET_API_SECRET: str = ""
     BITGET_PASSPHRASE: str = ""
 
+    MEXC_API_KEY: str = ""
+    MEXC_API_SECRET: str = ""
+
     OPENROUTER_API_KEY: str = ""
     AI_MIN_CONFIDENCE: int = 60      # Bu skorun altındaki sinyaller reddedilir
 

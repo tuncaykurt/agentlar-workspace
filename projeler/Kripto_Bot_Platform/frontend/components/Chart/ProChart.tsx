@@ -21,6 +21,8 @@ interface VPLevel { price: number; volume: number; pct: number; is_poc: boolean;
 interface OBRect  { type:"bullish"|"bearish"; time_start:number; time_end:number; high:number; low:number; mitigated:boolean }
 interface SRLevel { price: number; type:"support"|"resistance"; strength: number }
 interface UTSignal{ time: number; type:"buy"|"sell"; price: number }
+interface LiqLevel { price: number; long_liq: number; short_liq: number; total: number }
+interface LiqData  { long_liq_count: number; short_liq_count: number; signal: string; top_price_levels?: number[] }
 
 interface ChartData {
   candles: Candle[]; volume: VolBar[]
@@ -34,6 +36,8 @@ interface ChartData {
   lr_channel:  { upper: Point[]; mid: Point[]; lower: Point[]; slope: number }
   sr_levels:   SRLevel[]
   order_blocks:OBRect[]
+  liquidations?: LiqData
+  liq_heatmap?: { levels: LiqLevel[]; total_count?: number; total_usd?: number }
 }
 
 interface Legend  { o: number; h: number; l: number; c: number; change: number }
@@ -539,6 +543,8 @@ export default function ProChart({
   const [showLR,      setShowLR]      = useState(false)
   const [showOB,      setShowOB]      = useState(false)
   const [showSR,      setShowSR]      = useState(false)
+  const [showLiq,     setShowLiq]     = useState(false)
+  const [showSessions, setShowSessions] = useState(false)
 
   // Özel indikatörleri localStorage'dan yükle ve inds'e ekle
   useEffect(() => {
@@ -559,12 +565,34 @@ export default function ProChart({
   const paneRefs    = useRef<Record<string, HTMLDivElement | null>>({})
 
   // ── Veri çekme ──────────────────────────────────────────────
+  const tfLimits: Record<string, number> = {
+    "1m": 1000, "5m": 2000, "15m": 3000,
+    "1h": 5000, "4h": 2200, "1d": 365,
+  }
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const enc = encodeURIComponent(symbol)
-      const d   = await api.get(`/chart/data?symbol=${enc}&interval=${tf}&limit=400`)
+      const lim = tfLimits[tf] || 2000
+      const d   = await api.get(`/chart/data?symbol=${enc}&interval=${tf}&limit=${lim}`)
       if (d && d.candles && d.candles.length > 0) {
+        // Sort + deduplicate candles & volume by time
+        d.candles.sort((a: Candle, b: Candle) => a.time - b.time)
+        const seenTimes = new Set<number>()
+        d.candles = d.candles.filter((c: Candle) => {
+          if (seenTimes.has(c.time)) return false
+          seenTimes.add(c.time)
+          return true
+        })
+        if (d.volume) {
+          d.volume.sort((a: VolBar, b: VolBar) => a.time - b.time)
+          const seenVol = new Set<number>()
+          d.volume = d.volume.filter((v: VolBar) => {
+            if (seenVol.has(v.time)) return false
+            seenVol.add(v.time)
+            return true
+          })
+        }
         setData(d)
       }
     } catch (e) {
@@ -583,7 +611,7 @@ export default function ProChart({
       try {
         const enc = encodeURIComponent(symbol)
         const ticker = await fetch(
-          `${API_URL}/api/market/ticker?symbol=${enc}`
+          `${API_URL}/market/ticker?symbol=${enc}`
         ).then(r => r.json())
         if (!ticker?.last) return
         const price = parseFloat(ticker.last)
@@ -657,7 +685,7 @@ export default function ProChart({
       grid:   { vertLines: { color: "#0f172a" }, horzLines: { color: "#0f172a" } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: "#1e293b", scaleMargins: { top: 0.06, bottom: 0.02 } },
-      timeScale: { borderColor: "#1e293b", timeVisible: true, secondsVisible: false },
+      timeScale: { borderColor: "#1e293b", timeVisible: true, secondsVisible: false, rightOffset: 5 },
     })
     chartRef.current = chart
 
@@ -1011,6 +1039,51 @@ export default function ProChart({
     })
   }, [userLines])
 
+  // ── Likidasyon seviyeleri (price lines) ─────────────────────
+  const liqLinesRef = useRef<any[]>([])
+  useEffect(() => {
+    const series = candleSeriesRef.current
+    if (!series) return
+    // Eski çizgileri temizle
+    liqLinesRef.current.forEach(l => { try { series.removePriceLine(l) } catch {} })
+    liqLinesRef.current = []
+    if (!showLiq || !data) return
+
+    // Binance liquidation top levels
+    const topLevels = data.liquidations?.top_price_levels ?? []
+    topLevels.forEach(price => {
+      const l = series.createPriceLine({
+        price,
+        color: "rgba(255,165,0,0.7)",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: "LIQ",
+      })
+      liqLinesRef.current.push(l)
+    })
+
+    // Likidasyon heatmap levels (DB'den — Binance WS + Coinglass)
+    const heatmapLevels = data.liq_heatmap?.levels ?? []
+    const maxTotal = Math.max(...heatmapLevels.map(l => l.total), 1)
+    heatmapLevels.slice(0, 10).forEach(level => {
+      const intensity = Math.min(level.total / maxTotal, 1)
+      const isLong = level.long_liq > level.short_liq
+      const color = isLong
+        ? `rgba(239,68,68,${0.3 + intensity * 0.5})`   // kırmızı = long liq
+        : `rgba(34,197,94,${0.3 + intensity * 0.5})`    // yeşil = short liq
+      const l = series.createPriceLine({
+        price: level.price,
+        color,
+        lineWidth: intensity > 0.5 ? 2 : 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: isLong ? "L-LIQ" : "S-LIQ",
+      })
+      liqLinesRef.current.push(l)
+    })
+  }, [showLiq, data])
+
   // ── Osilatör pane'leri ───────────────────────────────────────
   useEffect(() => {
     if (!data || !chartRef.current) return
@@ -1354,6 +1427,20 @@ export default function ProChart({
           </span>
         </button>
 
+        {/* Likidasyon seviyeleri */}
+        <button onClick={() => setShowLiq(v => !v)} title="Likidasyon seviyeleri (Binance + Coinglass)">
+          <span className={`text-xs px-2 py-0.5 rounded border transition-colors ${showLiq ? "border-orange-500/50 text-orange-400 bg-orange-500/10" : "border-slate-700 text-slate-400 hover:text-white"}`}>
+            LIQ
+          </span>
+        </button>
+
+        {/* Dünya Borsası Seanslari */}
+        <button onClick={() => setShowSessions(v => !v)} title="Dünya borsası hareketli saatler (Tokyo / Londra / New York)">
+          <span className={`text-xs px-2 py-0.5 rounded border transition-colors ${showSessions ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10" : "border-slate-700 text-slate-400 hover:text-white"}`}>
+            Sessions
+          </span>
+        </button>
+
         {/* Çizgi aracı */}
         <button onClick={() => setDrawMode(v => !v)} title="Yatay çizgi çiz"
           className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs transition-colors ${
@@ -1402,6 +1489,9 @@ export default function ProChart({
           )}
         </div>
       </div>
+
+      {/* ── Dünya Borsası Seansları ────────────────────────────── */}
+      {showSessions && <SessionBar />}
 
       {/* ── Ana grafik alanı ────────────────────────────────────── */}
       <div className="flex-1 min-h-0 relative">
@@ -1501,7 +1591,7 @@ export default function ProChart({
           style={{ top: 0 }}
         >
           {countdown && (
-            <div className="text-[10px] font-mono text-slate-400 bg-[#1e293b] border-l border-t border-b border-slate-700 px-1.5 py-0.5 rounded-l">
+            <div className="text-[10px] font-mono text-white bg-red-600 px-1.5 py-0.5 rounded-l font-bold">
               {countdown}
             </div>
           )}
@@ -1666,6 +1756,58 @@ export default function ProChart({
           }}
           onClose={() => setSettingsInd(null)}
         />
+      )}
+    </div>
+  )
+}
+
+
+// ─── Dünya Borsası Seansları ──────────────────────────────────────────────────
+const SESSIONS = [
+  { name: "Sydney",    flag: "AU", startUTC: 22, endUTC: 7,  color: "#a78bfa", bg: "bg-violet-500/10", border: "border-violet-500/30" },
+  { name: "Tokyo",     flag: "JP", startUTC: 0,  endUTC: 9,  color: "#f472b6", bg: "bg-pink-500/10",   border: "border-pink-500/30"   },
+  { name: "Shanghai",  flag: "CN", startUTC: 1,  endUTC: 7,  color: "#fb923c", bg: "bg-orange-500/10", border: "border-orange-500/30" },
+  { name: "London",    flag: "GB", startUTC: 7,  endUTC: 16, color: "#60a5fa", bg: "bg-blue-500/10",   border: "border-blue-500/30"   },
+  { name: "Frankfurt", flag: "DE", startUTC: 7,  endUTC: 16, color: "#34d399", bg: "bg-emerald-500/10",border: "border-emerald-500/30"},
+  { name: "New York",  flag: "US", startUTC: 13, endUTC: 22, color: "#fbbf24", bg: "bg-yellow-500/10", border: "border-yellow-500/30" },
+]
+
+function SessionBar() {
+  const [now, setNow] = useState(new Date())
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  const utcH = now.getUTCHours()
+
+  const isActive = (s: typeof SESSIONS[0]) => {
+    if (s.startUTC < s.endUTC) return utcH >= s.startUTC && utcH < s.endUTC
+    return utcH >= s.startUTC || utcH < s.endUTC  // gece yarisini gecen (Sydney)
+  }
+
+  const fmtTime = (h: number) => `${String(h).padStart(2, "0")}:00`
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/50 border-b border-slate-800 overflow-x-auto">
+      <span className="text-[10px] text-slate-500 shrink-0">UTC {fmtTime(utcH)}</span>
+      {SESSIONS.map(s => {
+        const active = isActive(s)
+        return (
+          <div key={s.name} className={`flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10px] shrink-0 transition-all ${
+            active ? `${s.bg} ${s.border}` : "bg-slate-900 border-slate-800 opacity-40"
+          }`}>
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: active ? s.color : "#475569" }} />
+            <span className={active ? "text-white font-medium" : "text-slate-500"}>{s.name}</span>
+            <span className="text-slate-500">{fmtTime(s.startUTC)}-{fmtTime(s.endUTC)}</span>
+          </div>
+        )
+      })}
+      {SESSIONS.some(s => isActive(s)) && (
+        <span className="text-[10px] text-emerald-400 ml-auto shrink-0">
+          {SESSIONS.filter(s => isActive(s)).map(s => s.name).join(" + ")} aktif
+        </span>
       )}
     </div>
   )

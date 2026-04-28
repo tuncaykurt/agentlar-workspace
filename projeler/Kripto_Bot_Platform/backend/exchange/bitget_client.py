@@ -1,8 +1,8 @@
 """
 Bitget Exchange İstemcisi
 - CCXT ile REST işlemleri
-- WebSocket ile canlı veri
-Bitget futures: USDT-M perpetual (mix/BTCUSDT_UMCBL formatı)
+- WebSocket v2 ile canlı veri
+Bitget futures: USDT-M perpetual
 """
 import asyncio
 import json
@@ -17,87 +17,100 @@ class BitgetClient:
         self.exchange = ccxt.bitget({
             "apiKey": settings.BITGET_API_KEY,
             "secret": settings.BITGET_API_SECRET,
-            "password": settings.BITGET_PASSPHRASE,   # Bitget passphrase zorunlu
-            "options": {"defaultType": "swap"},        # swap = futures
+            "password": settings.BITGET_PASSPHRASE,
+            "options": {"defaultType": "swap"},
         })
 
-        # Testnet yoksa direkt canlı (Bitget'in ayrı testnet URL'si var)
-        self.ws_url = "wss://ws.bitget.com/mix/v1/stream"
+        # Bitget WS v2 — v1 kapandı
+        self.ws_url = "wss://ws.bitget.com/v2/ws/public"
 
-    # ─── WebSocket ────────────────────────────────────────────────────────────
+    # ─── WebSocket v2 ─────────────────────────────────────────────────────────
+
+    async def _ws_connect(self, subscribe_msg: dict, handler, label: str):
+        """WS bağlantı + ping/pong + otomatik yeniden bağlanma."""
+        while True:
+            try:
+                async with websockets.connect(
+                    self.ws_url,
+                    ping_interval=20,
+                    ping_timeout=10,
+                    close_timeout=5,
+                ) as ws:
+                    await ws.send(json.dumps(subscribe_msg))
+                    print(f"[Bitget WS] {label} abone olundu")
+
+                    async for raw in ws:
+                        data = json.loads(raw)
+
+                        # Ping/pong — Bitget v2 "ping" text mesajı gönderir
+                        if raw == "ping":
+                            await ws.send("pong")
+                            continue
+
+                        if "data" in data:
+                            await handler(data)
+
+            except (websockets.ConnectionClosed, ConnectionError, OSError) as e:
+                print(f"[Bitget WS] {label} koptu: {e} — 5s sonra tekrar")
+                await asyncio.sleep(5)
+            except Exception as e:
+                print(f"[Bitget WS] {label} hata: {e} — 10s sonra tekrar")
+                await asyncio.sleep(10)
 
     async def subscribe_kline(self, symbol: str, interval: str = "1m"):
-        """
-        Canlı mum verisi. Bitget WS formatı:
-        instId: BTCUSDT, channel: candle1m
-        """
+        """Canlı mum verisi — Bitget WS v2 formatı."""
         redis = get_redis()
-        channel = f"candle{interval}"
         inst_id = symbol.replace("/", "").replace(":USDT", "")
 
+        # v2 format: instType=USDT-FUTURES, channel=candle1m
         subscribe_msg = {
             "op": "subscribe",
-            "args": [{"instType": "mc", "channel": channel, "instId": inst_id}]
+            "args": [{"instType": "USDT-FUTURES", "channel": f"candle{interval}", "instId": inst_id}]
         }
 
-        while True:
-            try:
-                async with websockets.connect(self.ws_url) as ws:
-                    await ws.send(json.dumps(subscribe_msg))
-                    print(f"[Bitget WS] Abone olundu: {channel}/{inst_id}")
+        async def handler(data):
+            for candle in data.get("data", []):
+                payload = {
+                    "symbol": symbol,
+                    "interval": interval,
+                    "time": int(candle[0]),
+                    "open": float(candle[1]),
+                    "high": float(candle[2]),
+                    "low": float(candle[3]),
+                    "close": float(candle[4]),
+                    "volume": float(candle[5]),
+                }
+                key = f"kline:{symbol}:{interval}"
+                await redis.set(key, json.dumps(payload))
+                await redis.publish(f"kline:{symbol}", json.dumps(payload))
 
-                    async for raw in ws:
-                        data = json.loads(raw)
-                        if "data" in data and data.get("action") in ("snapshot", "update"):
-                            for candle in data["data"]:
-                                payload = {
-                                    "symbol": symbol,
-                                    "interval": interval,
-                                    "time": int(candle[0]),
-                                    "open": float(candle[1]),
-                                    "high": float(candle[2]),
-                                    "low": float(candle[3]),
-                                    "close": float(candle[4]),
-                                    "volume": float(candle[5]),
-                                }
-                                key = f"kline:{symbol}:{interval}"
-                                await redis.set(key, json.dumps(payload))
-                                await redis.publish(f"kline:{symbol}", json.dumps(payload))
-            except Exception as e:
-                print(f"[Bitget WS] Bağlantı kesildi: {e} — 5s sonra yeniden bağlanıyor")
-                await asyncio.sleep(5)
+        await self._ws_connect(subscribe_msg, handler, f"candle{interval}/{inst_id}")
 
     async def subscribe_ticker(self, symbol: str):
-        """Anlık fiyat."""
+        """Anlık fiyat — Bitget WS v2 formatı."""
         redis = get_redis()
         inst_id = symbol.replace("/", "").replace(":USDT", "")
+
         subscribe_msg = {
             "op": "subscribe",
-            "args": [{"instType": "mc", "channel": "ticker", "instId": inst_id}]
+            "args": [{"instType": "USDT-FUTURES", "channel": "ticker", "instId": inst_id}]
         }
 
-        while True:
-            try:
-                async with websockets.connect(self.ws_url) as ws:
-                    await ws.send(json.dumps(subscribe_msg))
-                    async for raw in ws:
-                        data = json.loads(raw)
-                        if "data" in data:
-                            tick = data["data"][0]
-                            await redis.set(
-                                f"ticker:{symbol}",
-                                json.dumps({
-                                    "symbol": symbol,
-                                    "last": tick.get("last"),
-                                    "bid": tick.get("bestBid"),
-                                    "ask": tick.get("bestAsk"),
-                                    "funding_rate": tick.get("fundingRate"),
-                                    "open_interest": tick.get("holdingAmount"),
-                                })
-                            )
-            except Exception as e:
-                print(f"[Bitget Ticker WS] {e}")
-                await asyncio.sleep(5)
+        async def handler(data):
+            for tick in data.get("data", []):
+                await redis.set(
+                    f"ticker:{symbol}",
+                    json.dumps({
+                        "symbol": symbol,
+                        "last": tick.get("lastPr", tick.get("last")),
+                        "bid": tick.get("bidPr", tick.get("bestBid")),
+                        "ask": tick.get("askPr", tick.get("bestAsk")),
+                        "funding_rate": tick.get("fundingRate", "0"),
+                        "open_interest": tick.get("holdVol", tick.get("holdingAmount")),
+                    })
+                )
+
+        await self._ws_connect(subscribe_msg, handler, f"ticker/{inst_id}")
 
     # ─── REST ─────────────────────────────────────────────────────────────────
 
@@ -117,7 +130,7 @@ class BitgetClient:
         order_type: str = "market",
         price: float = None,
     ) -> dict:
-        params = {"tdMode": "cross"}   # cross margin
+        params = {"tdMode": "cross"}
 
         if order_type == "market":
             order = await self.exchange.create_market_order(symbol, side, amount, params=params)

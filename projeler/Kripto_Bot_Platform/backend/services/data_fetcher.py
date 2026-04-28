@@ -191,25 +191,18 @@ class DataFetcher:
 
         # 2. PostgreSQL
         rows = await self._read_from_db(symbol, timeframe, limit)
-        if rows and len(rows) >= limit * 0.8:  # %80 doluluk yeterliyse DB'den dön
-            ohlcv = [[r.timestamp, r.open, r.high, r.low, r.close, r.volume] for r in rows]
-            ttl = CACHE_TTL.get(timeframe, 3600)
-            await redis.set(cache_key, json.dumps(ohlcv), ex=ttl)
-            return ohlcv
+        db_ohlcv = [[r.timestamp, r.open, r.high, r.low, r.close, r.volume] for r in rows] if rows else []
 
-        # 3. Borsadan çek ve kaydet
+        # 3. Borsadan son mumları çek (her zaman — DB'deki boşlukları doldur)
+        exchange_candles = []
         try:
-            candles = await self.exchange.exchange.fetch_ohlcv(
-                symbol, timeframe, limit=limit,
+            exchange_candles = await self.exchange.exchange.fetch_ohlcv(
+                symbol, timeframe, limit=200,
             )
         except Exception as e:
             print(f"[DataFetcher] Borsa hatası: {e}")
-            # DB'de ne varsa onu döndür
-            if rows:
-                return [[r.timestamp, r.open, r.high, r.low, r.close, r.volume] for r in rows]
-            return []
 
-        if candles:
+        if exchange_candles:
             # DB'ye kaydet
             db_rows = [
                 {
@@ -223,15 +216,28 @@ class DataFetcher:
                     "close": c[4],
                     "volume": c[5],
                 }
-                for c in candles
+                for c in exchange_candles
             ]
             await self._upsert_rows(db_rows)
 
-            # Redis'e cache'le
-            ttl = CACHE_TTL.get(timeframe, 3600)
-            await redis.set(cache_key, json.dumps(candles), ex=ttl)
+        # DB verisi + borsa verisini birleştir (timestamp'e göre deduplicate)
+        if db_ohlcv:
+            ts_map = {c[0]: c for c in db_ohlcv}
+            for c in exchange_candles:
+                ts_map[c[0]] = c  # borsa verisi daha güncel, üstüne yaz
+            merged = sorted(ts_map.values(), key=lambda c: c[0])
+            # Son N tanesini al
+            result = merged[-limit:] if len(merged) > limit else merged
+        elif exchange_candles:
+            result = exchange_candles
+        else:
+            return []
 
-        return candles
+        # Redis'e cache'le
+        ttl = CACHE_TTL.get(timeframe, 3600)
+        await redis.set(cache_key, json.dumps(result), ex=ttl)
+
+        return result
 
     # ─── Çoklu Sembol + Timeframe Toplu Çekme ───────────────────────────────
 

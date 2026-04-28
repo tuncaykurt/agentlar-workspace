@@ -7,36 +7,40 @@ Geçmiş Veri API Endpoint'leri
 - OHLCV sorgulama
 """
 from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
 from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
+from services.liquidation_collector import get_liquidation_heatmap, get_liquidation_stats
 
 router = APIRouter(prefix="/data", tags=["data"])
 
 fetcher = DataFetcher(bitget)
 
 
+class FetchHistoricalRequest(BaseModel):
+    symbol: str = "BTC/USDT:USDT"
+    timeframe: str = "1h"
+    days: int = Field(default=90, ge=1, le=365)
+
+
+class FetchAllRequest(BaseModel):
+    symbols: list[str] = ["BTC/USDT:USDT", "ETH/USDT:USDT"]
+    timeframes: list[str] = ["1h", "4h", "1d"]
+    days: int = Field(default=90, ge=1, le=365)
+
+
 @router.post("/fetch-historical")
-async def fetch_historical(
-    symbol: str = Query(default="BTC/USDT:USDT"),
-    timeframe: str = Query(default="1h"),
-    days: int = Query(default=90, ge=1, le=365),
-):
+async def fetch_historical(req: FetchHistoricalRequest):
     """Geçmişe dönük veri çek ve DB'ye yaz."""
-    count = await fetcher.fetch_historical(symbol, timeframe, days)
-    return {"symbol": symbol, "timeframe": timeframe, "days": days, "candles_written": count}
+    count = await fetcher.fetch_historical(req.symbol, req.timeframe, req.days)
+    return {"symbol": req.symbol, "timeframe": req.timeframe, "days": req.days, "candles_written": count}
 
 
 @router.post("/fetch-all")
-async def fetch_all(
-    symbols: str = Query(default="BTC/USDT:USDT,ETH/USDT:USDT"),
-    timeframes: str = Query(default="1h,4h,1d"),
-    days: int = Query(default=90, ge=1, le=365),
-):
+async def fetch_all(req: FetchAllRequest):
     """Birden fazla sembol ve timeframe için toplu geçmiş veri çek."""
-    sym_list = [s.strip() for s in symbols.split(",")]
-    tf_list = [t.strip() for t in timeframes.split(",")]
-    count = await fetcher.fetch_all(sym_list, tf_list, days)
-    return {"symbols": sym_list, "timeframes": tf_list, "days": days, "total_candles": count}
+    count = await fetcher.fetch_all(req.symbols, req.timeframes, req.days)
+    return {"symbols": req.symbols, "timeframes": req.timeframes, "days": req.days, "total_candles": count}
 
 
 @router.post("/sync")
@@ -95,3 +99,14 @@ async def get_ohlcv(
             for c in candles
         ],
     }
+
+
+@router.get("/liquidations")
+async def liquidation_heatmap(
+    symbol: str = Query(default="BTC/USDT:USDT"),
+    hours: int = Query(default=24, ge=1, le=168),
+):
+    """Likidasyon heatmap — DB'deki gerçek verilerden."""
+    heatmap = await get_liquidation_heatmap(symbol, hours)
+    stats = await get_liquidation_stats(symbol)
+    return {"heatmap": heatmap, "stats": stats, "symbol": symbol}

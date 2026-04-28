@@ -7,8 +7,12 @@ Gelişmiş Grafik Veri Endpoint'i
 import math
 from fastapi import APIRouter
 from exchange.bitget_client import bitget
+from services.data_fetcher import DataFetcher
+from services.liquidation_collector import get_liquidation_heatmap, get_liquidation_stats
 
 router = APIRouter(prefix="/chart", tags=["chart"])
+
+_fetcher = DataFetcher(bitget)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -390,10 +394,26 @@ def _order_blocks(ohlcv: list, n: int = 8) -> list:
 async def get_chart_data(
     symbol:   str = "BTC/USDT:USDT",
     interval: str = "1h",
-    limit:    int = 400,
+    limit:    int = 2000,
 ):
     """Tüm teknik indikatörleri döner."""
-    ohlcv  = await bitget.get_ohlcv(symbol, interval, limit)
+    import asyncio
+    ohlcv_task = _fetcher.get_ohlcv(symbol, interval, limit)
+    liq_stats_task = get_liquidation_stats(symbol)
+    liq_heatmap_task = get_liquidation_heatmap(symbol, hours=168)  # 7 gün
+    ohlcv, liq_stats, liq_heatmap = await asyncio.gather(ohlcv_task, liq_stats_task, liq_heatmap_task)
+
+    # Timestamp'e göre sırala ve duplikatları kaldır
+    ohlcv.sort(key=lambda c: c[0])
+    seen = set()
+    clean = []
+    for c in ohlcv:
+        ts = c[0] // 1000  # saniyeye çevir
+        if ts not in seen:
+            seen.add(ts)
+            clean.append(c)
+    ohlcv = clean
+
     closes = [c[4] for c in ohlcv]
     times  = [c[0] // 1000 for c in ohlcv]
 
@@ -453,4 +473,8 @@ async def get_chart_data(
 
         # Order Blocks (dikdörtgen koordinatları)
         "order_blocks": _order_blocks(ohlcv),
+
+        # Likidasyon verileri (Binance WS + opsiyonel Coinglass)
+        "liquidations": liq_stats,
+        "liq_heatmap": liq_heatmap,
     }

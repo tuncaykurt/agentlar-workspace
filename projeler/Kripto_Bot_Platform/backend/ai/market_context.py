@@ -338,11 +338,73 @@ async def get_liquidation_levels(symbol: str) -> dict:
         return {"long_liq_count": 0, "short_liq_count": 0, "signal": "neutral", "error": str(e)}
 
 
+# ─── Coinglass Liquidation Map ────────────────────────────────────────────────
+
+async def get_coinglass_liquidation_map(symbol: str) -> dict:
+    """
+    Coinglass Liquidation Map — hangi fiyat seviyelerinde ne kadar
+    long/short likidasyon birikmiş.
+    API key yoksa boş döner, confluence etkilenmez.
+    """
+    if not settings.COINGLASS_API_KEY:
+        return {"levels": [], "note": "COINGLASS_API_KEY tanımlı değil"}
+
+    coin = symbol.split("/")[0].replace(":USDT", "") + "USDT"
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                "https://open-api-v4.coinglass.com/api/futures/liquidation/map",
+                params={"exchange": "Binance", "symbol": coin, "range": "7d"},
+                headers={"CG-API-KEY": settings.COINGLASS_API_KEY},
+            )
+            data = r.json()
+
+            if data.get("code") != "0" and data.get("success") is not True:
+                return {"levels": [], "error": data.get("msg", "API hatası")}
+
+            result = data.get("data", {})
+
+            # Likidasyon yoğunluk seviyelerini çıkar
+            liq_levels = []
+            prices = result.get("prices", [])
+            liq_longs = result.get("liqLongs", [])
+            liq_shorts = result.get("liqShorts", [])
+
+            if prices and (liq_longs or liq_shorts):
+                for i, price in enumerate(prices):
+                    long_val = liq_longs[i] if i < len(liq_longs) else 0
+                    short_val = liq_shorts[i] if i < len(liq_shorts) else 0
+                    total = (long_val or 0) + (short_val or 0)
+                    if total > 0:
+                        liq_levels.append({
+                            "price": float(price),
+                            "long_liq": float(long_val or 0),
+                            "short_liq": float(short_val or 0),
+                            "total": float(total),
+                        })
+
+                # En yoğun 20 seviyeyi al
+                liq_levels.sort(key=lambda x: x["total"], reverse=True)
+                liq_levels = liq_levels[:20]
+
+            # Current price'a göre yukarıda/aşağıda en yoğun seviyeleri bul
+            return {
+                "levels": liq_levels,
+                "range": "7d",
+                "exchange": "Binance",
+                "count": len(liq_levels),
+            }
+
+    except Exception as e:
+        return {"levels": [], "error": str(e)}
+
+
 # ─── Tüm Bağlamı Topla ────────────────────────────────────────────────────────
 
 async def collect_full_context(exchange, symbol: str) -> dict:
     """Tüm piyasa bağlamını paralel olarak topla."""
-    fear_greed, btc_dom, order_book, whale, mtf, news, liquidations = await asyncio.gather(
+    fear_greed, btc_dom, order_book, whale, mtf, news, liquidations, cg_liq = await asyncio.gather(
         get_fear_greed(),
         get_btc_dominance(),
         get_order_book_pressure(exchange, symbol),
@@ -350,6 +412,7 @@ async def collect_full_context(exchange, symbol: str) -> dict:
         multi_timeframe_analysis(exchange, symbol),
         get_news_sentiment(symbol),
         get_liquidation_levels(symbol),
+        get_coinglass_liquidation_map(symbol),
         return_exceptions=True,
     )
 
@@ -364,4 +427,5 @@ async def collect_full_context(exchange, symbol: str) -> dict:
         "mtf":           safe(mtf,           {"confluence": "neutral", "alignment": False}),
         "news":          safe(news,          {"sentiment_score": 50, "signal": "neutral", "news": []}),
         "liquidations":  safe(liquidations,  {"long_liq_count": 0, "short_liq_count": 0, "signal": "neutral"}),
+        "coinglass_liq": safe(cg_liq,        {"levels": [], "note": "unavailable"}),
     }

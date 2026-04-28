@@ -15,6 +15,8 @@ export default function NavClient() {
         <div className="flex items-center gap-1">
           <Link href="/dashboard" className={`text-sm transition-colors px-3 py-1.5 rounded hover:bg-slate-800 ${pathname === "/dashboard" ? "text-white" : "text-slate-400 hover:text-white"}`}>Dashboard</Link>
           <Link href="/bots" className={`text-sm transition-colors px-3 py-1.5 rounded hover:bg-slate-800 ${pathname === "/bots" ? "text-white" : "text-slate-400 hover:text-white"}`}>Botlar</Link>
+          <Link href="/backtest" className={`text-sm transition-colors px-3 py-1.5 rounded hover:bg-slate-800 ${pathname === "/backtest" ? "text-white" : "text-slate-400 hover:text-white"}`}>Backtest</Link>
+          <Link href="/strategy-view" className={`text-sm transition-colors px-3 py-1.5 rounded hover:bg-slate-800 ${pathname === "/strategy-view" ? "text-white" : "text-slate-400 hover:text-white"}`}>Strateji Görüntüle</Link>
           <Link href="/settings" className={`text-sm transition-colors px-3 py-1.5 rounded hover:bg-slate-800 ${pathname === "/settings" ? "text-white" : "text-slate-400 hover:text-white"}`}>Borsa Bağlantısı</Link>
         </div>
       </div>

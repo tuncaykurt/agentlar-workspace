@@ -7,7 +7,6 @@ asyncpg
 redis
 ccxt
 pandas
-pandas-ta
 httpx
 pydantic-settings
 python-multipart

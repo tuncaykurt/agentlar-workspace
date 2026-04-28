@@ -1,13 +1,20 @@
+"""
+Bot Yönetimi API — PostgreSQL Persistent
+"""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
+import json
 from bot.engine import BotEngine
 from exchange.bitget_client import bitget
+from core.database import async_session
+from models.trade import Bot, BotStatus
+from sqlalchemy import select, update, delete
 
 router = APIRouter(prefix="/bots", tags=["bots"])
 
-# Çalışan bot instance'ları (memory'de tutuluyor, DB değil)
+# Çalışan bot instance'ları (memory — sadece aktif engine'ler)
 _running_bots: dict[int, BotEngine] = {}
 _bot_tasks: dict[int, asyncio.Task] = {}
 
@@ -24,51 +31,95 @@ class BotCreate(BaseModel):
     params: Optional[dict] = None
 
 
-class BotResponse(BaseModel):
-    id: int
-    name: str
-    symbol: str
-    strategy: str
-    paper_mode: bool
-    running: bool
-
-
-_bots_db: dict[int, dict] = {}   # Basit in-memory (ilerleyen fazda PostgreSQL'e taşınır)
-_next_id = 1
-
-
 @router.get("/")
 async def list_bots():
-    return [
-        {**bot, "running": bot["id"] in _running_bots}
-        for bot in _bots_db.values()
-    ]
+    async with async_session() as session:
+        result = await session.execute(select(Bot).order_by(Bot.id.desc()))
+        bots = result.scalars().all()
+        return [
+            {
+                "id": b.id,
+                "name": b.name,
+                "symbol": b.symbol,
+                "strategy": b.strategy,
+                "exchange": b.exchange,
+                "status": b.status.value if b.status else "stopped",
+                "paper_mode": b.paper_mode,
+                "leverage": b.leverage,
+                "risk_per_trade": b.risk_per_trade,
+                "max_daily_loss": b.max_daily_loss,
+                "initial_balance": b.initial_balance or 1000.0,
+                "params": json.loads(b.params) if b.params else None,
+                "running": b.id in _running_bots,
+                "created_at": b.created_at.isoformat() if b.created_at else None,
+            }
+            for b in bots
+        ]
 
 
 @router.post("/")
 async def create_bot(data: BotCreate):
-    global _next_id
-    bot_id = _next_id
-    _next_id += 1
-
-    bot = {**data.dict(), "id": bot_id}
-    _bots_db[bot_id] = bot
-    print(f"[Bot Created] ID:{bot_id} Name:{data.name} Strategy:{data.strategy} Params:{data.params}")
-    return bot
+    async with async_session() as session:
+        bot = Bot(
+            name=data.name,
+            symbol=data.symbol,
+            strategy=data.strategy,
+            exchange="bitget",
+            status=BotStatus.STOPPED,
+            paper_mode=data.paper_mode,
+            leverage=data.leverage,
+            risk_per_trade=data.risk_per_trade,
+            max_daily_loss=data.max_daily_loss,
+            initial_balance=data.initial_balance,
+            params=json.dumps(data.params) if data.params else None,
+        )
+        session.add(bot)
+        await session.commit()
+        await session.refresh(bot)
+        print(f"[Bot Created] ID:{bot.id} Name:{data.name} Strategy:{data.strategy}")
+        return {
+            "id": bot.id,
+            "name": bot.name,
+            "symbol": bot.symbol,
+            "strategy": bot.strategy,
+            "paper_mode": bot.paper_mode,
+            "params": data.params,
+            "running": False,
+        }
 
 
 @router.post("/{bot_id}/start")
 async def start_bot(bot_id: int):
-    if bot_id not in _bots_db:
-        raise HTTPException(404, "Bot bulunamadı")
-    if bot_id in _running_bots:
-        raise HTTPException(400, "Bot zaten çalışıyor")
+    async with async_session() as session:
+        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot = result.scalar_one_or_none()
+        if not bot:
+            raise HTTPException(404, "Bot bulunamadi")
+        if bot_id in _running_bots:
+            raise HTTPException(400, "Bot zaten calisiyor")
 
-    config = _bots_db[bot_id]
-    engine = BotEngine(config, bitget)
-    _running_bots[bot_id] = engine
-    task = asyncio.create_task(engine.run())
-    _bot_tasks[bot_id] = task
+        config = {
+            "id": bot.id,
+            "name": bot.name,
+            "symbol": bot.symbol,
+            "strategy": bot.strategy,
+            "paper_mode": bot.paper_mode,
+            "leverage": bot.leverage,
+            "risk_per_trade": bot.risk_per_trade,
+            "max_daily_loss": bot.max_daily_loss,
+            "initial_balance": bot.initial_balance or 1000.0,
+            "params": json.loads(bot.params) if bot.params else {},
+        }
+
+        engine = BotEngine(config, bitget)
+        _running_bots[bot_id] = engine
+        task = asyncio.create_task(engine.run())
+        _bot_tasks[bot_id] = task
+
+        await session.execute(
+            update(Bot).where(Bot.id == bot_id).values(status=BotStatus.RUNNING)
+        )
+        await session.commit()
 
     return {"status": "started", "bot_id": bot_id}
 
@@ -76,44 +127,74 @@ async def start_bot(bot_id: int):
 @router.post("/{bot_id}/stop")
 async def stop_bot(bot_id: int):
     if bot_id not in _running_bots:
-        raise HTTPException(400, "Bot çalışmıyor")
+        raise HTTPException(400, "Bot calismiypr")
 
     _running_bots[bot_id].stop()
     _bot_tasks[bot_id].cancel()
     del _running_bots[bot_id]
     del _bot_tasks[bot_id]
 
+    async with async_session() as session:
+        await session.execute(
+            update(Bot).where(Bot.id == bot_id).values(status=BotStatus.STOPPED)
+        )
+        await session.commit()
+
     return {"status": "stopped", "bot_id": bot_id}
 
 
 @router.delete("/{bot_id}")
 async def delete_bot(bot_id: int):
-    if bot_id not in _bots_db:
-        raise HTTPException(404, "Bot bulunamadı")
     if bot_id in _running_bots:
         _running_bots[bot_id].stop()
         _bot_tasks[bot_id].cancel()
         del _running_bots[bot_id]
         del _bot_tasks[bot_id]
-    del _bots_db[bot_id]
+
+    async with async_session() as session:
+        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot = result.scalar_one_or_none()
+        if not bot:
+            raise HTTPException(404, "Bot bulunamadi")
+        await session.execute(delete(Bot).where(Bot.id == bot_id))
+        await session.commit()
+
     return {"status": "deleted", "bot_id": bot_id}
 
 
 @router.patch("/{bot_id}")
 async def update_bot(bot_id: int, data: BotCreate):
-    if bot_id not in _bots_db:
-        raise HTTPException(404, "Bot bulunamadı")
     if bot_id in _running_bots:
-        raise HTTPException(400, "Çalışan botu düzenleyemezsiniz. Önce durdurun.")
-    _bots_db[bot_id] = {**data.dict(), "id": bot_id}
-    print(f"[Bot Updated] ID:{bot_id} Name:{data.name} Params:{data.params}")
-    return _bots_db[bot_id]
+        raise HTTPException(400, "Calisan botu duzenleyemezsiniz. Once durdurun.")
+
+    async with async_session() as session:
+        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot = result.scalar_one_or_none()
+        if not bot:
+            raise HTTPException(404, "Bot bulunamadi")
+
+        await session.execute(
+            update(Bot).where(Bot.id == bot_id).values(
+                name=data.name,
+                symbol=data.symbol,
+                strategy=data.strategy,
+                paper_mode=data.paper_mode,
+                leverage=data.leverage,
+                risk_per_trade=data.risk_per_trade,
+                max_daily_loss=data.max_daily_loss,
+                initial_balance=data.initial_balance,
+                params=json.dumps(data.params) if data.params else None,
+            )
+        )
+        await session.commit()
+        print(f"[Bot Updated] ID:{bot_id} Name:{data.name}")
+
+    return {"id": bot_id, **data.dict(), "running": False}
 
 
 @router.get("/{bot_id}/status")
 async def bot_status(bot_id: int):
     from core.redis_client import get_redis
-    import json
     redis = get_redis()
     raw = await redis.get(f"bot:{bot_id}:status")
     if not raw:
