@@ -43,10 +43,12 @@ export default function RegisterPage() {
     const supabase = createClient()
     const consentAt = new Date().toISOString()
 
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')
     const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: `${appUrl}/auth/callback?next=/dashboard`,
         data: {
           full_name: fullName,
           kvkk_consent: true,
@@ -69,11 +71,17 @@ export default function RegisterPage() {
         body: JSON.stringify({ userId: data.user.id, consentAt }),
       })
 
+      const emailConfirmed = !!data.user.email_confirmed_at
       setSuccess(true)
-      setTimeout(() => {
-        router.push('/dashboard')
-        router.refresh()
-      }, 2000)
+      if (emailConfirmed) {
+        // Email confirmation disabled — go directly to dashboard
+        setTimeout(() => {
+          router.push('/dashboard')
+          router.refresh()
+        }, 1500)
+      }
+      // else: user must click the verification link in their email
+      setLoading(false)
     } else {
       setLoading(false)
     }
@@ -103,7 +111,12 @@ export default function RegisterPage() {
                 </svg>
               </div>
               <h3 className="text-lg font-medium text-on-surface mb-2">Kayıt Başarılı!</h3>
-              <p className="text-sm text-on-surface-variant">Yönlendiriliyorsunuz...</p>
+              <p className="text-sm text-on-surface-variant">
+                <strong>{email}</strong> adresine bir doğrulama e-postası gönderdik.
+              </p>
+              <p className="text-xs text-on-surface-variant mt-2">
+                E-postanızdaki bağlantıya tıklayarak hesabınızı doğrulayın, ardından giriş yapabilirsiniz.
+              </p>
             </div>
           ) : (
             <form onSubmit={handleRegister} className="space-y-4">

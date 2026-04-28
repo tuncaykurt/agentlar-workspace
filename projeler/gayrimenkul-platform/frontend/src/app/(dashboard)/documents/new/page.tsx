@@ -124,11 +124,19 @@ function ClientSearch({
   const [q, setQ] = useState('')
   const [results, setResults] = useState<Client[]>([])
   const [open, setOpen] = useState(false)
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [creating, setCreating] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setShowNewForm(false)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -136,6 +144,7 @@ function ClientSearch({
 
   async function handleSearch(term: string) {
     setQ(term)
+    setShowNewForm(false)
     if (term.length < 2) { setResults([]); setOpen(false); return }
     const supabase = createClient()
     const { data } = await supabase
@@ -146,6 +155,48 @@ function ClientSearch({
       .limit(8)
     setResults((data as Client[]) || [])
     setOpen(true)
+  }
+
+  function openNewForm() {
+    setNewName(q)
+    setNewPhone('')
+    setNewEmail('')
+    setShowNewForm(true)
+    setOpen(true)
+  }
+
+  async function handleCreateClient() {
+    if (!newName.trim()) return
+    setCreating(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: consultant } = await supabase
+      .from('consultants')
+      .select('id')
+      .eq('user_id', user?.id)
+      .single()
+
+    const { data: newClient, error } = await supabase
+      .from('clients')
+      .insert({
+        full_name: newName.trim(),
+        phone: newPhone.trim() || null,
+        email: newEmail.trim() || null,
+        client_type: 'buyer',
+        lead_status: 'new',
+        source: 'other',
+        assigned_consultant_id: consultant?.id || null,
+      })
+      .select('id, full_name, salutation, phone, email, tc_no, address, client_type')
+      .single()
+
+    setCreating(false)
+    if (!error && newClient) {
+      onChange(newClient as Client)
+      setShowNewForm(false)
+      setOpen(false)
+      setQ('')
+    }
   }
 
   if (value) {
@@ -180,7 +231,7 @@ function ClientSearch({
           placeholder="İsim veya telefon ara..."
           className="w-full pl-8 pr-3 py-2 border border-outline rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
-        {open && results.length > 0 && (
+        {open && results.length > 0 && !showNewForm && (
           <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1 max-h-52 overflow-auto">
             {results.map(c => (
               <button
@@ -194,11 +245,65 @@ function ClientSearch({
                 {c.phone && <span className="text-on-surface-variant ml-2 text-xs">{c.phone}</span>}
               </button>
             ))}
+            <button
+              onMouseDown={openNewForm}
+              className="w-full text-left px-3 py-2 hover:bg-surface-container-high text-sm text-primary border-t border-outline flex items-center gap-1.5"
+            >
+              <span className="text-base leading-none">+</span> Yeni müşteri ekle
+            </button>
           </div>
         )}
-        {open && results.length === 0 && q.length >= 2 && (
-          <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1 px-3 py-2 text-sm text-on-surface-variant">
-            Sonuç bulunamadı
+        {open && results.length === 0 && q.length >= 2 && !showNewForm && (
+          <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1">
+            <p className="px-3 py-2 text-sm text-on-surface-variant">Sonuç bulunamadı</p>
+            <button
+              onMouseDown={openNewForm}
+              className="w-full text-left px-3 py-2 hover:bg-surface-container-high text-sm text-primary border-t border-outline flex items-center gap-1.5"
+            >
+              <span className="text-base leading-none">+</span> &quot;{q}&quot; adıyla yeni müşteri ekle
+            </button>
+          </div>
+        )}
+        {open && showNewForm && (
+          <div className="absolute top-full left-0 right-0 z-20 bg-surface-container border border-outline rounded-lg shadow-lg mt-1 p-3 space-y-2">
+            <p className="text-xs font-medium text-on-surface mb-1">Yeni Müşteri</p>
+            <input
+              type="text"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="Ad Soyad *"
+              className="w-full px-2 py-1.5 border border-outline rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              autoFocus
+            />
+            <input
+              type="tel"
+              value={newPhone}
+              onChange={e => setNewPhone(e.target.value)}
+              placeholder="Telefon"
+              className="w-full px-2 py-1.5 border border-outline rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <input
+              type="email"
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              placeholder="E-posta"
+              className="w-full px-2 py-1.5 border border-outline rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <div className="flex gap-2 pt-1">
+              <button
+                onMouseDown={handleCreateClient}
+                disabled={creating || !newName.trim()}
+                className="flex-1 bg-primary text-white text-xs py-1.5 rounded disabled:opacity-50"
+              >
+                {creating ? 'Kaydediliyor...' : 'Kaydet ve Seç'}
+              </button>
+              <button
+                onMouseDown={() => { setShowNewForm(false); setOpen(false) }}
+                className="px-3 text-xs text-on-surface-variant hover:text-on-surface border border-outline rounded"
+              >
+                İptal
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -946,7 +1051,7 @@ function generatePrintHTML(params: {
 
 export default function NewDocumentPage() {
   const router = useRouter()
-  const { isAdmin, creditBalance, creditCostPerDocument, deductCredit } = useFeatures()
+  const { isAdmin, creditBalance, creditCostPerDocument, deductCredit, consultantId: loggedInConsultantId } = useFeatures()
 
   const [creditError, setCreditError] = useState('')
   const [docType, setDocType] = useState<DocumentType>('authorization')
@@ -1174,31 +1279,9 @@ export default function NewDocumentPage() {
     setCreditError('')
     setSaving(true)
 
-    // Credit check (admin bypasses)
-    if (!isAdmin) {
-      try {
-        const creditRes = await fetch('/api/credits/use', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ document_title: title }),
-        })
-        const creditData = await creditRes.json()
-        if (!creditRes.ok) {
-          setCreditError(creditData.error || 'Kredi hatası')
-          setSaving(false)
-          return
-        }
-        // Update local credit state
-        deductCredit(creditData.cost || creditCostPerDocument)
-      } catch {
-        setCreditError('Kredi kontrolü yapılamadı')
-        setSaving(false)
-        return
-      }
-    }
-
+    // Step 1: Insert the document first
     const supabase = createClient()
-    const { error } = await supabase.from('documents').insert({
+    const { error: insertError } = await supabase.from('documents').insert({
       doc_type: docType,
       title,
       client_id: mainClient?.id || null,
@@ -1217,13 +1300,35 @@ export default function NewDocumentPage() {
       kyc_required: kycRequired,
       signature_status: 'draft',
     })
-    setSaving(false)
-    if (!error) {
-      // Silently save filled extra fields to contacts
-      if (mainClient) await saveExtraToClient(mainClient.id, mainExtra)
-      if (secondClient) await saveExtraToClient(secondClient.id, secondExtra)
-      router.push('/documents')
+
+    if (insertError) {
+      setCreditError('Belge kaydedilemedi: ' + insertError.message)
+      setSaving(false)
+      return
     }
+
+    // Step 2: Document saved — now deduct credits
+    if (!isAdmin) {
+      try {
+        const creditRes = await fetch('/api/credits/use', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ document_title: title }),
+        })
+        const creditData = await creditRes.json()
+        if (creditRes.ok) {
+          deductCredit(creditData.cost || creditCostPerDocument)
+        }
+        // If credit deduction fails after save, we still navigate — don't block the user
+      } catch {
+        // silent — document is already saved
+      }
+    }
+
+    setSaving(false)
+    if (mainClient) await saveExtraToClient(mainClient.id, mainExtra)
+    if (secondClient) await saveExtraToClient(secondClient.id, secondExtra)
+    router.push('/documents')
   }
 
   function handlePrint() {

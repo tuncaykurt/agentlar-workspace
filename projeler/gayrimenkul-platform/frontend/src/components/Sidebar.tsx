@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
 import {
   LayoutDashboard, Users, Building2, DollarSign,
   MessageSquare, Megaphone, FileText, Share2,
@@ -35,7 +36,15 @@ const bottomItems = [
 /** Nav links — shared between desktop sidebar and mobile drawer */
 function SidebarLinks({ onNav }: { onNav?: () => void }) {
   const pathname = usePathname()
+  const router = useRouter()
   const { hasFeature, isAdmin, creditBalance, loading } = useFeatures()
+
+  async function handleSignOut() {
+    onNav?.()
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   const visibleItems = navItems.filter(item => hasFeature(item.featureKey))
 
@@ -85,7 +94,7 @@ function SidebarLinks({ onNav }: { onNav?: () => void }) {
         ))}
         <button
           className="sidebar-link w-full text-left"
-          onClick={onNav}
+          onClick={handleSignOut}
         >
           <LogOut size={18} />
           Çıkış

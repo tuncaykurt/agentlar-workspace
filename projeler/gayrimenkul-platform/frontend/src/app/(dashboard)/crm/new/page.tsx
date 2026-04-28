@@ -125,7 +125,11 @@ export default function NewClientPage() {
       return
     }
 
-    router.push(`/crm/${data.id}`)
+    if (data?.id) {
+      router.push(`/crm/${data.id}`)
+    } else {
+      router.push('/crm')
+    }
   }
 
   return (
