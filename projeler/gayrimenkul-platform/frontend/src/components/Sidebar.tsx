@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, Building2, DollarSign,
   MessageSquare, Megaphone, FileText, Share2,
   UserCircle, Settings, LogOut, BookUser, Menu, X,
-  Store, TrendingUp, Coins, Gift,
+  Store, TrendingUp, Coins, Gift, Bot,
 } from 'lucide-react'
 import { useFeatures } from '@/lib/features'
 import { ThemeToggle } from '@/lib/theme'
@@ -25,6 +25,7 @@ const navItems = [
   { href: '/campaigns',      label: 'Kampanyalar',        icon: Megaphone,       featureKey: 'campaigns' },
   { href: '/documents',      label: 'Belgeler',           icon: FileText,        featureKey: 'documents' },
   { href: '/automations/birthday', label: 'Doğum Günü',   icon: Gift,            featureKey: 'documents' },
+  { href: '/automations/chatbot',  label: 'WA Chatbot',   icon: Bot,             featureKey: 'documents' },
   { href: '/social',         label: 'Sosyal Medya',       icon: Share2,          featureKey: 'social' },
   { href: '/piyasa',         label: 'Piyasa',             icon: TrendingUp,      featureKey: 'piyasa' },
 ]

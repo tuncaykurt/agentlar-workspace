@@ -591,6 +591,37 @@ ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS last_run_date DA
     `,
   },
   {
+    id: '023_whatsapp_chatbot',
+    sql: `
+CREATE TABLE IF NOT EXISTS whatsapp_chatbot_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultant_id UUID REFERENCES consultants(id) ON DELETE CASCADE UNIQUE,
+  is_enabled BOOLEAN DEFAULT false,
+  auto_reply_enabled BOOLEAN DEFAULT true,
+  system_prompt TEXT DEFAULT 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun. Mülk alım-satım, kiralama konularında yardımcı oluyorsun.',
+  working_hours_enabled BOOLEAN DEFAULT false,
+  working_hours_start TEXT DEFAULT '09:00',
+  working_hours_end TEXT DEFAULT '18:00',
+  outside_hours_message TEXT DEFAULT 'Mesai saatlerimiz dışındasınız. Yarın 09:00''da size döneceğiz.',
+  max_history_messages INTEGER DEFAULT 10,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS whatsapp_chat_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultant_id UUID REFERENCES consultants(id) ON DELETE CASCADE,
+  customer_phone TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN (''user'', ''assistant'')),
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_history_consultant_phone
+  ON whatsapp_chat_history(consultant_id, customer_phone, created_at);
+    `,
+  },
+  {
     id: '019_fix_rls_all_tables',
     sql: `
 DO $$ DECLARE tbl text; BEGIN

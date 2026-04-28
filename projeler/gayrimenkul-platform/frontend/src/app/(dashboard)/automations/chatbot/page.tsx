@@ -1,0 +1,193 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Bot, Save, Clock, MessageSquare, ToggleLeft, ToggleRight, Loader2, CheckCircle, Info } from 'lucide-react'
+
+const WEBHOOK_URL = 'https://gayrimenkul.yapayzekaotomasyon.cloud/api/whatsapp/webhook'
+
+const DEFAULT: Config = {
+  is_enabled: false,
+  auto_reply_enabled: true,
+  system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun. Mülk alım-satım, kiralama konularında yardımcı oluyorsun. Randevu almak isteyenlere danışmanın müsait olduğunu belirt ve telefon numarasını paylaş.',
+  working_hours_enabled: false,
+  working_hours_start: '09:00',
+  working_hours_end: '18:00',
+  outside_hours_message: 'Mesai saatlerimiz dışındasınız (09:00-18:00). Yarın size döneceğiz.',
+  max_history_messages: 10,
+}
+
+interface Config {
+  is_enabled: boolean
+  auto_reply_enabled: boolean
+  system_prompt: string
+  working_hours_enabled: boolean
+  working_hours_start: string
+  working_hours_end: string
+  outside_hours_message: string
+  max_history_messages: number
+}
+
+export default function ChatbotPage() {
+  const [config, setConfig] = useState<Config>(DEFAULT)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/automations/chatbot').then(r => r.json()).then(({ config: c }) => {
+      if (c) setConfig(c)
+      setLoading(false)
+    })
+  }, [])
+
+  async function handleSave() {
+    setSaving(true)
+    const res = await fetch('/api/automations/chatbot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    })
+    setSaving(false)
+    if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000) }
+  }
+
+  const set = (patch: Partial<Config>) => setConfig(c => ({ ...c, ...patch }))
+
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 size={24} className="animate-spin text-primary" /></div>
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-on-surface flex items-center gap-2">
+            <Bot size={22} className="text-primary" /> WhatsApp Chatbot
+          </h1>
+          <p className="text-on-surface-variant text-sm mt-1">Gelen mesajlara otomatik AI yanıtı ver</p>
+        </div>
+        <button onClick={handleSave} disabled={saving}
+          className="btn-primary flex items-center gap-2 disabled:opacity-50">
+          {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
+          {saved ? 'Kaydedildi!' : 'Kaydet'}
+        </button>
+      </div>
+
+      <div className="space-y-5">
+        {/* Webhook kurulum */}
+        <div className="card bg-blue-50 border-blue-200">
+          <div className="flex items-start gap-3">
+            <Info size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-blue-800 mb-1">Evolution API Webhook Kurulumu (tek seferlik)</p>
+              <p className="text-xs text-blue-700 mb-2">
+                Evolution API panelinden WhatsApp instance'ınızı seçin → Webhooks → aşağıdaki URL'yi ekleyin:
+              </p>
+              <div className="bg-white rounded px-3 py-2 font-mono text-xs text-blue-900 select-all break-all border border-blue-200">
+                {WEBHOOK_URL}
+              </div>
+              <p className="text-xs text-blue-600 mt-1.5">Events: <strong>MESSAGES_UPSERT</strong> seçin</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Ana açma/kapama */}
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-on-surface">Chatbot Durumu</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">Gelen tüm WhatsApp mesajlarını AI ile yanıtla</p>
+            </div>
+            <button onClick={() => set({ is_enabled: !config.is_enabled })} className="flex items-center gap-2">
+              {config.is_enabled
+                ? <ToggleRight size={36} className="text-primary" />
+                : <ToggleLeft size={36} className="text-on-surface-variant" />}
+              <span className={`text-sm font-medium ${config.is_enabled ? 'text-primary' : 'text-on-surface-variant'}`}>
+                {config.is_enabled ? 'Aktif' : 'Pasif'}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {config.is_enabled && (
+          <>
+            {/* Sistem Promptu */}
+            <div className="card">
+              <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                <MessageSquare size={16} /> Sistem Promptu
+              </h2>
+              <p className="text-xs text-on-surface-variant mb-3">
+                AI'ın nasıl davranacağını belirler. Ne söyleyebileceğini, hangi konuları ele alabileceğini buraya yazın.
+              </p>
+              <textarea
+                value={config.system_prompt}
+                onChange={e => set({ system_prompt: e.target.value })}
+                rows={5}
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
+            </div>
+
+            {/* Çalışma Saatleri */}
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-on-surface flex items-center gap-2">
+                  <Clock size={16} /> Çalışma Saatleri
+                </h2>
+                <button onClick={() => set({ working_hours_enabled: !config.working_hours_enabled })}
+                  className="flex items-center gap-1.5">
+                  {config.working_hours_enabled
+                    ? <ToggleRight size={28} className="text-primary" />
+                    : <ToggleLeft size={28} className="text-on-surface-variant" />}
+                  <span className="text-xs text-on-surface-variant">
+                    {config.working_hours_enabled ? 'Açık' : 'Kapalı (7/24 yanıt)'}
+                  </span>
+                </button>
+              </div>
+
+              {config.working_hours_enabled && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <label className="block text-xs text-on-surface-variant mb-1">Başlangıç</label>
+                      <input type="time" value={config.working_hours_start}
+                        onChange={e => set({ working_hours_start: e.target.value })}
+                        className="border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-on-surface-variant mb-1">Bitiş</label>
+                      <input type="time" value={config.working_hours_end}
+                        onChange={e => set({ working_hours_end: e.target.value })}
+                        className="border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary font-mono" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-on-surface-variant mb-1">Mesai dışı otomatik mesaj</label>
+                    <textarea
+                      value={config.outside_hours_message}
+                      onChange={e => set({ outside_hours_message: e.target.value })}
+                      rows={2}
+                      className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sohbet geçmişi */}
+            <div className="card">
+              <h2 className="font-semibold text-on-surface mb-3">Sohbet Hafızası</h2>
+              <div className="flex items-center gap-4">
+                <input type="range" min={0} max={20} value={config.max_history_messages}
+                  onChange={e => set({ max_history_messages: +e.target.value })}
+                  className="flex-1" />
+                <span className="text-sm font-mono w-20 text-on-surface">
+                  {config.max_history_messages === 0 ? 'Yok' : `${config.max_history_messages} mesaj`}
+                </span>
+              </div>
+              <p className="text-xs text-on-surface-variant mt-1">
+                AI her yanıtta önceki kaç mesajı bağlam olarak kullansın. Yüksek değer daha iyi bağlam sağlar.
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
