@@ -647,6 +647,24 @@ DO $$ DECLARE tbl text; BEGIN
 END $$;
     `,
   },
+  {
+    id: '050_webhook_logs',
+    sql: `
+CREATE TABLE IF NOT EXISTS webhook_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source TEXT NOT NULL DEFAULT 'whatsapp',
+  event TEXT,
+  instance TEXT,
+  payload JSONB,
+  result TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_created ON webhook_logs(created_at DESC);
+ALTER TABLE webhook_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS allow_authenticated ON webhook_logs;
+CREATE POLICY allow_authenticated ON webhook_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────

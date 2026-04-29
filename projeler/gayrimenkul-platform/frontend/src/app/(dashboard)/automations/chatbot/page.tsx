@@ -42,6 +42,8 @@ export default function ChatbotPage() {
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelSearch, setModelSearch] = useState('')
   const [registeringWebhook, setRegisteringWebhook] = useState(false)
+  const [debug, setDebug] = useState<any>(null)
+  const [showDebug, setShowDebug] = useState(false)
   const [status, setStatus] = useState<{
     wa_connected: boolean
     webhook_registered: boolean
@@ -81,6 +83,15 @@ export default function ChatbotPage() {
     } catch { /* ignore */ }
     await checkStatus()
     setRegisteringWebhook(false)
+  }
+
+  async function loadDebug() {
+    const res = await fetch('/api/whatsapp/debug').catch(() => null)
+    if (res?.ok) {
+      const data = await res.json()
+      setDebug(data)
+      setShowDebug(true)
+    }
   }
 
   async function fetchModels() {
@@ -135,6 +146,9 @@ export default function ChatbotPage() {
               <button onClick={checkStatus} className="text-xs text-on-surface-variant hover:text-primary">
                 Yenile
               </button>
+              <button onClick={loadDebug} className="text-xs text-on-surface-variant hover:text-primary px-2 py-1 border border-outline rounded">
+                Debug
+              </button>
               <button onClick={registerWebhook} disabled={registeringWebhook}
                 className="flex items-center gap-1 px-3 py-1 bg-primary text-white text-xs rounded-lg hover:bg-primary/90 disabled:opacity-50">
                 {registeringWebhook ? <Loader2 size={11} className="animate-spin" /> : null}
@@ -142,6 +156,18 @@ export default function ChatbotPage() {
               </button>
             </div>
           </div>
+
+          {showDebug && debug && (
+            <div className="mb-3 p-3 bg-surface-container-high rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold">Debug Bilgisi</span>
+                <button onClick={() => setShowDebug(false)} className="text-xs text-on-surface-variant hover:text-on-surface">Kapat</button>
+              </div>
+              <pre className="text-[10px] overflow-auto max-h-96 bg-surface-container p-2 rounded text-on-surface">
+                {JSON.stringify(debug, null, 2)}
+              </pre>
+            </div>
+          )}
           {status ? (
             <div className="space-y-2">
               {[

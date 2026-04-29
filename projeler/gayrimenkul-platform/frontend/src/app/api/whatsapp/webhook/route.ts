@@ -11,6 +11,18 @@ function svc() {
   )
 }
 
+async function logWebhook(opts: { event?: string; instance?: string; payload?: any; result: string }) {
+  try {
+    await svc().from('webhook_logs').insert({
+      source: 'whatsapp',
+      event: opts.event || null,
+      instance: opts.instance || null,
+      payload: opts.payload || null,
+      result: opts.result,
+    })
+  } catch { /* ignore */ }
+}
+
 function nowTR() {
   const now = new Date(Date.now() + 3 * 60 * 60 * 1000)
   const hh = String(now.getUTCHours()).padStart(2, '0')
@@ -26,18 +38,24 @@ function isInWorkingHours(start: string, end: string): boolean {
 async function sendWhatsApp(phone: string, message: string, instance: string) {
   const baseUrl = process.env.EVOLUTION_API_URL
   const apiKey = process.env.EVOLUTION_API_KEY
-  if (!baseUrl || !apiKey) return
+  if (!baseUrl || !apiKey) return { ok: false, error: 'no Evolution config' }
 
   let num = phone.replace(/\D/g, '')
   if (num.startsWith('0')) num = '90' + num.slice(1)
   else if (num.startsWith('5') && num.length === 10) num = '90' + num
   else if (!num.startsWith('90')) num = '90' + num
 
-  await fetch(`${baseUrl}/message/sendText/${instance}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: apiKey },
-    body: JSON.stringify({ number: num + '@s.whatsapp.net', text: message }),
-  }).catch(() => {})
+  try {
+    const res = await fetch(`${baseUrl}/message/sendText/${instance}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: apiKey },
+      body: JSON.stringify({ number: num + '@s.whatsapp.net', text: message }),
+    })
+    const txt = await res.text().catch(() => '')
+    return { ok: res.ok, status: res.status, body: txt.slice(0, 200) }
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) }
+  }
 }
 
 // GET — Evolution API pings this to verify the webhook URL is reachable
@@ -48,43 +66,55 @@ export async function GET() {
 // POST — Evolution API calls this when a message arrives
 export async function POST(req: NextRequest) {
   let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ ok: false }) }
+  try { body = await req.json() } catch {
+    await logWebhook({ result: 'invalid json' })
+    return NextResponse.json({ ok: false })
+  }
+
+  const event = body?.event
+  const instanceName: string = body?.instance || body?.instanceName || ''
 
   // Only handle incoming messages
-  const event = body?.event
-  if (event !== 'messages.upsert' && event !== 'message') {
+  if (event !== 'messages.upsert' && event !== 'message' && event !== 'MESSAGES_UPSERT') {
+    await logWebhook({ event, instance: instanceName, payload: body, result: `skipped: event=${event}` })
     return NextResponse.json({ ok: true, skipped: true })
   }
 
   const data = body?.data
   const key = data?.key
-  if (!key || key.fromMe) return NextResponse.json({ ok: true, skipped: 'fromMe' })
+  if (!key || key.fromMe) {
+    await logWebhook({ event, instance: instanceName, payload: body, result: 'skipped: fromMe or no key' })
+    return NextResponse.json({ ok: true, skipped: 'fromMe' })
+  }
 
-  // Extract message text
   const msg = data?.message
   const text = msg?.conversation || msg?.extendedTextMessage?.text || msg?.imageMessage?.caption || ''
-  if (!text?.trim()) return NextResponse.json({ ok: true, skipped: 'no text' })
+  if (!text?.trim()) {
+    await logWebhook({ event, instance: instanceName, payload: body, result: 'skipped: no text' })
+    return NextResponse.json({ ok: true, skipped: 'no text' })
+  }
 
-  // Extract customer phone (remove @s.whatsapp.net suffix)
   const remoteJid: string = key?.remoteJid || ''
-  if (remoteJid.endsWith('@g.us')) return NextResponse.json({ ok: true, skipped: 'group' })
+  if (remoteJid.endsWith('@g.us')) {
+    await logWebhook({ event, instance: instanceName, result: 'skipped: group' })
+    return NextResponse.json({ ok: true, skipped: 'group' })
+  }
   const customerPhone = remoteJid.replace('@s.whatsapp.net', '')
 
-  // Determine which instance received this
-  const instanceName: string = body?.instance || body?.instanceName || ''
-  if (!instanceName) return NextResponse.json({ ok: false, error: 'no instance' })
+  if (!instanceName) {
+    await logWebhook({ event, payload: body, result: 'no instance in payload' })
+    return NextResponse.json({ ok: false, error: 'no instance' })
+  }
 
   const supabase = svc()
 
   // Find consultant by wa_instance
-  let consultant: { id: string; full_name: string; wa_instance: string } | null = null
-
   const { data: consultantByInstance } = await supabase
     .from('consultants')
     .select('id, full_name, wa_instance')
     .eq('wa_instance', instanceName)
     .single()
-  consultant = consultantByInstance
+  let consultant = consultantByInstance
 
   // Fallback: find any consultant with wa_instance set
   if (!consultant) {
@@ -96,7 +126,10 @@ export async function POST(req: NextRequest) {
     consultant = all?.[0] || null
   }
 
-  if (!consultant) return NextResponse.json({ ok: false, error: 'no consultant with wa_instance found' })
+  if (!consultant) {
+    await logWebhook({ event, instance: instanceName, result: 'no consultant found' })
+    return NextResponse.json({ ok: false, error: 'no consultant with wa_instance found' })
+  }
 
   // Load chatbot config
   const { data: chatbotCfg } = await supabase
@@ -105,8 +138,12 @@ export async function POST(req: NextRequest) {
     .eq('consultant_id', consultant.id)
     .single()
 
-  // If chatbot is not enabled, skip
   if (!chatbotCfg?.is_enabled || !chatbotCfg?.auto_reply_enabled) {
+    await logWebhook({
+      event,
+      instance: instanceName,
+      result: `chatbot disabled (is_enabled=${chatbotCfg?.is_enabled}, auto_reply=${chatbotCfg?.auto_reply_enabled})`,
+    })
     return NextResponse.json({ ok: true, skipped: 'chatbot not enabled' })
   }
 
@@ -115,21 +152,21 @@ export async function POST(req: NextRequest) {
   const maxHistory = chatbotCfg.max_history_messages ?? 10
 
   if (!effectiveModel) {
-    return NextResponse.json({ ok: true, skipped: 'no model configured' })
+    await logWebhook({ event, instance: instanceName, result: 'no model configured' })
+    return NextResponse.json({ ok: true, skipped: 'no model' })
   }
 
-  // Check working hours — send outside-hours message if needed
   if (chatbotCfg.working_hours_enabled) {
     const start = chatbotCfg.working_hours_start || '09:00'
     const end = chatbotCfg.working_hours_end || '18:00'
     if (!isInWorkingHours(start, end)) {
-      const outsideMsg = chatbotCfg.outside_hours_message || 'Mesai saatlerimiz dışındasınız. Daha sonra tekrar deneyin.'
-      await sendWhatsApp(customerPhone, outsideMsg, instanceName)
+      const outsideMsg = chatbotCfg.outside_hours_message || 'Mesai saatlerimiz dışındasınız.'
+      const sendRes = await sendWhatsApp(customerPhone, outsideMsg, instanceName)
+      await logWebhook({ event, instance: instanceName, result: `outside hours, sent=${JSON.stringify(sendRes)}` })
       return NextResponse.json({ ok: true, outside_hours: true })
     }
   }
 
-  // Save customer message to history
   try {
     await supabase.from('whatsapp_chat_history').insert({
       consultant_id: consultant.id,
@@ -139,7 +176,6 @@ export async function POST(req: NextRequest) {
     })
   } catch { /* ignore */ }
 
-  // Load recent history for context
   const { data: history } = await supabase
     .from('whatsapp_chat_history')
     .select('role, content')
@@ -150,8 +186,8 @@ export async function POST(req: NextRequest) {
 
   const messages = (history || []).reverse()
 
-  // Generate AI response via OpenRouter
   let aiReply = ''
+  let aiStatus = ''
   const openrouterKey = process.env.OPENROUTER_API_KEY
 
   if (openrouterKey) {
@@ -174,24 +210,29 @@ export async function POST(req: NextRequest) {
         }),
         signal: AbortSignal.timeout(30000),
       })
+      aiStatus = `openrouter status=${res.status}`
       if (res.ok) {
         const data = await res.json()
         aiReply = data?.choices?.[0]?.message?.content || ''
       } else {
-        console.error('[chatbot] OpenRouter error:', res.status, await res.text())
+        const errText = await res.text()
+        aiStatus = `openrouter ${res.status}: ${errText.slice(0, 200)}`
         aiReply = 'Şu anda size yardımcı olamıyorum, lütfen daha sonra tekrar deneyin.'
       }
-    } catch (e) {
-      console.error('[chatbot] OpenRouter fetch error:', e)
+    } catch (e: any) {
+      aiStatus = `openrouter exception: ${e?.message}`
       aiReply = 'Şu anda size yardımcı olamıyorum, lütfen daha sonra tekrar deneyin.'
     }
   } else {
+    aiStatus = 'no OPENROUTER_API_KEY'
     aiReply = 'Mesajınızı aldık, en kısa sürede size döneceğiz.'
   }
 
-  if (!aiReply) return NextResponse.json({ ok: false, error: 'no AI reply' })
+  if (!aiReply) {
+    await logWebhook({ event, instance: instanceName, result: `no AI reply (${aiStatus})` })
+    return NextResponse.json({ ok: false, error: 'no AI reply' })
+  }
 
-  // Save AI reply to history
   try {
     await supabase.from('whatsapp_chat_history').insert({
       consultant_id: consultant.id,
@@ -201,8 +242,12 @@ export async function POST(req: NextRequest) {
     })
   } catch { /* ignore */ }
 
-  // Send the reply
-  await sendWhatsApp(customerPhone, aiReply, instanceName)
+  const sendRes = await sendWhatsApp(customerPhone, aiReply, instanceName)
+  await logWebhook({
+    event,
+    instance: instanceName,
+    result: `replied (${aiStatus}, send=${JSON.stringify(sendRes)})`,
+  })
 
   return NextResponse.json({ ok: true, replied: true })
 }
