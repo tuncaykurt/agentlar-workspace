@@ -189,7 +189,19 @@ export async function POST(req: NextRequest) {
     const message = buildMessage(config.message_template, contact)
     const result = await sendWhatsApp(contact.phone, message, consultant.wa_instance)
     detail.push({ name: contact.full_name, phone: contact.phone, ok: result.ok, error: result.error })
-    if (result.ok) sent++; else failed++
+    if (result.ok) {
+      sent++
+      // Mesaj gönderildi → chat history'ye kaydet (webhook bu kişiden cevap gelince tanıyacak)
+      const normPhone = contact.phone.replace(/\D/g, '')
+      await supabase.from('whatsapp_chat_history').insert({
+        consultant_id: consultant.id,
+        customer_phone: normPhone.startsWith('90') ? normPhone : '90' + (normPhone.startsWith('0') ? normPhone.slice(1) : normPhone),
+        role: 'assistant',
+        content: message,
+      }).catch(() => {})
+    } else {
+      failed++
+    }
   }
 
   return NextResponse.json({ sent, failed, detail, date: mmdd, force })

@@ -95,38 +95,35 @@ export async function POST(req: NextRequest) {
 
   if (!consultant) return NextResponse.json({ ok: false, error: 'no consultant with wa_instance found' })
 
-  // Load chatbot config — whatsapp_chatbot_config önce, yoksa birthday_automation_config'e bak
-  const { data: chatbotConfig } = await supabase
-    .from('whatsapp_chatbot_config')
-    .select('*')
-    .eq('consultant_id', consultant.id)
-    .single()
-
+  // Birthday automation config
   const { data: birthdayConfig } = await supabase
     .from('birthday_automation_config')
-    .select('system_prompt, selected_model')
+    .select('system_prompt, selected_model, is_enabled')
     .eq('consultant_id', consultant.id)
     .single()
 
-  // Chatbot aktif mi? whatsapp_chatbot_config veya birthday ayarlarından birinde model varsa devam et
-  const hasChatbotConfig = chatbotConfig?.is_enabled && chatbotConfig?.auto_reply_enabled
-  const hasBirthdayModel = !!(birthdayConfig?.selected_model)
+  // KURAL: Sadece daha önce birthday mesajı gönderilen kişilerden gelen mesajlara yanıt ver
+  // Geçmişte bu kişiye mesaj gönderildi mi kontrol et
+  const { data: existingHistory } = await supabase
+    .from('whatsapp_chat_history')
+    .select('id')
+    .eq('consultant_id', consultant.id)
+    .eq('customer_phone', customerPhone)
+    .eq('role', 'assistant')  // Biz daha önce mesaj gönderdik mi?
+    .limit(1)
 
-  if (!hasChatbotConfig && !hasBirthdayModel) {
-    return NextResponse.json({ ok: true, skipped: 'chatbot disabled' })
+  const hasPriorContact = (existingHistory?.length ?? 0) > 0
+
+  if (!hasPriorContact) {
+    return NextResponse.json({ ok: true, skipped: 'no prior birthday contact with this number' })
   }
 
-  // Ayarları birleştir: chatbot_config öncelikli, yoksa birthday_config
-  const effectiveSystemPrompt = chatbotConfig?.system_prompt || birthdayConfig?.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
-  const effectiveModel = chatbotConfig?.selected_model || birthdayConfig?.selected_model || 'anthropic/claude-haiku-4-5'
-  const effectiveMaxHistory = chatbotConfig?.max_history_messages ?? 10
+  // Model seçili mi?
+  const effectiveModel = birthdayConfig?.selected_model || ''
+  const effectiveSystemPrompt = birthdayConfig?.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
 
-  // Çalışma saati kontrolü (sadece chatbot_config varsa)
-  if (chatbotConfig?.working_hours_enabled) {
-    if (!isInWorkingHours(chatbotConfig.working_hours_start, chatbotConfig.working_hours_end)) {
-      await sendWhatsApp(customerPhone, chatbotConfig.outside_hours_message, instanceName)
-      return NextResponse.json({ ok: true, sent: 'outside hours message' })
-    }
+  if (!effectiveModel) {
+    return NextResponse.json({ ok: true, skipped: 'no model configured in birthday automation' })
   }
 
   // Save customer message to history
@@ -144,7 +141,7 @@ export async function POST(req: NextRequest) {
     .eq('consultant_id', consultant.id)
     .eq('customer_phone', customerPhone)
     .order('created_at', { ascending: false })
-    .limit(effectiveMaxHistory)
+    .limit(10)
 
   const messages = (history || []).reverse()
 

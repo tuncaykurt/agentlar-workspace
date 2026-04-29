@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import {
   Gift, Save, Play, Clock, MessageSquare, Users, User,
   CheckSquare, Square, Loader2, CheckCircle, AlertCircle,
-  ToggleLeft, ToggleRight, Search, Cpu,
+  ToggleLeft, ToggleRight, Search, Cpu, XCircle,
 } from 'lucide-react'
 
 interface Contact {
@@ -67,6 +67,8 @@ export default function BirthdayAutomationPage() {
   const [models, setModels] = useState<{ id: string; name: string; pricing?: { prompt: string } }[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelSearch, setModelSearch] = useState('')
+  const [sysStatus, setSysStatus] = useState<{ wa_connected: boolean; webhook_registered: boolean; openrouter_configured: boolean } | null>(null)
+  const [registeringWebhook, setRegisteringWebhook] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -74,6 +76,7 @@ export default function BirthdayAutomationPage() {
     const [cfgRes, contactRes] = await Promise.all([
       fetch('/api/automations/birthday'),
       loadContacts(),
+      checkSysStatus(),
     ])
     if (cfgRes.ok) {
       const { config: c } = await cfgRes.json()
@@ -84,6 +87,21 @@ export default function BirthdayAutomationPage() {
     }
     setLoading(false)
     void contactRes
+  }
+
+  async function checkSysStatus() {
+    const res = await fetch('/api/automations/chatbot/status').catch(() => null)
+    if (res?.ok) {
+      const d = await res.json()
+      setSysStatus({ wa_connected: d.wa_connected, webhook_registered: d.webhook_registered, openrouter_configured: d.openrouter_configured })
+    }
+  }
+
+  async function registerWebhook() {
+    setRegisteringWebhook(true)
+    await fetch('/api/whatsapp/consultant', { method: 'POST' }).catch(() => null)
+    await checkSysStatus()
+    setRegisteringWebhook(false)
   }
 
   async function fetchModels() {
@@ -239,6 +257,37 @@ export default function BirthdayAutomationPage() {
 
       <div className="space-y-5">
         {/* Aktif / Pasif */}
+        {/* Sistem Durumu */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-2">
+            <p className="font-semibold text-on-surface text-sm">Sistem Durumu</p>
+            <button onClick={registerWebhook} disabled={registeringWebhook}
+              className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white text-xs rounded-lg hover:bg-primary/90 disabled:opacity-50">
+              {registeringWebhook ? <Loader2 size={11} className="animate-spin" /> : null}
+              {registeringWebhook ? '...' : 'Webhook Kaydettir'}
+            </button>
+          </div>
+          {sysStatus ? (
+            <div className="flex gap-4 flex-wrap">
+              {[
+                { label: 'WhatsApp', ok: sysStatus.wa_connected },
+                { label: 'Webhook', ok: sysStatus.webhook_registered },
+                { label: 'OpenRouter', ok: sysStatus.openrouter_configured },
+                { label: 'Model', ok: !!config.selected_model },
+              ].map(s => (
+                <div key={s.label} className="flex items-center gap-1 text-xs">
+                  {s.ok ? <CheckCircle size={13} className="text-green-500" /> : <AlertCircle size={13} className="text-amber-500" />}
+                  <span className={s.ok ? 'text-on-surface' : 'text-on-surface-variant'}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="text-xs text-on-surface-variant">Kontrol ediliyor...</p>}
+          <p className="text-xs text-on-surface-variant mt-2 pt-2 border-t border-outline">
+            Doğum günü mesajına cevap veren müşterilere otomatik AI yanıtı gönderilir. Diğer mesajlar yanıtlanmaz.
+          </p>
+        </div>
+
+        {/* Otomasyon Durumu */}
         <div className="card">
           <div className="flex items-center justify-between">
             <div>
