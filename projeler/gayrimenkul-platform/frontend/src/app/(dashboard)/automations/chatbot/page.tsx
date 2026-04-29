@@ -108,13 +108,24 @@ export default function ChatbotPage() {
 
   async function handleSave() {
     setSaving(true)
-    const res = await fetch('/api/automations/chatbot', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    })
+    try {
+      const res = await fetch('/api/automations/chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success) {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 3000)
+        if (data.config) setConfig(data.config)
+      } else {
+        alert(`Kayıt başarısız (HTTP ${res.status}):\n${JSON.stringify(data, null, 2)}`)
+      }
+    } catch (e: any) {
+      alert(`Kayıt sırasında hata: ${e?.message || e}`)
+    }
     setSaving(false)
-    if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000) }
   }
 
   const set = (patch: Partial<Config>) => setConfig(c => ({ ...c, ...patch }))

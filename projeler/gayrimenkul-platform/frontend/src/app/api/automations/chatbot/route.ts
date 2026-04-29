@@ -19,8 +19,29 @@ export async function GET() {
   const { data: consultant } = await supabase.from('consultants').select('id').eq('user_id', user.id).single()
   if (!consultant) return NextResponse.json({ error: 'Consultant not found' }, { status: 404 })
 
-  const { data: config } = await supabase
+  let { data: config } = await supabase
     .from('whatsapp_chatbot_config').select('*').eq('consultant_id', consultant.id).single()
+
+  // Auto-create default config if missing
+  if (!config) {
+    const { data: created } = await supabase
+      .from('whatsapp_chatbot_config')
+      .insert({
+        consultant_id: consultant.id,
+        is_enabled: false,
+        auto_reply_enabled: true,
+        system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun.',
+        working_hours_enabled: false,
+        working_hours_start: '09:00',
+        working_hours_end: '18:00',
+        outside_hours_message: 'Mesai saatlerimiz dışındasınız. Yarın size döneceğiz.',
+        max_history_messages: 10,
+        selected_model: 'meta-llama/llama-3.3-70b-instruct:free',
+      })
+      .select('*')
+      .single()
+    config = created
+  }
 
   return NextResponse.json({ config: config || null, consultant_id: consultant.id })
 }
@@ -35,7 +56,7 @@ export async function POST(req: NextRequest) {
   const { data: consultant } = await supabase.from('consultants').select('id').eq('user_id', user.id).single()
   if (!consultant) return NextResponse.json({ error: 'Consultant not found' }, { status: 404 })
 
-  const { error } = await supabase.from('whatsapp_chatbot_config').upsert({
+  const { data: saved, error } = await supabase.from('whatsapp_chatbot_config').upsert({
     consultant_id: consultant.id,
     is_enabled: body.is_enabled,
     auto_reply_enabled: body.auto_reply_enabled,
@@ -47,8 +68,11 @@ export async function POST(req: NextRequest) {
     max_history_messages: body.max_history_messages,
     selected_model: body.selected_model,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'consultant_id' })
+  }, { onConflict: 'consultant_id' }).select('*').single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  if (error) {
+    console.error('[chatbot save] error:', error)
+    return NextResponse.json({ error: error.message, details: error }, { status: 500 })
+  }
+  return NextResponse.json({ success: true, config: saved })
 }
