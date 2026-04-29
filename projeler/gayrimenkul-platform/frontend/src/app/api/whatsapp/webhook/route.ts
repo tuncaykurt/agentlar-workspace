@@ -74,16 +74,14 @@ export async function POST(req: NextRequest) {
   // Find consultant by wa_instance
   let consultant: { id: string; full_name: string; wa_instance: string } | null = null
 
-  if (instanceName) {
-    const { data } = await supabase
-      .from('consultants')
-      .select('id, full_name, wa_instance')
-      .eq('wa_instance', instanceName)
-      .single()
-    consultant = data
-  }
+  const { data: consultantByInstance } = await supabase
+    .from('consultants')
+    .select('id, full_name, wa_instance')
+    .eq('wa_instance', instanceName)
+    .single()
+  consultant = consultantByInstance
 
-  // Fallback: if not found by instance name, try to find any consultant with wa_instance set
+  // Fallback: find any consultant with wa_instance set
   if (!consultant) {
     const { data: all } = await supabase
       .from('consultants')
@@ -95,39 +93,46 @@ export async function POST(req: NextRequest) {
 
   if (!consultant) return NextResponse.json({ ok: false, error: 'no consultant with wa_instance found' })
 
-  // Birthday automation config
-  const { data: birthdayConfig } = await supabase
-    .from('birthday_automation_config')
-    .select('system_prompt, selected_model, is_enabled')
+  // Load chatbot config
+  const { data: chatbotCfg } = await supabase
+    .from('whatsapp_chatbot_config')
+    .select('is_enabled, auto_reply_enabled, system_prompt, selected_model, working_hours_enabled, working_hours_start, working_hours_end, outside_hours_message, max_history_messages')
     .eq('consultant_id', consultant.id)
     .single()
 
-  // KURAL: Sadece daha önce birthday mesajı gönderilen kişilerden gelen mesajlara yanıt ver
-  // Geçmişte bu kişiye mesaj gönderildi mi kontrol et
-  const { data: existingHistory } = await supabase
-    .from('whatsapp_chat_history')
-    .select('id')
-    .eq('consultant_id', consultant.id)
-    .eq('customer_phone', customerPhone)
-    .eq('role', 'assistant')  // Biz daha önce mesaj gönderdik mi?
-    .limit(1)
-
-  const hasPriorContact = (existingHistory?.length ?? 0) > 0
-
-  if (!hasPriorContact) {
-    return NextResponse.json({ ok: true, skipped: 'no prior birthday contact with this number' })
+  // If chatbot is not enabled, skip
+  if (!chatbotCfg?.is_enabled || !chatbotCfg?.auto_reply_enabled) {
+    return NextResponse.json({ ok: true, skipped: 'chatbot not enabled' })
   }
 
-  // Model seçili mi?
-  const effectiveModel = birthdayConfig?.selected_model || ''
-  const effectiveSystemPrompt = birthdayConfig?.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
+  const effectiveModel = chatbotCfg.selected_model || ''
+  const effectiveSystemPrompt = chatbotCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
+  const maxHistory = chatbotCfg.max_history_messages ?? 10
 
   if (!effectiveModel) {
-    return NextResponse.json({ ok: true, skipped: 'no model configured in birthday automation' })
+    return NextResponse.json({ ok: true, skipped: 'no model configured' })
+  }
+
+  // Check working hours — send outside-hours message if needed
+  if (chatbotCfg.working_hours_enabled) {
+    const start = chatbotCfg.working_hours_start || '09:00'
+    const end = chatbotCfg.working_hours_end || '18:00'
+    if (!isInWorkingHours(start, end)) {
+      const outsideMsg = chatbotCfg.outside_hours_message || 'Mesai saatlerimiz dışındasınız. Daha sonra tekrar deneyin.'
+      await sendWhatsApp(customerPhone, outsideMsg, instanceName)
+      return NextResponse.json({ ok: true, outside_hours: true })
+    }
   }
 
   // Save customer message to history
-  try { await supabase.from('whatsapp_chat_history').insert({ consultant_id: consultant.id, customer_phone: customerPhone, role: 'user', content: text.trim() }) } catch { /* ignore */ }
+  try {
+    await supabase.from('whatsapp_chat_history').insert({
+      consultant_id: consultant.id,
+      customer_phone: customerPhone,
+      role: 'user',
+      content: text.trim(),
+    })
+  } catch { /* ignore */ }
 
   // Load recent history for context
   const { data: history } = await supabase
@@ -136,7 +141,7 @@ export async function POST(req: NextRequest) {
     .eq('consultant_id', consultant.id)
     .eq('customer_phone', customerPhone)
     .order('created_at', { ascending: false })
-    .limit(10)
+    .limit(maxHistory)
 
   const messages = (history || []).reverse()
 
@@ -182,7 +187,14 @@ export async function POST(req: NextRequest) {
   if (!aiReply) return NextResponse.json({ ok: false, error: 'no AI reply' })
 
   // Save AI reply to history
-  try { await supabase.from('whatsapp_chat_history').insert({ consultant_id: consultant.id, customer_phone: customerPhone, role: 'assistant', content: aiReply }) } catch { /* ignore */ }
+  try {
+    await supabase.from('whatsapp_chat_history').insert({
+      consultant_id: consultant.id,
+      customer_phone: customerPhone,
+      role: 'assistant',
+      content: aiReply,
+    })
+  } catch { /* ignore */ }
 
   // Send the reply
   await sendWhatsApp(customerPhone, aiReply, instanceName)

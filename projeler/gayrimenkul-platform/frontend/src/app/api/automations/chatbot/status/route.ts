@@ -52,7 +52,8 @@ export async function GET() {
     } catch { /* ignore */ }
   }
 
-  const activeModel = chatbotCfg?.selected_model || birthdayCfg?.selected_model || ''
+  const activeModel = chatbotCfg?.selected_model || ''
+  const chatbotEnabled = !!(chatbotCfg?.is_enabled && chatbotCfg?.auto_reply_enabled)
 
   // wa_connected: wa_instance varsa bağlı sayılır (wa_phone her zaman dolu olmayabilir)
   let waConnected = !!(consultant?.wa_instance)
@@ -74,10 +75,10 @@ export async function GET() {
     wa_connected: waConnected,
     wa_instance: consultant?.wa_instance || null,
     webhook_registered: webhookRegistered,
-    chatbot_enabled: !!(chatbotCfg?.is_enabled && chatbotCfg?.auto_reply_enabled),
+    chatbot_enabled: chatbotEnabled,
     model_selected: !!activeModel,
     active_model: activeModel,
     openrouter_configured: !!(process.env.OPENROUTER_API_KEY),
-    ready: !!(consultant?.wa_instance && webhookRegistered && activeModel && process.env.OPENROUTER_API_KEY),
+    ready: !!(consultant?.wa_instance && webhookRegistered && activeModel && process.env.OPENROUTER_API_KEY && chatbotEnabled),
   })
 }
