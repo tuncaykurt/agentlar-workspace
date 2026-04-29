@@ -194,12 +194,15 @@ export async function POST(req: NextRequest) {
       sent++
       // Mesaj gönderildi → chat history'ye kaydet (webhook bu kişiden cevap gelince tanıyacak)
       const normPhone = contact.phone.replace(/\D/g, '')
-      await supabase.from('whatsapp_chat_history').insert({
-        consultant_id: consultant.id,
-        customer_phone: normPhone.startsWith('90') ? normPhone : '90' + (normPhone.startsWith('0') ? normPhone.slice(1) : normPhone),
-        role: 'assistant',
-        content: message,
-      }).catch(() => {})
+      const chatPhone = normPhone.startsWith('90') ? normPhone : '90' + (normPhone.startsWith('0') ? normPhone.slice(1) : normPhone)
+      try {
+        await supabase.from('whatsapp_chat_history').insert({
+          consultant_id: consultant.id,
+          customer_phone: chatPhone,
+          role: 'assistant',
+          content: message,
+        })
+      } catch { /* non-critical */ }
     } else {
       failed++
     }

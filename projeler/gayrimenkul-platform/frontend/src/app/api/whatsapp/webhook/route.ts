@@ -127,12 +127,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Save customer message to history
-  await supabase.from('whatsapp_chat_history').insert({
-    consultant_id: consultant.id,
-    customer_phone: customerPhone,
-    role: 'user',
-    content: text.trim(),
-  })
+  try { await supabase.from('whatsapp_chat_history').insert({ consultant_id: consultant.id, customer_phone: customerPhone, role: 'user', content: text.trim() }) } catch { /* ignore */ }
 
   // Load recent history for context
   const { data: history } = await supabase
@@ -187,12 +182,7 @@ export async function POST(req: NextRequest) {
   if (!aiReply) return NextResponse.json({ ok: false, error: 'no AI reply' })
 
   // Save AI reply to history
-  await supabase.from('whatsapp_chat_history').insert({
-    consultant_id: consultant.id,
-    customer_phone: customerPhone,
-    role: 'assistant',
-    content: aiReply,
-  })
+  try { await supabase.from('whatsapp_chat_history').insert({ consultant_id: consultant.id, customer_phone: customerPhone, role: 'assistant', content: aiReply }) } catch { /* ignore */ }
 
   // Send the reply
   await sendWhatsApp(customerPhone, aiReply, instanceName)
