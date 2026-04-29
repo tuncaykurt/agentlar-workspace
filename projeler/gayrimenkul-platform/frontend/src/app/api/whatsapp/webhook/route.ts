@@ -40,6 +40,11 @@ async function sendWhatsApp(phone: string, message: string, instance: string) {
   }).catch(() => {})
 }
 
+// GET — Evolution API pings this to verify the webhook URL is reachable
+export async function GET() {
+  return NextResponse.json({ ok: true, service: 'whatsapp-webhook' })
+}
+
 // POST — Evolution API calls this when a message arrives
 export async function POST(req: NextRequest) {
   let body: any

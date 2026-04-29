@@ -28,29 +28,48 @@ function evoConfig() {
   }
 }
 
-// Register webhook — tries both v1 and v2 payload formats
+// Register webhook — Evolution API v2 format
 async function registerWebhook(evoUrl: string, evoKey: string, instName: string) {
   const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`
-  const payload = {
+  // v2 uses snake_case, no "enabled" field at root level
+  const payloadV2 = {
+    url: webhookUrl,
+    webhook_by_events: false,
+    webhook_base64: false,
+    events: ['MESSAGES_UPSERT'],
+  }
+  // v1 uses camelCase with enabled
+  const payloadV1 = {
     enabled: true,
     url: webhookUrl,
     webhookByEvents: false,
     webhookBase64: false,
     events: ['MESSAGES_UPSERT'],
   }
-  // Try PUT (v2 manager format)
+
+  // Try POST v2
+  const resPost = await fetch(`${evoUrl}/webhook/set/${instName}`, {
+    method: 'POST',
+    headers: { apikey: evoKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payloadV2),
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => null)
+  if (resPost?.ok) return
+
+  // Try PUT v2
   const resPut = await fetch(`${evoUrl}/webhook/set/${instName}`, {
     method: 'PUT',
     headers: { apikey: evoKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payloadV2),
     signal: AbortSignal.timeout(8000),
   }).catch(() => null)
   if (resPut?.ok) return
-  // Try POST (v1 format)
+
+  // Fallback: v1 format
   await fetch(`${evoUrl}/webhook/set/${instName}`, {
     method: 'POST',
     headers: { apikey: evoKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payloadV1),
     signal: AbortSignal.timeout(8000),
   }).catch(() => null)
 }

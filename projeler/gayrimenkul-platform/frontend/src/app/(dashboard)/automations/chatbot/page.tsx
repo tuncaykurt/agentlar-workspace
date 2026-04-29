@@ -72,7 +72,13 @@ export default function ChatbotPage() {
 
   async function registerWebhook() {
     setRegisteringWebhook(true)
-    await fetch('/api/whatsapp/consultant', { method: 'POST' }).catch(() => null)
+    try {
+      const res = await fetch('/api/whatsapp/register-webhook', { method: 'POST' })
+      const data = await res.json()
+      if (!data.ok) {
+        alert(`Webhook kaydedilemedi:\n${JSON.stringify(data.attempts || data.error, null, 2)}`)
+      }
+    } catch { /* ignore */ }
     await checkStatus()
     setRegisteringWebhook(false)
   }
