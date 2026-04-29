@@ -119,6 +119,7 @@ export default function ChatbotPage() {
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
         if (data.config) setConfig(data.config)
+        await checkStatus()
       } else {
         alert(`Kayıt başarısız (HTTP ${res.status}):\n${JSON.stringify(data, null, 2)}`)
       }
