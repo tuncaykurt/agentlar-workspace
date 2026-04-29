@@ -10,6 +10,38 @@ function svc() {
   )
 }
 
+async function tryRegister(evoUrl: string, evoKey: string, instName: string, payload: any, method: 'POST' | 'PUT') {
+  try {
+    const res = await fetch(`${evoUrl}/webhook/set/${instName}`, {
+      method,
+      headers: { apikey: evoKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
+    })
+    const text = await res.text()
+    return { status: res.status, ok: res.ok, body: text.slice(0, 500) }
+  } catch (e: any) {
+    return { error: e?.message || String(e) }
+  }
+}
+
+async function verifyRegistration(evoUrl: string, evoKey: string, instName: string) {
+  try {
+    const res = await fetch(`${evoUrl}/webhook/find/${instName}`, {
+      headers: { apikey: evoKey },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return { ok: false, status: res.status }
+    const data = await res.json()
+    const enabled = data?.enabled === true
+    const events: string[] = data?.events || []
+    const hasUpsert = events.some(e => String(e).toUpperCase() === 'MESSAGES_UPSERT')
+    return { ok: enabled && hasUpsert, enabled, events, registration: data }
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) }
+  }
+}
+
 export async function POST() {
   const userSb = await createServerSupabaseClient()
   const { data: { user } } = await userSb.auth.getUser()
@@ -37,74 +69,62 @@ export async function POST() {
   const webhookUrl = `${appUrl}/api/whatsapp/webhook`
   const instName = consultant.wa_instance
 
-  const results: Record<string, any> = {}
-
-  // Try v2 POST
-  try {
-    const res = await fetch(`${evoUrl}/webhook/set/${instName}`, {
-      method: 'POST',
-      headers: { apikey: evoKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: webhookUrl,
-        webhook_by_events: false,
-        webhook_base64: false,
-        events: ['MESSAGES_UPSERT'],
-      }),
-      signal: AbortSignal.timeout(10000),
-    })
-    const text = await res.text()
-    results.post_v2 = { status: res.status, ok: res.ok, body: text.slice(0, 300) }
-    if (res.ok) {
-      return NextResponse.json({ ok: true, method: 'POST v2', webhookUrl, instance: instName, response: text.slice(0, 300) })
-    }
-  } catch (e: any) {
-    results.post_v2 = { error: e?.message }
+  const camelCasePayload = {
+    enabled: true,
+    url: webhookUrl,
+    webhookByEvents: false,
+    webhookBase64: false,
+    events: ['MESSAGES_UPSERT'],
+  }
+  const nestedPayload = {
+    webhook: {
+      enabled: true,
+      url: webhookUrl,
+      webhookByEvents: false,
+      webhookBase64: false,
+      events: ['MESSAGES_UPSERT'],
+    },
+  }
+  const snakeCasePayload = {
+    enabled: true,
+    url: webhookUrl,
+    webhook_by_events: false,
+    webhook_base64: false,
+    events: ['MESSAGES_UPSERT'],
   }
 
-  // Try v2 PUT
-  try {
-    const res = await fetch(`${evoUrl}/webhook/set/${instName}`, {
-      method: 'PUT',
-      headers: { apikey: evoKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: webhookUrl,
-        webhook_by_events: false,
-        webhook_base64: false,
-        events: ['MESSAGES_UPSERT'],
-      }),
-      signal: AbortSignal.timeout(10000),
-    })
-    const text = await res.text()
-    results.put_v2 = { status: res.status, ok: res.ok, body: text.slice(0, 300) }
-    if (res.ok) {
-      return NextResponse.json({ ok: true, method: 'PUT v2', webhookUrl, instance: instName, response: text.slice(0, 300) })
+  const attempts: Record<string, any> = {}
+
+  // Try every combination, verify with /find after each
+  const variants: Array<[string, 'POST' | 'PUT', any]> = [
+    ['POST_camel', 'POST', camelCasePayload],
+    ['POST_nested', 'POST', nestedPayload],
+    ['PUT_camel', 'PUT', camelCasePayload],
+    ['PUT_nested', 'PUT', nestedPayload],
+    ['POST_snake', 'POST', snakeCasePayload],
+    ['PUT_snake', 'PUT', snakeCasePayload],
+  ]
+
+  for (const [name, method, payload] of variants) {
+    const setRes = await tryRegister(evoUrl, evoKey, instName, payload, method)
+    const verify = await verifyRegistration(evoUrl, evoKey, instName)
+    attempts[name] = { set: setRes, verify }
+    if (verify.ok) {
+      return NextResponse.json({
+        ok: true,
+        method: name,
+        webhookUrl,
+        instance: instName,
+        registration: verify.registration,
+      })
     }
-  } catch (e: any) {
-    results.put_v2 = { error: e?.message }
   }
 
-  // Try v1 POST (camelCase)
-  try {
-    const res = await fetch(`${evoUrl}/webhook/set/${instName}`, {
-      method: 'POST',
-      headers: { apikey: evoKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        enabled: true,
-        url: webhookUrl,
-        webhookByEvents: false,
-        webhookBase64: false,
-        events: ['MESSAGES_UPSERT'],
-      }),
-      signal: AbortSignal.timeout(10000),
-    })
-    const text = await res.text()
-    results.post_v1 = { status: res.status, ok: res.ok, body: text.slice(0, 300) }
-    if (res.ok) {
-      return NextResponse.json({ ok: true, method: 'POST v1', webhookUrl, instance: instName, response: text.slice(0, 300) })
-    }
-  } catch (e: any) {
-    results.post_v1 = { error: e?.message }
-  }
-
-  return NextResponse.json({ ok: false, webhookUrl, instance: instName, attempts: results }, { status: 500 })
+  return NextResponse.json({
+    ok: false,
+    webhookUrl,
+    instance: instName,
+    attempts,
+    hint: 'Hiçbir format webhook\'u enabled=true ve MESSAGES_UPSERT event\'i ile kaydedemedi. attempts içinden Evolution API yanıtlarını inceleyin.',
+  }, { status: 500 })
 }
