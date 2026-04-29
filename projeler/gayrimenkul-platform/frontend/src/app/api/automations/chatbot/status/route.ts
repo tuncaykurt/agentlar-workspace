@@ -54,8 +54,24 @@ export async function GET() {
 
   const activeModel = chatbotCfg?.selected_model || birthdayCfg?.selected_model || ''
 
+  // wa_connected: wa_instance varsa bağlı sayılır (wa_phone her zaman dolu olmayabilir)
+  let waConnected = !!(consultant?.wa_instance)
+  if (waConnected && evoUrl && evoKey) {
+    try {
+      const stateRes = await fetch(`${evoUrl}/instance/connectionState/${consultant!.wa_instance}`, {
+        headers: { apikey: evoKey },
+        signal: AbortSignal.timeout(5000),
+      })
+      if (stateRes.ok) {
+        const stateData = await stateRes.json()
+        const state: string = stateData?.instance?.state || stateData?.state || ''
+        waConnected = state === 'open'
+      }
+    } catch { /* ignore, keep wa_instance based check */ }
+  }
+
   return NextResponse.json({
-    wa_connected: !!(consultant?.wa_instance && consultant?.wa_phone),
+    wa_connected: waConnected,
     wa_instance: consultant?.wa_instance || null,
     webhook_registered: webhookRegistered,
     chatbot_enabled: !!(chatbotCfg?.is_enabled && chatbotCfg?.auto_reply_enabled),

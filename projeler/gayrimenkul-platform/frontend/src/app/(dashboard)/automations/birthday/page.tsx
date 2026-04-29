@@ -248,7 +248,7 @@ export default function BirthdayAutomationPage() {
           <div className="flex flex-wrap gap-2">
             {todayContacts.map(c => (
               <span key={c.id} className="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded-full">
-                {c.salutation ? c.salutation + ' ' : ''}{c.full_name}
+                {c.full_name}{c.salutation ? ' ' + c.salutation : ''}
               </span>
             ))}
           </div>

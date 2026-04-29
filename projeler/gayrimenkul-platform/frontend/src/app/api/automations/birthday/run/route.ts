@@ -97,6 +97,7 @@ async function buildAIMessage(
 // body: { force?: boolean, test_contact_ids?: string[] }
 // force=true → doğum günü tarihi kontrolü atlanır (test modu)
 export async function POST(req: NextRequest) {
+  try {
   const userSb = await createServerSupabaseClient()
   const { data: { user } } = await userSb.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -205,4 +206,8 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ sent, failed, detail, date: mmdd, force })
+  } catch (e: any) {
+    console.error('[birthday/run] unhandled error:', e)
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  }
 }

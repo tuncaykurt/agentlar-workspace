@@ -598,7 +598,7 @@ ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS selected_model T
     `,
   },
   {
-    id: '023_whatsapp_chatbot',
+    id: '023b_whatsapp_chatbot',
     sql: `
 CREATE TABLE IF NOT EXISTS whatsapp_chatbot_config (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -619,7 +619,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_chat_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   consultant_id UUID REFERENCES consultants(id) ON DELETE CASCADE,
   customer_phone TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN (''user'', ''assistant'')),
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
   content TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
