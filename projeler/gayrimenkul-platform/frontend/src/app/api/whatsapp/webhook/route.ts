@@ -72,13 +72,28 @@ export async function POST(req: NextRequest) {
   const supabase = svc()
 
   // Find consultant by wa_instance
-  const { data: consultant } = await supabase
-    .from('consultants')
-    .select('id, full_name, wa_instance')
-    .eq('wa_instance', instanceName)
-    .single()
+  let consultant: { id: string; full_name: string; wa_instance: string } | null = null
 
-  if (!consultant) return NextResponse.json({ ok: false, error: 'consultant not found for instance' })
+  if (instanceName) {
+    const { data } = await supabase
+      .from('consultants')
+      .select('id, full_name, wa_instance')
+      .eq('wa_instance', instanceName)
+      .single()
+    consultant = data
+  }
+
+  // Fallback: if not found by instance name, try to find any consultant with wa_instance set
+  if (!consultant) {
+    const { data: all } = await supabase
+      .from('consultants')
+      .select('id, full_name, wa_instance')
+      .not('wa_instance', 'is', null)
+      .limit(1)
+    consultant = all?.[0] || null
+  }
+
+  if (!consultant) return NextResponse.json({ ok: false, error: 'no consultant with wa_instance found' })
 
   // Load chatbot config — whatsapp_chatbot_config önce, yoksa birthday_automation_config'e bak
   const { data: chatbotConfig } = await supabase

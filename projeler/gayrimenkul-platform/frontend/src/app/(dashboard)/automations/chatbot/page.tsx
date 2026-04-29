@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bot, Save, Clock, MessageSquare, ToggleLeft, ToggleRight, Loader2, CheckCircle, Info, Cpu } from 'lucide-react'
+import { Bot, Save, Clock, MessageSquare, ToggleLeft, ToggleRight, Loader2, CheckCircle, Info, Cpu, XCircle, AlertCircle } from 'lucide-react'
 
 interface Config {
   is_enabled: boolean
@@ -42,22 +42,39 @@ export default function ChatbotPage() {
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelSearch, setModelSearch] = useState('')
   const [registeringWebhook, setRegisteringWebhook] = useState(false)
-  const [webhookStatus, setWebhookStatus] = useState<string | null>(null)
+  const [status, setStatus] = useState<{
+    wa_connected: boolean
+    webhook_registered: boolean
+    chatbot_enabled: boolean
+    model_selected: boolean
+    active_model: string
+    openrouter_configured: boolean
+    ready: boolean
+  } | null>(null)
 
   useEffect(() => {
-    fetch('/api/automations/chatbot').then(r => r.json()).then(({ config: c }) => {
+    Promise.all([
+      fetch('/api/automations/chatbot').then(r => r.json()),
+      checkStatus(),
+    ]).then(([{ config: c }]) => {
       if (c) setConfig(c)
       setLoading(false)
     })
   }, [])
 
+  async function checkStatus() {
+    const res = await fetch('/api/automations/chatbot/status').catch(() => null)
+    if (res?.ok) {
+      const data = await res.json()
+      setStatus(data)
+    }
+  }
+
   async function registerWebhook() {
     setRegisteringWebhook(true)
-    setWebhookStatus(null)
-    // QR endpoint'ini çağırmak webhook'u yeniden kaydeder
-    const res = await fetch('/api/whatsapp/consultant', { method: 'POST' }).catch(() => null)
+    await fetch('/api/whatsapp/consultant', { method: 'POST' }).catch(() => null)
+    await checkStatus()
     setRegisteringWebhook(false)
-    setWebhookStatus(res?.ok ? '✓ Webhook kaydedildi' : '✗ Hata — WhatsApp bağlı mı?')
   }
 
   async function fetchModels() {
@@ -104,30 +121,51 @@ export default function ChatbotPage() {
       </div>
 
       <div className="space-y-5">
-        {/* Webhook kaydet */}
-        <div className="card bg-blue-50 border-blue-200">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <Info size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-blue-800">Webhook Bağlantısı</p>
-                <p className="text-xs text-blue-700 mt-0.5">
-                  Gelen mesajların chatbot'a iletilmesi için webhook aktif olmalıdır.
-                  WhatsApp bağlıysa aşağıdaki butonla tek tıkla kaydedilir.
-                </p>
-                {webhookStatus && (
-                  <p className={`text-xs mt-1 font-medium ${webhookStatus.startsWith('✓') ? 'text-green-700' : 'text-red-600'}`}>
-                    {webhookStatus}
-                  </p>
-                )}
-              </div>
+        {/* Durum Kartı */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-semibold text-on-surface">Sistem Durumu</p>
+            <div className="flex gap-2">
+              <button onClick={checkStatus} className="text-xs text-on-surface-variant hover:text-primary">
+                Yenile
+              </button>
+              <button onClick={registerWebhook} disabled={registeringWebhook}
+                className="flex items-center gap-1 px-3 py-1 bg-primary text-white text-xs rounded-lg hover:bg-primary/90 disabled:opacity-50">
+                {registeringWebhook ? <Loader2 size={11} className="animate-spin" /> : null}
+                {registeringWebhook ? 'Kaydediliyor...' : 'Webhook Kaydettir'}
+              </button>
             </div>
-            <button onClick={registerWebhook} disabled={registeringWebhook}
-              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50">
-              {registeringWebhook ? <Loader2 size={12} className="animate-spin" /> : null}
-              {registeringWebhook ? 'Kaydediliyor...' : 'Webhook Kaydettir'}
-            </button>
           </div>
+          {status ? (
+            <div className="space-y-2">
+              {[
+                { label: 'WhatsApp Bağlı', ok: status.wa_connected },
+                { label: 'Webhook Kayıtlı', ok: status.webhook_registered },
+                { label: 'OpenRouter API', ok: status.openrouter_configured },
+                { label: 'Model Seçili', ok: status.model_selected, detail: status.active_model },
+                { label: 'Chatbot Aktif', ok: status.chatbot_enabled },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2 text-sm">
+                  {item.ok
+                    ? <CheckCircle size={15} className="text-green-500 flex-shrink-0" />
+                    : <XCircle size={15} className="text-red-400 flex-shrink-0" />}
+                  <span className={item.ok ? 'text-on-surface' : 'text-on-surface-variant'}>{item.label}</span>
+                  {item.detail && <span className="text-xs text-on-surface-variant ml-1">({item.detail})</span>}
+                </div>
+              ))}
+              {status.ready ? (
+                <div className="mt-3 px-3 py-2 bg-green-50 rounded-lg text-xs text-green-700 font-medium flex items-center gap-1.5">
+                  <CheckCircle size={13} /> Chatbot aktif — gelen mesajlara otomatik yanıt verilecek
+                </div>
+              ) : (
+                <div className="mt-3 px-3 py-2 bg-amber-50 rounded-lg text-xs text-amber-700 flex items-center gap-1.5">
+                  <AlertCircle size={13} /> Kırmızı işaretli adımları tamamlayın
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-on-surface-variant">Durum yükleniyor...</div>
+          )}
         </div>
 
         {/* Ana açma/kapama */}
