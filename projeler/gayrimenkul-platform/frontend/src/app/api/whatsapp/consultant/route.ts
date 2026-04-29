@@ -28,6 +28,33 @@ function evoConfig() {
   }
 }
 
+// Register webhook — tries both v1 and v2 payload formats
+async function registerWebhook(evoUrl: string, evoKey: string, instName: string) {
+  const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`
+  const payload = {
+    enabled: true,
+    url: webhookUrl,
+    webhookByEvents: false,
+    webhookBase64: false,
+    events: ['MESSAGES_UPSERT'],
+  }
+  // Try PUT (v2 manager format)
+  const resPut = await fetch(`${evoUrl}/webhook/set/${instName}`, {
+    method: 'PUT',
+    headers: { apikey: evoKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => null)
+  if (resPut?.ok) return
+  // Try POST (v1 format)
+  await fetch(`${evoUrl}/webhook/set/${instName}`, {
+    method: 'POST',
+    headers: { apikey: evoKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => null)
+}
+
 // Get the logged-in consultant record
 async function getConsultant() {
   const cookieStore = await cookies()
@@ -149,12 +176,7 @@ export async function POST() {
       const base64 = connectData?.base64 || connectData?.qrcode?.base64 || null
 
       // Always ensure webhook is registered
-      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`
-      fetch(`${url}/webhook/set/${instName}`, {
-        method: 'POST',
-        headers: { apikey: key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: webhookUrl, webhook_by_events: false, webhook_base64: false, events: ['MESSAGES_UPSERT'] }),
-      }).catch(() => {})
+      registerWebhook(url, key, instName).catch(() => {})
 
       if (base64) {
         return NextResponse.json({ instanceName: instName, base64, created: false })
@@ -189,17 +211,7 @@ export async function POST() {
       null
 
     // Auto-register webhook for this instance
-    const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`
-    fetch(`${url}/webhook/set/${instName}`, {
-      method: 'POST',
-      headers: { apikey: key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: webhookUrl,
-        webhook_by_events: false,
-        webhook_base64: false,
-        events: ['MESSAGES_UPSERT'],
-      }),
-    }).catch(() => { /* non-critical */ })
+    registerWebhook(url, key, instName).catch(() => {})
 
     return NextResponse.json({ instanceName: instName, base64, created: true })
   } catch (err: unknown) {
