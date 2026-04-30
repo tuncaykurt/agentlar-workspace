@@ -131,32 +131,57 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'no consultant with wa_instance found' })
   }
 
-  // Load chatbot config
-  const { data: chatbotCfg } = await supabase
-    .from('whatsapp_chatbot_config')
-    .select('is_enabled, auto_reply_enabled, system_prompt, selected_model, working_hours_enabled, working_hours_start, working_hours_end, outside_hours_message, max_history_messages')
+  // Check if this customer received a birthday message previously
+  const { data: priorMsgs } = await supabase
+    .from('whatsapp_chat_history')
+    .select('id')
     .eq('consultant_id', consultant.id)
-    .single()
+    .eq('customer_phone', customerPhone)
+    .eq('role', 'assistant')
+    .limit(1)
+  const hasPriorContact = (priorMsgs?.length ?? 0) > 0
 
-  if (!chatbotCfg?.is_enabled || !chatbotCfg?.auto_reply_enabled) {
+  // Load both configs
+  const [{ data: chatbotCfg }, { data: birthdayCfg }] = await Promise.all([
+    supabase
+      .from('whatsapp_chatbot_config')
+      .select('is_enabled, auto_reply_enabled, system_prompt, selected_model, working_hours_enabled, working_hours_start, working_hours_end, outside_hours_message, max_history_messages')
+      .eq('consultant_id', consultant.id)
+      .single(),
+    supabase
+      .from('birthday_automation_config')
+      .select('is_enabled, system_prompt, selected_model')
+      .eq('consultant_id', consultant.id)
+      .single(),
+  ])
+
+  // Decide which config to use:
+  // - If customer received birthday msg AND birthday config enabled → use birthday config
+  // - Else if general chatbot enabled → use chatbot config
+  // - Else skip
+  let effectiveModel = ''
+  let effectiveSystemPrompt = ''
+  let configSource = ''
+  const maxHistory = chatbotCfg?.max_history_messages ?? 10
+
+  if (hasPriorContact && birthdayCfg?.is_enabled && birthdayCfg?.selected_model) {
+    effectiveModel = birthdayCfg.selected_model
+    effectiveSystemPrompt = birthdayCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
+    configSource = 'birthday'
+  } else if (chatbotCfg?.is_enabled && chatbotCfg?.auto_reply_enabled && chatbotCfg?.selected_model) {
+    effectiveModel = chatbotCfg.selected_model
+    effectiveSystemPrompt = chatbotCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
+    configSource = 'chatbot'
+  } else {
     await logWebhook({
       event,
       instance: instanceName,
-      result: `chatbot disabled (is_enabled=${chatbotCfg?.is_enabled}, auto_reply=${chatbotCfg?.auto_reply_enabled})`,
+      result: `skipped: no matching config (hasPriorContact=${hasPriorContact}, birthday_enabled=${birthdayCfg?.is_enabled}, chatbot_enabled=${chatbotCfg?.is_enabled})`,
     })
-    return NextResponse.json({ ok: true, skipped: 'chatbot not enabled' })
+    return NextResponse.json({ ok: true, skipped: 'no matching config' })
   }
 
-  const effectiveModel = chatbotCfg.selected_model || ''
-  const effectiveSystemPrompt = chatbotCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
-  const maxHistory = chatbotCfg.max_history_messages ?? 10
-
-  if (!effectiveModel) {
-    await logWebhook({ event, instance: instanceName, result: 'no model configured' })
-    return NextResponse.json({ ok: true, skipped: 'no model' })
-  }
-
-  if (chatbotCfg.working_hours_enabled) {
+  if (chatbotCfg?.working_hours_enabled && configSource === 'chatbot') {
     const start = chatbotCfg.working_hours_start || '09:00'
     const end = chatbotCfg.working_hours_end || '18:00'
     if (!isInWorkingHours(start, end)) {
@@ -246,7 +271,7 @@ export async function POST(req: NextRequest) {
   await logWebhook({
     event,
     instance: instanceName,
-    result: `replied (${aiStatus}, send=${JSON.stringify(sendRes)})`,
+    result: `replied via ${configSource} (${aiStatus}, send=${JSON.stringify(sendRes)})`,
   })
 
   return NextResponse.json({ ok: true, replied: true })
