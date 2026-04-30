@@ -35,12 +35,13 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
         .from('properties')
         .select('id, title, city, district, price, m2_gross, room_count, property_type, status')
         .eq('is_active', true)
-        .eq('consultant_id', ctx.consultantId)
+        .eq('assigned_consultant_id', ctx.consultantId)
         .neq('status', 'sold')
         .order('created_at', { ascending: false })
         .limit(limit)
       if (!data || data.length === 0) return 'Aktif portföyde mülk bulunamadı.'
       return JSON.stringify(data.map(p => ({
+        id: p.id,
         title: p.title,
         sehir: p.city,
         ilce: p.district,
@@ -55,7 +56,7 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
 
   search_properties: {
     name: 'search_properties',
-    description: 'Belirli kriterlerle mülk arar. Müşteri "İzmir\'de 3+1 villa", "100m2 üstü daire" gibi talep ederse kullan.',
+    description: 'Danışmanın kendi portföyünde belirli kriterlerle mülk arar. Müşteri "İzmir\'de 3+1 villa", "100m2 üstü daire" gibi talep ederse kullan.',
     parameters: {
       type: 'object',
       properties: {
@@ -73,6 +74,7 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
         .from('properties')
         .select('id, title, city, district, price, m2_gross, room_count, property_type')
         .eq('is_active', true)
+        .eq('assigned_consultant_id', ctx.consultantId)
         .neq('status', 'sold')
         .limit(15)
       if (args.city) q = q.ilike('city', `%${args.city}%`)
@@ -90,7 +92,7 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
 
   get_property_details: {
     name: 'get_property_details',
-    description: 'Belirli bir mülkün tüm detaylarını getirir. Müşteri belirli bir mülk hakkında daha fazla bilgi istediğinde kullan.',
+    description: 'Danışmanın kendi portföyündeki belirli bir mülkün tüm detaylarını getirir. Müşteri belirli bir mülk hakkında daha fazla bilgi istediğinde kullan.',
     parameters: {
       type: 'object',
       properties: {
@@ -99,11 +101,14 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
       },
     },
     execute: async (args, ctx) => {
-      let q = ctx.supabase.from('properties').select('*').eq('is_active', true).limit(1)
+      let q = ctx.supabase.from('properties').select('*')
+        .eq('is_active', true)
+        .eq('assigned_consultant_id', ctx.consultantId)
+        .limit(1)
       if (args.property_id) q = q.eq('id', args.property_id)
       else if (args.title_search) q = q.ilike('title', `%${args.title_search}%`)
       else return 'property_id veya title_search gerekli.'
-      const { data } = await q.single()
+      const { data } = await q.maybeSingle()
       return data ? JSON.stringify(data, null, 2) : 'Mülk bulunamadı.'
     },
   },
@@ -169,6 +174,17 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
     execute: async (args, _ctx) => {
       const apiKey = process.env.OPENROUTER_API_KEY
       if (!apiKey) return 'Web arama yapılandırılmamış (OPENROUTER_API_KEY yok).'
+
+      const now = new Date()
+      const todayTR = now.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })
+      const yyyy = now.getFullYear()
+      const yyyymm = `${yyyy}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+      // Türk gayrimenkul piyasası enflasyonist; Sonar varsayılan olarak eski (2023-2024) kaynaklara
+      // dayanıp düşük fiyat verebiliyor. Tarihi açıkça vurgu + sorguya yıl ekleyerek güncel sonuç zorla.
+      const query = args.query?.trim() || ''
+      const augmentedQuery = /\b20\d{2}\b/.test(query) ? query : `${query} (${yyyy} güncel)`
+
       try {
         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
@@ -181,10 +197,20 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
           body: JSON.stringify({
             model: 'perplexity/sonar',
             messages: [
-              { role: 'system', content: 'Türkçe, kısa ve doğrudan cevap ver. Konuya odaklı, gereksiz detaya girme. Tarih/sayı/fiyat varsa öne çıkar.' },
-              { role: 'user', content: args.query },
+              {
+                role: 'system',
+                content: `Türkçe, kısa ve doğrudan cevap ver. Bugünün tarihi: ${todayTR}.
+
+KRİTİK KURALLAR (Türk gayrimenkul piyasası enflasyonist — eski rakamlar bugün geçerli değil):
+- SADECE ${yyyymm} veya sonrası tarihli kaynakları kullan. ${yyyy - 1} ve öncesi rakamları ASLA kullanma.
+- Fiyat verirken kaynağın tarihini parantez içinde belirt: "X TL (${yyyymm} verisi, [kaynak])".
+- Güncel kaynak bulamadıysan "şu an net bir veri bulamadım" de, eski rakamı vermiş gibi yapma.
+- Türkiye'de yıllık emlak enflasyonu yüksek, 1-2 yıl eski rakam gerçekçi değildir.
+- Tarih, sayı, fiyat varsa öne çıkar. Konuya odaklı, gereksiz detaya girme.`,
+              },
+              { role: 'user', content: augmentedQuery },
             ],
-            max_tokens: 500,
+            max_tokens: 600,
           }),
           signal: AbortSignal.timeout(25000),
         })
