@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { BUILTIN_TOOLS, buildSystemPrompt, type ToolContext } from '@/lib/chatbot-tools'
 
 export const dynamic = 'force-dynamic'
 
@@ -145,32 +146,45 @@ export async function POST(req: NextRequest) {
   const [{ data: chatbotCfg }, { data: birthdayCfg }] = await Promise.all([
     supabase
       .from('whatsapp_chatbot_config')
-      .select('is_enabled, auto_reply_enabled, system_prompt, selected_model, working_hours_enabled, working_hours_start, working_hours_end, outside_hours_message, max_history_messages')
+      .select('is_enabled, auto_reply_enabled, system_prompt, selected_model, working_hours_enabled, working_hours_start, working_hours_end, outside_hours_message, max_history_messages, personality_preset, temperature, example_dialogues, enabled_tools')
       .eq('consultant_id', consultant.id)
       .single(),
     supabase
       .from('birthday_automation_config')
-      .select('is_enabled, system_prompt, selected_model')
+      .select('is_enabled, system_prompt, selected_model, personality_preset, temperature, example_dialogues, enabled_tools')
       .eq('consultant_id', consultant.id)
       .single(),
   ])
 
-  // Decide which config to use:
-  // - If customer received birthday msg AND birthday config enabled → use birthday config
-  // - Else if general chatbot enabled → use chatbot config
-  // - Else skip
+  // Decide which config to use
   let effectiveModel = ''
   let effectiveSystemPrompt = ''
   let configSource = ''
+  let temperature = 0.7
+  let enabledTools: string[] = []
   const maxHistory = chatbotCfg?.max_history_messages ?? 10
 
   if (hasPriorContact && birthdayCfg?.is_enabled && birthdayCfg?.selected_model) {
     effectiveModel = birthdayCfg.selected_model
-    effectiveSystemPrompt = birthdayCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
+    effectiveSystemPrompt = buildSystemPrompt({
+      basePrompt: birthdayCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.',
+      preset: birthdayCfg.personality_preset || 'samimi',
+      exampleDialogues: birthdayCfg.example_dialogues || '',
+      consultantName: consultant.full_name,
+    })
+    temperature = Number(birthdayCfg.temperature) || 0.8
+    enabledTools = (birthdayCfg.enabled_tools as string[]) || []
     configSource = 'birthday'
   } else if (chatbotCfg?.is_enabled && chatbotCfg?.auto_reply_enabled && chatbotCfg?.selected_model) {
     effectiveModel = chatbotCfg.selected_model
-    effectiveSystemPrompt = chatbotCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.'
+    effectiveSystemPrompt = buildSystemPrompt({
+      basePrompt: chatbotCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.',
+      preset: chatbotCfg.personality_preset || 'samimi',
+      exampleDialogues: chatbotCfg.example_dialogues || '',
+      consultantName: consultant.full_name,
+    })
+    temperature = Number(chatbotCfg.temperature) || 0.7
+    enabledTools = (chatbotCfg.enabled_tools as string[]) || []
     configSource = 'chatbot'
   } else {
     await logWebhook({
@@ -215,33 +229,96 @@ export async function POST(req: NextRequest) {
   let aiStatus = ''
   const openrouterKey = process.env.OPENROUTER_API_KEY
 
-  async function callOpenRouter(model: string): Promise<{ ok: boolean; reply?: string; status?: number; error?: string }> {
+  // Build tool definitions from enabled tools
+  const toolDefs = enabledTools
+    .map(name => BUILTIN_TOOLS[name])
+    .filter(Boolean)
+    .map(t => ({
+      type: 'function' as const,
+      function: { name: t.name, description: t.description, parameters: t.parameters },
+    }))
+
+  const toolCtx: ToolContext = {
+    supabase,
+    consultantId: consultant.id,
+    customerPhone,
+  }
+
+  async function executeTool(name: string, argsJson: string): Promise<string> {
+    const tool = BUILTIN_TOOLS[name]
+    if (!tool) return `Tool ${name} bulunamadı.`
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openrouterKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud',
-          'X-Title': 'Gayrimenkul Platform Chatbot',
-        },
-        body: JSON.stringify({
+      const args = argsJson ? JSON.parse(argsJson) : {}
+      return await tool.execute(args, toolCtx)
+    } catch (e: any) {
+      return `Tool hatası: ${e?.message || String(e)}`
+    }
+  }
+
+  async function callOpenRouter(model: string): Promise<{ ok: boolean; reply?: string; status?: number; error?: string; toolCallsUsed?: number }> {
+    try {
+      const conversationMessages: any[] = [
+        { role: 'system', content: effectiveSystemPrompt },
+        ...messages.map((m: any) => ({ role: m.role, content: m.content })),
+      ]
+      let toolCallsUsed = 0
+      const maxToolRounds = 3
+
+      for (let round = 0; round < maxToolRounds; round++) {
+        const reqBody: any = {
           model,
           max_tokens: 500,
-          messages: [
-            { role: 'system', content: effectiveSystemPrompt },
-            ...messages.map((m: any) => ({ role: m.role, content: m.content })),
-          ],
-        }),
-        signal: AbortSignal.timeout(30000),
-      })
-      if (res.ok) {
+          temperature,
+          messages: conversationMessages,
+        }
+        if (toolDefs.length > 0) {
+          reqBody.tools = toolDefs
+          reqBody.tool_choice = 'auto'
+        }
+
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openrouterKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud',
+            'X-Title': 'Gayrimenkul Platform Chatbot',
+          },
+          body: JSON.stringify(reqBody),
+          signal: AbortSignal.timeout(45000),
+        })
+
+        if (!res.ok) {
+          const errText = await res.text()
+          return { ok: false, status: res.status, error: errText.slice(0, 300) }
+        }
+
         const data = await res.json()
-        const reply = data?.choices?.[0]?.message?.content || ''
-        return { ok: !!reply, reply, status: res.status }
+        const choice = data?.choices?.[0]
+        const msg = choice?.message
+        const toolCalls = msg?.tool_calls
+
+        if (toolCalls && toolCalls.length > 0) {
+          // Add assistant's tool call message
+          conversationMessages.push(msg)
+          // Execute each tool and add results
+          for (const tc of toolCalls) {
+            toolCallsUsed++
+            const result = await executeTool(tc.function.name, tc.function.arguments)
+            conversationMessages.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: result,
+            })
+          }
+          // Loop to get final response
+          continue
+        }
+
+        const reply = msg?.content || ''
+        return { ok: !!reply, reply, status: res.status, toolCallsUsed }
       }
-      const errText = await res.text()
-      return { ok: false, status: res.status, error: errText.slice(0, 300) }
+      return { ok: false, error: 'max tool rounds exceeded', toolCallsUsed }
     } catch (e: any) {
       return { ok: false, error: `exception: ${e?.message || String(e)}` }
     }
@@ -262,10 +339,10 @@ export async function POST(req: NextRequest) {
     const attempts: string[] = []
     for (const model of fallbackModels) {
       const result = await callOpenRouter(model)
-      attempts.push(`${model}=${result.ok ? 'OK' : `${result.status || 'err'}:${(result.error || '').slice(0, 80)}`}`)
+      attempts.push(`${model}=${result.ok ? `OK(tools:${result.toolCallsUsed || 0})` : `${result.status || 'err'}:${(result.error || '').slice(0, 80)}`}`)
       if (result.ok && result.reply) {
         aiReply = result.reply
-        aiStatus = `success with ${model}`
+        aiStatus = `success with ${model} (tools:${result.toolCallsUsed || 0})`
         break
       }
     }

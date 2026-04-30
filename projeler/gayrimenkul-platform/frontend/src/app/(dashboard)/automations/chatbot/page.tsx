@@ -1,7 +1,22 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bot, Save, Clock, MessageSquare, ToggleLeft, ToggleRight, Loader2, CheckCircle, Info, Cpu, XCircle, AlertCircle } from 'lucide-react'
+import { Bot, Save, Clock, MessageSquare, ToggleLeft, ToggleRight, Loader2, CheckCircle, Info, Cpu, XCircle, AlertCircle, Sparkles, Wrench, MessageCircleQuestion } from 'lucide-react'
+
+const TOOL_LIBRARY: Record<string, { label: string; emoji: string; description: string }> = {
+  list_my_properties:    { label: 'Portföyümü Listele',      emoji: '🏠', description: 'Aktif mülklerinizi gösterebilir' },
+  search_properties:     { label: 'Mülk Ara',                 emoji: '🔍', description: 'Kriterle (şehir/oda/fiyat) mülk arar' },
+  get_property_details:  { label: 'Mülk Detayı',              emoji: '📋', description: 'Belirli bir mülkün tüm detayını döner' },
+  get_consultant_contact:{ label: 'İletişim Bilgilerim',      emoji: '📞', description: 'Telefon/e-posta/ofis bilgisi' },
+  get_client_info:       { label: 'Müşteri CRM Bilgisi',      emoji: '👤', description: 'Müşteri kayıtlıysa geçmişini hatırlar' },
+  schedule_appointment:  { label: 'Randevu Kaydet',           emoji: '📅', description: 'AI randevu oluşturabilir' },
+}
+
+const PERSONALITY_OPTIONS = [
+  { value: 'resmi',     label: 'Resmi',   description: 'Profesyonel, mesafeli, saygılı' },
+  { value: 'samimi',    label: 'Samimi',  description: 'Sıcak, doğal, profesyonel' },
+  { value: 'espirili',  label: 'Esprili', description: 'Eğlenceli, samimi, esprili' },
+]
 
 interface Config {
   is_enabled: boolean
@@ -13,6 +28,10 @@ interface Config {
   outside_hours_message: string
   max_history_messages: number
   selected_model: string
+  personality_preset: string
+  temperature: number
+  example_dialogues: string
+  enabled_tools: string[]
 }
 
 interface ORModel {
@@ -24,13 +43,17 @@ interface ORModel {
 const DEFAULT: Config = {
   is_enabled: false,
   auto_reply_enabled: true,
-  system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun. Mülk alım-satım, kiralama konularında yardımcı oluyorsun. Randevu almak isteyenlere danışmanın müsait olduğunu belirt ve telefon numarasını paylaş.',
+  system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun.',
   working_hours_enabled: false,
   working_hours_start: '09:00',
   working_hours_end: '18:00',
   outside_hours_message: 'Mesai saatlerimiz dışındasınız (09:00-18:00). Yarın size döneceğiz.',
   max_history_messages: 10,
   selected_model: 'anthropic/claude-haiku-4-5',
+  personality_preset: 'samimi',
+  temperature: 0.7,
+  example_dialogues: '',
+  enabled_tools: [],
 }
 
 export default function ChatbotPage() {
@@ -279,20 +302,133 @@ export default function ChatbotPage() {
               )}
             </div>
 
+            {/* Kişilik / Üslup */}
+            <div className="card">
+              <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                <Sparkles size={16} /> Kişilik & Üslup
+              </h2>
+              <p className="text-xs text-on-surface-variant mb-3">
+                AI'ın nasıl konuşacağını belirler. Doğal danışman tonu için Samimi önerilir.
+              </p>
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {PERSONALITY_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => set({ personality_preset: opt.value })}
+                    className={`p-3 rounded-lg border-2 text-left transition-colors ${
+                      config.personality_preset === opt.value
+                        ? 'border-primary bg-primary-container'
+                        : 'border-outline hover:border-primary/50'
+                    }`}
+                  >
+                    <p className="text-sm font-medium text-on-surface">{opt.label}</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">{opt.description}</p>
+                  </button>
+                ))}
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-on-surface-variant">
+                    Yaratıcılık (Temperature)
+                  </label>
+                  <span className="text-xs font-mono text-on-surface">{config.temperature.toFixed(1)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={1.2}
+                  step={0.1}
+                  value={config.temperature}
+                  onChange={e => set({ temperature: parseFloat(e.target.value) })}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-[10px] text-on-surface-variant mt-1">
+                  <span>0.0 — Sabit, tekrarlı</span>
+                  <span>0.7 — Doğal</span>
+                  <span>1.2 — Yaratıcı</span>
+                </div>
+              </div>
+            </div>
+
             {/* Sistem Promptu */}
             <div className="card">
               <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
                 <MessageSquare size={16} /> Sistem Promptu
               </h2>
               <p className="text-xs text-on-surface-variant mb-3">
-                AI'ın nasıl davranacağını belirler. Ne söyleyebileceğini, hangi konuları ele alabileceğini buraya yazın.
+                Asistanın rolü ve görevi. Kişilik ayarı bunun üstüne eklenir.
               </p>
               <textarea
                 value={config.system_prompt}
                 onChange={e => set({ system_prompt: e.target.value })}
-                rows={5}
+                rows={4}
                 className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                placeholder="Sen bir gayrimenkul danışmanı asistanısın..."
               />
+            </div>
+
+            {/* Örnek Diyaloglar */}
+            <div className="card">
+              <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                <MessageCircleQuestion size={16} /> Örnek Diyaloglar
+              </h2>
+              <p className="text-xs text-on-surface-variant mb-3">
+                AI'a "böyle yanıt ver" örnekleri verin. Her örnek arasına boş satır bırakın.
+              </p>
+              <textarea
+                value={config.example_dialogues}
+                onChange={e => set({ example_dialogues: e.target.value })}
+                rows={6}
+                className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono"
+                placeholder={`Müşteri: Merhaba\nAsistan: Merhaba 🙂 Size nasıl yardımcı olabilirim?\n\nMüşteri: 3+1 daire arıyorum\nAsistan: Hangi semtte bakıyorsunuz? Bütçeniz hakkında da bilgi verirseniz size uygun seçenekleri çıkarabilirim.`}
+              />
+            </div>
+
+            {/* Tools */}
+            <div className="card">
+              <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                <Wrench size={16} /> Tool'lar (Araçlar)
+              </h2>
+              <p className="text-xs text-on-surface-variant mb-3">
+                AI bu araçları kullanarak veritabanından gerçek bilgiye ulaşabilir. Açtığınız tool'lar müşteri sorduğunda otomatik çağrılır.
+              </p>
+              <div className="space-y-2">
+                {Object.entries(TOOL_LIBRARY).map(([key, tool]) => {
+                  const enabled = config.enabled_tools.includes(key)
+                  return (
+                    <div
+                      key={key}
+                      className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
+                        enabled ? 'border-primary bg-primary-container/30' : 'border-outline'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3 flex-1">
+                        <span className="text-xl">{tool.emoji}</span>
+                        <div>
+                          <p className="text-sm font-medium text-on-surface">{tool.label}</p>
+                          <p className="text-xs text-on-surface-variant">{tool.description}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          set({
+                            enabled_tools: enabled
+                              ? config.enabled_tools.filter(t => t !== key)
+                              : [...config.enabled_tools, key],
+                          })
+                        }}
+                      >
+                        {enabled
+                          ? <ToggleRight size={28} className="text-primary" />
+                          : <ToggleLeft size={28} className="text-on-surface-variant" />}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-on-surface-variant mt-3 italic">
+                💡 Tool'lar OpenRouter "function calling" destekleyen modellerle çalışır (Claude, GPT-4, Gemini gibi).
+              </p>
             </div>
 
             {/* Çalışma Saatleri */}

@@ -665,6 +665,50 @@ DROP POLICY IF EXISTS allow_authenticated ON webhook_logs;
 CREATE POLICY allow_authenticated ON webhook_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
     `,
   },
+  {
+    id: '051_chatbot_personality_tools',
+    sql: `
+ALTER TABLE whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS personality_preset TEXT DEFAULT 'samimi';
+ALTER TABLE whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.7;
+ALTER TABLE whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS example_dialogues TEXT DEFAULT '';
+ALTER TABLE whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS enabled_tools JSONB DEFAULT '[]'::jsonb;
+
+ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS personality_preset TEXT DEFAULT 'samimi';
+ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS temperature NUMERIC(3,2) DEFAULT 0.8;
+ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS example_dialogues TEXT DEFAULT '';
+ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS enabled_tools JSONB DEFAULT '[]'::jsonb;
+
+CREATE TABLE IF NOT EXISTS chatbot_custom_tools (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultant_id UUID REFERENCES consultants(id) ON DELETE CASCADE,
+  scope TEXT NOT NULL DEFAULT 'chatbot',
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  parameters_json JSONB NOT NULL DEFAULT '{"type":"object","properties":{}}'::jsonb,
+  action_type TEXT NOT NULL DEFAULT 'sql_select',
+  action_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_enabled BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE chatbot_custom_tools ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS allow_authenticated ON chatbot_custom_tools;
+CREATE POLICY allow_authenticated ON chatbot_custom_tools FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS appointments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultant_id UUID REFERENCES consultants(id) ON DELETE CASCADE,
+  customer_phone TEXT,
+  customer_name TEXT,
+  appointment_date TIMESTAMPTZ NOT NULL,
+  notes TEXT,
+  status TEXT DEFAULT 'scheduled',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS allow_authenticated ON appointments;
+CREATE POLICY allow_authenticated ON appointments FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────

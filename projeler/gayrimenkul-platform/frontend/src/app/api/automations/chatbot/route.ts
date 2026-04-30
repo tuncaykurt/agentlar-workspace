@@ -30,13 +30,17 @@ export async function GET() {
         consultant_id: consultant.id,
         is_enabled: false,
         auto_reply_enabled: true,
-        system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun.',
+        system_prompt: 'Sen bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun.',
         working_hours_enabled: false,
         working_hours_start: '09:00',
         working_hours_end: '18:00',
         outside_hours_message: 'Mesai saatlerimiz dışındasınız. Yarın size döneceğiz.',
         max_history_messages: 10,
-        selected_model: 'meta-llama/llama-3.3-70b-instruct:free',
+        selected_model: 'google/gemini-2.5-flash',
+        personality_preset: 'samimi',
+        temperature: 0.7,
+        example_dialogues: '',
+        enabled_tools: [],
       })
       .select('*')
       .single()
@@ -67,6 +71,10 @@ export async function POST(req: NextRequest) {
     outside_hours_message: body.outside_hours_message,
     max_history_messages: body.max_history_messages,
     selected_model: body.selected_model,
+    personality_preset: body.personality_preset || 'samimi',
+    temperature: body.temperature ?? 0.7,
+    example_dialogues: body.example_dialogues || '',
+    enabled_tools: body.enabled_tools || [],
     updated_at: new Date().toISOString(),
   }, { onConflict: 'consultant_id' }).select('*').single()
 
