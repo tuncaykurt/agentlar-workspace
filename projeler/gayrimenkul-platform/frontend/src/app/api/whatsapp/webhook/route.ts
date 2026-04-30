@@ -219,7 +219,9 @@ async function handlePOST(req: NextRequest) {
       .single(),
   ])
 
-  // Decide which config to use
+  // Decide which config to use:
+  // - chatbot = primary (tools + persona). Always wins when enabled.
+  // - birthday = fallback for prior-contact replies when chatbot is off
   let effectiveModel = ''
   let effectiveSystemPrompt = ''
   let configSource = ''
@@ -227,28 +229,35 @@ async function handlePOST(req: NextRequest) {
   let enabledTools: string[] = []
   const maxHistory = chatbotCfg?.max_history_messages ?? 10
 
-  if (hasPriorContact && birthdayCfg?.is_enabled && birthdayCfg?.selected_model) {
-    effectiveModel = birthdayCfg.selected_model
+  const chatbotReady = !!(chatbotCfg?.is_enabled && chatbotCfg?.auto_reply_enabled && chatbotCfg?.selected_model)
+  const birthdayReady = !!(hasPriorContact && birthdayCfg?.is_enabled && birthdayCfg?.selected_model)
+
+  if (chatbotReady) {
+    effectiveModel = chatbotCfg!.selected_model
     effectiveSystemPrompt = buildSystemPrompt({
-      basePrompt: birthdayCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.',
-      preset: birthdayCfg.personality_preset || 'samimi',
-      exampleDialogues: birthdayCfg.example_dialogues || '',
+      basePrompt: chatbotCfg!.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.',
+      preset: chatbotCfg!.personality_preset || 'samimi',
+      exampleDialogues: chatbotCfg!.example_dialogues || '',
       consultantName: consultant.full_name,
     })
-    temperature = Number(birthdayCfg.temperature) || 0.8
-    enabledTools = (birthdayCfg.enabled_tools as string[]) || []
-    configSource = 'birthday'
-  } else if (chatbotCfg?.is_enabled && chatbotCfg?.auto_reply_enabled && chatbotCfg?.selected_model) {
-    effectiveModel = chatbotCfg.selected_model
-    effectiveSystemPrompt = buildSystemPrompt({
-      basePrompt: chatbotCfg.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.',
-      preset: chatbotCfg.personality_preset || 'samimi',
-      exampleDialogues: chatbotCfg.example_dialogues || '',
-      consultantName: consultant.full_name,
-    })
-    temperature = Number(chatbotCfg.temperature) || 0.7
-    enabledTools = (chatbotCfg.enabled_tools as string[]) || []
+    temperature = Number(chatbotCfg!.temperature) || 0.7
+    enabledTools = (chatbotCfg!.enabled_tools as string[]) || []
     configSource = 'chatbot'
+  } else if (birthdayReady) {
+    effectiveModel = birthdayCfg!.selected_model
+    effectiveSystemPrompt = buildSystemPrompt({
+      basePrompt: birthdayCfg!.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.',
+      preset: birthdayCfg!.personality_preset || 'samimi',
+      exampleDialogues: birthdayCfg!.example_dialogues || '',
+      consultantName: consultant.full_name,
+    })
+    temperature = Number(birthdayCfg!.temperature) || 0.8
+    // Birthday config'inde tool seçilmemişse chatbot config'in tool listesini kullan
+    const birthdayTools = (birthdayCfg!.enabled_tools as string[]) || []
+    enabledTools = birthdayTools.length > 0
+      ? birthdayTools
+      : ((chatbotCfg?.enabled_tools as string[]) || [])
+    configSource = 'birthday'
   } else {
     await logWebhook({
       event,
@@ -286,6 +295,7 @@ async function handlePOST(req: NextRequest) {
   if (debounceSeconds > 0) {
     try {
       const myTimestamp = new Date().toISOString()
+      const myTime = new Date(myTimestamp).getTime()
       const { error: upsertErr } = await supabase.from('chatbot_message_queue').upsert({
         consultant_id: consultant.id,
         customer_phone: customerPhone,
@@ -305,7 +315,10 @@ async function handlePOST(req: NextRequest) {
           .eq('customer_phone', customerPhone)
           .single()
 
-        if (queueRow && queueRow.last_msg_at !== myTimestamp) {
+        // Postgres timestamptz `+00:00` döndürür, JS ISO `Z` döndürür — string compare yanılır.
+        // Date.getTime() ile sayısal karşılaştır.
+        const queueTime = queueRow?.last_msg_at ? new Date(queueRow.last_msg_at).getTime() : 0
+        if (queueRow && queueTime > myTime) {
           await logWebhook({
             event,
             instance: instanceName,
