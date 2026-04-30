@@ -61,15 +61,73 @@ interface SahibindenItem {
   images?: string[]
   features?: string[]
   attributes?: Record<string, unknown>
-  // Seller info (Apify enriched mode)
+  // Seller info — actor versiyonuna göre değişen alan adları
   sellerName?: string
-  sellerPhone?: string
-  seller?: { name?: string; phone?: string; type?: string }
+  sellerPhone?: string | string[]
+  sellerPhones?: string[]
+  seller?: { name?: string; phone?: string | string[]; phones?: string[]; type?: string; tel?: string; mobile?: string; gsm?: string }
   contactName?: string
   contactPhone?: string
-  phone?: string
+  contact?: { name?: string; phone?: string | string[]; phones?: string[]; tel?: string }
+  phone?: string | string[]
+  phones?: string[]
+  tel?: string
+  mobile?: string
+  gsm?: string
   userName?: string
   userType?: string
+  owner?: { name?: string; phone?: string | string[]; tel?: string }
+  agent?: { name?: string; phone?: string | string[]; tel?: string }
+  [key: string]: unknown
+}
+
+// Tüm muhtemel telefon kaynaklarından ilk valid olanı çıkar.
+// "0532 123 45 67" / array / nested obj / string'in içine gömülü olabilir.
+function extractPhone(item: SahibindenItem): string | null {
+  const candidates: unknown[] = [
+    item.sellerPhone, item.sellerPhones, item.contactPhone, item.phone, item.phones,
+    item.tel, item.mobile, item.gsm,
+    item.seller?.phone, item.seller?.phones, item.seller?.tel, item.seller?.mobile, item.seller?.gsm,
+    item.contact?.phone, item.contact?.phones, item.contact?.tel,
+    item.owner?.phone, item.owner?.tel,
+    item.agent?.phone, item.agent?.tel,
+  ]
+  for (const c of candidates) {
+    if (!c) continue
+    if (Array.isArray(c)) {
+      for (const v of c) if (typeof v === 'string' && /\d{7,}/.test(v)) return normalizePhone(v)
+    } else if (typeof c === 'string' && /\d{7,}/.test(c)) {
+      return normalizePhone(c)
+    }
+  }
+  return null
+}
+
+function extractSellerName(item: SahibindenItem): string | null {
+  return (
+    item.sellerName ||
+    item.seller?.name ||
+    item.contactName ||
+    item.contact?.name ||
+    item.userName ||
+    item.owner?.name ||
+    item.agent?.name ||
+    null
+  )
+}
+
+function extractSellerType(item: SahibindenItem): string | null {
+  return (item.seller?.type || item.userType || null) as string | null
+}
+
+function normalizePhone(s: string): string {
+  // "+90 (532) 123 45 67" / "0532 123 4567" → düzgün biçim
+  const digits = s.replace(/\D/g, '')
+  if (digits.length === 10 && digits.startsWith('5')) return '0' + digits
+  if (digits.length === 11 && digits.startsWith('0')) return digits
+  if (digits.length === 12 && digits.startsWith('90')) return '0' + digits.slice(2)
+  if (digits.length === 13 && digits.startsWith('900')) return '0' + digits.slice(3)
+  return digits
 }
 
 function mapItem(item: SahibindenItem, officeUrl: string) {
@@ -120,9 +178,9 @@ function mapItem(item: SahibindenItem, officeUrl: string) {
     source_listing_id: item.id != null ? String(item.id) : null,
     source_url: item.url || null,
     office_source_url: officeUrl,
-    seller_name: item.sellerName || item.seller?.name || item.contactName || item.userName || null,
-    seller_phone: item.sellerPhone || item.seller?.phone || item.contactPhone || item.phone || null,
-    seller_type: item.seller?.type || item.userType || null,
+    seller_name: extractSellerName(item),
+    seller_phone: extractPhone(item),
+    seller_type: extractSellerType(item),
   }
 }
 
@@ -196,27 +254,62 @@ export async function POST(req: NextRequest) {
   let totalScraped = 0
   let totalInserted = 0
   let totalUpdated = 0
+  let totalWithPhone = 0
+  let firstItemDiagnostic: Record<string, unknown> | null = null
   const errors: string[] = []
 
   for (let i = 0; i < pagesToScrape; i++) {
     const offset = i * 20
-    const pageUrl = officeUrl.includes('?') 
-      ? `${officeUrl}&pagingOffset=${offset}` 
+    const pageUrl = officeUrl.includes('?')
+      ? `${officeUrl}&pagingOffset=${offset}`
       : `${officeUrl}?pagingOffset=${offset}`
-    
+
     try {
-      const pageItems = await runApifyActor({ 
-        startUrls: [pageUrl], 
+      // Phone enrichment için tüm muhtemel flag'leri yolla.
+      // Actor desteklemediğini sessizce yok sayar; destekleyenler için detail page'i ziyaret eder.
+      const pageItems = await runApifyActor({
+        startUrls: [pageUrl],
         maxItems: 20,
         enriched: true,
-        proxyConfiguration: { useApifyProxy: true, groups: ['RESIDENTIAL'] }
-      }, 120) as SahibindenItem[]
+        fullDetail: true,
+        crawlDetailPages: true,
+        extendItems: true,
+        extractContactInfo: true,
+        includePhone: true,
+        includePhones: true,
+        includeContact: true,
+        revealPhone: true,
+        withContact: true,
+        getOwnerInfo: true,
+        proxyConfiguration: { useApifyProxy: true, groups: ['RESIDENTIAL'] },
+      }, 180) as SahibindenItem[]
 
       if (!pageItems || pageItems.length === 0) break
+
+      // İlk item'in diagnostic bilgisini topla — telefon hangi alanda geliyor görmek için
+      if (!firstItemDiagnostic && pageItems[0]) {
+        const item: any = pageItems[0]
+        const phoneFields: Record<string, unknown> = {}
+        const flatten = (obj: any, prefix = '', depth = 0) => {
+          if (!obj || typeof obj !== 'object' || depth > 3) return
+          for (const [k, v] of Object.entries(obj)) {
+            const key = prefix ? `${prefix}.${k}` : k
+            if (/phone|tel|gsm|mobile|contact/i.test(k)) phoneFields[key] = v
+            if (v && typeof v === 'object' && !Array.isArray(v)) flatten(v, key, depth + 1)
+          }
+        }
+        flatten(item)
+        firstItemDiagnostic = {
+          topLevelKeys: Object.keys(item),
+          attributesKeys: item.attributes ? Object.keys(item.attributes) : null,
+          phoneCandidateFields: phoneFields,
+        }
+      }
 
       for (const raw of pageItems) {
         if (!raw?.id) continue
         const mapped = mapItem(raw, pageUrl) // url as context
+        if (mapped.seller_phone) totalWithPhone++
         const payload = {
           ...mapped,
           is_active: true,
@@ -265,7 +358,10 @@ export async function POST(req: NextRequest) {
     scraped: totalScraped,
     inserted: totalInserted,
     updated: totalUpdated,
+    with_phone: totalWithPhone,
+    phone_coverage_pct: totalScraped > 0 ? Math.round((totalWithPhone / totalScraped) * 100) : 0,
     deactivated: 0,
+    diagnostic: firstItemDiagnostic,
     errors: errors.slice(0, 10),
   }
 
