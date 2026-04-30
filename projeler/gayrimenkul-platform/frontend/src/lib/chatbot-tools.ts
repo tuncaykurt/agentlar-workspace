@@ -158,7 +158,7 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
 
   web_search: {
     name: 'web_search',
-    description: 'İnternette güncel bilgi araması yapar (Perplexity). Müşteri güncel piyasa, haber, yasal düzenleme, semt bilgisi, ortalama m2 fiyatı gibi web\'den araştırma gerektiren bir şey sorduğunda kullan.',
+    description: 'İnternette güncel bilgi araması yapar (OpenRouter üzerinden Perplexity Sonar). Müşteri güncel piyasa, haber, yasal düzenleme, semt bilgisi, ortalama m2 fiyatı gibi web\'den araştırma gerektiren bir şey sorduğunda kullan.',
     parameters: {
       type: 'object',
       properties: {
@@ -167,28 +167,30 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
       required: ['query'],
     },
     execute: async (args, _ctx) => {
-      const apiKey = process.env.PERPLEXITY_API_KEY
-      if (!apiKey) return 'Web arama yapılandırılmamış (PERPLEXITY_API_KEY yok). Tahmini cevap ver veya bilmediğini söyle.'
+      const apiKey = process.env.OPENROUTER_API_KEY
+      if (!apiKey) return 'Web arama yapılandırılmamış (OPENROUTER_API_KEY yok).'
       try {
-        const res = await fetch('https://api.perplexity.ai/chat/completions', {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
+            'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud',
+            'X-Title': 'Gayrimenkul Web Search',
           },
           body: JSON.stringify({
-            model: 'sonar',
+            model: 'perplexity/sonar',
             messages: [
-              { role: 'system', content: 'Türkçe, kısa ve doğrudan cevap ver. Kaynak göstermek gerekmez.' },
+              { role: 'system', content: 'Türkçe, kısa ve doğrudan cevap ver. Konuya odaklı, gereksiz detaya girme. Tarih/sayı/fiyat varsa öne çıkar.' },
               { role: 'user', content: args.query },
             ],
-            max_tokens: 400,
+            max_tokens: 500,
           }),
-          signal: AbortSignal.timeout(20000),
+          signal: AbortSignal.timeout(25000),
         })
         if (!res.ok) {
           const errText = await res.text()
-          return `Web arama hatası (${res.status}): ${errText.slice(0, 150)}`
+          return `Web arama hatası (${res.status}): ${errText.slice(0, 200)}`
         }
         const data = await res.json()
         return data?.choices?.[0]?.message?.content || 'Sonuç bulunamadı.'

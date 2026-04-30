@@ -9,7 +9,7 @@ const TOOL_LIBRARY: Record<string, { label: string; emoji: string; description: 
   get_property_details:  { label: 'Mülk Detayı',              emoji: '📋', description: 'Belirli bir mülkün tüm detayını döner' },
   get_consultant_contact:{ label: 'İletişim Bilgilerim',      emoji: '📞', description: 'Telefon/e-posta/ofis bilgisi' },
   get_client_info:       { label: 'Müşteri CRM Bilgisi',      emoji: '👤', description: 'Müşteri kayıtlıysa geçmişini hatırlar' },
-  web_search:            { label: 'İnternet Araştırması',     emoji: '🌐', description: 'Perplexity ile güncel bilgi (semt fiyatı, piyasa, haber)' },
+  web_search:            { label: 'İnternet Araştırması',     emoji: '🌐', description: 'Perplexity Sonar ile güncel bilgi (OpenRouter üzerinden)' },
   schedule_appointment:  { label: 'Randevu Kaydet',           emoji: '📅', description: 'AI randevu oluşturabilir' },
 }
 
