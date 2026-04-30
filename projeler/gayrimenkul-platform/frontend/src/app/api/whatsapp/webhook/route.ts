@@ -234,29 +234,31 @@ async function handlePOST(req: NextRequest) {
 
   if (chatbotReady) {
     effectiveModel = chatbotCfg!.selected_model
+    enabledTools = (chatbotCfg!.enabled_tools as string[]) || []
     effectiveSystemPrompt = buildSystemPrompt({
       basePrompt: chatbotCfg!.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.',
       preset: chatbotCfg!.personality_preset || 'samimi',
       exampleDialogues: chatbotCfg!.example_dialogues || '',
       consultantName: consultant.full_name,
+      enabledTools,
     })
     temperature = Number(chatbotCfg!.temperature) || 0.7
-    enabledTools = (chatbotCfg!.enabled_tools as string[]) || []
     configSource = 'chatbot'
   } else if (birthdayReady) {
     effectiveModel = birthdayCfg!.selected_model
-    effectiveSystemPrompt = buildSystemPrompt({
-      basePrompt: birthdayCfg!.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.',
-      preset: birthdayCfg!.personality_preset || 'samimi',
-      exampleDialogues: birthdayCfg!.example_dialogues || '',
-      consultantName: consultant.full_name,
-    })
-    temperature = Number(birthdayCfg!.temperature) || 0.8
     // Birthday config'inde tool seçilmemişse chatbot config'in tool listesini kullan
     const birthdayTools = (birthdayCfg!.enabled_tools as string[]) || []
     enabledTools = birthdayTools.length > 0
       ? birthdayTools
       : ((chatbotCfg?.enabled_tools as string[]) || [])
+    effectiveSystemPrompt = buildSystemPrompt({
+      basePrompt: birthdayCfg!.system_prompt || 'Sen yardımsever bir gayrimenkul danışmanı asistanısın.',
+      preset: birthdayCfg!.personality_preset || 'samimi',
+      exampleDialogues: birthdayCfg!.example_dialogues || '',
+      consultantName: consultant.full_name,
+      enabledTools,
+    })
+    temperature = Number(birthdayCfg!.temperature) || 0.8
     configSource = 'birthday'
   } else {
     await logWebhook({

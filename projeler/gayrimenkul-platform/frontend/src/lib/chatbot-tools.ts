@@ -244,11 +244,48 @@ export const PERSONALITY_PRESETS: Record<string, string> = {
   espirili: `Sıcakkanlı ve esprili bir tonun var. Müşterilerle samimi ve eğlenceli bir tonda konuşursun. Yeri geldiğinde küçük şakalar, espriler yaparsın ama saygıyı kaybetmezsin. Profesyonelliği eğlence ile harmanlar, müşteriye iyi vakit geçirtirsin. Emojiler doğal akışta yer alır.`,
 }
 
+// Her tool için "ne zaman çağırılmalı" kısa Türkçe kullanım ipucu (system prompt için)
+const TOOL_USAGE_HINTS: Record<string, string> = {
+  list_my_properties:
+    'Müşteri "neyiniz var", "satılık daireler", "müsait olanlar", "portföyünüzde ne var" gibi GENEL portföy sorduğunda çağır.',
+  search_properties:
+    'Müşteri KRİTER belirttiğinde (şehir/ilçe/oda sayısı/fiyat/m2 vb.) çağır. Ör: "İzmir\'de 3+1", "5 milyon altı daire", "100m2 üstü villa".',
+  get_property_details:
+    'Müşteri belirli bir mülk hakkında daha fazla detay istediğinde (id veya başlık) çağır.',
+  get_consultant_contact:
+    'Müşteri "telefonunuz", "e-postanız", "ofis adresi", "nasıl ulaşırım" gibi iletişim sorduğunda çağır.',
+  get_client_info:
+    'Müşterinin geçmişini, ilgilendiği tipi, notlarını hatırlaman gerektiğinde (özellikle ilk birkaç mesajda) çağır. CRM\'de kayıtlıysa kişiselleştirilmiş cevap verirsin.',
+  web_search:
+    'Güncel piyasa bilgisi, semt ortalama m2 fiyatı, mevzuat değişikliği, haber gibi WEB ARAŞTIRMASI gereken bir şey sorulursa çağır. Kafadan tahmin etme.',
+  schedule_appointment:
+    'Müşteri görüşmek/buluşmak/randevu istediğinde tarih-saat alıp çağır.',
+}
+
+function buildToolsSection(enabledTools?: string[]): string {
+  if (!enabledTools?.length) return ''
+  const lines: string[] = []
+  for (const name of enabledTools) {
+    const hint = TOOL_USAGE_HINTS[name]
+    if (hint) lines.push(`- ${name}: ${hint}`)
+  }
+  if (!lines.length) return ''
+  return `\n\nKULLANABİLECEĞİN ARAÇLAR (function calling):
+${lines.join('\n')}
+
+ARAÇ KULLANIM KURALI:
+- Mülk/fiyat/portföy/iletişim/randevu/güncel bilgi gibi VERİ gerektiren her durumda ÖNCE uygun tool'u çağır, SONRA cevap yaz. Kafadan uydurma.
+- Tool çağırırken "bir bakayım", "kontrol edeyim" gibi ön-cümle yazma — direkt çağır, dönen veriyle sohbete devam et.
+- Müşteri kriter verdiyse (oda/bütçe/bölge) hep search_properties; kriter yoksa list_my_properties kullan.
+- Aynı turda gerekirse birden fazla tool çağırabilirsin.`
+}
+
 export function buildSystemPrompt(opts: {
   basePrompt: string
   preset?: string
   exampleDialogues?: string
   consultantName?: string
+  enabledTools?: string[]
 }): string {
   // ÖNEMLİ: AI, danışmanın asistanı DEĞİL — danışmanın KENDİSİ gibi yazar
   const identity = opts.consultantName
@@ -263,6 +300,8 @@ export function buildSystemPrompt(opts: {
     ? `ÖRNEK DİYALOGLAR (bu üslupta yanıt ver):\n${opts.exampleDialogues}\n\n`
     : ''
 
+  const toolsSection = buildToolsSection(opts.enabledTools)
+
   const rules = `
 GENEL KURALLAR:
 - Sen danışmanın kendisisin. "Ben Tuncay" / "ben de aradım" / "müsaitim" gibi yaz. ASLA "asistanım", "danışmanım", "size yönlendireceğim" deme.
@@ -275,5 +314,5 @@ GENEL KURALLAR:
 - Selamlama her mesajda gerekmez, akıcı bir konuşma sürdür
 - Sesli mesaj veya fotoğraf gelirse içeriğini anlamlandır ve doğal yanıt ver`
 
-  return `${identity}${presetText}${examples}TEMEL TALİMAT: ${opts.basePrompt}\n${rules}`
+  return `${identity}${presetText}${examples}TEMEL TALİMAT: ${opts.basePrompt}\n${rules}${toolsSection}`
 }
