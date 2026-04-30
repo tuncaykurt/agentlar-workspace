@@ -21,11 +21,34 @@ export async function GET() {
     .from('consultants').select('id').eq('user_id', user.id).single()
   if (!consultant) return NextResponse.json({ error: 'Consultant not found' }, { status: 404 })
 
-  const { data: config } = await supabase
+  let { data: config } = await supabase
     .from('birthday_automation_config')
     .select('*')
     .eq('consultant_id', consultant.id)
     .single()
+
+  // Auto-create default config if missing
+  if (!config) {
+    const { data: created } = await supabase
+      .from('birthday_automation_config')
+      .insert({
+        consultant_id: consultant.id,
+        is_enabled: false,
+        trigger_time: '09:00',
+        system_prompt: 'Müşterilerinin doğum gününü kutlarsın.',
+        message_template: 'Merhaba {hitap} {ad}, doğum gününüz kutlu olsun! 🎂',
+        contact_filter: 'all',
+        selected_contact_ids: [],
+        selected_model: 'google/gemini-2.5-flash',
+        personality_preset: 'samimi',
+        temperature: 0.8,
+        example_dialogues: '',
+        enabled_tools: [],
+      })
+      .select('*')
+      .single()
+    config = created
+  }
 
   return NextResponse.json({ config: config || null, consultant_id: consultant.id })
 }
@@ -43,7 +66,7 @@ export async function POST(req: NextRequest) {
     .from('consultants').select('id').eq('user_id', user.id).single()
   if (!consultant) return NextResponse.json({ error: 'Consultant not found' }, { status: 404 })
 
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from('birthday_automation_config')
     .upsert({
       consultant_id: consultant.id,
@@ -54,9 +77,17 @@ export async function POST(req: NextRequest) {
       contact_filter: body.contact_filter,
       selected_contact_ids: body.selected_contact_ids || [],
       selected_model: body.selected_model || '',
+      personality_preset: body.personality_preset || 'samimi',
+      temperature: body.temperature ?? 0.8,
+      example_dialogues: body.example_dialogues || '',
+      enabled_tools: body.enabled_tools || [],
+      debounce_seconds: body.debounce_seconds ?? 5,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'consultant_id' })
+    }, { onConflict: 'consultant_id' }).select('*').single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  if (error) {
+    console.error('[birthday save] error:', error)
+    return NextResponse.json({ error: error.message, details: error }, { status: 500 })
+  }
+  return NextResponse.json({ success: true, config: saved })
 }

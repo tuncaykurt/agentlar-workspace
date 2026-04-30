@@ -5,8 +5,24 @@ import { createClient } from '@/lib/supabase'
 import {
   Gift, Save, Play, Clock, MessageSquare, Users, User,
   CheckSquare, Square, Loader2, CheckCircle, AlertCircle,
-  ToggleLeft, ToggleRight, Search, Cpu, XCircle,
+  ToggleLeft, ToggleRight, Search, Cpu, XCircle, Sparkles, Wrench, MessageCircleQuestion,
 } from 'lucide-react'
+
+const TOOL_LIBRARY: Record<string, { label: string; emoji: string; description: string }> = {
+  list_my_properties:    { label: 'Portföyümü Listele',      emoji: '🏠', description: 'Aktif mülklerinizi gösterebilir' },
+  search_properties:     { label: 'Mülk Ara',                 emoji: '🔍', description: 'Kriterle (şehir/oda/fiyat) mülk arar' },
+  get_property_details:  { label: 'Mülk Detayı',              emoji: '📋', description: 'Belirli bir mülkün tüm detayını döner' },
+  get_consultant_contact:{ label: 'İletişim Bilgilerim',      emoji: '📞', description: 'Telefon/e-posta/ofis bilgisi' },
+  get_client_info:       { label: 'Müşteri CRM Bilgisi',      emoji: '👤', description: 'Müşteri kayıtlıysa geçmişini hatırlar' },
+  web_search:            { label: 'İnternet Araştırması',     emoji: '🌐', description: 'Perplexity ile güncel bilgi (semt fiyatı, piyasa)' },
+  schedule_appointment:  { label: 'Randevu Kaydet',           emoji: '📅', description: 'AI randevu oluşturabilir' },
+}
+
+const PERSONALITY_OPTIONS = [
+  { value: 'resmi',     label: 'Resmi',   description: 'Profesyonel, mesafeli' },
+  { value: 'samimi',    label: 'Samimi',  description: 'Sıcak, doğal' },
+  { value: 'espirili',  label: 'Esprili', description: 'Eğlenceli, sevecen' },
+]
 
 interface Contact {
   id: string
@@ -24,16 +40,26 @@ interface Config {
   contact_filter: 'all' | 'specific'
   selected_contact_ids: string[]
   selected_model: string
+  personality_preset: string
+  temperature: number
+  example_dialogues: string
+  enabled_tools: string[]
+  debounce_seconds: number
 }
 
 const DEFAULT_CONFIG: Config = {
   is_enabled: false,
   trigger_time: '09:00',
-  system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilere kısa, samimi ve kişisel doğum günü mesajları yazıyorsun.',
+  system_prompt: 'Müşterilerinin doğum gününü kutlarsın ve doğum günü kutlamak için yazan müşterilere de doğal cevap verirsin.',
   message_template: 'Merhaba {ad} {hitap}, doğum gününüz kutlu olsun! 🎂\n\nSizi her zaman düşünüyoruz. İyi ki varsınız!',
   contact_filter: 'all',
   selected_contact_ids: [],
   selected_model: '',
+  personality_preset: 'samimi',
+  temperature: 0.8,
+  example_dialogues: '',
+  enabled_tools: [],
+  debounce_seconds: 5,
 }
 
 function previewMessage(template: string, contact?: Contact) {
@@ -417,6 +443,115 @@ export default function BirthdayAutomationPage() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Kişilik / Üslup */}
+        <div className="card">
+          <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+            <Sparkles size={16} /> Chatbot Kişiliği
+          </h2>
+          <p className="text-xs text-on-surface-variant mb-3">
+            Doğum günü mesajına dönen müşterilerle nasıl konuşulsun. AI sizin adınıza yazışır (asistan değil).
+          </p>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {PERSONALITY_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setConfig(c => ({ ...c, personality_preset: opt.value }))}
+                className={`p-3 rounded-lg border-2 text-left transition-colors ${
+                  config.personality_preset === opt.value
+                    ? 'border-primary bg-primary-container'
+                    : 'border-outline hover:border-primary/50'
+                }`}
+              >
+                <p className="text-sm font-medium text-on-surface">{opt.label}</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">{opt.description}</p>
+              </button>
+            ))}
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-on-surface-variant">Yaratıcılık (Temperature)</label>
+              <span className="text-xs font-mono text-on-surface">{config.temperature.toFixed(1)}</span>
+            </div>
+            <input type="range" min={0} max={1.2} step={0.1} value={config.temperature}
+              onChange={e => setConfig(c => ({ ...c, temperature: parseFloat(e.target.value) }))}
+              className="w-full" />
+          </div>
+        </div>
+
+        {/* Örnek Diyaloglar */}
+        <div className="card">
+          <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+            <MessageCircleQuestion size={16} /> Örnek Diyaloglar
+          </h2>
+          <p className="text-xs text-on-surface-variant mb-3">
+            AI'a "böyle yanıt ver" örnekleri verin. Doğum günü temasına özgü diyaloglar yazabilirsiniz.
+          </p>
+          <textarea
+            value={config.example_dialogues}
+            onChange={e => setConfig(c => ({ ...c, example_dialogues: e.target.value }))}
+            rows={5}
+            className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono"
+            placeholder={`Müşteri: Çok teşekkür ederim 🥰\nAsistan: Ben teşekkür ederim, güzel bir yıl geçirin 🙂\n\nMüşteri: Sağolun, daire arıyordum aslında\nAsistan: Tabii, hangi semte bakıyorsunuz?`}
+          />
+        </div>
+
+        {/* Tools */}
+        <div className="card">
+          <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+            <Wrench size={16} /> Tool'lar (Araçlar)
+          </h2>
+          <p className="text-xs text-on-surface-variant mb-3">
+            Müşteri "müsait daireniz var mı?" gibi sorduğunda AI bu araçları kullanarak gerçek bilgiye ulaşabilir.
+          </p>
+          <div className="space-y-2">
+            {Object.entries(TOOL_LIBRARY).map(([key, tool]) => {
+              const enabled = config.enabled_tools.includes(key)
+              return (
+                <div key={key}
+                  className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
+                    enabled ? 'border-primary bg-primary-container/30' : 'border-outline'
+                  }`}>
+                  <div className="flex items-start gap-3 flex-1">
+                    <span className="text-xl">{tool.emoji}</span>
+                    <div>
+                      <p className="text-sm font-medium text-on-surface">{tool.label}</p>
+                      <p className="text-xs text-on-surface-variant">{tool.description}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => {
+                    setConfig(c => ({
+                      ...c,
+                      enabled_tools: enabled
+                        ? c.enabled_tools.filter(t => t !== key)
+                        : [...c.enabled_tools, key],
+                    }))
+                  }}>
+                    {enabled
+                      ? <ToggleRight size={28} className="text-primary" />
+                      : <ToggleLeft size={28} className="text-on-surface-variant" />}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Mesaj Birleştirme */}
+        <div className="card">
+          <h2 className="font-semibold text-on-surface mb-1">Mesaj Birleştirme</h2>
+          <p className="text-xs text-on-surface-variant mb-3">
+            Müşteri ardarda mesaj atarsa kaç saniye bekleyip hepsini tek cevapla yanıtlayalım. 0 = beklemeden.
+          </p>
+          <div className="flex items-center gap-4">
+            <input type="range" min={0} max={20} value={config.debounce_seconds}
+              onChange={e => setConfig(c => ({ ...c, debounce_seconds: +e.target.value }))}
+              className="flex-1" />
+            <span className="text-sm font-mono w-20 text-on-surface">
+              {config.debounce_seconds === 0 ? 'Anlık' : `${config.debounce_seconds} sn`}
+            </span>
+          </div>
         </div>
 
         {/* Kişi Seçimi */}

@@ -709,6 +709,23 @@ DROP POLICY IF EXISTS allow_authenticated ON appointments;
 CREATE POLICY allow_authenticated ON appointments FOR ALL TO authenticated USING (true) WITH CHECK (true);
     `,
   },
+  {
+    id: '052_message_queue',
+    sql: `
+CREATE TABLE IF NOT EXISTS chatbot_message_queue (
+  consultant_id UUID NOT NULL,
+  customer_phone TEXT NOT NULL,
+  last_msg_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (consultant_id, customer_phone)
+);
+ALTER TABLE chatbot_message_queue ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS allow_authenticated ON chatbot_message_queue;
+CREATE POLICY allow_authenticated ON chatbot_message_queue FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS debounce_seconds INTEGER DEFAULT 5;
+ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS debounce_seconds INTEGER DEFAULT 5;
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────

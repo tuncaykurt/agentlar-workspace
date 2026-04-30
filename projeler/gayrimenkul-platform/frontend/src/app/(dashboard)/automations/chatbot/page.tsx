@@ -9,6 +9,7 @@ const TOOL_LIBRARY: Record<string, { label: string; emoji: string; description: 
   get_property_details:  { label: 'Mülk Detayı',              emoji: '📋', description: 'Belirli bir mülkün tüm detayını döner' },
   get_consultant_contact:{ label: 'İletişim Bilgilerim',      emoji: '📞', description: 'Telefon/e-posta/ofis bilgisi' },
   get_client_info:       { label: 'Müşteri CRM Bilgisi',      emoji: '👤', description: 'Müşteri kayıtlıysa geçmişini hatırlar' },
+  web_search:            { label: 'İnternet Araştırması',     emoji: '🌐', description: 'Perplexity ile güncel bilgi (semt fiyatı, piyasa, haber)' },
   schedule_appointment:  { label: 'Randevu Kaydet',           emoji: '📅', description: 'AI randevu oluşturabilir' },
 }
 
@@ -32,6 +33,7 @@ interface Config {
   temperature: number
   example_dialogues: string
   enabled_tools: string[]
+  debounce_seconds: number
 }
 
 interface ORModel {
@@ -54,6 +56,7 @@ const DEFAULT: Config = {
   temperature: 0.7,
   example_dialogues: '',
   enabled_tools: [],
+  debounce_seconds: 5,
 }
 
 export default function ChatbotPage() {
@@ -490,6 +493,22 @@ export default function ChatbotPage() {
               <p className="text-xs text-on-surface-variant mt-1">
                 AI her yanıtta önceki kaç mesajı bağlam olarak kullansın. Yüksek değer daha iyi bağlam sağlar.
               </p>
+            </div>
+
+            {/* Mesaj Birleştirme (Debounce) */}
+            <div className="card">
+              <h2 className="font-semibold text-on-surface mb-1">Mesaj Birleştirme</h2>
+              <p className="text-xs text-on-surface-variant mb-3">
+                Müşteri ardarda mesaj atarsa kaç saniye bekleyip hepsini tek cevapla yanıtlayalım. 0 = beklemeden hemen cevap.
+              </p>
+              <div className="flex items-center gap-4">
+                <input type="range" min={0} max={20} value={config.debounce_seconds}
+                  onChange={e => set({ debounce_seconds: +e.target.value })}
+                  className="flex-1" />
+                <span className="text-sm font-mono w-20 text-on-surface">
+                  {config.debounce_seconds === 0 ? 'Anlık' : `${config.debounce_seconds} sn`}
+                </span>
+              </div>
             </div>
           </>
         )}

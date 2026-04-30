@@ -156,6 +156,48 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
     },
   },
 
+  web_search: {
+    name: 'web_search',
+    description: 'İnternette güncel bilgi araması yapar (Perplexity). Müşteri güncel piyasa, haber, yasal düzenleme, semt bilgisi, ortalama m2 fiyatı gibi web\'den araştırma gerektiren bir şey sorduğunda kullan.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Aranacak soru/konu (Türkçe veya İngilizce)' },
+      },
+      required: ['query'],
+    },
+    execute: async (args, _ctx) => {
+      const apiKey = process.env.PERPLEXITY_API_KEY
+      if (!apiKey) return 'Web arama yapılandırılmamış (PERPLEXITY_API_KEY yok). Tahmini cevap ver veya bilmediğini söyle.'
+      try {
+        const res = await fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'sonar',
+            messages: [
+              { role: 'system', content: 'Türkçe, kısa ve doğrudan cevap ver. Kaynak göstermek gerekmez.' },
+              { role: 'user', content: args.query },
+            ],
+            max_tokens: 400,
+          }),
+          signal: AbortSignal.timeout(20000),
+        })
+        if (!res.ok) {
+          const errText = await res.text()
+          return `Web arama hatası (${res.status}): ${errText.slice(0, 150)}`
+        }
+        const data = await res.json()
+        return data?.choices?.[0]?.message?.content || 'Sonuç bulunamadı.'
+      } catch (e: any) {
+        return `Web arama exception: ${e?.message || String(e)}`
+      }
+    },
+  },
+
   schedule_appointment: {
     name: 'schedule_appointment',
     description: 'Müşteriyle randevu kaydeder. Müşteri görüşmek/buluşmak istediğinde kullan.',
@@ -188,6 +230,7 @@ export const TOOL_LABELS: Record<string, { label: string; emoji: string; descrip
   get_property_details:  { label: 'Mülk Detayı',              emoji: '📋', description: 'Belirli bir mülkün tüm detayını döner' },
   get_consultant_contact:{ label: 'İletişim Bilgilerim',      emoji: '📞', description: 'Telefon/e-posta/ofis bilgisi' },
   get_client_info:       { label: 'Müşteri CRM Bilgisi',      emoji: '👤', description: 'Müşteri kayıtlıysa geçmişini hatırlar' },
+  web_search:            { label: 'İnternet Araştırması',     emoji: '🌐', description: 'Perplexity ile güncel bilgi araması (semt fiyatı, piyasa, haber)' },
   schedule_appointment:  { label: 'Randevu Kaydet',           emoji: '📅', description: 'AI randevu oluşturabilir' },
 }
 

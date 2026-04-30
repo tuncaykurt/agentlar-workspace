@@ -269,6 +269,42 @@ export async function POST(req: NextRequest) {
     })
   } catch { /* ignore */ }
 
+  // ─── Debounce: ardarda gelen mesajları toplayıp tek cevap ver ────────────
+  const debounceSeconds = (configSource === 'birthday'
+    ? (birthdayCfg as any)?.debounce_seconds
+    : (chatbotCfg as any)?.debounce_seconds) ?? 5
+
+  if (debounceSeconds > 0) {
+    const myTimestamp = new Date().toISOString()
+    // Mark this consultant+customer as having a pending message
+    await supabase.from('chatbot_message_queue').upsert({
+      consultant_id: consultant.id,
+      customer_phone: customerPhone,
+      last_msg_at: myTimestamp,
+    }, { onConflict: 'consultant_id,customer_phone' })
+
+    // Wait debounceSeconds
+    await new Promise(r => setTimeout(r, debounceSeconds * 1000))
+
+    // Check if a newer message arrived during the wait
+    const { data: queueRow } = await supabase
+      .from('chatbot_message_queue')
+      .select('last_msg_at')
+      .eq('consultant_id', consultant.id)
+      .eq('customer_phone', customerPhone)
+      .single()
+
+    if (queueRow && queueRow.last_msg_at !== myTimestamp) {
+      // A newer message arrived; that handler will process. Exit silently.
+      await logWebhook({
+        event,
+        instance: instanceName,
+        result: `debounced: superseded by newer message at ${queueRow.last_msg_at}`,
+      })
+      return NextResponse.json({ ok: true, debounced: true })
+    }
+  }
+
   const { data: history } = await supabase
     .from('whatsapp_chat_history')
     .select('role, content')
@@ -410,22 +446,18 @@ export async function POST(req: NextRequest) {
     // Multimodal models (image + audio capable) — prioritize when media present
     const MULTIMODAL_MODELS = [
       'google/gemini-2.5-flash',
-      'google/gemini-2.5-pro',
       'openai/gpt-4o-mini',
       'anthropic/claude-haiku-4-5',
     ]
 
-    // Try the configured model first, then fallbacks
-    // Include chatbot model as fallback even when in birthday mode
+    // Bağımsız model: SADECE config'in kendi modelini kullan, cross-config fallback yok
+    // Yedek olarak sadece genel ucuz/güvenilir modelleri ekliyoruz (provider çökerse diye)
     const baseModels = [
       effectiveModel,
-      chatbotCfg?.selected_model,
       'google/gemini-2.5-flash',
       'anthropic/claude-haiku-4-5',
       'openai/gpt-4o-mini',
-      'meta-llama/llama-3.3-70b-instruct',
     ]
-    // If media is present, push multimodal models to the front
     const fallbackModels = (mediaKind
       ? [...MULTIMODAL_MODELS, ...baseModels]
       : baseModels

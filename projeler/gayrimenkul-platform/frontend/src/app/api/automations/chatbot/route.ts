@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
     temperature: body.temperature ?? 0.7,
     example_dialogues: body.example_dialogues || '',
     enabled_tools: body.enabled_tools || [],
+    debounce_seconds: body.debounce_seconds ?? 5,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'consultant_id' }).select('*').single()
 
