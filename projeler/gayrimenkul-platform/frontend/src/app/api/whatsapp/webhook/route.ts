@@ -36,6 +36,28 @@ function isInWorkingHours(start: string, end: string): boolean {
   return current >= start && current <= end
 }
 
+async function fetchMediaBase64(messageKeyId: string, instance: string): Promise<{ base64?: string; mimetype?: string; error?: string }> {
+  const baseUrl = process.env.EVOLUTION_API_URL
+  const apiKey = process.env.EVOLUTION_API_KEY
+  if (!baseUrl || !apiKey) return { error: 'no Evolution config' }
+  try {
+    const res = await fetch(`${baseUrl}/chat/getBase64FromMediaMessage/${instance}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: apiKey },
+      body: JSON.stringify({ message: { key: { id: messageKeyId } }, convertToMp4: false }),
+      signal: AbortSignal.timeout(30000),
+    })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      return { error: `Evolution media fetch ${res.status}: ${txt.slice(0, 200)}` }
+    }
+    const data = await res.json()
+    return { base64: data?.base64, mimetype: data?.mimetype }
+  } catch (e: any) {
+    return { error: e?.message || String(e) }
+  }
+}
+
 async function sendWhatsApp(phone: string, message: string, instance: string) {
   const baseUrl = process.env.EVOLUTION_API_URL
   const apiKey = process.env.EVOLUTION_API_KEY
@@ -89,11 +111,43 @@ export async function POST(req: NextRequest) {
   }
 
   const msg = data?.message
-  const text = msg?.conversation || msg?.extendedTextMessage?.text || msg?.imageMessage?.caption || ''
-  if (!text?.trim()) {
-    await logWebhook({ event, instance: instanceName, payload: body, result: 'skipped: no text' })
-    return NextResponse.json({ ok: true, skipped: 'no text' })
+  const messageKeyId: string = key?.id || ''
+
+  // Detect message type & extract text/media
+  const audioMessage = msg?.audioMessage || msg?.pttMessage
+  const imageMessage = msg?.imageMessage
+  const hasAudio = !!audioMessage
+  const hasImage = !!imageMessage
+
+  const textContent = msg?.conversation
+    || msg?.extendedTextMessage?.text
+    || msg?.imageMessage?.caption
+    || ''
+
+  // If no text AND no media, skip
+  if (!textContent?.trim() && !hasAudio && !hasImage) {
+    await logWebhook({ event, instance: instanceName, payload: body, result: 'skipped: no text or media' })
+    return NextResponse.json({ ok: true, skipped: 'no content' })
   }
+
+  // Fetch media base64 if present
+  let mediaBase64 = ''
+  let mediaMimetype = ''
+  let mediaKind: 'audio' | 'image' | null = null
+  if (hasAudio || hasImage) {
+    const fetched = await fetchMediaBase64(messageKeyId, instanceName)
+    if (fetched.base64) {
+      mediaBase64 = fetched.base64
+      mediaMimetype = fetched.mimetype || (hasAudio ? 'audio/ogg' : 'image/jpeg')
+      mediaKind = hasAudio ? 'audio' : 'image'
+    } else {
+      await logWebhook({ event, instance: instanceName, result: `media fetch failed: ${fetched.error}` })
+    }
+  }
+
+  // Build human-readable text for storage/history
+  const text = textContent.trim()
+    || (hasAudio ? '[Sesli mesaj]' : hasImage ? '[Fotoğraf]' : '')
 
   const remoteJid: string = key?.remoteJid || ''
   if (remoteJid.endsWith('@g.us')) {
@@ -257,9 +311,37 @@ export async function POST(req: NextRequest) {
 
   async function callOpenRouter(model: string): Promise<{ ok: boolean; reply?: string; status?: number; error?: string; toolCallsUsed?: number }> {
     try {
+      // History (older messages, plain text)
+      const historyMessages = messages.slice(0, -1).map((m: any) => ({ role: m.role, content: m.content }))
+
+      // Latest user message: with multimodal content if media present
+      let latestUserContent: any = text
+      if (mediaKind && mediaBase64) {
+        const parts: any[] = []
+        if (textContent.trim()) parts.push({ type: 'text', text: textContent.trim() })
+        if (mediaKind === 'image') {
+          parts.push({
+            type: 'image_url',
+            image_url: { url: `data:${mediaMimetype};base64,${mediaBase64}` },
+          })
+          if (parts.length === 1) parts.unshift({ type: 'text', text: 'Bu fotoğrafa bir cevap yaz.' })
+        } else if (mediaKind === 'audio') {
+          parts.push({
+            type: 'input_audio',
+            input_audio: {
+              data: mediaBase64,
+              format: (mediaMimetype.includes('mp4') || mediaMimetype.includes('m4a')) ? 'm4a' : 'ogg',
+            },
+          })
+          if (parts.length === 1) parts.unshift({ type: 'text', text: 'Bu sesli mesajı dinle ve içeriğine göre doğal bir cevap yaz.' })
+        }
+        latestUserContent = parts
+      }
+
       const conversationMessages: any[] = [
         { role: 'system', content: effectiveSystemPrompt },
-        ...messages.map((m: any) => ({ role: m.role, content: m.content })),
+        ...historyMessages,
+        { role: 'user', content: latestUserContent },
       ]
       let toolCallsUsed = 0
       const maxToolRounds = 3
@@ -325,16 +407,29 @@ export async function POST(req: NextRequest) {
   }
 
   if (openrouterKey) {
+    // Multimodal models (image + audio capable) — prioritize when media present
+    const MULTIMODAL_MODELS = [
+      'google/gemini-2.5-flash',
+      'google/gemini-2.5-pro',
+      'openai/gpt-4o-mini',
+      'anthropic/claude-haiku-4-5',
+    ]
+
     // Try the configured model first, then fallbacks
     // Include chatbot model as fallback even when in birthday mode
-    const fallbackModels = [
+    const baseModels = [
       effectiveModel,
       chatbotCfg?.selected_model,
       'google/gemini-2.5-flash',
       'anthropic/claude-haiku-4-5',
       'openai/gpt-4o-mini',
       'meta-llama/llama-3.3-70b-instruct',
-    ].filter((m, i, arr): m is string => !!m && arr.indexOf(m) === i)
+    ]
+    // If media is present, push multimodal models to the front
+    const fallbackModels = (mediaKind
+      ? [...MULTIMODAL_MODELS, ...baseModels]
+      : baseModels
+    ).filter((m, i, arr): m is string => !!m && arr.indexOf(m) === i)
 
     const attempts: string[] = []
     for (const model of fallbackModels) {
@@ -369,10 +464,11 @@ export async function POST(req: NextRequest) {
   } catch { /* ignore */ }
 
   const sendRes = await sendWhatsApp(customerPhone, aiReply, instanceName)
+  const mediaTag = mediaKind ? ` [${mediaKind}]` : ''
   await logWebhook({
     event,
     instance: instanceName,
-    result: `replied via ${configSource} (${aiStatus}, send=${JSON.stringify(sendRes)})`,
+    result: `replied via ${configSource}${mediaTag} (${aiStatus}, send=${JSON.stringify(sendRes)})`,
   })
 
   return NextResponse.json({ ok: true, replied: true })

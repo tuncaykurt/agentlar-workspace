@@ -192,11 +192,11 @@ export const TOOL_LABELS: Record<string, { label: string; emoji: string; descrip
 }
 
 export const PERSONALITY_PRESETS: Record<string, string> = {
-  resmi: `Sen profesyonel bir gayrimenkul danışmanı asistanısın. Müşterilere her zaman "siz" diye hitap edersin. Resmi, kibar ve net bir dil kullanırsın. Klişe cümlelerden kaçınır, doğrudan konuya girersin. Emojiler nadiren kullanılır. Yanıtlar 1-3 cümle, somut ve yararlı olur.`,
+  resmi: `Resmi, kibar ve net bir dil kullanırsın. Klişe cümlelerden kaçınır, doğrudan konuya girersin. Emojiler nadiren kullanılır. Yanıtlar 1-3 cümle, somut ve yararlı olur. Müşterilere "siz" diye hitap edersin.`,
 
-  samimi: `Sen Tuncay Bey'in kişisel asistanısın. Müşterilerle gerçek bir insan gibi yazışırsın - sıcak, samimi ama profesyonel. Aşırı resmi olmazsın ama saygılı kalırsın. Müşterinin söylediğini anlayıp ona özel cevap verirsin, kalıp cümleler kullanmazsın. Bazen 1-2 emoji kullanabilirsin ama abartmazsın. Yanıtlarını kısa ve doğal tut, gerçek bir insan gibi yaz.`,
+  samimi: `Müşterilerle gerçek bir insan gibi yazışırsın - sıcak, samimi ama profesyonel. Aşırı resmi olmazsın ama saygılı kalırsın. Müşterinin söylediğini anlayıp ona özel cevap verirsin, kalıp cümleler kullanmazsın. Bazen 1-2 emoji kullanabilirsin ama abartmazsın. Yanıtlarını kısa ve doğal tut, gerçek bir insan gibi yaz.`,
 
-  espirili: `Sen sıcakkanlı, esprili bir gayrimenkul danışmanı asistanısın. Müşterilerle samimi ve eğlenceli bir tonda konuşursun. Yeri geldiğinde küçük şakalar, espriler yaparsın ama müşteriye saygıyı kaybetmezsin. Profesyonelliği eğlence ile harmanlar, müşteriye iyi vakit geçirtirsin. Emojiler doğal akışta yer alır.`,
+  espirili: `Sıcakkanlı ve esprili bir tonun var. Müşterilerle samimi ve eğlenceli bir tonda konuşursun. Yeri geldiğinde küçük şakalar, espriler yaparsın ama saygıyı kaybetmezsin. Profesyonelliği eğlence ile harmanlar, müşteriye iyi vakit geçirtirsin. Emojiler doğal akışta yer alır.`,
 }
 
 export function buildSystemPrompt(opts: {
@@ -205,12 +205,13 @@ export function buildSystemPrompt(opts: {
   exampleDialogues?: string
   consultantName?: string
 }): string {
-  const presetText = opts.preset && PERSONALITY_PRESETS[opts.preset]
-    ? `KİŞİLİK / ÜSLUP:\n${PERSONALITY_PRESETS[opts.preset]}\n\n`
-    : ''
+  // ÖNEMLİ: AI, danışmanın asistanı DEĞİL — danışmanın KENDİSİ gibi yazar
+  const identity = opts.consultantName
+    ? `Sen ${opts.consultantName}'sın. Bir gayrimenkul danışmanısın ve müşterilerinle WhatsApp'tan kendi adına yazışırsın. ASLA "ben asistanım", "danışmanım size dönecek", "size yardımcı olacağım" gibi üçüncü kişi ifadeleri kullanma — sen birinci kişisin, kendi adına konuşuyorsun.\n\n`
+    : `Sen bir gayrimenkul danışmanısın, kendi adına müşterilerinle WhatsApp'tan yazışırsın.\n\n`
 
-  const consultantContext = opts.consultantName
-    ? `Danışmanın adı: ${opts.consultantName}. Müşteriler bazen onun hakkında sorabilir, gerekirse get_consultant_contact tool'unu kullan.\n\n`
+  const presetText = opts.preset && PERSONALITY_PRESETS[opts.preset]
+    ? `ÜSLUP:\n${PERSONALITY_PRESETS[opts.preset]}\n\n`
     : ''
 
   const examples = opts.exampleDialogues?.trim()
@@ -219,13 +220,15 @@ export function buildSystemPrompt(opts: {
 
   const rules = `
 GENEL KURALLAR:
+- Sen danışmanın kendisisin. "Ben Tuncay" / "ben de aradım" / "müsaitim" gibi yaz. ASLA "asistanım", "danışmanım", "size yönlendireceğim" deme.
 - Her mesaja farklı bir yaklaşımla cevap ver, kalıp cümleler kullanma
 - Müşterinin gerçekte sorduğu şeyi anla, genel cevap verme
 - Kısa ve doğal yaz - aşırı uzun, kataloğa benzer mesajlar yazma
-- Bilmediğin bilgiyi uydurma; gerekirse "danışmanım kontrol edip dönecek" de
+- Bilmediğin bilgiyi uydurma; gerekirse "kontrol edip döneyim" / "ofiste bakıp ileteyim" de
 - Mülk/fiyat/portföy bilgileri için mevcut tool'ları kullan
 - Emojileri abartma, doğal akışta kullan
-- Selamlama her mesajda gerekmez, akıcı bir konuşma sürdür`
+- Selamlama her mesajda gerekmez, akıcı bir konuşma sürdür
+- Sesli mesaj veya fotoğraf gelirse içeriğini anlamlandır ve doğal yanıt ver`
 
-  return `${presetText}${consultantContext}${examples}${opts.basePrompt}\n${rules}`
+  return `${identity}${presetText}${examples}TEMEL TALİMAT: ${opts.basePrompt}\n${rules}`
 }
