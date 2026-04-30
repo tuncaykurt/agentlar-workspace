@@ -88,6 +88,15 @@ export async function GET() {
 
 // POST — Evolution API calls this when a message arrives
 export async function POST(req: NextRequest) {
+  try {
+    return await handlePOST(req)
+  } catch (e: any) {
+    await logWebhook({ result: `unhandled exception: ${e?.message || String(e)}` })
+    return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
+  }
+}
+
+async function handlePOST(req: NextRequest) {
   let body: any
   try { body = await req.json() } catch {
     await logWebhook({ result: 'invalid json' })
@@ -275,33 +284,38 @@ export async function POST(req: NextRequest) {
     : (chatbotCfg as any)?.debounce_seconds) ?? 5
 
   if (debounceSeconds > 0) {
-    const myTimestamp = new Date().toISOString()
-    // Mark this consultant+customer as having a pending message
-    await supabase.from('chatbot_message_queue').upsert({
-      consultant_id: consultant.id,
-      customer_phone: customerPhone,
-      last_msg_at: myTimestamp,
-    }, { onConflict: 'consultant_id,customer_phone' })
+    try {
+      const myTimestamp = new Date().toISOString()
+      const { error: upsertErr } = await supabase.from('chatbot_message_queue').upsert({
+        consultant_id: consultant.id,
+        customer_phone: customerPhone,
+        last_msg_at: myTimestamp,
+      }, { onConflict: 'consultant_id,customer_phone' })
 
-    // Wait debounceSeconds
-    await new Promise(r => setTimeout(r, debounceSeconds * 1000))
+      if (upsertErr) {
+        // Migration henüz çalışmamış olabilir — debounce'u atla, mesajı işle
+        await logWebhook({ event, instance: instanceName, result: `debounce upsert failed (migration?): ${upsertErr.message}` })
+      } else {
+        await new Promise(r => setTimeout(r, debounceSeconds * 1000))
 
-    // Check if a newer message arrived during the wait
-    const { data: queueRow } = await supabase
-      .from('chatbot_message_queue')
-      .select('last_msg_at')
-      .eq('consultant_id', consultant.id)
-      .eq('customer_phone', customerPhone)
-      .single()
+        const { data: queueRow } = await supabase
+          .from('chatbot_message_queue')
+          .select('last_msg_at')
+          .eq('consultant_id', consultant.id)
+          .eq('customer_phone', customerPhone)
+          .single()
 
-    if (queueRow && queueRow.last_msg_at !== myTimestamp) {
-      // A newer message arrived; that handler will process. Exit silently.
-      await logWebhook({
-        event,
-        instance: instanceName,
-        result: `debounced: superseded by newer message at ${queueRow.last_msg_at}`,
-      })
-      return NextResponse.json({ ok: true, debounced: true })
+        if (queueRow && queueRow.last_msg_at !== myTimestamp) {
+          await logWebhook({
+            event,
+            instance: instanceName,
+            result: `debounced: superseded by newer message at ${queueRow.last_msg_at}`,
+          })
+          return NextResponse.json({ ok: true, debounced: true })
+        }
+      }
+    } catch (e: any) {
+      await logWebhook({ event, instance: instanceName, result: `debounce exception (skipping): ${e?.message}` })
     }
   }
 
