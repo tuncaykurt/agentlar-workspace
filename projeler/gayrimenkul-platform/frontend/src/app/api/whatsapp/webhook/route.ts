@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
   let aiStatus = ''
   const openrouterKey = process.env.OPENROUTER_API_KEY
 
-  if (openrouterKey) {
+  async function callOpenRouter(model: string): Promise<{ ok: boolean; reply?: string; status?: number; error?: string }> {
     try {
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
           'X-Title': 'Gayrimenkul Platform Chatbot',
         },
         body: JSON.stringify({
-          model: effectiveModel,
+          model,
           max_tokens: 500,
           messages: [
             { role: 'system', content: effectiveSystemPrompt },
@@ -235,27 +235,48 @@ export async function POST(req: NextRequest) {
         }),
         signal: AbortSignal.timeout(30000),
       })
-      aiStatus = `openrouter status=${res.status}`
       if (res.ok) {
         const data = await res.json()
-        aiReply = data?.choices?.[0]?.message?.content || ''
-      } else {
-        const errText = await res.text()
-        aiStatus = `openrouter ${res.status}: ${errText.slice(0, 200)}`
-        aiReply = 'Şu anda size yardımcı olamıyorum, lütfen daha sonra tekrar deneyin.'
+        const reply = data?.choices?.[0]?.message?.content || ''
+        return { ok: !!reply, reply, status: res.status }
       }
+      const errText = await res.text()
+      return { ok: false, status: res.status, error: errText.slice(0, 300) }
     } catch (e: any) {
-      aiStatus = `openrouter exception: ${e?.message}`
-      aiReply = 'Şu anda size yardımcı olamıyorum, lütfen daha sonra tekrar deneyin.'
+      return { ok: false, error: `exception: ${e?.message || String(e)}` }
+    }
+  }
+
+  if (openrouterKey) {
+    // Try the configured model first, then fallbacks
+    const fallbackModels = [
+      effectiveModel,
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'google/gemini-2.0-flash-exp:free',
+      'mistralai/mistral-7b-instruct:free',
+    ].filter((m, i, arr) => m && arr.indexOf(m) === i)
+
+    const attempts: string[] = []
+    for (const model of fallbackModels) {
+      const result = await callOpenRouter(model)
+      attempts.push(`${model}=${result.ok ? 'OK' : `${result.status || 'err'}:${(result.error || '').slice(0, 80)}`}`)
+      if (result.ok && result.reply) {
+        aiReply = result.reply
+        aiStatus = `success with ${model}`
+        break
+      }
+    }
+    if (!aiReply) {
+      aiStatus = `all models failed: ${attempts.join(' | ')}`
     }
   } else {
     aiStatus = 'no OPENROUTER_API_KEY'
-    aiReply = 'Mesajınızı aldık, en kısa sürede size döneceğiz.'
   }
 
+  // If AI failed, don't send fallback message — just log and skip
   if (!aiReply) {
     await logWebhook({ event, instance: instanceName, result: `no AI reply (${aiStatus})` })
-    return NextResponse.json({ ok: false, error: 'no AI reply' })
+    return NextResponse.json({ ok: false, error: 'AI unavailable', status: aiStatus })
   }
 
   try {
