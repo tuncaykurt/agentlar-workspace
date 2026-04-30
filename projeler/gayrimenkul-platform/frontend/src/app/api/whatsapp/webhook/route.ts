@@ -249,12 +249,15 @@ export async function POST(req: NextRequest) {
 
   if (openrouterKey) {
     // Try the configured model first, then fallbacks
+    // Include chatbot model as fallback even when in birthday mode
     const fallbackModels = [
       effectiveModel,
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'google/gemini-2.0-flash-exp:free',
-      'mistralai/mistral-7b-instruct:free',
-    ].filter((m, i, arr) => m && arr.indexOf(m) === i)
+      chatbotCfg?.selected_model,
+      'google/gemini-2.5-flash',
+      'anthropic/claude-haiku-4-5',
+      'openai/gpt-4o-mini',
+      'meta-llama/llama-3.3-70b-instruct',
+    ].filter((m, i, arr): m is string => !!m && arr.indexOf(m) === i)
 
     const attempts: string[] = []
     for (const model of fallbackModels) {
