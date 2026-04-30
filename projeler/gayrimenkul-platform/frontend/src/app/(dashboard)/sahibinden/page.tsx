@@ -552,13 +552,18 @@ export default function SahibindenIlanlarPage() {
           {listings.map(l => {
             const status = STATUS_CONFIG[l.contact_status] || STATUS_CONFIG.new
             return (
-              <div key={l.id} className="bg-surface-container rounded-2xl shadow-sm border border-outline overflow-hidden hover:shadow-lg transition-all duration-300 group">
+              <div key={l.id} className="bg-surface-container rounded-2xl shadow-sm border border-outline overflow-hidden hover:shadow-lg transition-all duration-300 group flex flex-col">
                 {/* Image */}
                 <div className="relative">
                   <ImageCarousel photos={l.photos || []} aspect="aspect-[4/3]" />
                   <span className={`absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border backdrop-blur-sm ${status.color}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />{status.label}
                   </span>
+                  {PROPERTY_TYPE_LABELS[l.property_type] && (
+                    <span className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
+                      {PROPERTY_TYPE_LABELS[l.property_type]}
+                    </span>
+                  )}
                   {l.price > 0 && (
                     <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm px-3 py-1 rounded-xl text-white font-bold text-sm">
                       {fmtPrice(l.price, l.currency)}
@@ -567,46 +572,89 @@ export default function SahibindenIlanlarPage() {
                 </div>
 
                 {/* Body */}
-                <div className="p-4">
+                <div className="p-4 flex flex-col flex-1">
                   <h3 onClick={() => setSelectedListing(l)}
                     className="font-semibold text-on-surface text-sm leading-snug mb-1 line-clamp-2 group-hover:text-primary cursor-pointer">
                     {l.title || 'İlan başlığı yok'}
                   </h3>
 
-                  {(l.city || l.district) && (
+                  {(l.city || l.district || l.neighborhood) && (
                     <p className="text-xs text-on-surface-variant flex items-center gap-1 mb-2">
                       <MapPin size={11} className="flex-shrink-0" />
-                      {[l.neighborhood, l.district, l.city].filter(Boolean).join(', ')}
+                      <span className="truncate">{[l.neighborhood, l.district, l.city].filter(Boolean).join(', ')}</span>
                     </p>
                   )}
 
-                  {/* Specs */}
-                  <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant mb-3 flex-wrap">
+                  {/* Specs — temel */}
+                  <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant mb-1.5 flex-wrap">
                     {l.room_count && <span className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-md"><BedDouble size={10} /> {l.room_count}</span>}
-                    {l.m2_gross > 0 && <span className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-md"><Ruler size={10} /> {l.m2_gross}m²</span>}
-                    {l.floor != null && l.total_floors && <span className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-md"><Layers size={10} /> {l.floor}/{l.total_floors}</span>}
-                    {l.age != null && <span className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-md"><Calendar size={10} /> {l.age===0?'Sıfır':`${l.age}y`}</span>}
+                    {l.m2_gross > 0 && <span className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-md"><Ruler size={10} /> {l.m2_gross}m²{l.m2_net && l.m2_net !== l.m2_gross ? ` / ${l.m2_net}` : ''}</span>}
+                    {l.bathroom_count > 0 && <span className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-md"><Bath size={10} /> {l.bathroom_count} banyo</span>}
+                    {l.floor != null && l.total_floors > 0 && <span className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-md"><Layers size={10} /> {l.floor}/{l.total_floors}</span>}
+                    {l.age != null && <span className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-md"><Calendar size={10} /> {l.age === 0 ? 'Sıfır' : `${l.age}y`}</span>}
+                    {l.heating_type && <span className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-md"><Thermometer size={10} /> {l.heating_type}</span>}
                   </div>
 
-                  {/* Seller — isim + telefon */}
-                  <div className="flex items-center gap-2 py-2 border-t border-outline mb-3">
+                  {/* Aidat / Depozito (varsa) */}
+                  {(l.dues > 0 || l.deposit > 0) && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant mb-2 flex-wrap">
+                      {l.dues > 0 && <span className="flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md"><Banknote size={10} /> Aidat: {fmtPrice(l.dues)}</span>}
+                      {l.deposit > 0 && <span className="flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md"><Banknote size={10} /> Depozito: {fmtPrice(l.deposit)}</span>}
+                    </div>
+                  )}
+
+                  {/* Açıklama önizleme */}
+                  {l.description && (
+                    <p className="text-[11px] text-on-surface-variant line-clamp-2 mb-2 leading-relaxed">
+                      {l.description}
+                    </p>
+                  )}
+
+                  {/* Özellikler — ilk 4 chip */}
+                  {l.features && l.features.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {l.features.slice(0, 4).map((f, i) => (
+                        <span key={i} className="text-[10px] bg-primary-container text-primary px-1.5 py-0.5 rounded border border-primary/20">{f}</span>
+                      ))}
+                      {l.features.length > 4 && (
+                        <span className="text-[10px] text-on-surface-variant px-1.5 py-0.5">+{l.features.length - 4}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Seller — her zaman görünür, eksik veriler için açık fallback */}
+                  <div className="flex items-center gap-2 py-2 mt-auto border-t border-outline">
                     <div className="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0">
                       <User size={14} className="text-primary" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs text-on-surface font-medium truncate">{l.seller_name || 'İlan Sahibi'}</p>
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-[10px] text-on-surface-variant">
+                      <p className="text-xs text-on-surface font-medium truncate">
+                        {l.seller_name || <span className="text-on-surface-variant italic font-normal">İsim yok</span>}
+                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] text-on-surface-variant">
                           {l.seller_type === 'owner' ? 'Sahibinden' : l.seller_type === 'agency' ? 'Emlak Ofisi' : l.seller_type || 'Sahibinden'}
-                        </p>
-                        {l.seller_phone && (
-                          <span className="text-[10px] text-primary font-medium">{l.seller_phone}</span>
+                        </span>
+                        {l.seller_phone ? (
+                          <a href={`tel:${l.seller_phone}`} onClick={e => e.stopPropagation()} className="text-[10px] text-primary font-medium hover:underline flex items-center gap-0.5">
+                            <Phone size={9} /> {l.seller_phone}
+                          </a>
+                        ) : l.source_url ? (
+                          <a href={l.source_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-on-surface-variant hover:text-primary italic flex items-center gap-0.5">
+                            <ExternalLink size={9} /> Telefon için ilana git
+                          </a>
+                        ) : (
+                          <span className="text-[10px] text-on-surface-variant italic">Telefon yok</span>
                         )}
                       </div>
                     </div>
-                    <p className="text-[10px] text-on-surface-variant flex items-center gap-0.5 flex-shrink-0">
-                      <Clock size={9} /> {timeAgo(l.created_at)}
-                    </p>
+                  </div>
+
+                  {/* Footer — meta */}
+                  <div className="flex items-center justify-between text-[10px] text-on-surface-variant mb-3 pt-1.5 flex-wrap gap-1">
+                    <span className="flex items-center gap-0.5"><Clock size={9} /> {timeAgo(l.created_at)}</span>
+                    {l.source_listing_id && <span>İlan No: {l.source_listing_id}</span>}
+                    {l.last_seen_at && <span title="Son tarama">Görüldü: {timeAgo(l.last_seen_at)}</span>}
                   </div>
 
                   {/* Actions */}
