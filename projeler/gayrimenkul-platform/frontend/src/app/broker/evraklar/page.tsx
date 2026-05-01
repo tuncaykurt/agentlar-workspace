@@ -131,7 +131,7 @@ export default function BrokerEvraklarPage() {
               ))}
             </select>
           )}
-          <Link href="/documents/new" className="btn-primary flex items-center gap-2">
+          <Link href="/broker/evraklar/new?returnTo=/broker/evraklar" className="btn-primary flex items-center gap-2">
             <Plus size={16} /> Belge Oluştur
           </Link>
         </div>
@@ -194,7 +194,7 @@ export default function BrokerEvraklarPage() {
               ? 'Filtreyle eşleşen belge bulunamadı.'
               : 'Bu ofise ait henüz belge yok.'}
           </p>
-          <Link href="/documents/new" className="btn-primary mt-4 flex items-center gap-2">
+          <Link href="/broker/evraklar/new?returnTo=/broker/evraklar" className="btn-primary mt-4 flex items-center gap-2">
             <Plus size={15} /> İlk belgeyi oluştur
           </Link>
         </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import type { Client, Property, Consultant, DocumentType } from '@/lib/types'
@@ -1151,6 +1151,8 @@ function generatePrintHTML(params: {
 
 export default function NewDocumentPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = searchParams.get('returnTo') || '/documents'
   const { isAdmin, creditBalance, creditCostPerDocument, deductCredit, consultantId: loggedInConsultantId, consultantData } = useFeatures()
 
   const [creditError, setCreditError] = useState('')
@@ -1445,7 +1447,7 @@ export default function NewDocumentPage() {
     setSaving(false)
     if (mainClient) await saveExtraToClient(mainClient.id, mainExtra)
     if (secondClient) await saveExtraToClient(secondClient.id, secondExtra)
-    router.push('/documents')
+    router.push(returnTo)
   }
 
   function handlePrint() {
@@ -1503,7 +1505,7 @@ export default function NewDocumentPage() {
     <div className="p-6 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/documents" className="text-on-surface-variant hover:text-on-surface-variant">
+        <Link href={returnTo} className="text-on-surface-variant hover:text-on-surface-variant">
           <ArrowLeft size={20} />
         </Link>
         <div>
