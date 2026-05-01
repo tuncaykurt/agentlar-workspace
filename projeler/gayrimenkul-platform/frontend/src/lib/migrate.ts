@@ -1292,6 +1292,12 @@ INSERT INTO brands (name, hq_share_rate, notes) VALUES
 ON CONFLICT (name) DO NOTHING;
     `,
   },
+  {
+    id: '060_office_royalty_rate',
+    sql: `
+ALTER TABLE offices ADD COLUMN IF NOT EXISTS royalty_rate NUMERIC(5,2) DEFAULT 0;
+    `,
+  },
 
   {
     id: '053_marketing_module',

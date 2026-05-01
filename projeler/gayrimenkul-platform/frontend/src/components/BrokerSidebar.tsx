@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
-  Users, Building2, Calculator, LogOut, Menu, X, Briefcase,
+  Users, Calculator, LogOut, Menu, X, Briefcase,
   Layout, Search, FileText, User, Settings
 } from 'lucide-react'
 import { ThemeToggle } from '@/lib/theme'
@@ -14,12 +14,20 @@ const navItems = [
   { href: '/broker', label: 'Ofis Yönetimi', icon: Briefcase },
   { href: '/broker/muhasebe', label: 'Ofis Muhasebesi', icon: Calculator },
   { href: '/broker/danismanlar', label: 'Danışmanlar', icon: Users },
-  { href: '/broker/portfoylerim', label: 'Portföylerim', icon: Layout },
-  { href: '/broker/ilanlar', label: 'İlanlar', icon: Search },
+  { href: '/broker/portfoylerim', label: 'Ofis Portföyleri', icon: Layout },
+  { href: '/broker/ilanlar', label: 'Sahibinden İlanlar', icon: Search },
   { href: '/broker/evraklar', label: 'Evraklar', icon: FileText },
+]
+
+const bottomNavItems = [
   { href: '/broker/ayarlar', label: 'Ayarlar', icon: Settings },
   { href: '/broker/profil', label: 'Profilim', icon: User },
 ]
+
+function isNavActive(href: string, pathname: string) {
+  if (href === '/broker') return pathname === '/broker'
+  return pathname === href || pathname.startsWith(href + '/')
+}
 
 function BrokerSidebarLinks({ onNav }: { onNav?: () => void }) {
   const pathname = usePathname()
@@ -40,7 +48,7 @@ function BrokerSidebarLinks({ onNav }: { onNav?: () => void }) {
             key={href}
             href={href}
             onClick={onNav}
-            className={`sidebar-link ${pathname === href || pathname.startsWith(href + '/') ? 'active' : ''}`}
+            className={`sidebar-link ${isNavActive(href, pathname) ? 'active' : ''}`}
           >
             <Icon size={18} />
             {label}
@@ -49,6 +57,17 @@ function BrokerSidebarLinks({ onNav }: { onNav?: () => void }) {
       </nav>
 
       <div className="flex-shrink-0 px-3 py-4 border-t border-sidebar-border space-y-1">
+        {bottomNavItems.map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            onClick={onNav}
+            className={`sidebar-link ${isNavActive(href, pathname) ? 'active' : ''}`}
+          >
+            <Icon size={18} />
+            {label}
+          </Link>
+        ))}
         <button
           className="sidebar-link w-full text-left text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
           onClick={handleSignOut}
@@ -68,7 +87,6 @@ export default function BrokerSidebar() {
     <>
       {/* ─── DESKTOP sidebar (md+) ──────────────────────────────────────── */}
       <aside className="hidden md:flex flex-col flex-shrink-0 w-64 h-screen sticky top-0 bg-sidebar overflow-hidden">
-        {/* Logo */}
         <div className="flex-shrink-0 px-6 py-5 border-b border-sidebar-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">

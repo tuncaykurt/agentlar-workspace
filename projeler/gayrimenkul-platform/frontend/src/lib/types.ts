@@ -209,6 +209,7 @@ export interface Office {
   default_office_share_rate: number
   default_consultant_share_rate: number
   default_total_commission_rate: number
+  royalty_rate?: number
   is_active: boolean
   created_at: string
   updated_at: string

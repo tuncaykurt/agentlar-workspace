@@ -19,6 +19,7 @@ type OfficeForm = {
   default_total_commission_rate: number
   default_office_share_rate: number
   default_consultant_share_rate: number
+  royalty_rate: number
 }
 
 const BRAND_INFO: Record<string, { website?: string; description?: string }> = {
@@ -63,6 +64,7 @@ export default function BrokerAyarlarPage() {
     default_total_commission_rate: 3,
     default_office_share_rate: 50,
     default_consultant_share_rate: 50,
+    royalty_rate: 0,
   })
 
   useEffect(() => { fetchData() }, [])
@@ -95,6 +97,7 @@ export default function BrokerAyarlarPage() {
       default_total_commission_rate: office.default_total_commission_rate ?? 3,
       default_office_share_rate: office.default_office_share_rate ?? 50,
       default_consultant_share_rate: office.default_consultant_share_rate ?? 50,
+      royalty_rate: office.royalty_rate ?? 0,
     })
   }, [selectedOfficeId, offices])
 
@@ -143,6 +146,7 @@ export default function BrokerAyarlarPage() {
         default_total_commission_rate: form.default_total_commission_rate,
         default_office_share_rate: form.default_office_share_rate,
         default_consultant_share_rate: form.default_consultant_share_rate,
+        royalty_rate: form.royalty_rate,
       })
       .eq('id', selectedOfficeId)
 
@@ -288,10 +292,21 @@ export default function BrokerAyarlarPage() {
                   onChange={e => setForm(f => ({ ...f, default_total_commission_rate: Number(e.target.value) }))}
                 />
               </Field>
+              <Field label="Franchise Royalty Oranı %">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="30"
+                  className="input"
+                  value={form.royalty_rate}
+                  onChange={e => setForm(f => ({ ...f, royalty_rate: Number(e.target.value) }))}
+                  placeholder="örn. 6"
+                />
+                <p className="text-xs text-on-surface-variant mt-1">Muhasebede royalty gideri hesabında kullanılır.</p>
+              </Field>
               <div className="pt-2 border-t border-outline">
-                <p className="text-xs text-on-surface-variant mb-2">
-                  {selectedBrand ? `HQ sonrası kalan dağılımı (${formatRate(selectedBrand.hq_share_rate)} HQ düşüldükten sonra):` : 'Dağılım (HQ yoksa):'}
-                </p>
+                <p className="text-xs text-on-surface-variant mb-2">Komisyon dağılımı:</p>
                 <Field label="Ofis payı %">
                   <input
                     type="number"
@@ -410,7 +425,7 @@ export default function BrokerAyarlarPage() {
             {/* Seçili marka detayı */}
             {selectedBrand && (
               <div className="mt-4 p-3 rounded-lg bg-primary-container text-primary text-sm space-y-1">
-                <p className="font-semibold">{selectedBrand.name} — HQ payı {formatRate(selectedBrand.hq_share_rate)}</p>
+                <p className="font-semibold">{selectedBrand.name}</p>
                 {brandExtra?.description && (
                   <p className="text-xs opacity-80">{brandExtra.description}</p>
                 )}
@@ -425,7 +440,7 @@ export default function BrokerAyarlarPage() {
                   </a>
                 )}
                 <p className="text-xs opacity-70 pt-1 border-t border-primary/20 mt-1">
-                  HQ payı ve iletişim bilgilerini değiştirmek için sistem yöneticisine başvurun.
+                  Royalty oranını sol kolondaki &quot;Franchise Royalty Oranı&quot; alanından manuel girin.
                 </p>
               </div>
             )}
@@ -471,9 +486,6 @@ function BrandCard({
         <span className="text-sm font-medium text-on-surface">{name}</span>
         {selected && <CheckCircle size={14} className="text-primary flex-shrink-0" />}
       </div>
-      <span className={`text-xs font-semibold ${rate > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-        HQ {formatRate(rate)}
-      </span>
       {description && (
         <p className="text-xs text-on-surface-variant mt-1 line-clamp-2">{description}</p>
       )}

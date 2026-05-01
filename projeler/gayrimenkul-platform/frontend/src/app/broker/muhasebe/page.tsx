@@ -213,8 +213,8 @@ export default function BrokerMuhasebePage() {
   const recurringExpenses = expenses.filter(e => e.is_recurring)
   const recurringMonthlyTotal = recurringExpenses.reduce((a, e) => a + e.amount, 0)
 
-  // Royalty tahmini (bu ayki komisyon gelirinden)
-  const royaltyRate = brand?.hq_share_rate ?? 0
+  // Royalty gideri (ayarlardan girilen manuel oran üzerinden)
+  const royaltyRate = selectedOffice?.royalty_rate ?? 0
   const royaltyEstimate = commissions
     .filter(c => (c.created_at || '').startsWith(thisMonthTag))
     .reduce((a, c) => {
@@ -295,10 +295,10 @@ export default function BrokerMuhasebePage() {
               <p className="text-xs text-on-surface-variant">Bu ay toplam gider</p>
               <p className="text-lg font-bold text-on-surface">{formatTRY(totalExpenses)}</p>
             </div>
-            {brand && royaltyRate > 0 && (
+            {royaltyRate > 0 && (
               <div>
                 <p className="text-xs text-on-surface-variant">
-                  {brand.name} royalty tahmini (%{royaltyRate})
+                  {brand?.name ? `${brand.name} ` : ''}royalty gideri (%{royaltyRate})
                 </p>
                 <p className="text-lg font-bold text-orange-600">{formatTRY(royaltyEstimate)}</p>
               </div>

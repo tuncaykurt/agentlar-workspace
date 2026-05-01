@@ -3,10 +3,40 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import type { OfficeMembership, Consultant, Office } from '@/lib/types'
-import { Users, ArrowRightLeft, ArrowRight, Loader2 } from 'lucide-react'
+import {
+  Users, ArrowRightLeft, ArrowRight, Loader2, LayoutGrid, List,
+  Phone, Mail, Percent,
+} from 'lucide-react'
 
 type MembershipRow = OfficeMembership & {
-  consultant?: Pick<Consultant, 'id' | 'full_name' | 'email' | 'phone' | 'role' | 'is_active'>
+  consultant?: Pick<Consultant, 'id' | 'full_name' | 'email' | 'phone' | 'role' | 'is_active' | 'profile_photo_url'>
+}
+
+function roleLabel(r?: string): string {
+  switch (r) {
+    case 'admin':      return 'Admin'
+    case 'broker':     return 'Broker'
+    case 'manager':    return 'Müdür'
+    case 'consultant': return 'Danışman'
+    default:           return r || '—'
+  }
+}
+
+function Avatar({ name, photoUrl, size = 'md' }: { name: string; photoUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
+  const cls = size === 'lg'
+    ? 'w-20 h-20 text-2xl'
+    : size === 'sm'
+    ? 'w-9 h-9 text-sm'
+    : 'w-12 h-12 text-lg'
+
+  if (photoUrl) {
+    return <img src={photoUrl} alt={name} className={`${cls} rounded-full object-cover flex-shrink-0`} />
+  }
+  return (
+    <div className={`${cls} rounded-full bg-primary-container flex items-center justify-center text-primary font-bold flex-shrink-0`}>
+      {name.charAt(0).toUpperCase()}
+    </div>
+  )
 }
 
 export default function ConsultantsPage() {
@@ -15,8 +45,8 @@ export default function ConsultantsPage() {
   const [offices, setOffices] = useState<Office[]>([])
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
 
-  // Transfer modal state
   const [transferConsultantId, setTransferConsultantId] = useState<string | null>(null)
   const [transferTargetOfficeId, setTransferTargetOfficeId] = useState('')
   const [transferReason, setTransferReason] = useState('')
@@ -27,9 +57,7 @@ export default function ConsultantsPage() {
   const [rateChanging, setRateChanging] = useState(false)
   const [rateRequests, setRateRequests] = useState<Record<string, any[]>>({})
 
-  useEffect(() => {
-    fetchOffices()
-  }, [])
+  useEffect(() => { fetchOffices() }, [])
 
   async function fetchOffices() {
     setLoading(true)
@@ -52,7 +80,7 @@ export default function ConsultantsPage() {
     setLoading(true)
     const { data } = await supabase
       .from('office_memberships')
-      .select('*, consultant:consultants(id,full_name,email,phone,role,is_active)')
+      .select('*, consultant:consultants(id,full_name,email,phone,role,is_active,profile_photo_url)')
       .eq('office_id', officeId)
       .is('end_date', null)
       .order('start_date', { ascending: false })
@@ -66,7 +94,7 @@ export default function ConsultantsPage() {
       .select('*')
       .eq('office_id', officeId)
       .eq('status', 'pending')
-    
+
     if (data) {
       const grouped: Record<string, any[]> = {}
       data.forEach(req => {
@@ -114,32 +142,25 @@ export default function ConsultantsPage() {
     if (!transferConsultantId || !transferTargetOfficeId) return
     setTransferring(true)
 
-    // 1) Mevcut aktif membership(leri) kapat
     await supabase
       .from('office_memberships')
-      .update({
-        end_date: new Date().toISOString(),
-        end_reason: transferReason || 'Ofis transferi',
-      })
+      .update({ end_date: new Date().toISOString(), end_reason: transferReason || 'Ofis transferi' })
       .eq('consultant_id', transferConsultantId)
       .is('end_date', null)
 
-    // 2) Yeni ofiste aktif membership aç
     const { data: cons } = await supabase
       .from('consultants')
       .select('role')
       .eq('id', transferConsultantId)
       .single()
 
-    await supabase
-      .from('office_memberships')
-      .insert({
-        consultant_id: transferConsultantId,
-        office_id: transferTargetOfficeId,
-        role: cons?.role || 'consultant',
-        start_date: new Date().toISOString(),
-        notes: transferReason || null,
-      })
+    await supabase.from('office_memberships').insert({
+      consultant_id: transferConsultantId,
+      office_id: transferTargetOfficeId,
+      role: cons?.role || 'consultant',
+      start_date: new Date().toISOString(),
+      notes: transferReason || null,
+    })
 
     setTransferring(false)
     setTransferConsultantId(null)
@@ -149,6 +170,7 @@ export default function ConsultantsPage() {
   }
 
   const otherOffices = offices.filter(o => o.id !== selectedOfficeId)
+  const defaultRate = offices.find(o => o.id === selectedOfficeId)?.default_consultant_share_rate || 50
 
   if (loading && offices.length === 0) {
     return <div className="p-6 flex justify-center"><Loader2 size={24} className="animate-spin text-primary" /></div>
@@ -156,119 +178,202 @@ export default function ConsultantsPage() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-on-surface flex items-center gap-2">
             <Users size={22} className="text-primary" />
             Danışmanlar
           </h1>
-          <p className="text-on-surface-variant text-sm mt-1">Ofisteki danışmanları yönetin ve komisyon oranlarını ayarlayın.</p>
+          <p className="text-on-surface-variant text-sm mt-1">
+            Ofisteki danışmanları yönetin ve komisyon oranlarını ayarlayın.
+          </p>
         </div>
 
-        {offices.length > 1 && (
-          <select
-            value={selectedOfficeId}
-            onChange={e => setSelectedOfficeId(e.target.value)}
-            className="input max-w-xs"
-          >
-            {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-        )}
+        <div className="flex items-center gap-2">
+          {offices.length > 1 && (
+            <select value={selectedOfficeId} onChange={e => setSelectedOfficeId(e.target.value)} className="input max-w-xs">
+              {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          )}
+          {/* Görünüm toggle */}
+          <div className="flex rounded-lg border border-outline overflow-hidden">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 ${viewMode === 'list' ? 'bg-primary text-white' : 'bg-surface text-on-surface-variant hover:bg-surface-container-high'}`}
+              title="Liste görünümü"
+            >
+              <List size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 ${viewMode === 'grid' ? 'bg-primary text-white' : 'bg-surface text-on-surface-variant hover:bg-surface-container-high'}`}
+              title="Kart görünümü"
+            >
+              <LayoutGrid size={16} />
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="card p-4">
-        {loading && memberships.length === 0 ? (
-          <div className="p-6 flex justify-center"><Loader2 size={24} className="animate-spin text-primary" /></div>
-        ) : memberships.length === 0 ? (
-          <div className="text-center py-10 text-on-surface-variant text-sm">
-            <Users size={32} className="mx-auto mb-2 opacity-30" />
-            Bu ofiste aktif danışman yok
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {memberships.map(m => {
-              const defaultOfficeRate = offices.find(o => o.id === selectedOfficeId)?.default_consultant_share_rate || 50
-              const currentRate = m.commission_rate_override || defaultOfficeRate
-              const pendingRequest = rateRequests[m.id]?.[0]
+      {loading && memberships.length === 0 ? (
+        <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-primary" /></div>
+      ) : memberships.length === 0 ? (
+        <div className="card flex flex-col items-center justify-center py-16 text-center">
+          <Users size={32} className="text-on-surface-variant opacity-30 mb-2" />
+          <p className="text-on-surface-variant text-sm">Bu ofiste aktif danışman yok</p>
+        </div>
+      ) : viewMode === 'grid' ? (
+        /* ─── GRID / KART GÖRÜNÜMÜ ──────────────────────────────── */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {memberships.map(m => {
+            const currentRate = m.commission_rate_override || defaultRate
+            const pendingRequest = rateRequests[m.id]?.[0]
 
-              return (
-              <div key={m.id} className="flex flex-col md:flex-row items-center gap-4 p-3 rounded-lg bg-surface-container-high">
-                <div className="flex items-center gap-4 flex-1 w-full">
-                  <div className="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center text-primary font-semibold text-sm shrink-0">
-                    {(m.consultant?.full_name || '?').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-on-surface truncate">{m.consultant?.full_name || '—'}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        m.role === 'broker' ? 'bg-purple-100 text-purple-700' :
-                        m.role === 'manager' ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>{roleLabel(m.role)}</span>
-                      {!m.consultant?.is_active && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Pasif</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-on-surface-variant truncate mt-1">
-                      Komisyon Oranı: <strong className="text-primary">% {currentRate}</strong>
-                      {pendingRequest && (
-                        <span className="ml-2 text-orange-600 bg-orange-100 px-2 py-0.5 rounded text-[10px] font-semibold">
-                          Onay Bekliyor: %{pendingRequest.proposed_rate}
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-xs text-on-surface-variant">
-                      Üyelik: {new Date(m.start_date).toLocaleDateString('tr-TR')}
-                    </p>
+            return (
+              <div key={m.id} className="card flex flex-col items-center text-center gap-3 p-5">
+                <Avatar name={m.consultant?.full_name || '?'} photoUrl={m.consultant?.profile_photo_url} size="lg" />
+
+                <div>
+                  <p className="font-semibold text-on-surface">{m.consultant?.full_name || '—'}</p>
+                  <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                      m.role === 'broker' ? 'bg-purple-100 text-purple-700' :
+                      m.role === 'manager' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>{roleLabel(m.role)}</span>
+                    {!m.consultant?.is_active && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600">Pasif</span>
+                    )}
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0">
+
+                {m.consultant?.phone && (
+                  <p className="text-xs text-on-surface-variant flex items-center gap-1">
+                    <Phone size={11} /> {m.consultant.phone}
+                  </p>
+                )}
+                {m.consultant?.email && (
+                  <p className="text-xs text-on-surface-variant flex items-center gap-1">
+                    <Mail size={11} /> {m.consultant.email}
+                  </p>
+                )}
+
+                <div className="flex items-center gap-1 text-sm font-semibold text-primary">
+                  <Percent size={13} />
+                  {currentRate} komisyon payı
+                  {pendingRequest && (
+                    <span className="ml-1 text-orange-600 bg-orange-100 px-2 py-0.5 rounded text-[10px]">
+                      → %{pendingRequest.proposed_rate} bekliyor
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-on-surface-variant">
+                  Üyelik: {new Date(m.start_date).toLocaleDateString('tr-TR')}
+                </p>
+
+                <div className="flex gap-2 w-full mt-1">
                   {pendingRequest ? (
-                    <button 
+                    <button
                       onClick={async () => {
-                        if(!confirm('Bu talebi iptal etmek istediğinize emin misiniz?')) return;
-                        await supabase.from('commission_rate_requests').update({status: 'rejected', resolved_at: new Date().toISOString()}).eq('id', pendingRequest.id);
-                        fetchRateRequests(selectedOfficeId);
+                        if (!confirm('Bu talebi iptal etmek istediğinize emin misiniz?')) return
+                        await supabase.from('commission_rate_requests').update({ status: 'rejected', resolved_at: new Date().toISOString() }).eq('id', pendingRequest.id)
+                        fetchRateRequests(selectedOfficeId)
                       }}
-                      className="btn-secondary text-xs flex-1 md:flex-none border-red-200 text-red-600 hover:bg-red-50"
+                      className="btn-secondary text-xs flex-1 border-red-200 text-red-600 hover:bg-red-50"
                     >
                       Talebi İptal Et
                     </button>
                   ) : (
-                    <button 
-                      onClick={() => setRateChangeMembershipId(m.id)}
-                      className="btn-secondary text-xs flex-1 md:flex-none"
-                    >
+                    <button onClick={() => setRateChangeMembershipId(m.id)} className="btn-secondary text-xs flex-1">
                       Komisyon Değiştir
                     </button>
                   )}
                   {otherOffices.length > 0 && m.consultant?.id && (
-                    <button
-                      onClick={() => setTransferConsultantId(m.consultant!.id)}
-                      className="btn-secondary flex items-center justify-center gap-1 text-xs flex-1 md:flex-none"
-                    >
-                      <ArrowRightLeft size={13} /> Transfer
+                    <button onClick={() => setTransferConsultantId(m.consultant!.id)} className="btn-secondary text-xs flex-1">
+                      <ArrowRightLeft size={12} className="inline mr-1" />Transfer
                     </button>
                   )}
                 </div>
               </div>
-            )})}
-          </div>
-        )}
-      </div>
+            )
+          })}
+        </div>
+      ) : (
+        /* ─── LİSTE GÖRÜNÜMÜ ──────────────────────────────────── */
+        <div className="card p-4">
+          <div className="space-y-2">
+            {memberships.map(m => {
+              const currentRate = m.commission_rate_override || defaultRate
+              const pendingRequest = rateRequests[m.id]?.[0]
 
-      {/* Komisyon Oranı Değiştirme Modal */}
+              return (
+                <div key={m.id} className="flex flex-col md:flex-row items-center gap-4 p-3 rounded-lg bg-surface-container-high">
+                  <div className="flex items-center gap-4 flex-1 w-full">
+                    <Avatar name={m.consultant?.full_name || '?'} photoUrl={m.consultant?.profile_photo_url} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-on-surface truncate">{m.consultant?.full_name || '—'}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          m.role === 'broker' ? 'bg-purple-100 text-purple-700' :
+                          m.role === 'manager' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>{roleLabel(m.role)}</span>
+                        {!m.consultant?.is_active && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Pasif</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-on-surface-variant mt-1">
+                        Komisyon: <strong className="text-primary">%{currentRate}</strong>
+                        {pendingRequest && (
+                          <span className="ml-2 text-orange-600 bg-orange-100 px-2 py-0.5 rounded text-[10px] font-semibold">
+                            Onay Bekliyor: %{pendingRequest.proposed_rate}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-on-surface-variant">
+                        Üyelik: {new Date(m.start_date).toLocaleDateString('tr-TR')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0">
+                    {pendingRequest ? (
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Bu talebi iptal etmek istediğinize emin misiniz?')) return
+                          await supabase.from('commission_rate_requests').update({ status: 'rejected', resolved_at: new Date().toISOString() }).eq('id', pendingRequest.id)
+                          fetchRateRequests(selectedOfficeId)
+                        }}
+                        className="btn-secondary text-xs flex-1 md:flex-none border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        Talebi İptal Et
+                      </button>
+                    ) : (
+                      <button onClick={() => setRateChangeMembershipId(m.id)} className="btn-secondary text-xs flex-1 md:flex-none">
+                        Komisyon Değiştir
+                      </button>
+                    )}
+                    {otherOffices.length > 0 && m.consultant?.id && (
+                      <button
+                        onClick={() => setTransferConsultantId(m.consultant!.id)}
+                        className="btn-secondary flex items-center justify-center gap-1 text-xs flex-1 md:flex-none"
+                      >
+                        <ArrowRightLeft size={13} /> Transfer
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Komisyon Oranı Modal */}
       {rateChangeMembershipId && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-          style={{ background: 'var(--backdrop)' }}
-          onClick={() => setRateChangeMembershipId(null)}
-        >
-          <div
-            className="card max-w-md w-full"
-            onClick={e => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'var(--backdrop)' }} onClick={() => setRateChangeMembershipId(null)}>
+          <div className="card max-w-md w-full" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
               <Users size={16} className="text-primary" />
               Komisyon Oranı Güncelleme
@@ -276,29 +381,13 @@ export default function ConsultantsPage() {
             <p className="text-xs text-on-surface-variant mb-4">
               Yeni oranı danışmana onaylaması için göndereceksiniz. Danışman kendi panelinden onayladığında oran otomatik olarak güncellenecektir.
             </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-on-surface mb-1">Yeni Danışman Payı (%) <span className="text-red-500">*</span></label>
-                <input 
-                  type="number" 
-                  className="input" 
-                  value={proposedRate} 
-                  onChange={e => setProposedRate(Number(e.target.value))} 
-                  placeholder="örn. 60" 
-                  min="0"
-                  max="100"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-on-surface mb-1">Yeni Danışman Payı (%) <span className="text-red-500">*</span></label>
+              <input type="number" className="input" value={proposedRate} onChange={e => setProposedRate(Number(e.target.value))} placeholder="örn. 60" min="0" max="100" />
             </div>
-
             <div className="flex gap-2 mt-5">
               <button onClick={() => setRateChangeMembershipId(null)} className="btn-secondary flex-1">İptal</button>
-              <button
-                onClick={handleRateChangeRequest}
-                disabled={proposedRate === '' || rateChanging}
-                className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
-              >
+              <button onClick={handleRateChangeRequest} disabled={proposedRate === '' || rateChanging} className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50">
                 {rateChanging ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
                 Onaya Gönder
               </button>
@@ -307,25 +396,17 @@ export default function ConsultantsPage() {
         </div>
       )}
 
-      {/* Transfer modal */}
+      {/* Transfer Modal */}
       {transferConsultantId && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-          style={{ background: 'var(--backdrop)' }}
-          onClick={() => setTransferConsultantId(null)}
-        >
-          <div
-            className="card max-w-md w-full"
-            onClick={e => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'var(--backdrop)' }} onClick={() => setTransferConsultantId(null)}>
+          <div className="card max-w-md w-full" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
               <ArrowRightLeft size={16} className="text-primary" />
               Danışmanı Transfer Et
             </h3>
             <p className="text-xs text-on-surface-variant mb-4">
-              Mevcut ofisteki üyelik kapatılır, yeni ofiste başlatılır. <strong>Bu ofis broker paneli, transfer öncesi kayıtları görmeye devam edecektir; yeni ofisin broker&apos;ı yalnızca transfer sonrası kayıtları görür.</strong>
+              Mevcut ofisteki üyelik kapatılır, yeni ofiste başlatılır.
             </p>
-
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-on-surface mb-1">Hedef Ofis <span className="text-red-500">*</span></label>
@@ -334,20 +415,14 @@ export default function ConsultantsPage() {
                   {otherOffices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-on-surface mb-1">Transfer Sebebi (opsiyonel)</label>
                 <input className="input" value={transferReason} onChange={e => setTransferReason(e.target.value)} placeholder="örn. ofis taşındı, terfi..." />
               </div>
             </div>
-
             <div className="flex gap-2 mt-5">
               <button onClick={() => setTransferConsultantId(null)} className="btn-secondary flex-1">İptal</button>
-              <button
-                onClick={transferConsultant}
-                disabled={!transferTargetOfficeId || transferring}
-                className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
-              >
+              <button onClick={transferConsultant} disabled={!transferTargetOfficeId || transferring} className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50">
                 {transferring ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
                 Transfer Et
               </button>
@@ -357,14 +432,4 @@ export default function ConsultantsPage() {
       )}
     </div>
   )
-}
-
-function roleLabel(r?: string): string {
-  switch (r) {
-    case 'admin':      return 'Admin'
-    case 'broker':     return 'Broker'
-    case 'manager':    return 'Müdür'
-    case 'consultant': return 'Danışman'
-    default:           return r || '—'
-  }
 }
