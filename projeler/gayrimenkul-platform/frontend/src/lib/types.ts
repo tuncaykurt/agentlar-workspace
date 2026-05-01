@@ -1,14 +1,14 @@
 // Gayrimenkul Platform — TypeScript Tipler
 // Supabase şemasına göre oluşturulmuştur
 
-export type UserRole = 'admin' | 'manager' | 'consultant'
+export type UserRole = 'admin' | 'manager' | 'consultant' | 'broker'
 export type ClientType = 'buyer' | 'seller' | 'both' | 'investor' | 'tenant' | 'landlord' | 'network'
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'negotiating' | 'won' | 'lost' | 'dormant'
 export type PropertyStatus = 'active' | 'under_offer' | 'sold' | 'rented' | 'withdrawn'
 export type PropertyType = 'apartment' | 'villa' | 'land' | 'commercial' | 'office' | 'shop' | 'warehouse' | 'detached_house' | 'field'
 export type ListingSource = 'manual' | 'sahibinden' | 'cb_com_tr' | 'hepsiemlak' | 'emlakjet' | 'zingat' | 'referral' | 'walk_in' | 'other'
 export type InteractionChannel = 'whatsapp' | 'email' | 'call_inbound' | 'call_outbound' | 'sms' | 'meeting' | 'note'
-export type DocumentType = 'authorization' | 'sales_contract' | 'rental_contract' | 'offer_letter' | 'showing_agreement' | 'other'
+export type DocumentType = 'authorization' | 'sales_contract' | 'rental_contract' | 'offer_letter' | 'showing_agreement' | 'sales_closing' | 'other'
 export type SignatureStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired'
 export type SocialPlatform = 'instagram' | 'facebook' | 'linkedin' | 'twitter'
 export type PostStatus = 'draft' | 'scheduled' | 'posted' | 'failed'
@@ -163,16 +163,158 @@ export interface Commission {
   id: string
   property_id?: string
   consultant_id?: string
+  office_id?: string
+  brand_id?: string
   sale_price: number
   total_commission_rate: number
   total_commission_amount?: number
+  hq_share_rate?: number
+  hq_share_amount?: number
+  office_share_rate?: number
   office_share_amount?: number
   consultant_share_rate?: number
   consultant_share_amount?: number
+  co_consultant_id?: string
+  co_consultant_share_rate?: number
+  co_consultant_share_amount?: number
   status: CommissionStatus
   paid_at?: string
   notes?: string
   created_at: string
+}
+
+// ─── Multi-tenant: Brands / Offices / Memberships ──────────────────────────────
+
+export interface Brand {
+  id: string
+  name: string
+  hq_share_rate: number
+  hq_contact_name?: string
+  hq_contact_email?: string
+  hq_contact_phone?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Office {
+  id: string
+  brand_id?: string
+  name: string
+  address?: string
+  phone?: string
+  email?: string
+  tax_no?: string
+  logo_url?: string
+  default_office_share_rate: number
+  default_consultant_share_rate: number
+  default_total_commission_rate: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  brand?: Brand
+}
+
+export interface OfficeMembership {
+  id: string
+  consultant_id: string
+  office_id: string
+  role: UserRole
+  commission_rate_override?: number
+  start_date: string
+  end_date?: string
+  end_reason?: string
+  notes?: string
+  created_at: string
+  consultant?: Consultant
+  office?: Office
+}
+
+// ─── Sales Closing (satış kapatma belgesi) ─────────────────────────────────────
+
+export type SalesClosingStatus = 'pending' | 'filled' | 'sent' | 'signed' | 'cancelled'
+export type SalesClosingPropertyKind = 'ev_villa' | 'apt' | 'ofis' | 'dukkan' | 'bina' | 'arazi'
+
+export interface SalesClosing {
+  id: string
+  property_id?: string
+  office_id?: string
+  brand_id?: string
+  consultant_id?: string
+  co_consultant_id?: string
+  // Mevcut client_id (eski) — alıcı için kullanılıyordu, yeni alanlar buyer_client_id / seller_client_id
+  client_id?: string
+  buyer_client_id?: string
+  seller_client_id?: string
+  commission_id?: string
+  document_id?: string
+
+  // Aracılık ve ilan bilgileri
+  agency_contract_no?: string
+  agency_contract_date?: string
+  system_listing_no?: string
+  external_listing_no?: string
+
+  // Gayrimenkul (snapshot)
+  property_kind?: SalesClosingPropertyKind
+  property_address?: string
+  property_district?: string
+  property_city?: string
+  tapu_pafta?: string
+  tapu_ada?: string
+  tapu_parsel?: string
+
+  // Satıcı (snapshot)
+  seller_name?: string
+  seller_tc?: string
+  seller_address?: string
+  seller_phone?: string
+
+  // Alıcı (snapshot)
+  buyer_name?: string
+  buyer_tc?: string
+  buyer_address?: string
+  buyer_phone?: string
+
+  // Satış işlemi
+  transaction_date?: string
+  sale_amount?: number
+  seller_fee_amount?: number
+  seller_fee_rate?: number
+  buyer_fee_amount?: number
+  buyer_fee_rate?: number
+  service_fee?: number       // toplam = seller_fee + buyer_fee
+  consultant_name_snapshot?: string
+
+  // Dağılım
+  hq_share_rate?: number
+  hq_share_amount?: number
+  office_share_rate?: number
+  office_share_amount?: number
+  consultant_share_rate?: number
+  consultant_share_amount?: number
+  co_consultant_share_rate?: number
+  co_consultant_share_amount?: number
+
+  // Akış
+  status: SalesClosingStatus
+  notes?: string
+  filled_at?: string
+  filled_by?: string
+  signed_at?: string
+  pdf_url?: string
+  signed_pdf_url?: string
+  created_at: string
+  updated_at: string
+
+  // İlişkili veriler (JOIN ile)
+  property?: Property
+  office?: Office
+  brand?: Brand
+  consultant?: Consultant
+  co_consultant?: Consultant
+  buyer?: Client
+  seller?: Client
 }
 
 export interface Expense {

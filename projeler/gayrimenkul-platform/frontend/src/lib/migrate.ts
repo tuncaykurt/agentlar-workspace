@@ -727,6 +727,547 @@ ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS debounce_seconds
     `,
   },
   {
+    id: '054_multi_tenant_brokers',
+    sql: `
+-- ─── BROKER ROLE & MULTI-TENANT BACKBONE ─────────────────────────────────────
+-- broker rolünü user_role enum'una ekle (admin/manager/consultant + broker)
+DO $$ BEGIN
+  ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'broker';
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- ─── BRANDS (franchise / marka) ──────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS brands (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  hq_share_rate NUMERIC(5,2) NOT NULL DEFAULT 9.00,
+  hq_contact_name TEXT,
+  hq_contact_email TEXT,
+  hq_contact_phone TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+DO $$ BEGIN CREATE TRIGGER brands_updated_at BEFORE UPDATE ON brands FOR EACH ROW EXECUTE FUNCTION update_updated_at(); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+INSERT INTO brands (name, hq_share_rate)
+VALUES ('Bağımsız', 0.00)
+ON CONFLICT (name) DO NOTHING;
+
+-- ─── OFFICES ──────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS offices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  brand_id UUID REFERENCES brands(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  address TEXT,
+  phone TEXT,
+  email TEXT,
+  tax_no TEXT,
+  logo_url TEXT,
+  -- Default paylaşım oranları
+  default_office_share_rate NUMERIC(5,2) NOT NULL DEFAULT 50.00, -- ofis (HQ sonrası)
+  default_consultant_share_rate NUMERIC(5,2) NOT NULL DEFAULT 50.00, -- danışman (HQ sonrası)
+  default_total_commission_rate NUMERIC(5,2) NOT NULL DEFAULT 3.00, -- müşteriden alınan
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+DO $$ BEGIN CREATE TRIGGER offices_updated_at BEFORE UPDATE ON offices FOR EACH ROW EXECUTE FUNCTION update_updated_at(); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Mevcut tek-ofis verisinden default ofis oluştur
+INSERT INTO offices (id, brand_id, name, address, default_office_share_rate, default_consultant_share_rate, default_total_commission_rate)
+SELECT
+  '00000000-0000-0000-0000-000000000001'::uuid,
+  (SELECT id FROM brands WHERE name = 'Bağımsız' LIMIT 1),
+  COALESCE((SELECT (value #>> '{}')::text FROM settings WHERE key = 'office_name'), 'Ana Ofis'),
+  COALESCE((SELECT (value #>> '{}')::text FROM settings WHERE key = 'office_address'), ''),
+  50.00, 50.00, 3.00
+ON CONFLICT (id) DO NOTHING;
+
+-- ─── OFFICE MEMBERSHIPS (transfer geçmişi) ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS office_memberships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultant_id UUID NOT NULL REFERENCES consultants(id) ON DELETE CASCADE,
+  office_id UUID NOT NULL REFERENCES offices(id) ON DELETE RESTRICT,
+  role user_role NOT NULL DEFAULT 'consultant', -- consultant | manager | broker
+  -- Bu üyelik için bu ofiste alınan komisyon oranı (override)
+  commission_rate_override NUMERIC(5,2),
+  start_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+  end_date TIMESTAMPTZ, -- NULL = aktif
+  end_reason TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_om_consultant_active ON office_memberships(consultant_id) WHERE end_date IS NULL;
+CREATE INDEX IF NOT EXISTS idx_om_office_active ON office_memberships(office_id) WHERE end_date IS NULL;
+CREATE INDEX IF NOT EXISTS idx_om_consultant_history ON office_memberships(consultant_id, start_date DESC);
+
+-- Tüm mevcut consultant'ları default ofise üye yap (idempotent)
+INSERT INTO office_memberships (consultant_id, office_id, role, start_date)
+SELECT
+  c.id,
+  '00000000-0000-0000-0000-000000000001'::uuid,
+  c.role,
+  COALESCE(c.created_at, now())
+FROM consultants c
+WHERE NOT EXISTS (
+  SELECT 1 FROM office_memberships om
+  WHERE om.consultant_id = c.id AND om.end_date IS NULL
+)
+ON CONFLICT DO NOTHING;
+
+-- ─── HELPER: bir consultant'ın aktif ofisi ────────────────────────────────────
+CREATE OR REPLACE FUNCTION current_office_of_consultant(p_consultant_id UUID)
+RETURNS UUID AS $fn$
+  SELECT office_id FROM office_memberships
+  WHERE consultant_id = p_consultant_id AND end_date IS NULL
+  ORDER BY start_date DESC LIMIT 1;
+$fn$ LANGUAGE sql STABLE;
+
+-- ─── OFFICE_ID KOLONLARI (mevcut tablolara) ───────────────────────────────────
+ALTER TABLE properties      ADD COLUMN IF NOT EXISTS office_id UUID REFERENCES offices(id) ON DELETE SET NULL;
+ALTER TABLE clients         ADD COLUMN IF NOT EXISTS office_id UUID REFERENCES offices(id) ON DELETE SET NULL;
+ALTER TABLE commissions     ADD COLUMN IF NOT EXISTS office_id UUID REFERENCES offices(id) ON DELETE SET NULL;
+ALTER TABLE documents       ADD COLUMN IF NOT EXISTS office_id UUID REFERENCES offices(id) ON DELETE SET NULL;
+ALTER TABLE expenses        ADD COLUMN IF NOT EXISTS office_id UUID REFERENCES offices(id) ON DELETE SET NULL;
+ALTER TABLE interactions    ADD COLUMN IF NOT EXISTS office_id UUID REFERENCES offices(id) ON DELETE SET NULL;
+ALTER TABLE follow_ups      ADD COLUMN IF NOT EXISTS office_id UUID REFERENCES offices(id) ON DELETE SET NULL;
+ALTER TABLE social_posts    ADD COLUMN IF NOT EXISTS office_id UUID REFERENCES offices(id) ON DELETE SET NULL;
+ALTER TABLE campaigns       ADD COLUMN IF NOT EXISTS office_id UUID REFERENCES offices(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_properties_office   ON properties(office_id);
+CREATE INDEX IF NOT EXISTS idx_clients_office      ON clients(office_id);
+CREATE INDEX IF NOT EXISTS idx_commissions_office  ON commissions(office_id);
+CREATE INDEX IF NOT EXISTS idx_documents_office    ON documents(office_id);
+
+-- Mevcut kayıtları default ofise damgala (immutable damga — sadece NULL'lar için)
+UPDATE properties   SET office_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE office_id IS NULL;
+UPDATE clients      SET office_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE office_id IS NULL;
+UPDATE commissions  SET office_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE office_id IS NULL;
+UPDATE documents    SET office_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE office_id IS NULL;
+UPDATE expenses     SET office_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE office_id IS NULL;
+UPDATE interactions SET office_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE office_id IS NULL;
+UPDATE follow_ups   SET office_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE office_id IS NULL;
+UPDATE social_posts SET office_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE office_id IS NULL;
+UPDATE campaigns    SET office_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE office_id IS NULL;
+
+-- ─── BEFORE INSERT TRIGGER: office_id otomatik damga ──────────────────────────
+-- Kayıt oluşturulduğunda consultant'ın O ANKİ ofisini damgalar (transfer sonrası eski kayıtların office_id'si değişmez)
+-- Tablolar için: consultant_id kolonuna sahip olanlar (commissions, documents, expenses, interactions, follow_ups, social_posts, campaigns, sales_closings)
+CREATE OR REPLACE FUNCTION stamp_office_id()
+RETURNS TRIGGER AS $fn$
+DECLARE
+  oid UUID;
+BEGIN
+  IF NEW.office_id IS NOT NULL THEN RETURN NEW; END IF;
+  IF NEW.consultant_id IS NULL THEN
+    NEW.office_id := '00000000-0000-0000-0000-000000000001'::uuid;
+    RETURN NEW;
+  END IF;
+  oid := current_office_of_consultant(NEW.consultant_id);
+  NEW.office_id := COALESCE(oid, '00000000-0000-0000-0000-000000000001'::uuid);
+  RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+-- Properties: assigned_consultant_id alanını kullanır
+CREATE OR REPLACE FUNCTION stamp_office_id_properties()
+RETURNS TRIGGER AS $fn$
+DECLARE oid UUID;
+BEGIN
+  IF NEW.office_id IS NOT NULL THEN RETURN NEW; END IF;
+  IF NEW.assigned_consultant_id IS NULL THEN
+    NEW.office_id := '00000000-0000-0000-0000-000000000001'::uuid;
+    RETURN NEW;
+  END IF;
+  oid := current_office_of_consultant(NEW.assigned_consultant_id);
+  NEW.office_id := COALESCE(oid, '00000000-0000-0000-0000-000000000001'::uuid);
+  RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+-- Clients: assigned_consultant_id alanını kullanır
+CREATE OR REPLACE FUNCTION stamp_office_id_clients()
+RETURNS TRIGGER AS $fn$
+DECLARE oid UUID;
+BEGIN
+  IF NEW.office_id IS NOT NULL THEN RETURN NEW; END IF;
+  IF NEW.assigned_consultant_id IS NULL THEN
+    NEW.office_id := '00000000-0000-0000-0000-000000000001'::uuid;
+    RETURN NEW;
+  END IF;
+  oid := current_office_of_consultant(NEW.assigned_consultant_id);
+  NEW.office_id := COALESCE(oid, '00000000-0000-0000-0000-000000000001'::uuid);
+  RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS stamp_office_properties ON properties;
+CREATE TRIGGER stamp_office_properties BEFORE INSERT ON properties FOR EACH ROW EXECUTE FUNCTION stamp_office_id_properties();
+
+DROP TRIGGER IF EXISTS stamp_office_clients ON clients;
+CREATE TRIGGER stamp_office_clients BEFORE INSERT ON clients FOR EACH ROW EXECUTE FUNCTION stamp_office_id_clients();
+
+DROP TRIGGER IF EXISTS stamp_office_commissions ON commissions;
+CREATE TRIGGER stamp_office_commissions BEFORE INSERT ON commissions FOR EACH ROW EXECUTE FUNCTION stamp_office_id();
+
+DROP TRIGGER IF EXISTS stamp_office_documents ON documents;
+CREATE TRIGGER stamp_office_documents BEFORE INSERT ON documents FOR EACH ROW EXECUTE FUNCTION stamp_office_id();
+
+DROP TRIGGER IF EXISTS stamp_office_expenses ON expenses;
+CREATE TRIGGER stamp_office_expenses BEFORE INSERT ON expenses FOR EACH ROW EXECUTE FUNCTION stamp_office_id();
+
+DROP TRIGGER IF EXISTS stamp_office_interactions ON interactions;
+CREATE TRIGGER stamp_office_interactions BEFORE INSERT ON interactions FOR EACH ROW EXECUTE FUNCTION stamp_office_id();
+
+DROP TRIGGER IF EXISTS stamp_office_followups ON follow_ups;
+CREATE TRIGGER stamp_office_followups BEFORE INSERT ON follow_ups FOR EACH ROW EXECUTE FUNCTION stamp_office_id();
+
+-- RLS
+ALTER TABLE brands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE offices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE office_memberships ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS allow_authenticated ON brands;
+CREATE POLICY allow_authenticated ON brands FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_authenticated ON offices;
+CREATE POLICY allow_authenticated ON offices FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS allow_authenticated ON office_memberships;
+CREATE POLICY allow_authenticated ON office_memberships FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    `,
+  },
+
+  {
+    id: '055_sales_closing',
+    sql: `
+-- ─── SATIŞ KAPATMA: HQ payı + sales_closings + property sold trigger ─────────
+
+-- document_type enum'una sales_closing ekle
+DO $$ BEGIN
+  ALTER TYPE document_type ADD VALUE IF NOT EXISTS 'sales_closing';
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- commissions tablosuna HQ payı alanları
+ALTER TABLE commissions ADD COLUMN IF NOT EXISTS hq_share_rate NUMERIC(5,2);    -- markaya göre % (varsayılan brand.hq_share_rate)
+ALTER TABLE commissions ADD COLUMN IF NOT EXISTS hq_share_amount NUMERIC(15,2);
+ALTER TABLE commissions ADD COLUMN IF NOT EXISTS brand_id UUID REFERENCES brands(id) ON DELETE SET NULL;
+
+-- ─── SALES_CLOSINGS (satış kapatma belgesi) ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS sales_closings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- bağlamlar
+  property_id UUID REFERENCES properties(id) ON DELETE SET NULL,
+  office_id UUID REFERENCES offices(id) ON DELETE SET NULL,
+  brand_id UUID REFERENCES brands(id) ON DELETE SET NULL,
+  consultant_id UUID REFERENCES consultants(id) ON DELETE SET NULL,
+  co_consultant_id UUID REFERENCES consultants(id) ON DELETE SET NULL,
+  client_id UUID REFERENCES clients(id) ON DELETE SET NULL, -- alıcı veya satıcı (genelde alıcı)
+  commission_id UUID REFERENCES commissions(id) ON DELETE SET NULL,
+  document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
+  -- finansal
+  service_fee NUMERIC(15,2),                  -- toplam alınan hizmet bedeli
+  hq_share_rate NUMERIC(5,2),                 -- HQ %
+  hq_share_amount NUMERIC(15,2),
+  office_share_rate NUMERIC(5,2),             -- ofisin (HQ sonrası kalan tutardan)
+  office_share_amount NUMERIC(15,2),
+  consultant_share_rate NUMERIC(5,2),         -- danışmanın
+  consultant_share_amount NUMERIC(15,2),
+  co_consultant_share_rate NUMERIC(5,2),
+  co_consultant_share_amount NUMERIC(15,2),
+  -- imza akışı
+  status TEXT NOT NULL DEFAULT 'pending', -- pending | filled | sent | signed | cancelled
+  notes TEXT,
+  filled_at TIMESTAMPTZ,
+  filled_by UUID REFERENCES consultants(id) ON DELETE SET NULL,
+  signed_at TIMESTAMPTZ,
+  pdf_url TEXT,
+  signed_pdf_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+DO $$ BEGIN CREATE TRIGGER sales_closings_updated_at BEFORE UPDATE ON sales_closings FOR EACH ROW EXECUTE FUNCTION update_updated_at(); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+CREATE INDEX IF NOT EXISTS idx_sales_closings_office     ON sales_closings(office_id);
+CREATE INDEX IF NOT EXISTS idx_sales_closings_consultant ON sales_closings(consultant_id);
+CREATE INDEX IF NOT EXISTS idx_sales_closings_status     ON sales_closings(status);
+CREATE INDEX IF NOT EXISTS idx_sales_closings_property   ON sales_closings(property_id);
+
+ALTER TABLE sales_closings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS allow_authenticated ON sales_closings;
+CREATE POLICY allow_authenticated ON sales_closings FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- BEFORE INSERT trigger: office_id auto-stamp
+DROP TRIGGER IF EXISTS stamp_office_sales_closings ON sales_closings;
+CREATE TRIGGER stamp_office_sales_closings BEFORE INSERT ON sales_closings FOR EACH ROW EXECUTE FUNCTION stamp_office_id();
+
+-- ─── AUTO-CREATE TRIGGER: property 'sold' olduğunda pending sales_closing aç ──
+CREATE OR REPLACE FUNCTION create_pending_sales_closing()
+RETURNS TRIGGER AS $fn$
+DECLARE
+  v_office_id UUID;
+  v_brand_id UUID;
+  v_hq_rate NUMERIC(5,2);
+  v_office_default_rate NUMERIC(5,2);
+  v_consultant_default_rate NUMERIC(5,2);
+BEGIN
+  -- Yalnızca status active/under_offer iken sold'a geçişte tetiklensin
+  IF NEW.status <> 'sold' THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.status = 'sold' THEN
+    RETURN NEW; -- zaten sold idi, yeni belge açma
+  END IF;
+
+  -- Bu property için zaten pending bir sales_closing varsa bir daha açma
+  IF EXISTS (SELECT 1 FROM sales_closings WHERE property_id = NEW.id AND status IN ('pending','filled','sent')) THEN
+    RETURN NEW;
+  END IF;
+
+  -- Office/brand bilgisini topla
+  v_office_id := NEW.office_id;
+  IF v_office_id IS NULL AND NEW.assigned_consultant_id IS NOT NULL THEN
+    v_office_id := current_office_of_consultant(NEW.assigned_consultant_id);
+  END IF;
+
+  SELECT o.brand_id, COALESCE(b.hq_share_rate, 0), o.default_office_share_rate, o.default_consultant_share_rate
+    INTO v_brand_id, v_hq_rate, v_office_default_rate, v_consultant_default_rate
+    FROM offices o
+    LEFT JOIN brands b ON b.id = o.brand_id
+   WHERE o.id = v_office_id;
+
+  INSERT INTO sales_closings (
+    property_id, office_id, brand_id, consultant_id,
+    hq_share_rate, office_share_rate, consultant_share_rate,
+    status, notes
+  ) VALUES (
+    NEW.id, v_office_id, v_brand_id, NEW.assigned_consultant_id,
+    COALESCE(v_hq_rate, 0), COALESCE(v_office_default_rate, 50), COALESCE(v_consultant_default_rate, 50),
+    'pending', 'Property "sold" olarak işaretlendi — kapatma bilgileri bekleniyor'
+  );
+
+  -- sold_at otomatik set et (zaten yoksa)
+  IF NEW.sold_at IS NULL THEN
+    NEW.sold_at := now();
+  END IF;
+
+  RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_property_sold_create_closing ON properties;
+CREATE TRIGGER trg_property_sold_create_closing
+  BEFORE UPDATE OF status ON properties
+  FOR EACH ROW EXECUTE FUNCTION create_pending_sales_closing();
+    `,
+  },
+
+  {
+    id: '056_office_scoped_rls',
+    sql: `
+-- ─── OFFICE-SCOPED RLS: helper fonksiyonlar + politikalar ────────────────────
+-- Mevcut mimari: tek-ofis kurulumlarda kimse engellenmesin (backward compat).
+-- Çoklu ofis: broker yalnızca üyesi olduğu ofisi(ler)i görür.
+-- Admin (role='admin') hep her şeyi görür.
+
+CREATE OR REPLACE FUNCTION my_consultant_id()
+RETURNS UUID AS $fn$
+  SELECT id FROM consultants WHERE user_id = auth.uid() LIMIT 1;
+$fn$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION my_role()
+RETURNS user_role AS $fn$
+  SELECT role FROM consultants WHERE user_id = auth.uid() LIMIT 1;
+$fn$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- Kullanıcının AKTİF üyesi olduğu ofislerin id listesi
+CREATE OR REPLACE FUNCTION my_active_office_ids()
+RETURNS SETOF UUID AS $fn$
+  SELECT office_id FROM office_memberships
+  WHERE consultant_id = my_consultant_id() AND end_date IS NULL;
+$fn$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- Kullanıcı belirli bir ofiste yetkili mi (broker/manager/admin/üye)?
+CREATE OR REPLACE FUNCTION can_see_office(p_office_id UUID)
+RETURNS BOOLEAN AS $fn$
+  SELECT
+    -- admin her şeyi görür
+    (SELECT role = 'admin' FROM consultants WHERE user_id = auth.uid() LIMIT 1)
+    OR
+    -- ofiste şu an üye
+    EXISTS (
+      SELECT 1 FROM office_memberships
+      WHERE consultant_id = my_consultant_id()
+        AND office_id = p_office_id
+        AND end_date IS NULL
+    )
+    OR
+    -- ofiste geçmişte üyeydi (eski broker eski verileri görmeye devam etsin)
+    EXISTS (
+      SELECT 1 FROM office_memberships
+      WHERE consultant_id = my_consultant_id()
+        AND office_id = p_office_id
+        AND role IN ('broker','manager')
+    );
+$fn$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- ─── Office-scoped politikalar (allow_authenticated yerine) ──────────────────
+-- Sadece broker/manager rolü olan kullanıcıları kapsayan tablolar için
+-- consultant kendi kayıtlarını her halükarda görür (consultant_id = my_consultant_id)
+
+DO $$ BEGIN
+  -- properties
+  DROP POLICY IF EXISTS office_scoped_properties ON properties;
+  CREATE POLICY office_scoped_properties ON properties FOR ALL TO authenticated
+    USING (
+      my_role() = 'admin'
+      OR assigned_consultant_id = my_consultant_id()
+      OR can_see_office(office_id)
+    )
+    WITH CHECK (true);
+EXCEPTION WHEN OTHERS THEN null; END $$;
+
+DO $$ BEGIN
+  -- clients
+  DROP POLICY IF EXISTS office_scoped_clients ON clients;
+  CREATE POLICY office_scoped_clients ON clients FOR ALL TO authenticated
+    USING (
+      my_role() = 'admin'
+      OR assigned_consultant_id = my_consultant_id()
+      OR can_see_office(office_id)
+    )
+    WITH CHECK (true);
+EXCEPTION WHEN OTHERS THEN null; END $$;
+
+DO $$ BEGIN
+  -- commissions
+  DROP POLICY IF EXISTS office_scoped_commissions ON commissions;
+  CREATE POLICY office_scoped_commissions ON commissions FOR ALL TO authenticated
+    USING (
+      my_role() = 'admin'
+      OR consultant_id = my_consultant_id()
+      OR co_consultant_id = my_consultant_id()
+      OR can_see_office(office_id)
+    )
+    WITH CHECK (true);
+EXCEPTION WHEN OTHERS THEN null; END $$;
+
+DO $$ BEGIN
+  -- sales_closings
+  DROP POLICY IF EXISTS office_scoped_sales_closings ON sales_closings;
+  CREATE POLICY office_scoped_sales_closings ON sales_closings FOR ALL TO authenticated
+    USING (
+      my_role() = 'admin'
+      OR consultant_id = my_consultant_id()
+      OR co_consultant_id = my_consultant_id()
+      OR can_see_office(office_id)
+    )
+    WITH CHECK (true);
+EXCEPTION WHEN OTHERS THEN null; END $$;
+
+DO $$ BEGIN
+  -- documents
+  DROP POLICY IF EXISTS office_scoped_documents ON documents;
+  CREATE POLICY office_scoped_documents ON documents FOR ALL TO authenticated
+    USING (
+      my_role() = 'admin'
+      OR consultant_id = my_consultant_id()
+      OR can_see_office(office_id)
+    )
+    WITH CHECK (true);
+EXCEPTION WHEN OTHERS THEN null; END $$;
+
+-- Eski permissive policy'leri bu tablolar için kaldır ki yeni scoped policy aktif olsun
+DROP POLICY IF EXISTS allow_authenticated ON properties;
+DROP POLICY IF EXISTS allow_authenticated ON clients;
+DROP POLICY IF EXISTS allow_authenticated ON commissions;
+DROP POLICY IF EXISTS allow_authenticated ON sales_closings;
+DROP POLICY IF EXISTS allow_authenticated ON documents;
+    `,
+  },
+
+  {
+    id: '057_muhasebe_broker_features',
+    sql: `
+-- ─── feature_config: finance → muhasebe rename + broker eklensin ─────────────
+UPDATE feature_config
+   SET feature_key = 'muhasebe',
+       label = 'Muhasebe',
+       description = 'Komisyon, gider ve satış kapatma',
+       icon = 'Calculator',
+       route = '/muhasebe'
+ WHERE feature_key = 'finance';
+
+INSERT INTO feature_config (feature_key, label, description, icon, route, sort_order, enabled_for_roles, is_enabled) VALUES
+  ('muhasebe', 'Muhasebe', 'Komisyon, gider ve satış kapatma', 'Calculator', '/muhasebe', 7, '{consultant,manager,broker,admin}', true)
+ON CONFLICT (feature_key) DO NOTHING;
+
+INSERT INTO feature_config (feature_key, label, description, icon, route, sort_order, enabled_for_roles, is_enabled) VALUES
+  ('broker', 'Broker Paneli', 'Ofis yönetimi (danışmanlar, transfer, marka)', 'Briefcase', '/broker', 12, '{broker,admin,manager}', true)
+ON CONFLICT (feature_key) DO NOTHING;
+
+-- documents/finance feature override'ları varsa muhasebe'ye taşı
+UPDATE consultant_feature_overrides SET feature_key = 'muhasebe' WHERE feature_key = 'finance';
+    `,
+  },
+
+  {
+    id: '058_sales_closing_form_fields',
+    sql: `
+-- ─── Satış Sonrası Portföy Kapama Formu — gerçek form alanları ───────────────
+-- (Coldwell Banker / REMAX gibi markaların standart formuna göre)
+
+-- Aracılık ve ilan bilgileri
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS agency_contract_no TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS agency_contract_date DATE;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS system_listing_no TEXT;       -- CB SİSTEM İLAN NO (marka içi)
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS external_listing_no TEXT;     -- SAHİBİNDEN İLAN NO
+
+-- Gayrimenkule ait bilgiler (snapshot — portföy silinse de belge geçerli kalsın)
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS property_kind TEXT;           -- ev_villa | apt | ofis | dukkan | bina | arazi
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS property_address TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS property_district TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS property_city TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS tapu_pafta TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS tapu_ada TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS tapu_parsel TEXT;
+
+-- Satıcı bilgileri
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS seller_name TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS seller_tc TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS seller_address TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS seller_phone TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS seller_client_id UUID REFERENCES clients(id) ON DELETE SET NULL;
+
+-- Alıcı bilgileri (mevcut client_id alanı = alıcı; yine de snapshot için):
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS buyer_name TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS buyer_tc TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS buyer_address TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS buyer_phone TEXT;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS buyer_client_id UUID REFERENCES clients(id) ON DELETE SET NULL;
+
+-- Satış işlemine ait bilgiler (form: satıcı + alıcı ayrı ayrı hizmet bedeli alıyor)
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS transaction_date DATE;
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS sale_amount NUMERIC(15,2);    -- gerçek tapu satış tutarı
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS seller_fee_amount NUMERIC(15,2);
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS seller_fee_rate NUMERIC(5,2);
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS buyer_fee_amount NUMERIC(15,2);
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS buyer_fee_rate NUMERIC(5,2);
+-- service_fee zaten var: TOPLAM alınan hizmet bedeli (= seller_fee + buyer_fee)
+
+-- Danışman snapshot
+ALTER TABLE sales_closings ADD COLUMN IF NOT EXISTS consultant_name_snapshot TEXT;
+
+-- Mevcut client_id alanını "buyer" semantiğine geçişte yardımcı: zaten alıcı için kullanılıyor
+-- buyer_client_id'ye taşı (idempotent)
+UPDATE sales_closings SET buyer_client_id = client_id WHERE buyer_client_id IS NULL AND client_id IS NOT NULL;
+    `,
+  },
+  {
     id: '053_marketing_module',
     sql: `
 -- Campaigns: çok kanallı (whatsapp + email + linkedin) hale getir

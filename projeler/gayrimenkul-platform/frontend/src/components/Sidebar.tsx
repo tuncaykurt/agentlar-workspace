@@ -5,10 +5,10 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
-  LayoutDashboard, Users, Building2, DollarSign,
+  LayoutDashboard, Users, Building2, Calculator,
   MessageSquare, Megaphone, FileText, Share2,
   UserCircle, Settings, LogOut, BookUser, Menu, X,
-  Store, TrendingUp, Coins, Gift, Bot,
+  Store, TrendingUp, Coins, Gift, Bot, Briefcase,
 } from 'lucide-react'
 import { useFeatures } from '@/lib/features'
 import { ThemeToggle } from '@/lib/theme'
@@ -20,7 +20,8 @@ const navItems = [
   { href: '/rehber',         label: 'Rehber',             icon: BookUser,        featureKey: 'rehber' },
   { href: '/portfolio',      label: 'Portföy',            icon: Building2,       featureKey: 'portfolio' },
   { href: '/sahibinden',     label: 'Sahibinden İlanlar', icon: Store,           featureKey: 'sahibinden' },
-  { href: '/finance',        label: 'Finans',             icon: DollarSign,      featureKey: 'finance' },
+  { href: '/muhasebe',       label: 'Muhasebe',           icon: Calculator,      featureKey: 'muhasebe' },
+  { href: '/broker',         label: 'Broker Paneli',      icon: Briefcase,       featureKey: 'broker' },
   { href: '/communications', label: 'İletişim',           icon: MessageSquare,   featureKey: 'communications' },
   { href: '/campaigns',      label: 'Kampanyalar',        icon: Megaphone,       featureKey: 'campaigns' },
   { href: '/documents',      label: 'Belgeler',           icon: FileText,        featureKey: 'documents' },

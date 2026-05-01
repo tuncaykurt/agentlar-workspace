@@ -54,13 +54,13 @@ export default function NewExpensePage() {
     })
 
     if (err) { setError('Kaydedilemedi: ' + err.message); setSaving(false); return }
-    router.push('/finance')
+    router.push('/muhasebe')
   }
 
   return (
     <div className="p-6 max-w-lg mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/finance" className="text-on-surface-variant hover:text-on-surface-variant">
+        <Link href="/muhasebe" className="text-on-surface-variant hover:text-on-surface-variant">
           <ArrowLeft size={20} />
         </Link>
         <div>
@@ -128,7 +128,7 @@ export default function NewExpensePage() {
         )}
 
         <div className="flex gap-3 pt-2">
-          <Link href="/finance" className="btn-secondary flex-1 text-center">İptal</Link>
+          <Link href="/muhasebe" className="btn-secondary flex-1 text-center">İptal</Link>
           <button
             onClick={handleSave}
             disabled={saving}

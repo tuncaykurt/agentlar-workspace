@@ -27,7 +27,7 @@ export async function middleware(request: NextRequest) {
 
   // Korunan rotalar
   const protectedPaths = [
-    '/dashboard', '/crm', '/portfolio', '/finance',
+    '/dashboard', '/crm', '/portfolio', '/muhasebe', '/broker',
     '/communications', '/campaigns', '/documents', '/social', '/profile', '/admin',
   ]
 
