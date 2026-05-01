@@ -726,6 +726,110 @@ ALTER TABLE whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS debounce_seconds IN
 ALTER TABLE birthday_automation_config ADD COLUMN IF NOT EXISTS debounce_seconds INTEGER DEFAULT 5;
     `,
   },
+  {
+    id: '053_marketing_module',
+    sql: `
+-- Campaigns: çok kanallı (whatsapp + email + linkedin) hale getir
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'whatsapp';
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS html_template TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS from_name TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS audience_source TEXT DEFAULT 'clients';
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS lead_filter JSONB;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS opened_count INTEGER DEFAULT 0;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS clicked_count INTEGER DEFAULT 0;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS property_id UUID;
+
+-- Campaign logs: email/linkedin tracking
+ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS channel TEXT DEFAULT 'whatsapp';
+ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS lead_id UUID;
+ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS email_message_id TEXT;
+ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ;
+ALTER TABLE campaign_logs ADD COLUMN IF NOT EXISTS clicked_at TIMESTAMPTZ;
+
+-- Pazarlama lead havuzu (CRM müşterilerinden ayrı, scrape edilmiş kişiler)
+CREATE TABLE IF NOT EXISTS marketing_leads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name TEXT,
+  email TEXT,
+  phone TEXT,
+  company TEXT,
+  title TEXT,
+  industry TEXT,
+  city TEXT,
+  district TEXT,
+  linkedin_url TEXT,
+  website TEXT,
+  source TEXT NOT NULL,
+  source_detail TEXT,
+  enrichment_data JSONB DEFAULT '{}'::jsonb,
+  tags TEXT[] DEFAULT '{}',
+  kvkk_consent BOOLEAN DEFAULT false,
+  unsubscribed BOOLEAN DEFAULT false,
+  unsubscribed_at TIMESTAMPTZ,
+  bounced BOOLEAN DEFAULT false,
+  last_contacted_at TIMESTAMPTZ,
+  contact_count INTEGER DEFAULT 0,
+  converted_to_client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+  scrape_job_id UUID,
+  consultant_id UUID REFERENCES consultants(id) ON DELETE SET NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_marketing_leads_email ON marketing_leads(LOWER(email)) WHERE email IS NOT NULL AND email <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_marketing_leads_phone ON marketing_leads(phone) WHERE phone IS NOT NULL AND phone <> '';
+CREATE INDEX IF NOT EXISTS idx_marketing_leads_city ON marketing_leads(city);
+CREATE INDEX IF NOT EXISTS idx_marketing_leads_source ON marketing_leads(source);
+CREATE INDEX IF NOT EXISTS idx_marketing_leads_linkedin ON marketing_leads(linkedin_url) WHERE linkedin_url IS NOT NULL;
+
+ALTER TABLE marketing_leads ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS allow_authenticated ON marketing_leads;
+CREATE POLICY allow_authenticated ON marketing_leads FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Apify scrape işleri (Google Maps, LinkedIn vb.)
+CREATE TABLE IF NOT EXISTS lead_scrape_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_type TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  input JSONB NOT NULL,
+  apify_run_id TEXT,
+  apify_dataset_id TEXT,
+  status TEXT DEFAULT 'pending',
+  result_count INTEGER DEFAULT 0,
+  imported_count INTEGER DEFAULT 0,
+  cost_usd NUMERIC(10,4),
+  error_message TEXT,
+  consultant_id UUID REFERENCES consultants(id) ON DELETE SET NULL,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE lead_scrape_jobs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS allow_authenticated ON lead_scrape_jobs;
+CREATE POLICY allow_authenticated ON lead_scrape_jobs FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- KVKK / iletişim red listesi (public unsubscribe endpoint için)
+CREATE TABLE IF NOT EXISTS marketing_unsubscribes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT,
+  phone TEXT,
+  reason TEXT,
+  campaign_id UUID,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_marketing_unsub_email ON marketing_unsubscribes(LOWER(email)) WHERE email IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_marketing_unsub_phone ON marketing_unsubscribes(phone) WHERE phone IS NOT NULL;
+
+ALTER TABLE marketing_unsubscribes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS allow_anon_insert ON marketing_unsubscribes;
+CREATE POLICY allow_anon_insert ON marketing_unsubscribes FOR INSERT TO anon WITH CHECK (true);
+DROP POLICY IF EXISTS allow_authenticated_all ON marketing_unsubscribes;
+CREATE POLICY allow_authenticated_all ON marketing_unsubscribes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    `,
+  },
 ]
 
 // ─── Runner ───────────────────────────────────────────────────────────────────

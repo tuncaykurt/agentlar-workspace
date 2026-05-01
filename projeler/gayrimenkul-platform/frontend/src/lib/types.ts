@@ -222,15 +222,89 @@ export interface SocialPost {
   created_at: string
 }
 
+export type CampaignChannel = 'whatsapp' | 'email' | 'linkedin' | 'sms'
+export type AudienceSource = 'clients' | 'leads' | 'mixed'
+
 export interface Campaign {
   id: string
   name: string
   consultant_id: string
+  channel: CampaignChannel
   message_template: string
+  subject?: string
+  html_template?: string
+  from_name?: string
+  audience_source: AudienceSource
+  lead_filter?: { city?: string; district?: string; source?: string; tags?: string[] }
+  property_id?: string
   status: 'draft' | 'scheduled' | 'sending' | 'completed' | 'cancelled'
   scheduled_at?: string
   target_count: number
   sent_count: number
   failed_count: number
+  opened_count: number
+  clicked_count: number
+  created_at: string
+}
+
+export type LeadSource =
+  | 'apify_google_maps'
+  | 'apify_linkedin_people'
+  | 'apify_linkedin_company'
+  | 'apify_emlak'
+  | 'manual_csv'
+  | 'manual'
+
+export interface MarketingLead {
+  id: string
+  full_name?: string
+  email?: string
+  phone?: string
+  company?: string
+  title?: string
+  industry?: string
+  city?: string
+  district?: string
+  linkedin_url?: string
+  website?: string
+  source: LeadSource
+  source_detail?: string
+  enrichment_data?: Record<string, unknown>
+  tags?: string[]
+  kvkk_consent: boolean
+  unsubscribed: boolean
+  unsubscribed_at?: string
+  bounced: boolean
+  last_contacted_at?: string
+  contact_count: number
+  converted_to_client_id?: string
+  scrape_job_id?: string
+  consultant_id?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export type ScrapeJobType =
+  | 'google_maps'
+  | 'linkedin_people'
+  | 'linkedin_company'
+  | 'linkedin_message'
+
+export interface LeadScrapeJob {
+  id: string
+  job_type: ScrapeJobType
+  actor_id: string
+  input: Record<string, unknown>
+  apify_run_id?: string
+  apify_dataset_id?: string
+  status: 'pending' | 'running' | 'succeeded' | 'failed'
+  result_count: number
+  imported_count: number
+  cost_usd?: number
+  error_message?: string
+  consultant_id?: string
+  started_at?: string
+  completed_at?: string
   created_at: string
 }
