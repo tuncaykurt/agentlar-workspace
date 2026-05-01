@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase'
 import type { Office, Brand } from '@/lib/types'
 import {
   Settings, Save, Upload, X, CheckCircle, Building2,
-  Tag, Loader2, Image as ImageIcon, Info,
+  Tag, Loader2, Image as ImageIcon, Info, MessageCircle,
+  Mail, Wifi, WifiOff, RefreshCw, Trash2, QrCode,
 } from 'lucide-react'
 
 type OfficeForm = {
@@ -53,6 +54,13 @@ export default function BrokerAyarlarPage() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // WhatsApp bağlantı durumu
+  const [waStatus, setWaStatus] = useState<{ connected: boolean; phone?: string; instance?: string } | null>(null)
+  const [waLoading, setWaLoading] = useState(false)
+  const [waConnecting, setWaConnecting] = useState(false)
+  const [waQr, setWaQr] = useState<string | null>(null)
+  const [waQrBase64, setWaQrBase64] = useState<string | null>(null)
+
   const [form, setForm] = useState<OfficeForm>({
     name: '',
     address: '',
@@ -67,7 +75,7 @@ export default function BrokerAyarlarPage() {
     royalty_rate: 0,
   })
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData(); fetchWaStatus() }, [])
 
   async function fetchData() {
     setLoading(true)
@@ -158,6 +166,53 @@ export default function BrokerAyarlarPage() {
       setTimeout(() => setSaved(false), 2500)
       fetchData()
     }
+  }
+
+  async function fetchWaStatus() {
+    setWaLoading(true)
+    try {
+      const res = await fetch('/api/whatsapp/consultant')
+      if (res.ok) {
+        const d = await res.json()
+        setWaStatus({
+          connected: d.state === 'open' || d.connected === true,
+          phone: d.phone_number || d.phone,
+          instance: d.instance_name || d.instance,
+        })
+      } else {
+        setWaStatus({ connected: false })
+      }
+    } catch {
+      setWaStatus({ connected: false })
+    } finally {
+      setWaLoading(false)
+    }
+  }
+
+  async function connectWa() {
+    setWaConnecting(true)
+    setWaQr(null)
+    setWaQrBase64(null)
+    try {
+      const res = await fetch('/api/whatsapp/consultant', { method: 'POST' })
+      const d = await res.json()
+      if (d.qr) setWaQr(d.qr)
+      if (d.qrBase64 || d.base64) setWaQrBase64(d.qrBase64 || d.base64)
+      // Poll for connection after QR is shown
+      setTimeout(() => fetchWaStatus(), 15000)
+    } catch {
+      //
+    } finally {
+      setWaConnecting(false)
+    }
+  }
+
+  async function disconnectWa() {
+    if (!confirm('WhatsApp bağlantısını kesmek istediğinize emin misiniz?')) return
+    await fetch('/api/whatsapp/consultant', { method: 'DELETE' })
+    setWaStatus({ connected: false })
+    setWaQr(null)
+    setWaQrBase64(null)
   }
 
   const selectedBrand = brands.find(b => b.id === form.brand_id)
@@ -444,6 +499,98 @@ export default function BrokerAyarlarPage() {
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bağlantı Ayarları */}
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* WhatsApp */}
+        <div className="card">
+          <h2 className="text-base font-semibold text-on-surface mb-1 flex items-center gap-2">
+            <MessageCircle size={16} className="text-green-600" /> WhatsApp Bağlantısı
+          </h2>
+          <p className="text-xs text-on-surface-variant mb-4">
+            Chatbot ve otomasyonlar için WhatsApp numaranızı bağlayın.
+          </p>
+
+          {waLoading ? (
+            <div className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <Loader2 size={14} className="animate-spin" /> Durum kontrol ediliyor...
+            </div>
+          ) : waStatus?.connected ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                <Wifi size={16} className="text-green-600" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-800">Bağlı</p>
+                  {waStatus.phone && <p className="text-xs text-green-600">{waStatus.phone}</p>}
+                  {waStatus.instance && <p className="text-xs text-green-500">Instance: {waStatus.instance}</p>}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={fetchWaStatus} className="btn-secondary flex items-center gap-1 text-xs flex-1">
+                  <RefreshCw size={12} /> Yenile
+                </button>
+                <button onClick={disconnectWa} className="btn-secondary flex items-center gap-1 text-xs flex-1 text-red-600 border-red-200 hover:bg-red-50">
+                  <Trash2 size={12} /> Bağlantıyı Kes
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-surface-container-high">
+                <WifiOff size={16} className="text-on-surface-variant" />
+                <p className="text-sm text-on-surface-variant">Bağlı değil</p>
+              </div>
+
+              {waQr || waQrBase64 ? (
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-xs text-on-surface-variant">QR kodu WhatsApp ile tarayın:</p>
+                  {waQrBase64 ? (
+                    <img src={waQrBase64.startsWith('data:') ? waQrBase64 : `data:image/png;base64,${waQrBase64}`} alt="QR" className="w-48 h-48 rounded-lg" />
+                  ) : waQr ? (
+                    <div className="p-3 bg-white rounded-lg border">
+                      <p className="text-[10px] break-all text-on-surface-variant font-mono max-w-[200px]">{waQr.slice(0, 60)}...</p>
+                    </div>
+                  ) : null}
+                  <button onClick={fetchWaStatus} className="btn-secondary text-xs flex items-center gap-1">
+                    <RefreshCw size={12} /> Bağlantıyı kontrol et
+                  </button>
+                </div>
+              ) : (
+                <button onClick={connectWa} disabled={waConnecting} className="btn-primary flex items-center gap-2 w-full justify-center">
+                  {waConnecting ? <Loader2 size={14} className="animate-spin" /> : <QrCode size={14} />}
+                  {waConnecting ? 'QR Oluşturuluyor...' : 'QR ile Bağlan'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* E-posta */}
+        <div className="card">
+          <h2 className="text-base font-semibold text-on-surface mb-1 flex items-center gap-2">
+            <Mail size={16} className="text-primary" /> E-posta Ayarları
+          </h2>
+          <p className="text-xs text-on-surface-variant mb-4">
+            Sistem bildirimleri ve e-posta otomasyonları için kullanılacak adres.
+          </p>
+
+          <div className="space-y-3">
+            <Field label="Bildirim E-postası">
+              <input
+                type="email"
+                className="input"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="ofis@example.com"
+              />
+            </Field>
+            <p className="text-xs text-on-surface-variant flex items-start gap-1">
+              <Info size={11} className="mt-0.5 flex-shrink-0" />
+              Bu e-posta sistem bildirimleri ve doküman/belge gönderimlerinde gösterilir. Kaydet butonuyla güncellenir.
+            </p>
           </div>
         </div>
       </div>
