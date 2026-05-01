@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
-  Users, Building2, Calculator, LogOut, Menu, X, Briefcase
+  Users, Building2, Calculator, LogOut, Menu, X, Briefcase,
+  Home, Layout, Search, FileText, User, Settings
 } from 'lucide-react'
 import { ThemeToggle } from '@/lib/theme'
 
@@ -13,6 +14,10 @@ const navItems = [
   { href: '/broker', label: 'Ofis Yönetimi', icon: Briefcase },
   { href: '/broker/muhasebe', label: 'Ofis Muhasebesi', icon: Calculator },
   { href: '/broker/danismanlar', label: 'Danışmanlar', icon: Users },
+  { href: '/broker/portfoylerim', label: 'Portföylerim', icon: Layout },
+  { href: '/broker/ilanlar', label: 'İlanlar', icon: Search },
+  { href: '/broker/evraklar', label: 'Evraklar', icon: FileText },
+  { href: '/broker/profil', label: 'Profilim', icon: User },
 ]
 
 function BrokerSidebarLinks({ onNav }: { onNav?: () => void }) {
@@ -43,10 +48,6 @@ function BrokerSidebarLinks({ onNav }: { onNav?: () => void }) {
       </nav>
 
       <div className="flex-shrink-0 px-3 py-4 border-t border-sidebar-border space-y-1">
-        <Link href="/dashboard" className="sidebar-link text-on-surface-variant hover:text-on-surface">
-          <Building2 size={18} />
-          Danışman Paneline Dön
-        </Link>
         <button
           className="sidebar-link w-full text-left text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
           onClick={handleSignOut}

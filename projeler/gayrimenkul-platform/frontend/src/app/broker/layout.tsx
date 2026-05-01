@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import BrokerSidebar from '@/components/BrokerSidebar'
 import ActiveGuard from '@/components/ActiveGuard'
+import { FeatureProvider } from '@/lib/features'
 
 export default async function BrokerLayout({
   children,
@@ -27,13 +28,15 @@ export default async function BrokerLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-surface">
-      <BrokerSidebar />
-      <main className="flex-1 min-w-0 overflow-auto pt-14 md:pt-0 flex flex-col">
-        <ActiveGuard>
-          {children}
-        </ActiveGuard>
-      </main>
-    </div>
+    <FeatureProvider>
+      <div className="flex min-h-screen bg-surface">
+        <BrokerSidebar />
+        <main className="flex-1 min-w-0 overflow-auto pt-14 md:pt-0 flex flex-col">
+          <ActiveGuard>
+            {children}
+          </ActiveGuard>
+        </main>
+      </div>
+    </FeatureProvider>
   )
 }
