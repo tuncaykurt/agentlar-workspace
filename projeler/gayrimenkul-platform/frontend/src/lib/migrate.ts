@@ -1301,32 +1301,41 @@ ALTER TABLE offices ADD COLUMN IF NOT EXISTS royalty_rate NUMERIC(5,2) DEFAULT 0
   {
     id: '061_normalize_phone_numbers',
     sql: `
--- Telefon numaralarını +90 formatına dönüştür:
--- 1) Tire, boşluk, nokta, parantez, / karakterlerini kaldır
--- 2) Başında 0 varsa → +90 ile değiştir  (0532... → +90532...)
--- 3) Başında 90 ve 12 hane varsa → + ekle  (905321234567 → +905321234567)
--- 4) 10 haneli ise → +90 ekle (5321234567 → +905321234567)
--- 5) Zaten + ile başlıyorsa → olduğu gibi bırak
-WITH cleaned AS (
+-- (ilk deneme — 062 ile düzeltildi)
+SELECT 1;
+    `,
+  },
+  {
+    id: '062_normalize_phone_numbers_v2',
+    sql: `
+-- Sadece rakamları tut, sonra +90 formatına çevir.
+-- [^0-9] tüm ayırıcıları (tire, boşluk, nokta, parantez, +, /) atar.
+-- Zaten +90XXXXXXXXXX (13 karakter) formatında olan kayıtlar atlanır.
+WITH digits_cte AS (
   SELECT id,
-    REGEXP_REPLACE(phone, '[\s\-\.\(\)\/]', '', 'g') AS clean
+    REGEXP_REPLACE(phone, '[^0-9]', '', 'g') AS d
   FROM clients
   WHERE phone IS NOT NULL AND phone <> ''
+),
+normalized_cte AS (
+  SELECT id,
+    CASE
+      WHEN d LIKE '90%' AND LENGTH(d) = 12 THEN '+' || d
+      WHEN d LIKE '0%'                      THEN '+90' || SUBSTRING(d, 2)
+      WHEN LENGTH(d) = 10                   THEN '+90' || d
+      WHEN LENGTH(d) = 11 AND d LIKE '0%'   THEN '+90' || SUBSTRING(d, 2)
+      ELSE '+90' || d
+    END AS normalized
+  FROM digits_cte
+  WHERE d <> ''
 )
 UPDATE clients
-SET phone = CASE
-  WHEN c.clean LIKE '+%'
-    THEN c.clean
-  WHEN c.clean LIKE '90%' AND LENGTH(c.clean) = 12
-    THEN '+' || c.clean
-  WHEN c.clean LIKE '0%'
-    THEN '+90' || SUBSTRING(c.clean, 2)
-  WHEN LENGTH(c.clean) = 10
-    THEN '+90' || c.clean
-  ELSE c.clean
-END
-FROM cleaned c
-WHERE clients.id = c.id;
+SET phone = n.normalized
+FROM normalized_cte n
+WHERE clients.id = n.id
+  AND clients.phone IS NOT NULL
+  AND clients.phone <> ''
+  AND clients.phone NOT SIMILAR TO '[+]90[0-9]{10}';
     `,
   },
 
