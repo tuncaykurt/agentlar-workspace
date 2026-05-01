@@ -1298,6 +1298,37 @@ ON CONFLICT (name) DO NOTHING;
 ALTER TABLE offices ADD COLUMN IF NOT EXISTS royalty_rate NUMERIC(5,2) DEFAULT 0;
     `,
   },
+  {
+    id: '061_normalize_phone_numbers',
+    sql: `
+-- Telefon numaralarını +90 formatına dönüştür:
+-- 1) Tire, boşluk, nokta, parantez, / karakterlerini kaldır
+-- 2) Başında 0 varsa → +90 ile değiştir  (0532... → +90532...)
+-- 3) Başında 90 ve 12 hane varsa → + ekle  (905321234567 → +905321234567)
+-- 4) 10 haneli ise → +90 ekle (5321234567 → +905321234567)
+-- 5) Zaten + ile başlıyorsa → olduğu gibi bırak
+WITH cleaned AS (
+  SELECT id,
+    REGEXP_REPLACE(phone, '[\s\-\.\(\)\/]', '', 'g') AS clean
+  FROM clients
+  WHERE phone IS NOT NULL AND phone <> ''
+)
+UPDATE clients
+SET phone = CASE
+  WHEN c.clean LIKE '+%'
+    THEN c.clean
+  WHEN c.clean LIKE '90%' AND LENGTH(c.clean) = 12
+    THEN '+' || c.clean
+  WHEN c.clean LIKE '0%'
+    THEN '+90' || SUBSTRING(c.clean, 2)
+  WHEN LENGTH(c.clean) = 10
+    THEN '+90' || c.clean
+  ELSE c.clean
+END
+FROM cleaned c
+WHERE clients.id = c.id;
+    `,
+  },
 
   {
     id: '053_marketing_module',
