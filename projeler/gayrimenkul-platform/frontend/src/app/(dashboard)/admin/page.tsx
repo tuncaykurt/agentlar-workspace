@@ -10,7 +10,7 @@ import {
   Eye, EyeOff, Save, RefreshCw, Wifi, WifiOff,
   QrCode, X, Smartphone, Upload, Trash2,
   Zap, ToggleLeft, ToggleRight, Coins, Plus, Minus,
-  Puzzle,
+  Puzzle, UserPlus, ChevronDown,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -764,12 +764,27 @@ function SettingsTab() {
 
 // ─── Consultants Tab ──────────────────────────────────────────────────────────
 
+const ROLES = [
+  { value: 'consultant', label: 'Danışman' },
+  { value: 'broker',     label: 'Broker' },
+  { value: 'manager',    label: 'Müdür' },
+  { value: 'admin',      label: 'Admin' },
+]
+
 function ConsultantsTab() {
   const [consultants, setConsultants] = useState<Consultant[]>([])
   const [loading, setLoading] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)
   const [editRate, setEditRate] = useState('')
   const [saving, setSaving] = useState(false)
+  const [roleChangingId, setRoleChangingId] = useState<string | null>(null)
+
+  // Yeni kullanıcı formu
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newForm, setNewForm] = useState({ full_name: '', email: '', password: '', role: 'consultant', phone: '' })
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [createSuccess, setCreateSuccess] = useState('')
 
   useEffect(() => { fetchConsultants() }, [])
 
@@ -800,29 +815,168 @@ function ConsultantsTab() {
     fetchConsultants()
   }
 
+  async function changeRole(id: string, newRole: string) {
+    setRoleChangingId(id)
+    const supabase = createClient()
+    await supabase.from('consultants').update({ role: newRole }).eq('id', id)
+    // Aynı zamanda office_memberships tablosundaki rolü de senkronize et
+    await supabase.from('office_memberships').update({ role: newRole }).eq('consultant_id', id).is('end_date', null)
+    setRoleChangingId(null)
+    fetchConsultants()
+  }
+
+  async function createNewUser() {
+    if (!newForm.full_name || !newForm.email || !newForm.password) {
+      setCreateError('Ad, e-posta ve şifre zorunludur.')
+      return
+    }
+    setCreating(true)
+    setCreateError('')
+    setCreateSuccess('')
+    try {
+      const res = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newForm),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Hata oluştu')
+      setCreateSuccess(`✅ ${newForm.full_name} (${newForm.role}) başarıyla oluşturuldu!`)
+      setNewForm({ full_name: '', email: '', password: '', role: 'consultant', phone: '' })
+      fetchConsultants()
+    } catch (e: any) {
+      setCreateError(e.message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const activeCount = consultants.filter(c => c.is_active).length
 
   return (
     <div className="space-y-4">
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Toplam', value: consultants.length, color: 'blue' },
-          { label: 'Aktif', value: activeCount, color: 'green' },
-          { label: 'Pasif', value: consultants.length - activeCount, color: 'slate' },
-        ].map(s => (
-          <div key={s.label} className="stat-card">
-            <p className="text-xs text-on-surface-variant">{s.label}</p>
-            <p className="text-2xl font-bold text-on-surface mt-0.5">{s.value}</p>
-          </div>
-        ))}
+      {/* Stats + Yeni Kullanıcı */}
+      <div className="flex items-start gap-3">
+        <div className="grid grid-cols-3 gap-3 flex-1">
+          {[
+            { label: 'Toplam', value: consultants.length, color: 'blue' },
+            { label: 'Aktif', value: activeCount, color: 'green' },
+            { label: 'Pasif', value: consultants.length - activeCount, color: 'slate' },
+          ].map(s => (
+            <div key={s.label} className="stat-card">
+              <p className="text-xs text-on-surface-variant">{s.label}</p>
+              <p className="text-2xl font-bold text-on-surface mt-0.5">{s.value}</p>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => { setShowNewForm(v => !v); setCreateError(''); setCreateSuccess('') }}
+          className="btn-primary flex items-center gap-2 text-sm flex-shrink-0 mt-0.5"
+        >
+          <UserPlus size={15} />
+          Yeni Kullanıcı
+        </button>
       </div>
+
+      {/* Yeni Kullanıcı Formu */}
+      {showNewForm && (
+        <div className="card border-2 border-primary/20 bg-primary-container/10">
+          <h3 className="font-semibold text-on-surface mb-4 flex items-center gap-2">
+            <UserPlus size={16} className="text-primary" />
+            Yeni Kullanıcı Oluştur
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-on-surface mb-1">Ad Soyad <span className="text-red-500">*</span></label>
+              <input
+                className="input"
+                value={newForm.full_name}
+                onChange={e => setNewForm(f => ({ ...f, full_name: e.target.value }))}
+                placeholder="Ahmet Yılmaz"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-on-surface mb-1">E-posta <span className="text-red-500">*</span></label>
+              <input
+                type="email"
+                className="input"
+                value={newForm.email}
+                onChange={e => setNewForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="ahmet@ofis.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-on-surface mb-1">Şifre <span className="text-red-500">*</span></label>
+              <input
+                type="password"
+                className="input"
+                value={newForm.password}
+                onChange={e => setNewForm(f => ({ ...f, password: e.target.value }))}
+                placeholder="Min. 8 karakter"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-on-surface mb-1">Telefon</label>
+              <input
+                className="input"
+                value={newForm.phone}
+                onChange={e => setNewForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="+905551234567"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-on-surface mb-1">Rol <span className="text-red-500">*</span></label>
+              <div className="flex gap-2 flex-wrap">
+                {ROLES.map(r => (
+                  <button
+                    key={r.value}
+                    onClick={() => setNewForm(f => ({ ...f, role: r.value }))}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+                      newForm.role === r.value
+                        ? r.value === 'broker' ? 'bg-purple-600 text-white border-purple-600'
+                          : r.value === 'admin' ? 'bg-red-600 text-white border-red-600'
+                          : 'bg-primary text-white border-primary'
+                        : 'bg-surface border-outline text-on-surface-variant hover:border-primary'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              {newForm.role === 'broker' && (
+                <p className="text-xs text-purple-600 mt-2 bg-purple-50 px-3 py-1.5 rounded-lg">
+                  🏢 Broker hesabı oluşturulduğunda kullanıcı giriş yaptığında otomatik olarak <strong>/broker</strong> paneline yönlendirilir.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {createError && (
+            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mt-3">{createError}</p>
+          )}
+          {createSuccess && (
+            <p className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg mt-3">{createSuccess}</p>
+          )}
+
+          <div className="flex gap-2 mt-4">
+            <button onClick={() => setShowNewForm(false)} className="btn-secondary flex-1">İptal</button>
+            <button
+              onClick={createNewUser}
+              disabled={creating}
+              className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {creating ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+              {creating ? 'Oluşturuluyor...' : 'Oluştur'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* List */}
       <div className="card p-0 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-outline">
           <Shield size={15} className="text-primary" />
-          <h2 className="font-semibold text-on-surface text-sm">Danışmanlar</h2>
+          <h2 className="font-semibold text-on-surface text-sm">Kullanıcılar & Roller</h2>
         </div>
 
         {loading ? (
@@ -845,38 +999,52 @@ function ConsultantsTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium text-on-surface text-sm">{c.full_name}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${roleColors[c.role] || 'bg-surface-container-high text-on-surface-variant'}`}>
-                      {roleLabels[c.role] || c.role}
-                    </span>
                     {!c.is_active && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">Pasif</span>
                     )}
-                    {/* WhatsApp durum rozeti */}
                     {c.wa_phone ? (
                       <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
-                        <MessageCircle size={10} />
-                        <span className="hidden sm:inline">WA</span>
+                        <MessageCircle size={10} /><span className="hidden sm:inline">WA</span>
                         <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                       </span>
                     ) : c.wa_instance ? (
-                      <span className="flex items-center gap-1 text-xs text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full" title="Instance var ama bağlı değil">
-                        <MessageCircle size={10} />
-                        <span className="hidden sm:inline">WA</span>
+                      <span className="flex items-center gap-1 text-xs text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">
+                        <MessageCircle size={10} /><span className="hidden sm:inline">WA</span>
                         <span className="w-1.5 h-1.5 bg-orange-400 rounded-full" />
                       </span>
                     ) : null}
                   </div>
                   <p className="text-xs text-on-surface-variant mt-0.5">{c.email}</p>
                   {c.phone && <p className="text-xs text-on-surface-variant">{c.phone}</p>}
-                  {c.wa_phone && (
-                    <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
-                      <MessageCircle size={10} /> +{c.wa_phone}
-                    </p>
-                  )}
                 </div>
 
-                {/* Komisyon */}
+                {/* Rol Değiştirme */}
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="relative">
+                    <select
+                      value={c.role}
+                      onChange={e => changeRole(c.id, e.target.value)}
+                      disabled={roleChangingId === c.id}
+                      className={`appearance-none pr-7 pl-3 py-1.5 text-xs font-medium rounded-lg border cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+                        c.role === 'broker' ? 'bg-purple-100 text-purple-700 border-purple-300'
+                        : c.role === 'admin' ? 'bg-red-100 text-red-700 border-red-300'
+                        : c.role === 'manager' ? 'bg-blue-100 text-blue-700 border-blue-300'
+                        : 'bg-surface-container-high text-on-surface-variant border-outline'
+                      }`}
+                      title="Rolü değiştir"
+                    >
+                      {ROLES.map(r => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2">
+                      {roleChangingId === c.id
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : <ChevronDown size={11} />}
+                    </div>
+                  </div>
+
+                  {/* Komisyon */}
                   <div className="flex items-center gap-1">
                     <TrendingUp size={12} className="text-on-surface-variant" />
                     {editId === c.id ? (
@@ -885,7 +1053,7 @@ function ConsultantsTab() {
                           type="number"
                           value={editRate}
                           onChange={e => setEditRate(e.target.value)}
-                          className="w-16 border border-primary rounded px-2 py-0.5 text-xs focus:outline-none"
+                          className="w-14 border border-primary rounded px-2 py-0.5 text-xs focus:outline-none"
                           placeholder={String(c.commission_rate)}
                         />
                         <span className="text-xs text-on-surface-variant">%</span>

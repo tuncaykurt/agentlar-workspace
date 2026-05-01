@@ -256,6 +256,98 @@ function WACard() {
   )
 }
 
+// ─── Commission Requests Card ──────────────────────────────────────────────────
+
+function CommissionRequestsCard({ consultantId }: { consultantId: string }) {
+  const [requests, setRequests] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchRequests()
+  }, [consultantId])
+
+  async function fetchRequests() {
+    setLoading(true)
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('commission_rate_requests')
+      .select('*, office:offices(name), requested_by:consultants(full_name)')
+      .eq('consultant_id', consultantId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+    
+    if (data) setRequests(data)
+    setLoading(false)
+  }
+
+  async function handleResponse(requestId: string, isApproved: boolean) {
+    const supabase = createClient()
+    const req = requests.find(r => r.id === requestId)
+    if (!req) return
+
+    // Talebi güncelle
+    await supabase
+      .from('commission_rate_requests')
+      .update({
+        status: isApproved ? 'approved' : 'rejected',
+        resolved_at: new Date().toISOString()
+      })
+      .eq('id', requestId)
+
+    // Eğer onaylandıysa office_memberships tablosunu da güncelle
+    if (isApproved) {
+      await supabase
+        .from('office_memberships')
+        .update({
+          commission_rate_override: req.proposed_rate
+        })
+        .eq('id', req.membership_id)
+    }
+
+    fetchRequests()
+  }
+
+  if (loading) return null
+  if (requests.length === 0) return null
+
+  return (
+    <div className="card border-orange-200 bg-orange-50/30">
+      <h2 className="font-semibold text-orange-800 mb-4 flex items-center gap-2">
+        <Award size={16} className="text-orange-600" /> 
+        Komisyon Oranı Değişiklik Talepleri
+      </h2>
+      <div className="space-y-3">
+        {requests.map(req => (
+          <div key={req.id} className="p-3 bg-white rounded-lg border border-orange-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-gray-900">
+                {req.office?.name} - <span className="text-primary font-bold">Yeni Oran: %{req.proposed_rate}</span>
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Taleb eden: {req.requested_by?.full_name} • {new Date(req.created_at).toLocaleDateString('tr-TR')}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => handleResponse(req.id, false)}
+                className="btn-secondary text-xs border-red-200 text-red-600 hover:bg-red-50"
+              >
+                Reddet
+              </button>
+              <button 
+                onClick={() => handleResponse(req.id, true)}
+                className="btn-primary text-xs bg-green-600 hover:bg-green-700 text-white"
+              >
+                Onayla
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
@@ -438,6 +530,8 @@ export default function ProfilePage() {
       </div>
 
       <div className="space-y-5">
+        {consultant && <CommissionRequestsCard consultantId={consultant.id} />}
+
         {/* Temel Bilgiler */}
         <div className="card">
           <h2 className="font-semibold text-on-surface mb-4 flex items-center gap-2">

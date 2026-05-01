@@ -215,6 +215,23 @@ export interface Office {
   brand?: Brand
 }
 
+export interface CommissionRateRequest {
+  id: string
+  membership_id: string
+  office_id: string
+  consultant_id: string
+  requested_by_id: string
+  proposed_rate: number
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+  resolved_at?: string
+  
+  // İlişkili veriler
+  membership?: OfficeMembership
+  consultant?: Consultant
+  requested_by?: Consultant
+}
+
 export interface OfficeMembership {
   id: string
   consultant_id: string

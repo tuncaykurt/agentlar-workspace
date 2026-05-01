@@ -21,7 +21,6 @@ const navItems = [
   { href: '/portfolio',      label: 'Portföy',            icon: Building2,       featureKey: 'portfolio' },
   { href: '/sahibinden',     label: 'Sahibinden İlanlar', icon: Store,           featureKey: 'sahibinden' },
   { href: '/muhasebe',       label: 'Muhasebe',           icon: Calculator,      featureKey: 'muhasebe' },
-  { href: '/broker',         label: 'Broker Paneli',      icon: Briefcase,       featureKey: 'broker' },
   { href: '/communications', label: 'İletişim',           icon: MessageSquare,   featureKey: 'communications' },
   { href: '/campaigns',      label: 'Kampanyalar',        icon: Megaphone,       featureKey: 'campaigns' },
   { href: '/documents',      label: 'Belgeler',           icon: FileText,        featureKey: 'documents' },

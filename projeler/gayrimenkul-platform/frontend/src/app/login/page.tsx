@@ -19,7 +19,7 @@ export default function LoginPage() {
     setError('')
 
     const supabase = createClient()
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const { error: authError, data: authData } = await supabase.auth.signInWithPassword({ email, password })
 
     if (authError) {
       if (authError.message.includes('Email not confirmed')) {
@@ -31,7 +31,22 @@ export default function LoginPage() {
       return
     }
 
-    router.push('/dashboard')
+    if (authData?.user) {
+      const { data: consultant } = await supabase
+        .from('consultants')
+        .select('role')
+        .eq('user_id', authData.user.id)
+        .single()
+      
+      if (consultant?.role === 'broker') {
+        router.push('/broker')
+      } else {
+        router.push('/dashboard')
+      }
+    } else {
+      router.push('/dashboard')
+    }
+
     router.refresh()
   }
 
