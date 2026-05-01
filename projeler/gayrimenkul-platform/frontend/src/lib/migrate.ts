@@ -1268,6 +1268,32 @@ UPDATE sales_closings SET buyer_client_id = client_id WHERE buyer_client_id IS N
     `,
   },
   {
+    id: '059_broker_improvements',
+    sql: `
+-- ─── Sabit / tekrarlayan giderler ────────────────────────────────────────────
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN DEFAULT false;
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS recurring_day INTEGER DEFAULT 1; -- ayın kaçında (1-31)
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS parent_expense_id UUID REFERENCES expenses(id) ON DELETE SET NULL;
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS month_tag TEXT; -- YYYY-MM formatında (otomatik kopyalama için)
+
+-- ─── Türk gayrimenkul franchise markalarını seed et ───────────────────────────
+INSERT INTO brands (name, hq_share_rate, notes) VALUES
+  ('RE/MAX',               6.00,  'RE/MAX Türkiye franchise — aylık royalty + reklam fonu'),
+  ('Century 21',           6.00,  'Century 21 Türkiye franchise'),
+  ('Coldwell Banker',      7.00,  'Coldwell Banker Türkiye — CB Net üzerinden listeleme'),
+  ('ERA Real Estate',      6.00,  'ERA Türkiye franchise'),
+  ('Keller Williams',      6.00,  'Keller Williams Türkiye — KW Command sistemi'),
+  ('Engel & Völkers',      8.00,  'Engel & Völkers Türkiye — lüks segment'),
+  ('Sotheby''s Realty TR', 8.00,  'Sotheby''s International Realty Türkiye lisansı'),
+  ('Turyap',               5.00,  'Turyap — yerel Türk zincir marka'),
+  ('Zingat Ofis',          5.00,  'Zingat kurumsal ofis ağı'),
+  ('Hepsiemlak Ofis',      5.00,  'Hepsiemlak kurumsal ofis ağı'),
+  ('emlakjet Ofis',        5.00,  'emlakjet kurumsal ofis programı')
+ON CONFLICT (name) DO NOTHING;
+    `,
+  },
+
+  {
     id: '053_marketing_module',
     sql: `
 -- Campaigns: çok kanallı (whatsapp + email + linkedin) hale getir

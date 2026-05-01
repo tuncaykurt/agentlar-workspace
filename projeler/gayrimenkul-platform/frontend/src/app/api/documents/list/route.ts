@@ -27,17 +27,30 @@ export async function GET(req: NextRequest) {
     .single()
 
   const isAdmin = consultant?.role === 'admin'
+  const isBroker = consultant?.role === 'broker' || consultant?.role === 'manager'
 
   const { searchParams } = new URL(req.url)
   const filterStatus = searchParams.get('status')
+  const officeId = searchParams.get('office_id')
 
   let query = supabase
     .from('documents')
-    .select('*, client:clients(full_name), property:properties(title)')
+    .select('*, client:clients(full_name), property:properties(title), consultant:consultants(full_name)')
     .order('created_at', { ascending: false })
 
-  // Non-admins only see their own documents
-  if (!isAdmin && consultant?.id) {
+  if (isAdmin) {
+    // Admin her şeyi görür; office_id filtresi varsa uygula
+    if (officeId) query = query.eq('office_id', officeId)
+  } else if (isBroker) {
+    // Broker/manager: ofis bazlı filtre (office_id verilmişse onu kullan)
+    if (officeId) {
+      query = query.eq('office_id', officeId)
+    } else if (consultant?.id) {
+      // office_id verilmemişse danışmanın kendi belgelerini göster
+      query = query.eq('consultant_id', consultant.id)
+    }
+  } else if (consultant?.id) {
+    // Sıradan danışman: sadece kendi belgeleri
     query = query.eq('consultant_id', consultant.id)
   }
 

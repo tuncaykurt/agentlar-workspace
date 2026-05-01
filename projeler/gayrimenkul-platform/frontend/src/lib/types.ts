@@ -337,6 +337,7 @@ export interface SalesClosing {
 export interface Expense {
   id: string
   consultant_id: string
+  office_id?: string
   amount: number
   category: ExpenseCategory
   description: string
@@ -344,6 +345,11 @@ export interface Expense {
   expense_date: string
   is_approved?: boolean
   approved_at?: string
+  is_recurring: boolean
+  recurring_day?: number
+  parent_expense_id?: string
+  month_tag?: string
+  notes?: string
   created_at: string
 }
 

@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   Users, Building2, Calculator, LogOut, Menu, X, Briefcase,
-  Home, Layout, Search, FileText, User, Settings
+  Layout, Search, FileText, User, Settings
 } from 'lucide-react'
 import { ThemeToggle } from '@/lib/theme'
 
@@ -17,6 +17,7 @@ const navItems = [
   { href: '/broker/portfoylerim', label: 'Portföylerim', icon: Layout },
   { href: '/broker/ilanlar', label: 'İlanlar', icon: Search },
   { href: '/broker/evraklar', label: 'Evraklar', icon: FileText },
+  { href: '/broker/ayarlar', label: 'Ayarlar', icon: Settings },
   { href: '/broker/profil', label: 'Profilim', icon: User },
 ]
 
