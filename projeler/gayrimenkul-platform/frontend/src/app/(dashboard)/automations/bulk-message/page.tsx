@@ -6,6 +6,7 @@ import {
   Send, MessageSquare, Users, Tag, GraduationCap, Copy, CheckCircle,
   ChevronDown, ChevronUp, Filter, Sparkles, Play, Pause, SkipForward,
   Square, Settings2, Bot, Save, Loader2, Clock, ToggleLeft, ToggleRight,
+  Cpu, Wrench, MessageCircleQuestion
 } from 'lucide-react'
 
 const TOOL_LIBRARY: Record<string, { label: string; emoji: string; description: string }> = {
@@ -25,6 +26,36 @@ interface Contact {
   phone: string | null
   email: string | null
   tags: string[]
+}
+
+const PERSONALITY_OPTIONS = [
+  { value: 'resmi',     label: 'Resmi',   description: 'Profesyonel, mesafeli, saygılı' },
+  { value: 'samimi',    label: 'Samimi',  description: 'Sıcak, doğal, profesyonel' },
+  { value: 'espirili',  label: 'Esprili', description: 'Eğlenceli, samimi, esprili' },
+]
+
+interface ChatbotConfig {
+  is_enabled: boolean
+  system_prompt: string
+  max_history_messages: number
+  selected_model: string
+  personality_preset: string
+  temperature: number
+  example_dialogues: string
+  enabled_tools: string[]
+  debounce_seconds: number
+}
+
+const DEFAULT_CONFIG: ChatbotConfig = {
+  is_enabled: false,
+  system_prompt: 'Sen yardımsever bir gayrimenkul danışmanı asistanısın. Müşterilerin sorularını kısa, samimi ve profesyonel bir şekilde yanıtlıyorsun.',
+  max_history_messages: 10,
+  selected_model: 'anthropic/claude-haiku-4-5',
+  personality_preset: 'samimi',
+  temperature: 0.7,
+  example_dialogues: '',
+  enabled_tools: [],
+  debounce_seconds: 5,
 }
 
 interface ORModel {
@@ -112,12 +143,11 @@ export default function BulkMessagePage() {
 
   // AI Sistem Promptu ve Ayarları
   const [showAI, setShowAI] = useState(false)
-  const [aiPrompt, setAiPrompt] = useState('')
-  const [aiEnabled, setAiEnabled] = useState(false)
-  const [aiModel, setAiModel] = useState('google/gemini-2.5-flash')
-  const [aiTools, setAiTools] = useState<string[]>([])
+  const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(DEFAULT_CONFIG)
   const [savingAI, setSavingAI] = useState(false)
   const [aiSaved, setAiSaved] = useState(false)
+
+  const setConfig = (patch: Partial<ChatbotConfig>) => setChatbotConfig(c => ({ ...c, ...patch }))
   
   const [orModels, setOrModels] = useState<ORModel[]>([])
   const [orModelsLoading, setOrModelsLoading] = useState(false)
@@ -165,10 +195,17 @@ export default function BulkMessagePage() {
       
       setContacts(fetchedContacts)
       if (configRes.data) {
-        setAiPrompt(configRes.data.system_prompt || '')
-        setAiEnabled(configRes.data.is_enabled || false)
-        setAiModel(configRes.data.selected_model || 'google/gemini-2.5-flash')
-        setAiTools(configRes.data.enabled_tools || [])
+        setChatbotConfig({
+          is_enabled: configRes.data.is_enabled || false,
+          system_prompt: configRes.data.system_prompt || DEFAULT_CONFIG.system_prompt,
+          max_history_messages: configRes.data.max_history_messages ?? DEFAULT_CONFIG.max_history_messages,
+          selected_model: configRes.data.selected_model || DEFAULT_CONFIG.selected_model,
+          personality_preset: configRes.data.personality_preset || DEFAULT_CONFIG.personality_preset,
+          temperature: configRes.data.temperature ?? DEFAULT_CONFIG.temperature,
+          example_dialogues: configRes.data.example_dialogues || '',
+          enabled_tools: configRes.data.enabled_tools || [],
+          debounce_seconds: configRes.data.debounce_seconds ?? DEFAULT_CONFIG.debounce_seconds,
+        })
       }
       setLoading(false)
     }
@@ -378,10 +415,15 @@ export default function BulkMessagePage() {
     await supabase
       .from('whatsapp_chatbot_config')
       .update({ 
-        system_prompt: aiPrompt,
-        is_enabled: aiEnabled,
-        selected_model: aiModel,
-        enabled_tools: aiTools,
+        system_prompt: chatbotConfig.system_prompt,
+        is_enabled: chatbotConfig.is_enabled,
+        selected_model: chatbotConfig.selected_model,
+        enabled_tools: chatbotConfig.enabled_tools,
+        personality_preset: chatbotConfig.personality_preset,
+        temperature: chatbotConfig.temperature,
+        example_dialogues: chatbotConfig.example_dialogues,
+        max_history_messages: chatbotConfig.max_history_messages,
+        debounce_seconds: chatbotConfig.debounce_seconds,
       })
       .eq('consultant_id', consultant.id)
 
@@ -694,144 +736,255 @@ export default function BulkMessagePage() {
             </p>
           </div>
 
-          {/* AI Sistem Promptu */}
+          {/* AI Ayarları Genişletici */}
           <div className="card">
             <button type="button" onClick={() => setShowAI(v => !v)}
               className="w-full flex items-center justify-between">
               <h2 className="font-semibold text-on-surface flex items-center gap-2">
-                <Bot size={16} className="text-purple-600" /> AI Yanıt Ayarı
+                <Bot size={16} className="text-purple-600" /> AI Yanıt Ayarları
               </h2>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-on-surface-variant">Geri mesaj yazanlara AI cevap verir</span>
                 {showAI ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </div>
             </button>
+          </div>
 
-            {showAI && (
-              <div className="mt-4 space-y-4 border-t border-outline pt-4">
+          {showAI && (
+            <div className="space-y-4">
+              {/* Durum */}
+              <div className="card">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-on-surface">Yapay Zeka Yanıtları</p>
-                    <p className="text-xs text-on-surface-variant">Otomatik yanıtları aktif veya pasif yapın</p>
+                    <p className="font-semibold text-on-surface">Chatbot Durumu</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">Otomatik yanıtları aktif veya pasif yapın</p>
                   </div>
-                  <button onClick={() => setAiEnabled(!aiEnabled)} className="flex items-center gap-2">
-                    {aiEnabled
+                  <button onClick={() => setConfig({ is_enabled: !chatbotConfig.is_enabled })} className="flex items-center gap-2">
+                    {chatbotConfig.is_enabled
                       ? <ToggleRight size={36} className="text-primary" />
                       : <ToggleLeft size={36} className="text-on-surface-variant" />}
-                    <span className={`text-sm font-medium ${aiEnabled ? 'text-primary' : 'text-on-surface-variant'}`}>
-                      {aiEnabled ? 'Aktif' : 'Pasif'}
+                    <span className={`text-sm font-medium ${chatbotConfig.is_enabled ? 'text-primary' : 'text-on-surface-variant'}`}>
+                      {chatbotConfig.is_enabled ? 'Aktif' : 'Pasif'}
                     </span>
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-xs font-medium text-on-surface-variant flex items-center gap-2">
-                    <Bot size={14} /> Yapay Zeka Modeli
-                  </h3>
-                  <p className="text-[10px] text-on-surface-variant mb-2">
-                    OpenRouter üzerinden yüzlerce model kullanabilirsiniz. Seçili: <code className="bg-surface-container-high px-1 rounded">{aiModel}</code>
-                  </p>
-                  
-                  {orModels.length === 0 ? (
-                    <button onClick={fetchModels} disabled={orModelsLoading}
-                      className="text-xs text-primary hover:underline flex items-center gap-1 disabled:opacity-50">
-                      {orModelsLoading ? <Loader2 size={12} className="animate-spin" /> : null}
-                      {orModelsLoading ? 'Modeller yükleniyor...' : 'Tüm Modelleri Listele'}
-                    </button>
-                  ) : (
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        placeholder="Model ara... (örn: claude, gpt, llama)"
-                        value={orModelSearch}
-                        onChange={e => setOrModelSearch(e.target.value)}
-                        className="w-full border border-outline rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                      <div className="max-h-40 overflow-y-auto border border-outline rounded-lg divide-y divide-outline">
-                        {orModels
-                          .filter(m => !orModelSearch || m.id.toLowerCase().includes(orModelSearch.toLowerCase()) || m.name.toLowerCase().includes(orModelSearch.toLowerCase()))
-                          .map(m => {
-                            const isFree = m.pricing?.prompt === '0'
-                            return (
-                              <button
-                                key={m.id}
-                                onClick={() => setAiModel(m.id)}
-                                className={`w-full text-left px-3 py-2 hover:bg-surface-container-high text-xs transition-colors flex items-center justify-between ${aiModel === m.id ? 'bg-primary-container' : ''}`}
-                              >
-                                <div>
-                                  <span className={`font-medium ${aiModel === m.id ? 'text-primary' : 'text-on-surface'}`}>{m.name}</span>
-                                  <span className="text-[10px] text-on-surface-variant ml-2 block truncate">{m.id}</span>
-                                </div>
-                                {isFree && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full flex-shrink-0">Ücretsiz</span>}
-                              </button>
-                            )
-                          })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-on-surface-variant">Sistem Promptu (Karakter ve Davranış)</label>
-                  <textarea
-                    value={aiPrompt}
-                    onChange={e => setAiPrompt(e.target.value)}
-                    rows={4}
-                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-400 resize-y"
-                    placeholder="Örn: Sen bir gayrimenkul danışmanının asistanısın. Sıcak, samimi ve kısa cevaplar veriyorsun."
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-on-surface-variant mb-1 block">Aktif Araçlar (Tool Kullanımı)</label>
-                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                    {Object.entries(TOOL_LIBRARY).map(([key, tool]) => {
-                      const enabled = aiTools.includes(key)
-                      return (
-                        <div
-                          key={key}
-                          className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
-                            enabled ? 'border-primary bg-primary-container/30' : 'border-outline'
-                          }`}
-                        >
-                          <div className="flex items-start gap-3 flex-1">
-                            <span className="text-xl">{tool.emoji}</span>
-                            <div>
-                              <p className="text-sm font-medium text-on-surface">{tool.label}</p>
-                              <p className="text-xs text-on-surface-variant">{tool.description}</p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => {
-                              if (enabled) setAiTools(prev => prev.filter(t => t !== key))
-                              else setAiTools(prev => [...prev, key])
-                            }}
-                          >
-                            {enabled
-                              ? <ToggleRight size={28} className="text-primary" />
-                              : <ToggleLeft size={28} className="text-on-surface-variant" />}
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end pt-2 border-t border-outline">
-                  {aiSaved && (
-                    <span className="text-xs text-green-600 flex items-center gap-1">
-                      <CheckCircle size={12} /> Kaydedildi
-                    </span>
-                  )}
-                  <button onClick={saveAIPrompt} disabled={savingAI}
-                    className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-50">
-                    {savingAI ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                    Kaydet
                   </button>
                 </div>
               </div>
-            )}
-          </div>
+
+              {chatbotConfig.is_enabled && (
+                <>
+                  {/* Model */}
+                  <div className="card">
+                    <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                      <Cpu size={16} /> AI Modeli
+                    </h2>
+                    <p className="text-xs text-on-surface-variant mb-3">
+                      OpenRouter üzerinden yüzlerce model kullanabilirsiniz. Seçili: <code className="bg-surface-container-high px-1 rounded">{chatbotConfig.selected_model}</code>
+                    </p>
+                    
+                    {orModels.length === 0 ? (
+                      <button onClick={fetchModels} disabled={orModelsLoading}
+                        className="text-xs text-primary hover:underline flex items-center gap-1 disabled:opacity-50">
+                        {orModelsLoading ? <Loader2 size={12} className="animate-spin" /> : null}
+                        {orModelsLoading ? 'Modeller yükleniyor...' : 'Tüm Modelleri Listele'}
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          placeholder="Model ara... (örn: claude, gpt, llama)"
+                          value={orModelSearch}
+                          onChange={e => setOrModelSearch(e.target.value)}
+                          className="w-full border border-outline rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                        <div className="max-h-40 overflow-y-auto border border-outline rounded-lg divide-y divide-outline">
+                          {orModels
+                            .filter(m => !orModelSearch || m.id.toLowerCase().includes(orModelSearch.toLowerCase()) || m.name.toLowerCase().includes(orModelSearch.toLowerCase()))
+                            .map(m => {
+                              const isFree = m.pricing?.prompt === '0'
+                              return (
+                                <button
+                                  key={m.id}
+                                  onClick={() => setConfig({ selected_model: m.id })}
+                                  className={`w-full text-left px-3 py-2 hover:bg-surface-container-high text-xs transition-colors flex items-center justify-between ${chatbotConfig.selected_model === m.id ? 'bg-primary-container' : ''}`}
+                                >
+                                  <div>
+                                    <span className={`font-medium ${chatbotConfig.selected_model === m.id ? 'text-primary' : 'text-on-surface'}`}>{m.name}</span>
+                                    <span className="text-[10px] text-on-surface-variant ml-2 block truncate">{m.id}</span>
+                                  </div>
+                                  {isFree && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full flex-shrink-0">Ücretsiz</span>}
+                                </button>
+                              )
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Kişilik */}
+                  <div className="card">
+                    <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                      <Sparkles size={16} /> Kişilik & Üslup
+                    </h2>
+                    <p className="text-xs text-on-surface-variant mb-3">
+                      AI'ın nasıl konuşacağını belirler. Doğal danışman tonu için Samimi önerilir.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+                      {PERSONALITY_OPTIONS.map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setConfig({ personality_preset: opt.value })}
+                          className={`p-3 rounded-lg border-2 text-left transition-colors ${
+                            chatbotConfig.personality_preset === opt.value
+                              ? 'border-primary bg-primary-container'
+                              : 'border-outline hover:border-primary/50'
+                          }`}
+                        >
+                          <p className="text-sm font-medium text-on-surface">{opt.label}</p>
+                          <p className="text-xs text-on-surface-variant mt-0.5">{opt.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-on-surface-variant">Yaratıcılık (Temperature)</label>
+                        <span className="text-xs font-mono text-on-surface">{chatbotConfig.temperature.toFixed(1)}</span>
+                      </div>
+                      <input
+                        type="range" min={0} max={1.2} step={0.1}
+                        value={chatbotConfig.temperature}
+                        onChange={e => setConfig({ temperature: parseFloat(e.target.value) })}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-[10px] text-on-surface-variant mt-1">
+                        <span>0.0 — Sabit</span>
+                        <span>0.7 — Doğal</span>
+                        <span>1.2 — Yaratıcı</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sistem Promptu */}
+                  <div className="card">
+                    <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                      <MessageSquare size={16} /> Sistem Promptu
+                    </h2>
+                    <p className="text-xs text-on-surface-variant mb-3">
+                      Asistanın rolü ve görevi. Kişilik ayarı bunun üstüne eklenir.
+                    </p>
+                    <textarea
+                      value={chatbotConfig.system_prompt}
+                      onChange={e => setConfig({ system_prompt: e.target.value })}
+                      rows={4}
+                      className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                    />
+                  </div>
+
+                  {/* Örnek Diyaloglar */}
+                  <div className="card">
+                    <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                      <MessageCircleQuestion size={16} /> Örnek Diyaloglar
+                    </h2>
+                    <p className="text-xs text-on-surface-variant mb-3">
+                      AI'a "böyle yanıt ver" örnekleri verin. Her örnek arasına boş satır bırakın.
+                    </p>
+                    <textarea
+                      value={chatbotConfig.example_dialogues}
+                      onChange={e => setConfig({ example_dialogues: e.target.value })}
+                      rows={4}
+                      className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono"
+                      placeholder={`Müşteri: Merhaba\nAsistan: Merhaba 🙂 Size nasıl yardımcı olabilirim?`}
+                    />
+                  </div>
+
+                  {/* Tools */}
+                  <div className="card">
+                    <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                      <Wrench size={16} /> Aktif Araçlar (Tool Kullanımı)
+                    </h2>
+                    <p className="text-xs text-on-surface-variant mb-3">
+                      Açtığınız tool'lar müşteri sorduğunda otomatik çağrılır.
+                    </p>
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {Object.entries(TOOL_LIBRARY).map(([key, tool]) => {
+                        const enabled = chatbotConfig.enabled_tools.includes(key)
+                        return (
+                          <div
+                            key={key}
+                            className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
+                              enabled ? 'border-primary bg-primary-container/30' : 'border-outline'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3 flex-1">
+                              <span className="text-xl">{tool.emoji}</span>
+                              <div>
+                                <p className="text-sm font-medium text-on-surface">{tool.label}</p>
+                                <p className="text-xs text-on-surface-variant">{tool.description}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (enabled) setConfig({ enabled_tools: chatbotConfig.enabled_tools.filter(t => t !== key) })
+                                else setConfig({ enabled_tools: [...chatbotConfig.enabled_tools, key] })
+                              }}
+                            >
+                              {enabled
+                                ? <ToggleRight size={28} className="text-primary" />
+                                : <ToggleLeft size={28} className="text-on-surface-variant" />}
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Sohbet Hafızası & Mesaj Birleştirme */}
+                  <div className="card">
+                    <div className="space-y-5">
+                      <div>
+                        <h2 className="font-semibold text-on-surface mb-1">Sohbet Hafızası</h2>
+                        <div className="flex items-center gap-4">
+                          <input type="range" min={0} max={20} value={chatbotConfig.max_history_messages}
+                            onChange={e => setConfig({ max_history_messages: +e.target.value })}
+                            className="flex-1" />
+                          <span className="text-sm font-mono w-20 text-on-surface">
+                            {chatbotConfig.max_history_messages === 0 ? 'Yok' : `${chatbotConfig.max_history_messages} mesaj`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-on-surface-variant mt-1">AI önceki kaç mesajı bağlam olarak kullansın.</p>
+                      </div>
+                      
+                      <div>
+                        <h2 className="font-semibold text-on-surface mb-1">Mesaj Birleştirme</h2>
+                        <div className="flex items-center gap-4">
+                          <input type="range" min={0} max={20} value={chatbotConfig.debounce_seconds}
+                            onChange={e => setConfig({ debounce_seconds: +e.target.value })}
+                            className="flex-1" />
+                          <span className="text-sm font-mono w-20 text-on-surface">
+                            {chatbotConfig.debounce_seconds === 0 ? 'Anlık' : `${chatbotConfig.debounce_seconds} sn`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-on-surface-variant mt-1">Ardarda atılan mesajları birleştirmek için bekleme süresi.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Kaydet */}
+                  <div className="flex items-center justify-end gap-3 mt-4">
+                    {aiSaved && (
+                      <span className="text-sm text-green-600 flex items-center gap-1 font-medium">
+                        <CheckCircle size={16} /> Ayarlar Kaydedildi
+                      </span>
+                    )}
+                    <button onClick={saveAIPrompt} disabled={savingAI}
+                      className="btn-primary flex items-center gap-2">
+                      {savingAI ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                      AI Ayarlarını Kaydet
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ─── Sağ: Önizleme ─── */}
