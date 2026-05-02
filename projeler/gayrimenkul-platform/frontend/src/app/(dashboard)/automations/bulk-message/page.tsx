@@ -94,9 +94,12 @@ export default function BulkMessagePage() {
   const [sendError, setSendError] = useState<string | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // AI Sistem Promptu
+  // AI Sistem Promptu ve Ayarları
   const [showAI, setShowAI] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [aiModel, setAiModel] = useState('google/gemini-2.5-flash')
+  const [aiTools, setAiTools] = useState<string[]>([])
   const [savingAI, setSavingAI] = useState(false)
   const [aiSaved, setAiSaved] = useState(false)
 
@@ -110,11 +113,16 @@ export default function BulkMessagePage() {
           .eq('is_active', true)
           .not('phone', 'is', null)
           .order('full_name')
-          .limit(2000),
-        supabase.from('whatsapp_chatbot_config').select('system_prompt').limit(1).single(),
+          .limit(10000),
+        supabase.from('whatsapp_chatbot_config').select('*').limit(1).single(),
       ])
       if (contactsRes.data) setContacts(contactsRes.data as Contact[])
-      if (configRes.data?.system_prompt) setAiPrompt(configRes.data.system_prompt)
+      if (configRes.data) {
+        setAiPrompt(configRes.data.system_prompt || '')
+        setAiEnabled(configRes.data.is_enabled || false)
+        setAiModel(configRes.data.selected_model || 'google/gemini-2.5-flash')
+        setAiTools(configRes.data.enabled_tools || [])
+      }
       setLoading(false)
     }
     load()
@@ -322,7 +330,13 @@ export default function BulkMessagePage() {
 
     await supabase
       .from('whatsapp_chatbot_config')
-      .upsert({ consultant_id: consultant.id, system_prompt: aiPrompt }, { onConflict: 'consultant_id' })
+      .update({ 
+        system_prompt: aiPrompt,
+        is_enabled: aiEnabled,
+        selected_model: aiModel,
+        enabled_tools: aiTools,
+      })
+      .eq('consultant_id', consultant.id)
 
     setSavingAI(false)
     setAiSaved(true)
@@ -647,18 +661,72 @@ export default function BulkMessagePage() {
             </button>
 
             {showAI && (
-              <div className="mt-4 space-y-3">
-                <p className="text-xs text-on-surface-variant leading-relaxed">
-                  Bu mesajlara cevap yazan kişilerle AI chatbot nasıl konuşsun? Aşağıdaki sistem promptunu belirleyin.
-                </p>
-                <textarea
-                  value={aiPrompt}
-                  onChange={e => setAiPrompt(e.target.value)}
-                  rows={5}
-                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y"
-                  placeholder="Örn: Sen bir gayrimenkul danışmanının asistanısın. Sıcak, samimi ve kısa cevaplar veriyorsun. Mülk soruları için randevu öneriyorsun. Bayram mesajına cevap verenlere teşekkür et ve nasıl yardımcı olabileceğini sor."
-                />
-                <div className="flex items-center gap-2 justify-end">
+              <div className="mt-4 space-y-4 border-t border-outline pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-on-surface">Yapay Zeka Yanıtları</p>
+                    <p className="text-xs text-on-surface-variant">Otomatik yanıtları aktif veya pasif yapın</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={aiEnabled} onChange={e => setAiEnabled(e.target.checked)} />
+                    <div className="w-9 h-5 bg-surface-container-high peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                  </label>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-on-surface-variant">Yapay Zeka Modeli</label>
+                  <select 
+                    value={aiModel} 
+                    onChange={e => setAiModel(e.target.value)}
+                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-surface"
+                  >
+                    <option value="google/gemini-2.5-flash">Gemini 2.5 Flash (Hızlı ve Ucuz)</option>
+                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (Akıllı ve Doğal)</option>
+                    <option value="openai/gpt-4o-mini">GPT-4o Mini (Hızlı)</option>
+                    <option value="openai/gpt-4o">GPT-4o (Gelişmiş)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-on-surface-variant">Sistem Promptu (Karakter ve Davranış)</label>
+                  <textarea
+                    value={aiPrompt}
+                    onChange={e => setAiPrompt(e.target.value)}
+                    rows={4}
+                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-400 resize-y"
+                    placeholder="Örn: Sen bir gayrimenkul danışmanının asistanısın. Sıcak, samimi ve kısa cevaplar veriyorsun."
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-on-surface-variant mb-1 block">Aktif Araçlar (Tool Kullanımı)</label>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" 
+                        checked={aiTools.includes('property_search')} 
+                        onChange={e => {
+                          if (e.target.checked) setAiTools(prev => [...prev, 'property_search'])
+                          else setAiTools(prev => prev.filter(t => t !== 'property_search'))
+                        }} 
+                        className="rounded border-outline text-primary focus:ring-primary" 
+                      />
+                      Portföy Arama (Müşteriye uygun ilanları bulur)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" 
+                        checked={aiTools.includes('save_lead')} 
+                        onChange={e => {
+                          if (e.target.checked) setAiTools(prev => [...prev, 'save_lead'])
+                          else setAiTools(prev => prev.filter(t => t !== 'save_lead'))
+                        }} 
+                        className="rounded border-outline text-primary focus:ring-primary" 
+                      />
+                      Talep Kaydetme (Müşteri taleplerini CRM'e kaydeder)
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end pt-2 border-t border-outline">
                   {aiSaved && (
                     <span className="text-xs text-green-600 flex items-center gap-1">
                       <CheckCircle size={12} /> Kaydedildi
