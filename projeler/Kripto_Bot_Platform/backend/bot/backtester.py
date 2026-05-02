@@ -66,7 +66,8 @@ class BacktestEngine:
                 if hit:
                     pnl = self._calc_pnl(position, hit["exit_price"])
                     exit_fee = position["qty"] * hit["exit_price"] * self.fee_pct
-                    net_pnl = pnl - exit_fee
+                    entry_fee = position.get("entry_fee", 0)
+                    net_pnl = pnl - exit_fee - entry_fee
                     # Likidasyon güvenliği: margin'den fazla kaybedemezsin
                     if net_pnl < -position["margin"]:
                         net_pnl = -position["margin"]
@@ -106,7 +107,8 @@ class BacktestEngine:
                 if opposite:
                     pnl = self._calc_pnl(position, c)
                     exit_fee = position["qty"] * c * self.fee_pct
-                    net_pnl = pnl - exit_fee
+                    entry_fee = position.get("entry_fee", 0)
+                    net_pnl = pnl - exit_fee - entry_fee
                     if net_pnl < -position["margin"]:
                         net_pnl = -position["margin"]
                     balance += net_pnl
@@ -165,7 +167,6 @@ class BacktestEngine:
                             if sl > liq_price:
                                 sl = liq_price
 
-                    balance -= entry_fee
                     position = {
                         "side": signal,
                         "entry": c,
@@ -175,6 +176,7 @@ class BacktestEngine:
                         "tp": tp,
                         "liq_price": liq_price,
                         "entry_ts": ts,
+                        "entry_fee": entry_fee,
                     }
 
             # Equity curve (her 10 barda bir kaydet — performans)
@@ -195,7 +197,8 @@ class BacktestEngine:
             last_close = ohlcv[-1][4]
             pnl = self._calc_pnl(position, last_close)
             exit_fee = position["qty"] * last_close * self.fee_pct
-            net_pnl = pnl - exit_fee
+            entry_fee = position.get("entry_fee", 0)
+            net_pnl = pnl - exit_fee - entry_fee
             if net_pnl < -position["margin"]:
                 net_pnl = -position["margin"]
             balance += net_pnl
