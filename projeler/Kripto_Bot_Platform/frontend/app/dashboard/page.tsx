@@ -70,7 +70,7 @@ export default function DashboardPage() {
   const symbolDisplay = symbol.replace("/USDT:USDT", "").replace("/USDT", "") + "/USDT"
 
   return (
-    <div className="flex h-[calc(100vh-45px)] bg-[#020817] overflow-hidden">
+    <div className="flex flex-col md:flex-row h-full md:h-[calc(100vh-45px)] bg-[#020817] overflow-hidden md:overflow-hidden overflow-y-auto">
 
       {/* ── TradingView Tam Ekran Modu ── */}
       {tvFull && (
@@ -198,7 +198,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Grafik Alanı ── */}
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 min-h-[300px]">
           {mode === "tv" ? (
             <TradingViewWidget symbol={symbol} interval={interval} />
           ) : (
@@ -212,8 +212,8 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Sağ Sidebar ── */}
-      <div className={`border-l border-slate-800 bg-[#0a0f1a] flex flex-col overflow-y-auto shrink-0 transition-all duration-300 ${
-        sidebarCollapsed ? "w-0 opacity-0 overflow-hidden border-0" : "w-72"
+      <div className={`border-t md:border-t-0 md:border-l border-slate-800 bg-[#0a0f1a] flex flex-col overflow-y-auto shrink-0 transition-all duration-300 ${
+        sidebarCollapsed ? "hidden md:flex w-0 opacity-0 overflow-hidden border-0" : "w-full md:w-72"
       }`}>
         <div className="p-3 space-y-0 min-w-[18rem]">
 

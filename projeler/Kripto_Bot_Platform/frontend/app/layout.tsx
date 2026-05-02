@@ -28,9 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
       </head>
-      <body className="bg-slate-950 text-white h-screen overflow-hidden flex flex-col">
+      <body className="bg-slate-950 text-white flex flex-col" style={{ height: "100dvh", overflow: "hidden" }}>
         <NavClient />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto overscroll-contain">{children}</main>
         <PWARegister />
       </body>
     </html>
