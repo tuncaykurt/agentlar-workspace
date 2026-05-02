@@ -64,7 +64,7 @@ const PREDEFINED_TAGS = ['Emlakçı', 'VIP', 'Yatırımcı', 'Aktif Alıcı', 'T
 
 function personalizeMessage(template: string, contact: Contact): string {
   const hitap = contact.salutation || ''
-  const isim = contact.full_name || ''
+  const isim = (contact.full_name || '').split(' ')[0] || ''
   return template
     .replace(/\{hitap\}/g, hitap)
     .replace(/\{isim\}/g, isim)
