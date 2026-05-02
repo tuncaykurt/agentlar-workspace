@@ -5,8 +5,18 @@ import { createClient } from '@/lib/supabase'
 import {
   Send, MessageSquare, Users, Tag, GraduationCap, Copy, CheckCircle,
   ChevronDown, ChevronUp, Filter, Sparkles, Play, Pause, SkipForward,
-  Square, Settings2, Bot, Save, Loader2, Clock,
+  Square, Settings2, Bot, Save, Loader2, Clock, ToggleLeft, ToggleRight,
 } from 'lucide-react'
+
+const TOOL_LIBRARY: Record<string, { label: string; emoji: string; description: string }> = {
+  list_my_properties:    { label: 'Portföyümü Listele',      emoji: '🏠', description: 'Aktif mülklerinizi gösterebilir' },
+  search_properties:     { label: 'Mülk Ara',                 emoji: '🔍', description: 'Kriterle (şehir/oda/fiyat) mülk arar' },
+  get_property_details:  { label: 'Mülk Detayı',              emoji: '📋', description: 'Belirli bir mülkün tüm detayını döner' },
+  get_consultant_contact:{ label: 'İletişim Bilgilerim',      emoji: '📞', description: 'Telefon/e-posta/ofis bilgisi' },
+  get_client_info:       { label: 'Müşteri CRM Bilgisi',      emoji: '👤', description: 'Müşteri kayıtlıysa geçmişini hatırlar' },
+  web_search:            { label: 'İnternet Araştırması',     emoji: '🌐', description: 'Perplexity Sonar ile güncel bilgi' },
+  schedule_appointment:  { label: 'Randevu Kaydet',           emoji: '📅', description: 'AI randevu oluşturabilir' },
+}
 
 interface Contact {
   id: string
@@ -15,6 +25,12 @@ interface Contact {
   phone: string | null
   email: string | null
   tags: string[]
+}
+
+interface ORModel {
+  id: string
+  name: string
+  pricing?: { prompt: string }
 }
 
 const SALUTATION_GROUPS = [
@@ -102,6 +118,21 @@ export default function BulkMessagePage() {
   const [aiTools, setAiTools] = useState<string[]>([])
   const [savingAI, setSavingAI] = useState(false)
   const [aiSaved, setAiSaved] = useState(false)
+  
+  const [orModels, setOrModels] = useState<ORModel[]>([])
+  const [orModelsLoading, setOrModelsLoading] = useState(false)
+  const [orModelSearch, setOrModelSearch] = useState('')
+
+  async function fetchModels() {
+    setOrModelsLoading(true)
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models')
+      const data = await res.json()
+      const list: ORModel[] = (data?.data || []).sort((a: ORModel, b: ORModel) => a.name.localeCompare(b.name))
+      setOrModels(list)
+    } catch { /* ignore */ }
+    setOrModelsLoading(false)
+  }
 
   useEffect(() => {
     async function load() {
@@ -683,24 +714,61 @@ export default function BulkMessagePage() {
                     <p className="text-sm font-medium text-on-surface">Yapay Zeka Yanıtları</p>
                     <p className="text-xs text-on-surface-variant">Otomatik yanıtları aktif veya pasif yapın</p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={aiEnabled} onChange={e => setAiEnabled(e.target.checked)} />
-                    <div className="w-9 h-5 bg-surface-container-high peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                  </label>
+                  <button onClick={() => setAiEnabled(!aiEnabled)} className="flex items-center gap-2">
+                    {aiEnabled
+                      ? <ToggleRight size={36} className="text-primary" />
+                      : <ToggleLeft size={36} className="text-on-surface-variant" />}
+                    <span className={`text-sm font-medium ${aiEnabled ? 'text-primary' : 'text-on-surface-variant'}`}>
+                      {aiEnabled ? 'Aktif' : 'Pasif'}
+                    </span>
+                  </button>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-on-surface-variant">Yapay Zeka Modeli</label>
-                  <select 
-                    value={aiModel} 
-                    onChange={e => setAiModel(e.target.value)}
-                    className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-surface"
-                  >
-                    <option value="google/gemini-2.5-flash">Gemini 2.5 Flash (Hızlı ve Ucuz)</option>
-                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (Akıllı ve Doğal)</option>
-                    <option value="openai/gpt-4o-mini">GPT-4o Mini (Hızlı)</option>
-                    <option value="openai/gpt-4o">GPT-4o (Gelişmiş)</option>
-                  </select>
+                <div className="space-y-2">
+                  <h3 className="text-xs font-medium text-on-surface-variant flex items-center gap-2">
+                    <Bot size={14} /> Yapay Zeka Modeli
+                  </h3>
+                  <p className="text-[10px] text-on-surface-variant mb-2">
+                    OpenRouter üzerinden yüzlerce model kullanabilirsiniz. Seçili: <code className="bg-surface-container-high px-1 rounded">{aiModel}</code>
+                  </p>
+                  
+                  {orModels.length === 0 ? (
+                    <button onClick={fetchModels} disabled={orModelsLoading}
+                      className="text-xs text-primary hover:underline flex items-center gap-1 disabled:opacity-50">
+                      {orModelsLoading ? <Loader2 size={12} className="animate-spin" /> : null}
+                      {orModelsLoading ? 'Modeller yükleniyor...' : 'Tüm Modelleri Listele'}
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Model ara... (örn: claude, gpt, llama)"
+                        value={orModelSearch}
+                        onChange={e => setOrModelSearch(e.target.value)}
+                        className="w-full border border-outline rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <div className="max-h-40 overflow-y-auto border border-outline rounded-lg divide-y divide-outline">
+                        {orModels
+                          .filter(m => !orModelSearch || m.id.toLowerCase().includes(orModelSearch.toLowerCase()) || m.name.toLowerCase().includes(orModelSearch.toLowerCase()))
+                          .map(m => {
+                            const isFree = m.pricing?.prompt === '0'
+                            return (
+                              <button
+                                key={m.id}
+                                onClick={() => setAiModel(m.id)}
+                                className={`w-full text-left px-3 py-2 hover:bg-surface-container-high text-xs transition-colors flex items-center justify-between ${aiModel === m.id ? 'bg-primary-container' : ''}`}
+                              >
+                                <div>
+                                  <span className={`font-medium ${aiModel === m.id ? 'text-primary' : 'text-on-surface'}`}>{m.name}</span>
+                                  <span className="text-[10px] text-on-surface-variant ml-2 block truncate">{m.id}</span>
+                                </div>
+                                {isFree && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full flex-shrink-0">Ücretsiz</span>}
+                              </button>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -716,29 +784,36 @@ export default function BulkMessagePage() {
 
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-on-surface-variant mb-1 block">Aktif Araçlar (Tool Kullanımı)</label>
-                  <div className="flex flex-col gap-2">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input type="checkbox" 
-                        checked={aiTools.includes('property_search')} 
-                        onChange={e => {
-                          if (e.target.checked) setAiTools(prev => [...prev, 'property_search'])
-                          else setAiTools(prev => prev.filter(t => t !== 'property_search'))
-                        }} 
-                        className="rounded border-outline text-primary focus:ring-primary" 
-                      />
-                      Portföy Arama (Müşteriye uygun ilanları bulur)
-                    </label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input type="checkbox" 
-                        checked={aiTools.includes('save_lead')} 
-                        onChange={e => {
-                          if (e.target.checked) setAiTools(prev => [...prev, 'save_lead'])
-                          else setAiTools(prev => prev.filter(t => t !== 'save_lead'))
-                        }} 
-                        className="rounded border-outline text-primary focus:ring-primary" 
-                      />
-                      Talep Kaydetme (Müşteri taleplerini CRM'e kaydeder)
-                    </label>
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {Object.entries(TOOL_LIBRARY).map(([key, tool]) => {
+                      const enabled = aiTools.includes(key)
+                      return (
+                        <div
+                          key={key}
+                          className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
+                            enabled ? 'border-primary bg-primary-container/30' : 'border-outline'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3 flex-1">
+                            <span className="text-xl">{tool.emoji}</span>
+                            <div>
+                              <p className="text-sm font-medium text-on-surface">{tool.label}</p>
+                              <p className="text-xs text-on-surface-variant">{tool.description}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (enabled) setAiTools(prev => prev.filter(t => t !== key))
+                              else setAiTools(prev => [...prev, key])
+                            }}
+                          >
+                            {enabled
+                              ? <ToggleRight size={28} className="text-primary" />
+                              : <ToggleLeft size={28} className="text-on-surface-variant" />}
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
 
