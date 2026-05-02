@@ -37,60 +37,68 @@ class BotCreate(BaseModel):
 
 @router.get("/")
 async def list_bots():
-    async with async_session() as session:
-        result = await session.execute(select(Bot).order_by(Bot.id.desc()))
-        bots = result.scalars().all()
-        return [
-            {
-                "id": b.id,
-                "name": b.name,
-                "symbol": b.symbol,
-                "strategy": b.strategy,
-                "exchange": b.exchange,
-                "status": b.status.value if b.status else "stopped",
-                "paper_mode": b.paper_mode,
-                "leverage": b.leverage,
-                "risk_per_trade": b.risk_per_trade,
-                "max_daily_loss": b.max_daily_loss,
-                "initial_balance": b.initial_balance or 1000.0,
-                "params": json.loads(b.params) if b.params else None,
-                "running": b.id in _running_bots,
-                "created_at": b.created_at.isoformat() if b.created_at else None,
-            }
-            for b in bots
-        ]
+    try:
+        async with async_session() as session:
+            result = await session.execute(select(Bot).order_by(Bot.id.desc()))
+            bots = result.scalars().all()
+            return [
+                {
+                    "id": b.id,
+                    "name": b.name,
+                    "symbol": b.symbol,
+                    "strategy": b.strategy,
+                    "exchange": b.exchange,
+                    "status": b.status.value if b.status else "stopped",
+                    "paper_mode": b.paper_mode,
+                    "leverage": b.leverage,
+                    "risk_per_trade": b.risk_per_trade,
+                    "max_daily_loss": b.max_daily_loss,
+                    "initial_balance": b.initial_balance or 1000.0,
+                    "params": json.loads(b.params) if b.params else None,
+                    "running": b.id in _running_bots,
+                    "created_at": b.created_at.isoformat() if b.created_at else None,
+                }
+                for b in bots
+            ]
+    except Exception as e:
+        print(f"[List Bots Error] {e}")
+        return []
 
 
 @router.post("/")
 async def create_bot(data: BotCreate):
-    async with async_session() as session:
-        effective_params = data.params or data.strategy_params
-        bot = Bot(
-            name=data.name,
-            symbol=data.symbol,
-            strategy=data.strategy,
-            exchange="bitget",
-            status=BotStatus.STOPPED,
-            paper_mode=data.paper_mode,
-            leverage=data.leverage,
-            risk_per_trade=data.risk_per_trade,
-            max_daily_loss=data.max_daily_loss,
-            initial_balance=data.initial_balance,
-            params=json.dumps(effective_params) if effective_params else None,
-        )
-        session.add(bot)
-        await session.commit()
-        await session.refresh(bot)
-        print(f"[Bot Created] ID:{bot.id} Name:{data.name} Strategy:{data.strategy}")
-        return {
-            "id": bot.id,
-            "name": bot.name,
-            "symbol": bot.symbol,
-            "strategy": bot.strategy,
-            "paper_mode": bot.paper_mode,
-            "params": data.params,
-            "running": False,
-        }
+    try:
+        async with async_session() as session:
+            effective_params = data.params or data.strategy_params
+            bot = Bot(
+                name=data.name,
+                symbol=data.symbol,
+                strategy=data.strategy,
+                exchange="bitget",
+                status=BotStatus.STOPPED,
+                paper_mode=data.paper_mode,
+                leverage=data.leverage,
+                risk_per_trade=data.risk_per_trade,
+                max_daily_loss=data.max_daily_loss,
+                initial_balance=data.initial_balance,
+                params=json.dumps(effective_params) if effective_params else None,
+            )
+            session.add(bot)
+            await session.commit()
+            await session.refresh(bot)
+            print(f"[Bot Created] ID:{bot.id} Name:{data.name} Strategy:{data.strategy}")
+            return {
+                "id": bot.id,
+                "name": bot.name,
+                "symbol": bot.symbol,
+                "strategy": bot.strategy,
+                "paper_mode": bot.paper_mode,
+                "params": data.params,
+                "running": False,
+            }
+    except Exception as e:
+        print(f"[Bot Create Error] {e}")
+        raise HTTPException(status_code=503, detail=f"Veritabanı hatası: {str(e)}")
 
 
 @router.post("/{bot_id}/start")
