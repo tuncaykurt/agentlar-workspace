@@ -178,13 +178,16 @@ export default function NewClientPage() {
               </div>
               <div className="w-36">
                 <label className="block text-sm font-medium text-on-surface mb-1">Hitap</label>
-                <select
+                <input
+                  list="salutation-list"
                   value={form.salutation}
                   onChange={e => setForm(f => ({ ...f, salutation: e.target.value }))}
+                  placeholder="Bey, Dr., Ecz…"
                   className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {SALUTATIONS.map(s => <option key={s} value={s}>{s || '—'}</option>)}
-                </select>
+                />
+                <datalist id="salutation-list">
+                  {SALUTATIONS.filter(Boolean).map(s => <option key={s} value={s} />)}
+                </datalist>
               </div>
             </div>
             <div>
