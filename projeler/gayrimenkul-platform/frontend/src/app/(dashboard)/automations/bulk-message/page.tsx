@@ -106,17 +106,34 @@ export default function BulkMessagePage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient()
-      const [contactsRes, configRes] = await Promise.all([
-        supabase
+      let fetchedContacts: Contact[] = []
+      let page = 0
+      const pageSize = 1000
+      let hasMore = true
+
+      while (hasMore) {
+        const { data, error } = await supabase
           .from('clients')
           .select('id,full_name,salutation,phone,email,tags')
           .eq('is_active', true)
           .not('phone', 'is', null)
           .order('full_name')
-          .limit(10000),
+          .range(page * pageSize, (page + 1) * pageSize - 1)
+        
+        if (data && data.length > 0) {
+          fetchedContacts = [...fetchedContacts, ...(data as Contact[])]
+          if (data.length < pageSize) hasMore = false
+          else page++
+        } else {
+          hasMore = false
+        }
+      }
+
+      const [configRes] = await Promise.all([
         supabase.from('whatsapp_chatbot_config').select('*').limit(1).single(),
       ])
-      if (contactsRes.data) setContacts(contactsRes.data as Contact[])
+      
+      setContacts(fetchedContacts)
       if (configRes.data) {
         setAiPrompt(configRes.data.system_prompt || '')
         setAiEnabled(configRes.data.is_enabled || false)
