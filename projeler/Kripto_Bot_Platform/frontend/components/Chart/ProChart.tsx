@@ -547,6 +547,10 @@ export default function ProChart({
   const [showSR,      setShowSR]      = useState(false)
   const [showLiq,     setShowLiq]     = useState(false)
   const [showSessions, setShowSessions] = useState(false)
+  const [stratSignal,  setStratSignal]  = useState<string | null>(null)
+  const [stratTrades,  setStratTrades]  = useState<any[]>([])
+  const [stratLoading, setStratLoading] = useState(false)
+  const [showStratMenu,setShowStratMenu]= useState(false)
 
   // Özel indikatörleri localStorage'dan yükle ve inds'e ekle
   useEffect(() => {
@@ -778,18 +782,6 @@ export default function ProChart({
         })
         trailS.setData(data.ut_bot.trail as any)
       }
-      // Buy/Sell markers
-      if (data.ut_bot.signals?.length) {
-        const markers = data.ut_bot.signals.map((s: UTSignal) => ({
-          time:     s.time as Time,
-          position: s.type === "buy" ? "belowBar" : "aboveBar",
-          color:    s.type === "buy" ? "#22c55e"  : "#ef4444",
-          shape:    s.type === "buy" ? "arrowUp"  : "arrowDown",
-          text:     s.type === "buy" ? "AL"       : "SAT",
-          size: 1,
-        }))
-        candles.setMarkers(markers as any)
-      }
     }
 
     // ── Linear Regression Channel ─────────────────────────────────
@@ -813,6 +805,68 @@ export default function ProChart({
     window.addEventListener("resize", onResize)
     return () => { window.removeEventListener("resize", onResize); chart.remove(); chartRef.current = null }
   }, [data, inds, tp, sl, showUT, showLR])
+
+  // ── Birleşik marker useEffect (UT Bot + strateji sinyalleri) ──
+  useEffect(() => {
+    const series = candleSeriesRef.current
+    if (!series || !data) return
+
+    const allMarkers: any[] = []
+
+    // UT Bot sinyalleri
+    if (showUT && data.ut_bot?.signals?.length) {
+      data.ut_bot.signals.forEach((s: UTSignal) => {
+        allMarkers.push({
+          time: s.time as Time,
+          position: s.type === "buy" ? "belowBar" : "aboveBar",
+          color:    s.type === "buy" ? "#22c55e"  : "#ef4444",
+          shape:    s.type === "buy" ? "arrowUp"  : "arrowDown",
+          text:     s.type === "buy" ? "AL"       : "SAT",
+          size: 1,
+        })
+      })
+    }
+
+    // Strateji trade sinyalleri
+    if (stratTrades.length) {
+      const candleTimes = data.candles.map(c => c.time)
+      const snap = (ts: number) => {
+        const sec = Math.floor(ts / 1000)
+        let best = candleTimes[0]; let bestDiff = Math.abs(sec - best)
+        for (const ct of candleTimes) { const d = Math.abs(sec - ct); if (d < bestDiff) { best = ct; bestDiff = d } }
+        return best
+      }
+      stratTrades.forEach((t, idx) => {
+        const entryT = snap(t.entry_ts)
+        const exitT  = snap(t.exit_ts)
+        const isLong = t.side === "buy"
+        // Giriş oku
+        allMarkers.push({
+          time:     entryT as Time,
+          position: isLong ? "belowBar" : "aboveBar",
+          color:    isLong ? "#22c55e"  : "#ef4444",
+          shape:    isLong ? "arrowUp"  : "arrowDown",
+          text:     `${isLong ? "Long" : "Short"} #${idx + 1}`,
+          size: 1.5,
+        })
+        // Çıkış işareti
+        const isTP  = t.exit_reason === "take_profit"
+        const isLiq = t.exit_reason === "liquidation"
+        allMarkers.push({
+          time:     exitT as Time,
+          position: isLong ? "aboveBar" : "belowBar",
+          color:    isTP ? "#22c55e" : isLiq ? "#dc2626" : "#f59e0b",
+          shape:    "circle",
+          text:     `${isTP ? "TP" : isLiq ? "LIQ" : "SL"} ${t.pnl >= 0 ? "+" : ""}$${Math.abs(t.pnl).toFixed(0)}`,
+          size: 1,
+        })
+      })
+    }
+
+    // Sırala (lightweight-charts zorunluluğu)
+    allMarkers.sort((a, b) => (a.time as number) - (b.time as number))
+    try { series.setMarkers(allMarkers as any) } catch {}
+  }, [showUT, data, stratTrades])
 
   // ── Volume Profile canvas (rAF ile sürekli senkron) ──────────
   useEffect(() => {
@@ -1292,6 +1346,50 @@ export default function ProChart({
     if (price !== null) { setUserLines(prev => [...prev, price as number]); setDrawMode(false) }
   }
 
+  const STRAT_LIST = [
+    { id: "ema_cross",       name: "EMA Cross",      params: {} },
+    { id: "supertrend",      name: "Supertrend",     params: { period: 10, mult: 3.0 } },
+    { id: "ut_bot",          name: "UT Bot",         params: { atr_period: 10, atr_mult: 3.0, heikin_ashi: false } },
+    { id: "macd_signal",     name: "MACD",           params: { fast: 12, slow: 26, signal: 9 } },
+    { id: "rsi_oversold",    name: "RSI",            params: { rsi_period: 14, oversold: 30, overbought: 70 } },
+    { id: "bollinger_bounce",name: "Bollinger",      params: { period: 20, std_dev: 2.0 } },
+    { id: "bb_ema_cross",    name: "BB-EMA Cross",   params: { bb_period: 20, bb_std: 2.0, ema_fast: 5, ema_slow: 13 } },
+  ]
+
+  // Sinyal menüsünü dışa tıklayınca kapat
+  useEffect(() => {
+    if (!showStratMenu) return
+    const handler = () => setShowStratMenu(false)
+    window.addEventListener("click", handler)
+    return () => window.removeEventListener("click", handler)
+  }, [showStratMenu])
+
+  const fetchStratSignals = async (stratId: string) => {
+    setStratLoading(true)
+    setShowStratMenu(false)
+    try {
+      const strat = STRAT_LIST.find(s => s.id === stratId)
+      const res = await api.post("/backtest/run", {
+        symbol, timeframe: tf, strategy: stratId,
+        days: 30,
+        initial_balance: 10000,
+        risk_per_trade: 0.02,
+        leverage: 1,
+        stop_loss_pct: 2.0,
+        take_profit_pct: 4.0,
+        params: strat?.params ?? {},
+      })
+      setStratTrades(res.trades || [])
+      setStratSignal(stratId)
+    } catch {
+      setStratTrades([])
+    } finally {
+      setStratLoading(false)
+    }
+  }
+
+  const clearStratSignals = () => { setStratSignal(null); setStratTrades([]) }
+
   const toggleInd      = (id: string) => setInds(prev => prev.map(i => i.id === id ? { ...i, enabled: !i.enabled } : i))
   const overlayEnabled = inds.filter(i => i.type === "overlay" && i.enabled)
   const lastClose      = data?.candles[data.candles.length - 1]?.close
@@ -1407,6 +1505,37 @@ export default function ProChart({
             UT Bot
           </span>
         </button>
+
+        {/* Strateji Sinyalleri */}
+        <div className="relative">
+          <button
+            onClick={() => stratSignal ? clearStratSignals() : setShowStratMenu(v => !v)}
+            disabled={stratLoading}
+            className={`text-xs px-2 py-0.5 rounded border transition-colors disabled:opacity-50 ${
+              stratSignal
+                ? "border-purple-500/50 text-purple-400 bg-purple-500/10"
+                : "border-slate-700 text-slate-400 hover:text-white"
+            }`}
+          >
+            {stratLoading ? "⏳" : stratSignal
+              ? `✕ ${STRAT_LIST.find(s => s.id === stratSignal)?.name ?? stratSignal}`
+              : "↑↓ Sinyal"
+            }
+          </button>
+          {showStratMenu && (
+            <div className="absolute top-full left-0 mt-1 z-50 bg-[#0d1117] border border-slate-700 rounded-lg shadow-xl min-w-[160px] py-1">
+              {STRAT_LIST.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => fetchStratSignals(s.id)}
+                  className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* LR Channel */}
         <button onClick={() => setShowLR(v => !v)} title="Linear Regression Channel">
