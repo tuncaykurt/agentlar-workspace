@@ -22,6 +22,8 @@ _bot_tasks: dict[int, asyncio.Task] = {}
 class BotCreate(BaseModel):
     name: str
     symbol: str = "BTC/USDT:USDT"
+    # Mevcut stratejiler: ema_cross | rsi_oversold | macd_signal | bollinger_bounce |
+    #   supertrend | ut_bot | grid_bot | custom_signal | funding_rate | bb_ema_cross
     strategy: str = "ema_cross"
     paper_mode: bool = True
     leverage: int = 3
@@ -29,6 +31,15 @@ class BotCreate(BaseModel):
     max_daily_loss: float = 0.05
     initial_balance: float = 1000.0
     params: Optional[dict] = None
+    # bb_ema_cross parametreleri (params dict içinde):
+    #   bb_period      : int   = 20       BB SMA periyodu
+    #   bb_std         : float = 2.0      Standart sapma katsayısı
+    #   ema_fast       : int   = 5        Hızlı EMA periyodu
+    #   ema_slow       : int   = 13       Yavaş EMA / dokunuş çizgisi
+    #   touch_pct      : float = 0.3      EMA'ya % yaklaşım (0 = sadece wick)
+    #   setup_lookback : int   = 5        BB orta kesişimi için geriye bakış
+    #   direction      : str   = "both"   "long" | "short" | "both"
+    #   exit_at_bands  : bool  = True     BB bantlarında çıkış sinyali
 
 
 @router.get("/")

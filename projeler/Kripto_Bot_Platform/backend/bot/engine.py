@@ -20,6 +20,7 @@ from bot.strategies.macd_signal import MACDSignalStrategy
 from bot.strategies.bollinger_bounce import BollingerBounceStrategy
 from bot.strategies.ut_bot import UTBotStrategy
 from bot.strategies.supertrend import SupertrendStrategy
+from bot.strategies.bb_ema_cross import BBEMACrossStrategy
 import json
 
 
@@ -224,6 +225,20 @@ class BotEngine:
             strat = SupertrendStrategy(
                 period=int(params.get("period", 10)),
                 mult=float(params.get("mult", 3.0)),
+            )
+            result = strat.calculate(ohlcv)
+            return result.get("signal")
+
+        elif strategy == "bb_ema_cross":
+            strat = BBEMACrossStrategy(
+                bb_period=int(params.get("bb_period", 20)),
+                bb_std=float(params.get("bb_std", 2.0)),
+                ema_fast=int(params.get("ema_fast", 5)),
+                ema_slow=int(params.get("ema_slow", 13)),
+                touch_pct=float(params.get("touch_pct", 0.3)),
+                setup_lookback=int(params.get("setup_lookback", 5)),
+                direction=str(params.get("direction", "both")),
+                exit_at_bands=bool(params.get("exit_at_bands", True)),
             )
             result = strat.calculate(ohlcv)
             return result.get("signal")

@@ -65,7 +65,16 @@ const STRATEGIES = [
   { id: "bollinger_bounce", name: "Bollinger Bounce", params: { period: 20, std_dev: 2.0, squeeze: true } },
   { id: "ut_bot", name: "UT Bot Alert", params: { atr_period: 10, atr_mult: 3.0, heikin_ashi: false } },
   { id: "supertrend", name: "Supertrend", params: { period: 10, mult: 3.0 } },
+  {
+    id: "bb_ema_cross", name: "BB-EMA Cross",
+    params: { bb_period: 20, bb_std: 2.0, ema_fast: 5, ema_slow: 13, touch_pct: 0.3, setup_lookback: 5, direction: "both", exit_at_bands: true },
+  },
 ]
+
+// String parametre için seçenek listesi
+const PARAM_OPTIONS: Record<string, Record<string, string[]>> = {
+  bb_ema_cross: { direction: ["both", "long", "short"] },
+}
 
 const SYMBOLS = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT", "XRP/USDT:USDT", "DOGE/USDT:USDT", "BNB/USDT:USDT", "ADA/USDT:USDT", "AVAX/USDT:USDT"]
 const TIMEFRAMES = ["5m", "15m", "1h", "4h", "1d"]
@@ -80,7 +89,7 @@ export default function BacktestPage() {
   const [leverage, setLeverage] = useState(3)
   const [slPct, setSlPct] = useState(2)
   const [tpPct, setTpPct] = useState(4)
-  const [params, setParams] = useState<Record<string, number | boolean>>({})
+  const [params, setParams] = useState<Record<string, number | boolean | string>>({})
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<BacktestResult | null>(null)
 
@@ -108,7 +117,15 @@ export default function BacktestPage() {
 
   const updateParam = (key: string, val: string) => {
     const num = Number(val)
-    setParams(p => ({ ...p, [key]: isNaN(num) ? val === "true" : num }))
+    if (!isNaN(num) && val !== "true" && val !== "false" && val.trim() !== "") {
+      setParams(p => ({ ...p, [key]: num }))
+    } else if (val === "true") {
+      setParams(p => ({ ...p, [key]: true }))
+    } else if (val === "false") {
+      setParams(p => ({ ...p, [key]: false }))
+    } else {
+      setParams(p => ({ ...p, [key]: val }))
+    }
   }
 
   return (
@@ -204,7 +221,17 @@ export default function BacktestPage() {
               {Object.entries(selectedStrat.params).map(([key, defaultVal]) => (
                 <label key={key} className="block">
                   <span className="text-xs text-slate-400">{key}</span>
-                  {typeof defaultVal === "boolean" ? (
+                  {typeof defaultVal === "string" ? (
+                    <select
+                      value={String(params[key] ?? defaultVal)}
+                      onChange={e => updateParam(key, e.target.value)}
+                      className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
+                    >
+                      {(PARAM_OPTIONS[strategy]?.[key] ?? [defaultVal]).map(o => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : typeof defaultVal === "boolean" ? (
                     <select
                       value={String(params[key] ?? defaultVal)}
                       onChange={e => updateParam(key, e.target.value)}
