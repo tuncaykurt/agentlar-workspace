@@ -201,12 +201,12 @@ export default function StrategyViewPage() {
   const [loading,    setLoading]    = useState(false)
   const [result,     setResult]     = useState<BacktestResult | null>(null)
   const [customInds, setCustomInds] = useState<CustomIndicatorDef[]>([])
-  // Risk & Para ayarları
-  const [initialBalance, setInitialBalance] = useState(10000)
-  const [leverage,       setLeverage]       = useState(1)
-  const [riskPct,        setRiskPct]        = useState(2)
-  const [slPct,          setSlPct]          = useState(3)
-  const [tpPct,          setTpPct]          = useState(6)
+  // Risk & Para ayarları (string state — boş bırakılabilsin)
+  const [initialBalance, setInitialBalance] = useState("10000")
+  const [leverage,       setLeverage]       = useState("1")
+  const [riskPct,        setRiskPct]        = useState("2")
+  const [slPct,          setSlPct]          = useState("3")
+  const [tpPct,          setTpPct]          = useState("6")
 
   useEffect(() => {
     setCustomInds(loadCustomInds().filter(i => i.producesSignals))
@@ -263,8 +263,11 @@ export default function StrategyViewPage() {
         })
 
         const signals = codeResult.signals || []
-        const trades = clientBacktest(signals, rawCandles, initialBalance, riskPct / 100, leverage)
-        const metrics = computeMetrics(trades, initialBalance)
+        const bal = Number(initialBalance) || 10000
+        const lev = Number(leverage) || 1
+        const rsk = Number(riskPct) || 2
+        const trades = clientBacktest(signals, rawCandles, bal, rsk / 100, lev)
+        const metrics = computeMetrics(trades, bal)
 
         setResult({
           ...metrics,
@@ -273,6 +276,7 @@ export default function StrategyViewPage() {
           indicators,
           config: { symbol, timeframe, strategy: ind.name, days, candle_count: rawCandles.length },
           custom: true,
+          initialBalance: bal,
         })
         return
       }
@@ -281,11 +285,11 @@ export default function StrategyViewPage() {
       const mergedParams = { ...selectedStrat.params, ...params }
       const res = await api.post("/backtest/run", {
         symbol, timeframe, strategy, days,
-        initial_balance: initialBalance,
-        risk_per_trade: riskPct / 100,
-        leverage,
-        stop_loss_pct: slPct,
-        take_profit_pct: tpPct,
+        initial_balance: Number(initialBalance) || 10000,
+        risk_per_trade: (Number(riskPct) || 2) / 100,
+        leverage: Number(leverage) || 1,
+        stop_loss_pct: Number(slPct) || 3,
+        take_profit_pct: Number(tpPct) || 6,
         params: mergedParams,
       })
       setResult(res)
@@ -366,32 +370,32 @@ export default function StrategyViewPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
             <label className="block">
               <span className="text-xs text-slate-400">Başlangıç Kasası ($)</span>
-              <input type="number" value={initialBalance} min={100} step={100}
-                onChange={e => setInitialBalance(Number(e.target.value))}
+              <input type="number" value={initialBalance}
+                onChange={e => setInitialBalance(e.target.value)}
                 className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
             <label className="block">
               <span className="text-xs text-slate-400">Kaldıraç (x)</span>
-              <input type="number" value={leverage} min={1} max={500} step={1}
-                onChange={e => setLeverage(Number(e.target.value))}
+              <input type="number" value={leverage}
+                onChange={e => setLeverage(e.target.value)}
                 className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
             <label className="block">
               <span className="text-xs text-slate-400">Risk / İşlem (%)</span>
-              <input type="number" value={riskPct} min={0.1} max={100} step={0.5}
-                onChange={e => setRiskPct(Number(e.target.value))}
+              <input type="number" value={riskPct}
+                onChange={e => setRiskPct(e.target.value)}
                 className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
             <label className="block">
               <span className="text-xs text-slate-400">Zarar Durdur (%)</span>
-              <input type="number" value={slPct} min={0.1} max={50} step={0.5}
-                onChange={e => setSlPct(Number(e.target.value))}
+              <input type="number" value={slPct}
+                onChange={e => setSlPct(e.target.value)}
                 className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
             <label className="block">
               <span className="text-xs text-slate-400">Kar Al (%)</span>
-              <input type="number" value={tpPct} min={0.1} max={200} step={0.5}
-                onChange={e => setTpPct(Number(e.target.value))}
+              <input type="number" value={tpPct}
+                onChange={e => setTpPct(e.target.value)}
                 className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
           </div>
@@ -486,12 +490,12 @@ export default function StrategyViewPage() {
             <div className="flex flex-wrap items-center gap-4 md:gap-8">
               <div>
                 <p className="text-xs text-slate-500 mb-0.5">Başlangıç Kasası</p>
-                <p className="text-lg font-bold text-white">${initialBalance.toLocaleString()}</p>
+                <p className="text-lg font-bold text-white">${(Number(initialBalance)||10000).toLocaleString()}</p>
               </div>
               <div className="text-slate-600 text-xl font-light hidden md:block">→</div>
               <div>
                 <p className="text-xs text-slate-500 mb-0.5">Bitiş Kasası</p>
-                <p className={`text-lg font-bold ${result.final_balance >= initialBalance ? "text-green-400" : "text-red-400"}`}>
+                <p className={`text-lg font-bold ${result.final_balance >= (Number(initialBalance)||10000) ? "text-green-400" : "text-red-400"}`}>
                   ${result.final_balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </p>
               </div>
@@ -506,8 +510,8 @@ export default function StrategyViewPage() {
               </div>
               <div className="border-l border-slate-700 pl-4 md:pl-8 text-xs text-slate-500 space-y-0.5">
                 <p>Kaldıraç: <span className="text-white">{leverage}x</span></p>
-                <p>Risk/İşlem: <span className="text-white">%{riskPct}</span></p>
-                <p>SL / TP: <span className="text-white">%{slPct} / %{tpPct}</span></p>
+                <p>Risk/İşlem: <span className="text-white">%{riskPct || 2}</span></p>
+                <p>SL / TP: <span className="text-white">%{slPct || 3} / %{tpPct || 6}</span></p>
               </div>
             </div>
           </div>

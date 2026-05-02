@@ -117,9 +117,9 @@ export default function DashboardPage() {
 
           <div className="w-px h-5 bg-slate-800" />
 
-          {/* Zaman dilimi — sadece TV modunda */}
+          {/* Zaman dilimi — sadece TV modunda, masaüstünde göster */}
           {mode === "tv" && (
-            <div className="flex items-center gap-0.5">
+            <div className="hidden md:flex items-center gap-0.5">
               {TV_INTERVALS.map(i => (
                 <button key={i.value} onClick={() => setInterval(i.value)}
                   className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
@@ -133,13 +133,11 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {mode === "tv" && <div className="w-px h-5 bg-slate-800" />}
-
           {/* Chart mod geçişi */}
           <div className="flex items-center gap-0.5 bg-slate-900 rounded-lg p-0.5 border border-slate-800">
             <button
               onClick={() => setMode("tv")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
                 mode === "tv"
                   ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
                   : "text-slate-500 hover:text-slate-300"
@@ -149,11 +147,11 @@ export default function DashboardPage() {
                 <rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" strokeWidth="2"/>
                 <path d="M8 21h8M12 17v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
-              TradingView
+              <span className="hidden sm:inline">TradingView</span>
             </button>
             <button
               onClick={() => setMode("pro")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
                 mode === "pro"
                   ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
                   : "text-slate-500 hover:text-slate-300"
@@ -162,16 +160,16 @@ export default function DashboardPage() {
               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
               </svg>
-              Pro Chart
+              <span className="hidden sm:inline">Pro Chart</span>
             </button>
           </div>
 
-          {/* Tam ekran butonu (sadece TV modunda) */}
+          {/* Tam ekran — sadece masaüstünde */}
           {mode === "tv" && (
             <button
               onClick={() => setTvFull(true)}
               title="Tam ekran"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-slate-800 text-slate-500 hover:text-white hover:border-slate-600 text-xs transition-colors"
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-slate-800 text-slate-500 hover:text-white hover:border-slate-600 text-xs transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -182,11 +180,11 @@ export default function DashboardPage() {
           )}
 
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-slate-700">Bitget Perpetual · USDT-M</span>
-            {/* Sidebar collapse */}
+            <span className="text-xs text-slate-700 hidden md:inline">Bitget Perpetual · USDT-M</span>
+            {/* Sidebar collapse — sadece masaüstünde */}
             <button
               onClick={() => setSidebarCollapsed(v => !v)}
-              className="p-1.5 rounded border border-slate-800 text-slate-600 hover:text-slate-300 hover:border-slate-600 transition-colors"
+              className="hidden md:flex p-1.5 rounded border border-slate-800 text-slate-600 hover:text-slate-300 hover:border-slate-600 transition-colors"
               title={sidebarCollapsed ? "Paneli aç" : "Paneli kapat"}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
