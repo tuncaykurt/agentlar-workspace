@@ -100,6 +100,7 @@ export default function BacktestPage() {
   const [slPct, setSlPct] = useState("2")
   const [tpPct, setTpPct] = useState("4")
   const [params, setParams] = useState<Record<string, number | boolean | string>>({})
+  const [feePct, setFeePct] = useState("0.06")
   const [overlays, setOverlays] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<BacktestResult | null>(null)
@@ -116,6 +117,7 @@ export default function BacktestPage() {
   const numLeverage = Number(leverage) || 3
   const numSlPct    = Number(slPct)    || 2
   const numTpPct    = Number(tpPct)    || 4
+  const numFeePct   = feePct.trim() === "" ? 0.06 : Math.max(0, parseFloat(feePct) || 0)
 
   const runBacktest = async () => {
     setLoading(true)
@@ -132,6 +134,7 @@ export default function BacktestPage() {
         take_profit_pct: numTpPct,
         params: mergedParams,
         overlay_indicators: overlays,
+        fee_pct: numFeePct,
       })
       setResult(res)
     } catch (e: unknown) {
@@ -193,6 +196,27 @@ export default function BacktestPage() {
             <div className="flex justify-between"><span className="text-slate-500">Marjin (pozisyona ayrilan)</span><span className="text-white">${(numBalance * numRisk / 100).toFixed(2)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Pozisyon Degeri</span><span className="text-white">${(numBalance * numRisk / 100 * numLeverage).toFixed(2)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Likidasyon (~)</span><span className="text-yellow-400">{(95 / numLeverage).toFixed(2)}%</span></div>
+            {numFeePct > 0 && (() => {
+              const margin = numBalance * numRisk / 100
+              const posVal = margin * numLeverage
+              const totalFee = 2 * numFeePct / 100 * posVal
+              const totalFeePct = (totalFee / margin * 100).toFixed(1)
+              const grossTP = numTpPct / 100 * posVal
+              const netTP = grossTP - totalFee
+              const netTPpct = (netTP / margin * 100).toFixed(1)
+              return (
+                <>
+                  <div className="flex justify-between border-t border-slate-700 pt-0.5">
+                    <span className="text-slate-500">Toplam Komisyon (2 taraf)</span>
+                    <span className="text-orange-400">${totalFee.toFixed(2)} (%{totalFeePct} marjin)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">TP@%{numTpPct} Net Kar</span>
+                    <span className={netTP >= 0 ? "text-green-400" : "text-red-400"}>${netTP.toFixed(2)} (%{netTPpct})</span>
+                  </div>
+                </>
+              )
+            })()}
             {numSlPct > 95 / numLeverage && (
               <div className="text-red-400 text-[10px] pt-1 border-t border-slate-700">
                 ⚠ SL %{numSlPct} &gt; Likidasyon %{(95/numLeverage).toFixed(2)} — SL tetiklenmeden likidasyon olur
@@ -219,6 +243,18 @@ export default function BacktestPage() {
             <span className="text-xs text-slate-400">TP %</span>
             <input type="number" value={tpPct} onChange={e => setTpPct(e.target.value)} min={0.1} max={200} step={0.1} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
           </label>
+
+          <div className="block">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-slate-400">Komisyon %</span>
+              <div className="flex gap-1">
+                <button onClick={() => setFeePct("0")} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${numFeePct === 0 ? "border-green-500 bg-green-500/20 text-green-300" : "border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>Sıfır</button>
+                <button onClick={() => setFeePct("0.04")} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${numFeePct === 0.04 ? "border-blue-500 bg-blue-500/20 text-blue-300" : "border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>0.04%</button>
+                <button onClick={() => setFeePct("0.06")} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${numFeePct === 0.06 ? "border-blue-500 bg-blue-500/20 text-blue-300" : "border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>0.06%</button>
+              </div>
+            </div>
+            <input type="number" value={feePct} onChange={e => setFeePct(e.target.value)} min={0} max={1} step={0.01} className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+          </div>
 
           {/* Overlay İndikatörler */}
           <div>
