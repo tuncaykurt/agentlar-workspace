@@ -178,7 +178,7 @@ export default function MuhasebePage() {
                 {closings.map(c => (
                   <Link
                     key={c.id}
-                    href={`/muhasebe/sales-closing/${c.id}`}
+                    href={`/muhasebe/sales-closing/${c.id}?returnTo=/muhasebe`}
                     className="flex items-center gap-4 p-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest transition-colors"
                   >
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${

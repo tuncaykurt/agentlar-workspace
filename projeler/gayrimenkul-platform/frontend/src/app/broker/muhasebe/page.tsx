@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import type { Commission, Expense, SalesClosing, Office, Brand, ExpenseCategory } from '@/lib/types'
+import Link from 'next/link'
 import {
   TrendingUp, Clock, CheckCircle, Calculator, Receipt, FileSignature,
   Building2, Loader2, Plus, Repeat, X, RefreshCw, ChevronDown, ChevronUp,
@@ -553,7 +554,11 @@ export default function BrokerMuhasebePage() {
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {closings.map(c => (
-                  <div key={c.id} className="flex justify-between items-center p-3 rounded-lg border border-outline hover:bg-surface-container-high transition-colors">
+                  <Link
+                    key={c.id}
+                    href={`/broker/muhasebe/sales-closing/${c.id}?returnTo=/broker/muhasebe`}
+                    className="flex justify-between items-center p-3 rounded-lg border border-outline hover:bg-surface-container-high transition-colors"
+                  >
                     <div>
                       <p className="text-sm font-medium text-on-surface">{(c as any).property?.title || 'Gayrimenkul'}</p>
                       <p className="text-xs text-on-surface-variant">Danışman: {(c as any).consultant?.full_name || '—'}</p>
@@ -563,12 +568,17 @@ export default function BrokerMuhasebePage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         c.status === 'signed' ? 'bg-green-100 text-green-700' :
                         c.status === 'pending' ? 'bg-orange-100 text-orange-700' :
+                        c.status === 'filled' ? 'bg-blue-100 text-blue-700' :
+                        c.status === 'sent' ? 'bg-purple-100 text-purple-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {c.status === 'signed' ? 'İmzalandı' : c.status === 'pending' ? 'Bekliyor' : c.status}
+                        {c.status === 'pending' ? 'Bekliyor' :
+                         c.status === 'filled' ? 'Dolduruldu' :
+                         c.status === 'sent' ? 'İmzaya Gitti' :
+                         c.status === 'signed' ? 'İmzalandı' : 'İptal'}
                       </span>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}

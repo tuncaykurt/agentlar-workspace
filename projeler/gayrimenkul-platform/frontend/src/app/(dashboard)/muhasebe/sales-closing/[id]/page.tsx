@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { calcCommission, formatTRY } from '@/lib/commission'
 import type {
@@ -31,9 +31,11 @@ const PROPERTY_KINDS: { v: SalesClosingPropertyKind; l: string }[] = [
   { v: 'arazi',    l: 'Arazi' },
 ]
 
-export default function SalesClosingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
+export default function SalesClosingDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = searchParams.get('returnTo') || '/muhasebe'
   const supabase = createClient()
 
   const [closing, setClosing] = useState<ClosingFull | null>(null)
@@ -344,7 +346,7 @@ export default function SalesClosingDetailPage({ params }: { params: Promise<{ i
     }
 
     setSaving(false)
-    router.push('/muhasebe')
+    router.push(returnTo)
   }
 
   if (loading) {
@@ -354,7 +356,7 @@ export default function SalesClosingDetailPage({ params }: { params: Promise<{ i
     return (
       <div className="p-6">
         <p className="text-red-600">{error || 'Kayıt bulunamadı'}</p>
-        <Link href="/muhasebe" className="text-primary text-sm mt-2 inline-block">← Muhasebe&apos;ye dön</Link>
+        <Link href={returnTo} className="text-primary text-sm mt-2 inline-block">← Muhasebe&apos;ye dön</Link>
       </div>
     )
   }
@@ -364,7 +366,7 @@ export default function SalesClosingDetailPage({ params }: { params: Promise<{ i
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center gap-3 mb-6 print:hidden">
-        <Link href="/muhasebe" className="text-on-surface-variant hover:text-on-surface">
+        <Link href={returnTo} className="text-on-surface-variant hover:text-on-surface">
           <ArrowLeft size={20} />
         </Link>
         <div className="flex-1">
@@ -585,7 +587,7 @@ export default function SalesClosingDetailPage({ params }: { params: Promise<{ i
 
         {!readOnly && (
           <div className="flex gap-3 pt-2 print:hidden">
-            <Link href="/muhasebe" className="btn-secondary flex-1 text-center">İptal</Link>
+            <Link href={returnTo} className="btn-secondary flex-1 text-center">İptal</Link>
             <button
               onClick={() => handleSave(false)}
               disabled={saving}
