@@ -12,7 +12,7 @@ from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
 
 
-def _compute_indicators(ohlcv: list, strategy: str, params: dict, step: int) -> dict:
+def _compute_indicators(ohlcv: list, strategy: str, params: dict, step: int, extra: list | None = None) -> dict:
     """Grafik overlay için bar bar indikatör değerleri hesapla."""
     closes = [c[4] for c in ohlcv]
     timestamps = [c[0] // 1000 for c in ohlcv]
@@ -47,6 +47,37 @@ def _compute_indicators(ohlcv: list, strategy: str, params: dict, step: int) -> 
         indicators["ema_fast"] = make_line(s.ewm(span=fast, adjust=False).mean())
         indicators["ema_slow"] = make_line(s.ewm(span=slow, adjust=False).mean())
 
+    # Ekstra overlay indikatörler (kullanıcı seçimi)
+    for ind in (extra or []):
+        if ind.startswith("ema_"):
+            try:
+                period = int(ind.split("_")[1])
+                key = f"custom_ema_{period}"
+                if key not in indicators:
+                    indicators[key] = make_line(s.ewm(span=period, adjust=False).mean())
+            except (ValueError, IndexError):
+                pass
+        elif ind.startswith("bb_"):
+            try:
+                period = int(ind.split("_")[1])
+                std_dev = float(ind.split("_")[2]) if len(ind.split("_")) > 2 else 2.0
+                sma = s.rolling(period).mean()
+                std = s.rolling(period).std()
+                if f"custom_bb_{period}_upper" not in indicators:
+                    indicators[f"custom_bb_{period}_upper"] = make_line(sma + std_dev * std)
+                    indicators[f"custom_bb_{period}_mid"]   = make_line(sma)
+                    indicators[f"custom_bb_{period}_lower"] = make_line(sma - std_dev * std)
+            except (ValueError, IndexError):
+                pass
+        elif ind.startswith("sma_"):
+            try:
+                period = int(ind.split("_")[1])
+                key = f"custom_sma_{period}"
+                if key not in indicators:
+                    indicators[key] = make_line(s.rolling(period).mean())
+            except (ValueError, IndexError):
+                pass
+
     return indicators
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
@@ -66,6 +97,7 @@ class BacktestRequest(BaseModel):
     take_profit_pct: float = Field(default=4.0, ge=0.1, le=200)
     fee_pct: float = Field(default=0.06, ge=0, le=0.5)
     params: dict = Field(default_factory=dict)
+    overlay_indicators: list = Field(default_factory=list)
 
 
 @router.post("/run")
@@ -106,14 +138,15 @@ async def run_backtest(req: BacktestRequest):
         "candle_count": len(ohlcv),
     }
 
-    # Grafik için OHLCV verisi (max 3000 mum — performans)
-    step = max(1, len(ohlcv) // 3000)
+    # Grafik için OHLCV verisi — tüm mumlar (boşluk oluşmasın)
     result["ohlcv"] = [
         {"time": c[0] // 1000, "open": c[1], "high": c[2], "low": c[3], "close": c[4]}
-        for c in ohlcv[::step]
+        for c in ohlcv
     ]
 
-    result["indicators"] = _compute_indicators(ohlcv, req.strategy, req.params, step)
+    # İndikatörler için step (performans — çizgide boşluk olmaz)
+    ind_step = max(1, len(ohlcv) // 6000)
+    result["indicators"] = _compute_indicators(ohlcv, req.strategy, req.params, ind_step, req.overlay_indicators)
 
     return result
 

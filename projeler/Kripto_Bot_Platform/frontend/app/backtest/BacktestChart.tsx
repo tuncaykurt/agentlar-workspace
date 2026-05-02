@@ -46,6 +46,29 @@ const INDICATOR_STYLES: Record<string, { color: string; lineWidth: number; lineS
   ema_slow: { color: "#fbbf24",               lineWidth: 1, lineStyle: LineStyle.Solid,    title: "EMA slow" },
 }
 
+function resolveIndicatorStyle(key: string, colorIdx: number): { color: string; lineWidth: number; lineStyle: number; title: string } {
+  if (INDICATOR_STYLES[key]) return INDICATOR_STYLES[key]
+  // custom_ema_N
+  const emaMatch = key.match(/^custom_ema_(\d+)$/)
+  if (emaMatch) {
+    const colors = ["#22c55e","#fbbf24","#f472b6","#a78bfa","#38bdf8","#fb923c"]
+    return { color: colors[colorIdx % colors.length], lineWidth: 1, lineStyle: LineStyle.Solid, title: `EMA ${emaMatch[1]}` }
+  }
+  // custom_sma_N
+  const smaMatch = key.match(/^custom_sma_(\d+)$/)
+  if (smaMatch) {
+    return { color: "#38bdf8", lineWidth: 1, lineStyle: LineStyle.Dashed, title: `SMA ${smaMatch[1]}` }
+  }
+  // custom_bb_N_upper/mid/lower
+  const bbUpperMatch = key.match(/^custom_bb_(\d+)_upper$/)
+  if (bbUpperMatch) return { color: "rgba(96,165,250,0.5)", lineWidth: 1, lineStyle: LineStyle.Dashed, title: `BB${bbUpperMatch[1]} ↑` }
+  const bbMidMatch = key.match(/^custom_bb_(\d+)_mid$/)
+  if (bbMidMatch) return { color: "rgba(148,163,184,0.4)", lineWidth: 1, lineStyle: LineStyle.Dashed, title: `BB${bbMidMatch[1]}` }
+  const bbLowerMatch = key.match(/^custom_bb_(\d+)_lower$/)
+  if (bbLowerMatch) return { color: "rgba(96,165,250,0.5)", lineWidth: 1, lineStyle: LineStyle.Dashed, title: `BB${bbLowerMatch[1]} ↓` }
+  return { color: CUSTOM_COLORS[colorIdx % CUSTOM_COLORS.length], lineWidth: 1, lineStyle: LineStyle.Solid, title: key }
+}
+
 const CUSTOM_COLORS = ["#a78bfa","#f472b6","#34d399","#fb923c","#38bdf8","#e879f9","#facc15","#4ade80"]
 
 export default function BacktestChart({
@@ -132,12 +155,7 @@ export default function BacktestChart({
       if (indicators) {
         for (const [key, points] of Object.entries(indicators)) {
           if (!points || points.length === 0) continue
-          const style = INDICATOR_STYLES[key] ?? {
-            color: CUSTOM_COLORS[customColorIdx++ % CUSTOM_COLORS.length],
-            lineWidth: 1,
-            lineStyle: LineStyle.Solid,
-            title: key.replace(/^custom_\d+_/, "").replace(/_/g, " "),
-          }
+          const style = resolveIndicatorStyle(key, customColorIdx++)
 
           try {
             const lineSeries = chart.addLineSeries({

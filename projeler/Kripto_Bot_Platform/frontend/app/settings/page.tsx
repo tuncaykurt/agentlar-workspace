@@ -16,8 +16,15 @@ const EXCHANGE_ICONS: Record<string, string> = {
   mexc: "🟣",
 }
 
+const FALLBACK_EXCHANGES: ExchangeInfo[] = [
+  { exchange: "bitget",  label: "Bitget",   connected: false, needs_passphrase: true },
+  { exchange: "binance", label: "Binance",  connected: false, needs_passphrase: false },
+  { exchange: "mexc",    label: "MEXC",     connected: false, needs_passphrase: false },
+]
+
 export default function SettingsPage() {
-  const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
+  const [exchanges, setExchanges] = useState<ExchangeInfo[]>(FALLBACK_EXCHANGES)
+  const [loadError, setLoadError] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [form, setForm] = useState({ api_key: "", secret: "", passphrase: "" })
   const [loading, setLoading] = useState(false)
@@ -32,7 +39,11 @@ export default function SettingsPage() {
     try {
       const data = await api.get("/exchanges/")
       setExchanges(data)
-    } catch {}
+      setLoadError(false)
+    } catch {
+      setLoadError(true)
+      setExchanges(FALLBACK_EXCHANGES)
+    }
   }
 
   const openForm = (exchange: string) => {
@@ -95,6 +106,12 @@ export default function SettingsPage() {
         <h1 className="text-xl font-bold text-white">Borsa Bağlantısı</h1>
         <p className="text-sm text-slate-400 mt-1">Borsa API bağlantılarınızı yönetin</p>
       </div>
+
+      {loadError && (
+        <div className="text-sm rounded-lg px-4 py-3 border border-yellow-500/20 bg-yellow-500/10 text-yellow-400">
+          Backend bağlantısı kurulamadı. Borsalar çevrimdışı görünüyor. Coolify&apos;da servisin çalıştığını kontrol edin.
+        </div>
+      )}
 
       {message && (
         <div

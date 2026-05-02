@@ -650,9 +650,9 @@ function StrategySignalCard({
 
 // ─── Leverage slider ──────────────────────────────────────────────────────────
 function LeverageSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const marks = [1, 2, 3, 5, 10, 20, 25, 50, 75, 100]
-  const risk = value <= 3 ? "Düşük" : value <= 10 ? "Orta" : value <= 25 ? "Yüksek" : "Çok Yüksek"
-  const riskColor = value <= 3 ? "text-green-400" : value <= 10 ? "text-yellow-400" : value <= 25 ? "text-orange-400" : "text-red-400"
+  const marks = [1, 3, 5, 10, 20, 50, 75, 100, 125, 150, 200, 300, 500]
+  const risk = value <= 3 ? "Düşük" : value <= 10 ? "Orta" : value <= 50 ? "Yüksek" : "Çok Yüksek"
+  const sliderPct = (value / 500) * 100
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -660,24 +660,24 @@ function LeverageSlider({ value, onChange }: { value: number; onChange: (v: numb
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
           value <= 3  ? "border-green-500/30 bg-green-500/10 text-green-400" :
           value <= 10 ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-400" :
-          value <= 25 ? "border-orange-500/30 bg-orange-500/10 text-orange-400" :
+          value <= 50 ? "border-orange-500/30 bg-orange-500/10 text-orange-400" :
                         "border-red-500/30 bg-red-500/10 text-red-400"
         }`}>{risk} Risk</span>
       </div>
       <input
-        type="range" min={1} max={100} value={value}
+        type="range" min={1} max={500} value={value}
         onChange={e => onChange(+e.target.value)}
         className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
         style={{
           background: `linear-gradient(to right, ${
-            value <= 10 ? "#22c55e" : value <= 25 ? "#f59e0b" : "#ef4444"
-          } ${value}%, #1e293b ${value}%)`,
+            value <= 10 ? "#22c55e" : value <= 50 ? "#f59e0b" : "#ef4444"
+          } ${sliderPct}%, #1e293b ${sliderPct}%)`,
         }}
       />
-      <div className="flex gap-1.5 flex-wrap">
+      <div className="flex gap-1 flex-wrap">
         {marks.map(m => (
           <button key={m} onClick={() => onChange(m)}
-            className={`px-2 py-0.5 rounded border text-xs transition-colors ${
+            className={`px-1.5 py-0.5 rounded border text-[11px] transition-colors ${
               value === m
                 ? "border-blue-500 bg-blue-500/20 text-blue-300"
                 : "border-slate-700 text-slate-500 hover:text-white hover:border-slate-500"
@@ -685,7 +685,7 @@ function LeverageSlider({ value, onChange }: { value: number; onChange: (v: numb
           >{m}x</button>
         ))}
       </div>
-      {value > 25 && (
+      {value > 50 && (
         <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
           <span className="shrink-0 mt-0.5">⚠</span>
           <span>Yüksek kaldıraç likidasyona yol açabilir. Paper Trading modunu öneririz.</span>

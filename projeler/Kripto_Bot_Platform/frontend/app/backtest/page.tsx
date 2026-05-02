@@ -80,21 +80,42 @@ const PARAM_OPTIONS: Record<string, Record<string, string[]>> = {
 const SYMBOLS = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT", "XRP/USDT:USDT", "DOGE/USDT:USDT", "BNB/USDT:USDT", "ADA/USDT:USDT", "AVAX/USDT:USDT"]
 const TIMEFRAMES = ["5m", "15m", "1h", "4h", "1d"]
 
+const OVERLAY_OPTIONS = [
+  { id: "ema_9",   label: "EMA 9",   color: "#22c55e" },
+  { id: "ema_21",  label: "EMA 21",  color: "#fbbf24" },
+  { id: "ema_50",  label: "EMA 50",  color: "#f472b6" },
+  { id: "ema_200", label: "EMA 200", color: "#a78bfa" },
+  { id: "sma_20",  label: "SMA 20",  color: "#38bdf8" },
+  { id: "bb_20",   label: "BB 20",   color: "#60a5fa" },
+]
+
 export default function BacktestPage() {
   const [strategy, setStrategy] = useState("ema_cross")
   const [symbol, setSymbol] = useState("BTC/USDT:USDT")
   const [timeframe, setTimeframe] = useState("1h")
-  const [days, setDays] = useState(90)
-  const [balance, setBalance] = useState(10000)
-  const [risk, setRisk] = useState(2)
-  const [leverage, setLeverage] = useState(3)
-  const [slPct, setSlPct] = useState(2)
-  const [tpPct, setTpPct] = useState(4)
+  const [days, setDays] = useState("90")
+  const [balance, setBalance] = useState("10000")
+  const [risk, setRisk] = useState("2")
+  const [leverage, setLeverage] = useState("3")
+  const [slPct, setSlPct] = useState("2")
+  const [tpPct, setTpPct] = useState("4")
   const [params, setParams] = useState<Record<string, number | boolean | string>>({})
+  const [overlays, setOverlays] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<BacktestResult | null>(null)
 
   const selectedStrat = STRATEGIES.find(s => s.id === strategy)
+
+  const toggleOverlay = (id: string) => {
+    setOverlays(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const numDays     = Number(days)     || 90
+  const numBalance  = Number(balance)  || 10000
+  const numRisk     = Number(risk)     || 2
+  const numLeverage = Number(leverage) || 3
+  const numSlPct    = Number(slPct)    || 2
+  const numTpPct    = Number(tpPct)    || 4
 
   const runBacktest = async () => {
     setLoading(true)
@@ -102,11 +123,15 @@ export default function BacktestPage() {
     try {
       const mergedParams = { ...selectedStrat?.params, ...params }
       const res = await api.post("/backtest/run", {
-        symbol, timeframe, strategy, days,
-        initial_balance: balance,
-        risk_per_trade: risk / 100,
-        leverage, stop_loss_pct: slPct, take_profit_pct: tpPct,
+        symbol, timeframe, strategy,
+        days: numDays,
+        initial_balance: numBalance,
+        risk_per_trade: numRisk / 100,
+        leverage: numLeverage,
+        stop_loss_pct: numSlPct,
+        take_profit_pct: numTpPct,
         params: mergedParams,
+        overlay_indicators: overlays,
       })
       setResult(res)
     } catch (e: unknown) {
@@ -155,22 +180,22 @@ export default function BacktestPage() {
 
           <label className="block">
             <span className="text-xs text-slate-400">Test Suresi (gun)</span>
-            <input type="number" value={days} onChange={e => setDays(Number(e.target.value))} min={7} max={365} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+            <input type="number" value={days} onChange={e => setDays(e.target.value)} min={7} max={365} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
           </label>
 
           <label className="block">
             <span className="text-xs text-slate-400">Baslangic Bakiye ($)</span>
-            <input type="number" value={balance} onChange={e => setBalance(Number(e.target.value))} min={100} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+            <input type="number" value={balance} onChange={e => setBalance(e.target.value)} min={100} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
           </label>
 
-          {/* Pozisyon onizlemesi — kullanici kaldirac etkisini gorsun */}
+          {/* Pozisyon onizlemesi */}
           <div className="text-[11px] bg-slate-800/50 border border-slate-700 rounded p-2 space-y-0.5">
-            <div className="flex justify-between"><span className="text-slate-500">Marjin (pozisyona ayrilan)</span><span className="text-white">${(balance * risk / 100).toFixed(2)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Pozisyon Degeri</span><span className="text-white">${(balance * risk / 100 * leverage).toFixed(2)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Likidasyon (~)</span><span className="text-yellow-400">{(95 / leverage).toFixed(2)}%</span></div>
-            {slPct > 95 / leverage && (
+            <div className="flex justify-between"><span className="text-slate-500">Marjin (pozisyona ayrilan)</span><span className="text-white">${(numBalance * numRisk / 100).toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Pozisyon Degeri</span><span className="text-white">${(numBalance * numRisk / 100 * numLeverage).toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Likidasyon (~)</span><span className="text-yellow-400">{(95 / numLeverage).toFixed(2)}%</span></div>
+            {numSlPct > 95 / numLeverage && (
               <div className="text-red-400 text-[10px] pt-1 border-t border-slate-700">
-                ⚠ SL %{slPct} &gt; Likidasyon %{(95/leverage).toFixed(2)} — SL tetiklenmeden likidasyon olur
+                ⚠ SL %{numSlPct} &gt; Likidasyon %{(95/numLeverage).toFixed(2)} — SL tetiklenmeden likidasyon olur
               </div>
             )}
           </div>
@@ -178,22 +203,42 @@ export default function BacktestPage() {
           <div className="grid grid-cols-3 gap-2">
             <label className="block">
               <span className="text-xs text-slate-400">Marjin %</span>
-              <input type="number" value={risk} onChange={e => setRisk(Number(e.target.value))} min={0.5} max={10} step={0.5} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+              <input type="number" value={risk} onChange={e => setRisk(e.target.value)} min={0.5} max={10} step={0.5} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
             <label className="block">
               <span className="text-xs text-slate-400">Kaldrac</span>
-              <input type="number" value={leverage} onChange={e => setLeverage(Number(e.target.value))} min={1} max={500} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+              <input type="number" value={leverage} onChange={e => setLeverage(e.target.value)} min={1} max={500} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
             <label className="block">
               <span className="text-xs text-slate-400">SL %</span>
-              <input type="number" value={slPct} onChange={e => setSlPct(Number(e.target.value))} min={0.5} max={10} step={0.5} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+              <input type="number" value={slPct} onChange={e => setSlPct(e.target.value)} min={0.1} max={50} step={0.1} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
           </div>
 
           <label className="block">
             <span className="text-xs text-slate-400">TP %</span>
-            <input type="number" value={tpPct} onChange={e => setTpPct(Number(e.target.value))} min={1} max={20} step={0.5} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+            <input type="number" value={tpPct} onChange={e => setTpPct(e.target.value)} min={0.1} max={200} step={0.1} className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
           </label>
+
+          {/* Overlay İndikatörler */}
+          <div>
+            <span className="text-xs text-slate-400 block mb-1.5">Grafik İndikatörleri</span>
+            <div className="flex flex-wrap gap-1.5">
+              {OVERLAY_OPTIONS.map(o => (
+                <button
+                  key={o.id}
+                  onClick={() => toggleOverlay(o.id)}
+                  className={`text-xs px-2 py-1 rounded border transition-colors ${
+                    overlays.includes(o.id)
+                      ? "border-blue-500 bg-blue-500/20 text-blue-300"
+                      : "border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Orta: Strateji Secimi + Parametreleri */}
@@ -334,7 +379,7 @@ export default function BacktestPage() {
       {result && !result.error && result.equity_curve.length > 0 && (
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <h2 className="text-sm font-semibold text-slate-300 mb-3">Equity Curve</h2>
-          <EquityChart data={result.equity_curve} initial={balance} />
+          <EquityChart data={result.equity_curve} initial={numBalance} />
         </div>
       )}
 
