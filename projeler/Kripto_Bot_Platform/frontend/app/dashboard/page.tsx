@@ -38,12 +38,22 @@ const TV_INTERVALS = [
 type ChartMode = "tv" | "pro"
 
 export default function DashboardPage() {
-  const [symbol,    setSymbol]    = useState("BTC/USDT:USDT")
-  const [interval,  setInterval]  = useState("60")
+  const [symbol,    setSymbol]    = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("prochart_symbol") ?? "BTC/USDT:USDT") : "BTC/USDT:USDT"
+  )
+  const [interval,  setInterval]  = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("prochart_tv_interval") ?? "60") : "60"
+  )
   const [aiLevels,  setAiLevels]  = useState<{ tp?: number; sl?: number }>({})
-  const [mode,      setMode]      = useState<ChartMode>("tv")
+  const [mode,      setMode]      = useState<ChartMode>(() =>
+    typeof window !== "undefined" ? ((localStorage.getItem("prochart_mode") as ChartMode) ?? "tv") : "tv"
+  )
   const [tvFull,    setTvFull]    = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  useEffect(() => { localStorage.setItem("prochart_symbol", symbol) }, [symbol])
+  useEffect(() => { localStorage.setItem("prochart_tv_interval", interval) }, [interval])
+  useEffect(() => { localStorage.setItem("prochart_mode", mode) }, [mode])
 
   const handleSymbol = (info: SymbolInfo) => {
     setSymbol(info.internal)

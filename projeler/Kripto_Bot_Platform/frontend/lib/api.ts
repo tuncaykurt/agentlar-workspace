@@ -9,7 +9,11 @@ function getWsBase() {
 async function handleResponse(r: Response) {
   if (!r.ok) {
     const data = await r.json().catch(() => null)
-    throw new Error(data?.detail ?? `API ${r.status}: ${r.statusText}`)
+    let detail = data?.detail
+    if (Array.isArray(detail)) {
+      detail = detail.map((e: { msg?: string }) => e?.msg ?? JSON.stringify(e)).join(", ")
+    }
+    throw new Error(detail ?? `API ${r.status}: ${r.statusText}`)
   }
   return r.json()
 }

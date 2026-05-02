@@ -500,7 +500,9 @@ export default function ProChart({
 
   const [data,      setData]      = useState<ChartData | null>(null)
   const [loading,   setLoading]   = useState(false)
-  const [tf,        setTf]        = useState("1h")
+  const [tf,        setTf]        = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("prochart_tf") ?? "1h") : "1h"
+  )
   const [inds,      setInds]      = useState<Indicator[]>(INDICATOR_LIBRARY)
   const [picker,    setPicker]    = useState(false)
   const [legend,    setLegend]    = useState<Legend | null>(null)
@@ -1312,7 +1314,7 @@ export default function ProChart({
         {/* Zaman dilimi */}
         <div className="flex gap-0.5 bg-slate-900 rounded p-0.5">
           {TIMEFRAMES.map(t => (
-            <button key={t.value} onClick={() => setTf(t.value)}
+            <button key={t.value} onClick={() => { setTf(t.value); localStorage.setItem("prochart_tf", t.value) }}
               className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${tf === t.value ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}>
               {t.label}
             </button>
