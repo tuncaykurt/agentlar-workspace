@@ -1509,7 +1509,7 @@ export default function ProChart({
         {/* Strateji Sinyalleri */}
         <div className="relative">
           <button
-            onClick={() => stratSignal ? clearStratSignals() : setShowStratMenu(v => !v)}
+            onClick={(e) => { e.stopPropagation(); stratSignal ? clearStratSignals() : setShowStratMenu(v => !v) }}
             disabled={stratLoading}
             className={`text-xs px-2 py-0.5 rounded border transition-colors disabled:opacity-50 ${
               stratSignal
@@ -1527,7 +1527,7 @@ export default function ProChart({
               {STRAT_LIST.map(s => (
                 <button
                   key={s.id}
-                  onClick={() => fetchStratSignals(s.id)}
+                  onClick={(e) => { e.stopPropagation(); fetchStratSignals(s.id) }}
                   className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
                 >
                   {s.name}

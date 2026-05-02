@@ -17,21 +17,22 @@ interface Ticker {
 export default function MarketStats({ symbol }: Props) {
   const [ticker, setTicker] = useState<Ticker | null>(null)
   const [change, setChange] = useState<number>(0)
-  const [prevPrice, setPrevPrice] = useState<number>(0)
 
   useEffect(() => {
-    const fetch = async () => {
+    let localPrev = 0
+    setChange(0)
+    const poll = async () => {
       try {
         const encoded = encodeURIComponent(symbol)
         const data = await api.get(`/market/ticker?symbol=${encoded}`)
         setTicker(data)
         const cur = parseFloat(data.last)
-        if (prevPrice) setChange(((cur - prevPrice) / prevPrice) * 100)
-        setPrevPrice(cur)
+        if (localPrev > 0) setChange(((cur - localPrev) / localPrev) * 100)
+        localPrev = cur
       } catch {}
     }
-    fetch()
-    const interval = setInterval(fetch, 3000)
+    poll()
+    const interval = setInterval(poll, 3000)
     return () => clearInterval(interval)
   }, [symbol])
 
