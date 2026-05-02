@@ -116,7 +116,6 @@ export default function BulkMessagePage() {
           .from('clients')
           .select('id,full_name,salutation,phone,email,tags')
           .eq('is_active', true)
-          .not('phone', 'is', null)
           .order('full_name')
           .range(page * pageSize, (page + 1) * pageSize - 1)
         
