@@ -1340,6 +1340,14 @@ WHERE clients.id = n.id
   },
 
   {
+    id: '063_client_tags_salutation',
+    sql: `
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS idx_clients_tags ON clients USING GIN(tags);
+    `,
+  },
+
+  {
     id: '053_marketing_module',
     sql: `
 -- Campaigns: çok kanallı (whatsapp + email + linkedin) hale getir

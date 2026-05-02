@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 import {
   Users, Calculator, LogOut, Menu, X, Briefcase,
   Layout, Search, FileText, User, Settings, BookUser,
-  Bot, Gift, UserCheck,
+  Bot, Gift, UserCheck, Sparkles,
 } from 'lucide-react'
 import { ThemeToggle } from '@/lib/theme'
 
@@ -22,6 +22,7 @@ const navItems = [
   { href: '/broker/rehber', label: 'Rehber', icon: BookUser },
   { href: '/broker/automations/birthday', label: 'Doğum Günü', icon: Gift },
   { href: '/broker/automations/chatbot', label: 'Chatbot', icon: Bot },
+  { href: '/broker/automations/bulk-message', label: 'Toplu Mesaj', icon: Sparkles },
 ]
 
 const bottomNavItems = [

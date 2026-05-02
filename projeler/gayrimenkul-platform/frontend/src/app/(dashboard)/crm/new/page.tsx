@@ -44,6 +44,13 @@ const propertyTypes: { value: PropertyType; label: string }[] = [
 
 const cities = ['İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Mersin', 'Adana', 'Kocaeli', 'Konya', 'Gaziantep']
 
+const SALUTATIONS = [
+  '', 'Bey', 'Hanım', 'Dr.', 'Op. Dr.', 'Uzm. Dr.', 'Av.', 'Prof.', 'Prof. Dr.',
+  'Doç.', 'Müh.', 'Ecz.', 'Dt.', 'Öğretmen', 'Arh.', 'Psik.', 'Vet.',
+]
+
+const PREDEFINED_TAGS = ['Emlakçı', 'VIP', 'Yatırımcı', 'Aktif Alıcı', 'Taşınma Planlıyor', 'Sektör Bağlantısı', 'Referans Kaynağı']
+
 export default function NewClientPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -59,6 +66,7 @@ export default function NewClientPage() {
     lead_status: 'new' as LeadStatus,
     source: 'other' as ListingSource,
     notes: '',
+    tags: [] as string[],
     // Alıcı kriterleri
     budget_min: '',
     budget_max: '',
@@ -103,6 +111,7 @@ export default function NewClientPage() {
       lead_status: form.lead_status,
       source: form.source,
       notes: form.notes.trim() || null,
+      tags: form.tags,
       assigned_consultant_id: consultant?.id || null,
       ...(isBuyer && {
         budget_min: form.budget_min ? Number(form.budget_min) : null,
@@ -167,24 +176,14 @@ export default function NewClientPage() {
                   className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
-              <div className="w-32">
+              <div className="w-36">
                 <label className="block text-sm font-medium text-on-surface mb-1">Hitap</label>
                 <select
                   value={form.salutation}
                   onChange={e => setForm(f => ({ ...f, salutation: e.target.value }))}
                   className="w-full border border-outline rounded-lg px-3 py-2 text-sm bg-surface-container focus:outline-none focus:ring-2 focus:ring-primary"
                 >
-                  <option value="">—</option>
-                  <option value="Bey">Bey</option>
-                  <option value="Hanım">Hanım</option>
-                  <option value="Dr.">Dr.</option>
-                  <option value="Op. Dr.">Op. Dr.</option>
-                  <option value="Uzm. Dr.">Uzm. Dr.</option>
-                  <option value="Av.">Av.</option>
-                  <option value="Prof.">Prof.</option>
-                  <option value="Prof. Dr.">Prof. Dr.</option>
-                  <option value="Doç.">Doç.</option>
-                  <option value="Müh.">Müh.</option>
+                  {SALUTATIONS.map(s => <option key={s} value={s}>{s || '—'}</option>)}
                 </select>
               </div>
             </div>
@@ -375,6 +374,24 @@ export default function NewClientPage() {
             </div>
           </div>
         )}
+
+        {/* Etiketler */}
+        <div className="card">
+          <h2 className="font-semibold text-on-surface mb-3">Etiketler</h2>
+          <div className="flex flex-wrap gap-2">
+            {PREDEFINED_TAGS.map(tag => (
+              <button key={tag} type="button"
+                onClick={() => setForm(f => ({ ...f, tags: toggle(f.tags, tag) }))}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  form.tags.includes(tag)
+                    ? 'bg-indigo-600 border-indigo-600 text-white'
+                    : 'bg-surface-container border-outline text-on-surface-variant hover:border-indigo-300'
+                }`}>
+                {tag}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Notlar */}
         <div className="card">

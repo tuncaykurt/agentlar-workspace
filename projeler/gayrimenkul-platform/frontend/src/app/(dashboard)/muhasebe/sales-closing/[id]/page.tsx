@@ -9,7 +9,7 @@ import type {
   SalesClosing, SalesClosingPropertyKind, Property, Office, Brand, Consultant, Client,
 } from '@/lib/types'
 import {
-  ArrowLeft, FileSignature, Save, Send, Loader2, AlertCircle, Printer,
+  ArrowLeft, FileSignature, Save, Send, Loader2, AlertCircle, Printer, Trash2,
 } from 'lucide-react'
 
 type ClosingFull = SalesClosing & {
@@ -44,6 +44,8 @@ export default function SalesClosingDetailPage({ params }: { params: { id: strin
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // ─── Form state ─────────────────────────────────────────────────────────────
   // Aracılık + ilan
@@ -349,6 +351,21 @@ export default function SalesClosingDetailPage({ params }: { params: { id: strin
     router.push(returnTo)
   }
 
+  async function handleDelete() {
+    if (!closing) return
+    setDeleting(true)
+    const supabase = createClient()
+    if (closing.commission_id) {
+      await supabase.from('commissions').delete().eq('id', closing.commission_id)
+    }
+    if ((closing as any).document_id) {
+      await supabase.from('documents').delete().eq('id', (closing as any).document_id)
+    }
+    await supabase.from('sales_closings').delete().eq('id', closing.id)
+    setDeleting(false)
+    router.push(returnTo)
+  }
+
   if (loading) {
     return <div className="p-6 flex justify-center"><Loader2 size={24} className="animate-spin text-primary" /></div>
   }
@@ -386,7 +403,29 @@ export default function SalesClosingDetailPage({ params }: { params: { id: strin
         >
           <Printer size={15} /> Yazdır
         </button>
+        {!readOnly && (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors print:hidden"
+            type="button"
+          >
+            <Trash2 size={15} /> Sil
+          </button>
+        )}
       </div>
+
+      {confirmDelete && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between print:hidden">
+          <p className="text-sm text-red-700 font-medium">Bu kapatma kaydını silmek istediğinizden emin misiniz?</p>
+          <div className="flex gap-2">
+            <button onClick={() => setConfirmDelete(false)} className="btn-secondary text-sm" disabled={deleting}>İptal</button>
+            <button onClick={handleDelete} disabled={deleting}
+              className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-red-700 flex items-center gap-1 disabled:opacity-50">
+              {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Evet, Sil
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ─── Form: gerçek kapama formuna birebir uygun düzen ─────────────────── */}
       <div className="card space-y-6">

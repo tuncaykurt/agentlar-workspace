@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, Building2, Calculator,
   MessageSquare, Megaphone, FileText, Share2,
   UserCircle, Settings, LogOut, BookUser, Menu, X,
-  Store, TrendingUp, Coins, Gift, Bot, Briefcase,
+  Store, TrendingUp, Coins, Gift, Bot, Briefcase, Sparkles,
 } from 'lucide-react'
 import { useFeatures } from '@/lib/features'
 import { ThemeToggle } from '@/lib/theme'
@@ -24,8 +24,9 @@ const navItems = [
   { href: '/communications', label: 'İletişim',           icon: MessageSquare,   featureKey: 'communications' },
   { href: '/campaigns',      label: 'Kampanyalar',        icon: Megaphone,       featureKey: 'campaigns' },
   { href: '/documents',      label: 'Belgeler',           icon: FileText,        featureKey: 'documents' },
-  { href: '/automations/birthday', label: 'Doğum Günü',   icon: Gift,            featureKey: 'documents' },
-  { href: '/automations/chatbot',  label: 'Chatbot',        icon: Bot,             featureKey: 'documents' },
+  { href: '/automations/birthday',      label: 'Doğum Günü',   icon: Gift,     featureKey: 'documents' },
+  { href: '/automations/chatbot',       label: 'Chatbot',      icon: Bot,      featureKey: 'documents' },
+  { href: '/automations/bulk-message',  label: 'Toplu Mesaj',  icon: Sparkles, featureKey: 'crm' },
   { href: '/social',         label: 'Sosyal Medya',       icon: Share2,          featureKey: 'social' },
   { href: '/piyasa',         label: 'Piyasa',             icon: TrendingUp,      featureKey: 'piyasa' },
 ]
