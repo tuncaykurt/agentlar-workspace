@@ -46,6 +46,8 @@ const INDICATOR_STYLES: Record<string, { color: string; lineWidth: number; lineS
   ema_slow: { color: "#fbbf24",               lineWidth: 1, lineStyle: LineStyle.Solid,    title: "EMA slow" },
 }
 
+const CUSTOM_COLORS = ["#a78bfa","#f472b6","#34d399","#fb923c","#38bdf8","#e879f9","#facc15","#4ade80"]
+
 export default function BacktestChart({
   candles,
   trades,
@@ -126,11 +128,16 @@ export default function BacktestChart({
 
       // ── İndikatör çizgileri ──
       let indicatorCount = 0
+      let customColorIdx = 0
       if (indicators) {
         for (const [key, points] of Object.entries(indicators)) {
           if (!points || points.length === 0) continue
-          const style = INDICATOR_STYLES[key]
-          if (!style) continue
+          const style = INDICATOR_STYLES[key] ?? {
+            color: CUSTOM_COLORS[customColorIdx++ % CUSTOM_COLORS.length],
+            lineWidth: 1,
+            lineStyle: LineStyle.Solid,
+            title: key.replace(/^custom_\d+_/, "").replace(/_/g, " "),
+          }
 
           try {
             const lineSeries = chart.addLineSeries({

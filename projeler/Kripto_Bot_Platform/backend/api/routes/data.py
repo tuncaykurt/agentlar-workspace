@@ -76,12 +76,18 @@ async def get_stats():
 async def get_ohlcv(
     symbol: str = Query(default="BTC/USDT:USDT"),
     timeframe: str = Query(default="1h"),
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(default=200, ge=1, le=5000),
+    days: int = Query(default=0, ge=0, le=365),
 ):
     """
     OHLCV verisi getir (3 katmanlı: Redis → DB → Borsa).
     Chart ve indikatör hesaplamaları için kullanılır.
+    days > 0 verilirse limit otomatik hesaplanır.
     """
+    if days > 0:
+        hours_per_candle = {"1m": 1/60, "5m": 5/60, "15m": 0.25, "1h": 1, "4h": 4, "1d": 24}
+        hpc = hours_per_candle.get(timeframe, 1)
+        limit = min(5000, int((days * 24) / hpc) + 50)
     candles = await fetcher.get_ohlcv(symbol, timeframe, limit)
     return {
         "symbol": symbol,

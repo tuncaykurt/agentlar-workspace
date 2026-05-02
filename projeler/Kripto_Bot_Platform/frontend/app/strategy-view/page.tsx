@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { api } from "@/lib/api"
 import dynamic from "next/dynamic"
+import { runCustomCode, loadCustomInds, type CustomIndicatorDef } from "@/components/Chart/CustomIndicatorEditor"
 
 const BacktestChart = dynamic(() => import("../backtest/BacktestChart"), { ssr: false })
 
@@ -12,8 +13,10 @@ interface Trade {
   side: string
   entry: number
   exit: number
+  qty?: number
   margin?: number
   position_value?: number
+  leverage?: number
   pnl: number
   pnl_pct: number
   exit_reason: string
@@ -25,6 +28,7 @@ interface OHLCVCandle {
   high: number
   low: number
   close: number
+  volume?: number
 }
 
 interface BacktestResult {
@@ -46,6 +50,7 @@ interface BacktestResult {
   indicators?: Record<string, { time: number; value: number }[]>
   config?: { symbol: string; timeframe: string; strategy: string; days: number; candle_count: number }
   error?: string
+  custom?: boolean
 }
 
 const STRATEGIES = [
@@ -74,16 +79,139 @@ const PARAM_OPTIONS: Record<string, Record<string, string[]>> = {
 const SYMBOLS   = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT", "XRP/USDT:USDT", "DOGE/USDT:USDT", "BNB/USDT:USDT"]
 const TIMEFRAMES = ["5m", "15m", "1h", "4h", "1d"]
 
-export default function StrategyViewPage() {
-  const [symbol,    setSymbol]    = useState("BTC/USDT:USDT")
-  const [timeframe, setTimeframe] = useState("1h")
-  const [days,      setDays]      = useState(30)
-  const [strategy,  setStrategy]  = useState("ema_cross")
-  const [params,    setParams]    = useState<Record<string, number | boolean | string>>({})
-  const [loading,   setLoading]   = useState(false)
-  const [result,    setResult]    = useState<BacktestResult | null>(null)
+// ─── Client-side backtest for custom indicators ───────────────────────────────
+function clientBacktest(
+  signals: Array<{ type: string; bar_index: number; price?: number; reason?: string }>,
+  candles: OHLCVCandle[],
+  initialBalance: number,
+  riskPct: number,
+  leverage: number
+): Trade[] {
+  const trades: Trade[] = []
+  let position: { side: "buy"|"sell"; entry: number; entry_ts: number; margin: number; qty: number } | null = null
 
-  const selectedStrat = STRATEGIES.find(s => s.id === strategy)!
+  for (const sig of signals) {
+    const idx = sig.bar_index < 0 ? candles.length + sig.bar_index : sig.bar_index
+    if (idx < 0 || idx >= candles.length) continue
+    const candle = candles[idx]
+    const price = sig.price ?? candle.close
+    const ts = candle.time * 1000
+
+    if (sig.type === "buy" && !position) {
+      const margin = initialBalance * riskPct
+      const qty = (margin * leverage) / price
+      position = { side: "buy", entry: price, entry_ts: ts, margin, qty }
+    } else if (sig.type === "sell" && position?.side === "buy") {
+      const pnl = position.qty * (price - position.entry)
+      trades.push({
+        entry_ts: position.entry_ts, exit_ts: ts,
+        side: "buy", entry: position.entry, exit: price,
+        qty: Math.round(position.qty * 1e6) / 1e6,
+        margin: Math.round(position.margin * 100) / 100,
+        position_value: Math.round(position.margin * leverage * 100) / 100,
+        leverage, pnl: Math.round(pnl * 100) / 100,
+        pnl_pct: Math.round((pnl / position.margin) * 10000) / 100,
+        exit_reason: sig.reason || "signal",
+      })
+      position = null
+    } else if (sig.type === "sell" && !position) {
+      const margin = initialBalance * riskPct
+      const qty = (margin * leverage) / price
+      position = { side: "sell", entry: price, entry_ts: ts, margin, qty }
+    } else if (sig.type === "buy" && position?.side === "sell") {
+      const pnl = position.qty * (position.entry - price)
+      trades.push({
+        entry_ts: position.entry_ts, exit_ts: ts,
+        side: "sell", entry: position.entry, exit: price,
+        qty: Math.round(position.qty * 1e6) / 1e6,
+        margin: Math.round(position.margin * 100) / 100,
+        position_value: Math.round(position.margin * leverage * 100) / 100,
+        leverage, pnl: Math.round(pnl * 100) / 100,
+        pnl_pct: Math.round((pnl / position.margin) * 10000) / 100,
+        exit_reason: sig.reason || "signal",
+      })
+      position = null
+    }
+  }
+
+  // Açık kalan pozisyonu son barda kapat
+  if (position && candles.length > 0) {
+    const last = candles[candles.length - 1]
+    const price = last.close
+    const ts = last.time * 1000
+    const pnl = position.side === "buy"
+      ? position.qty * (price - position.entry)
+      : position.qty * (position.entry - price)
+    trades.push({
+      entry_ts: position.entry_ts, exit_ts: ts,
+      side: position.side, entry: position.entry, exit: price,
+      qty: Math.round(position.qty * 1e6) / 1e6,
+      margin: Math.round(position.margin * 100) / 100,
+      position_value: Math.round(position.margin * leverage * 100) / 100,
+      leverage, pnl: Math.round(pnl * 100) / 100,
+      pnl_pct: Math.round((pnl / position.margin) * 10000) / 100,
+      exit_reason: "end_of_data",
+    })
+  }
+
+  return trades
+}
+
+function computeMetrics(trades: Trade[], initialBalance: number): Omit<BacktestResult, "trades" | "ohlcv" | "indicators" | "config" | "error" | "custom"> {
+  if (!trades.length) return {
+    total_trades: 0, final_balance: initialBalance,
+    total_pnl: 0, total_pnl_pct: 0, win_rate: 0,
+    max_drawdown_pct: 0, sharpe_ratio: 0, profit_factor: 0,
+    avg_trade_pnl: 0, best_trade: 0, worst_trade: 0,
+    avg_win: 0, avg_loss: 0, win_count: 0, loss_count: 0,
+  }
+  const pnls = trades.map(t => t.pnl)
+  const wins = pnls.filter(p => p > 0)
+  const losses = pnls.filter(p => p <= 0)
+  const totalPnl = pnls.reduce((a, b) => a + b, 0)
+  return {
+    total_trades: trades.length,
+    final_balance: Math.round((initialBalance + totalPnl) * 100) / 100,
+    total_pnl: Math.round(totalPnl * 100) / 100,
+    total_pnl_pct: Math.round((totalPnl / initialBalance) * 10000) / 100,
+    win_rate: Math.round((wins.length / pnls.length) * 1000) / 10,
+    max_drawdown_pct: 0,
+    sharpe_ratio: 0,
+    profit_factor: wins.length && losses.length
+      ? Math.round(wins.reduce((a,b)=>a+b,0) / Math.abs(losses.reduce((a,b)=>a+b,0)) * 100) / 100
+      : wins.length ? 999 : 0,
+    avg_trade_pnl: Math.round((totalPnl / trades.length) * 100) / 100,
+    best_trade: Math.round(Math.max(...pnls) * 100) / 100,
+    worst_trade: Math.round(Math.min(...pnls) * 100) / 100,
+    avg_win: wins.length ? Math.round(wins.reduce((a,b)=>a+b,0)/wins.length*100)/100 : 0,
+    avg_loss: losses.length ? Math.round(losses.reduce((a,b)=>a+b,0)/losses.length*100)/100 : 0,
+    win_count: wins.length,
+    loss_count: losses.length,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function StrategyViewPage() {
+  const [symbol,     setSymbol]     = useState("BTC/USDT:USDT")
+  const [timeframe,  setTimeframe]  = useState("1h")
+  const [days,       setDays]       = useState(30)
+  const [strategy,   setStrategy]   = useState("ema_cross")
+  const [params,     setParams]     = useState<Record<string, number | boolean | string>>({})
+  const [loading,    setLoading]    = useState(false)
+  const [result,     setResult]     = useState<BacktestResult | null>(null)
+  const [customInds, setCustomInds] = useState<CustomIndicatorDef[]>([])
+
+  useEffect(() => {
+    setCustomInds(loadCustomInds().filter(i => i.producesSignals))
+  }, [])
+
+  const allStrategies = [
+    ...STRATEGIES,
+    ...customInds.map(i => ({ id: `custom__${i.id}`, name: `⚙ ${i.name}`, params: {} as Record<string, number | boolean | string> })),
+  ]
+
+  const selectedStrat = allStrategies.find(s => s.id === strategy) ?? STRATEGIES[0]
 
   const updateParam = (key: string, val: string) => {
     const num = Number(val)
@@ -102,6 +230,48 @@ export default function StrategyViewPage() {
     setLoading(true)
     setResult(null)
     try {
+      // ── Özel indikatör: tarayıcıda çalıştır ──
+      if (strategy.startsWith("custom__")) {
+        const indId = strategy.replace("custom__", "")
+        const ind = customInds.find(i => i.id === indId)
+        if (!ind) { setResult({ error: "Özel indikatör bulunamadı" } as BacktestResult); return }
+
+        const hpc: Record<string, number> = { "1m": 1/60, "5m": 5/60, "15m": 0.25, "1h": 1, "4h": 4, "1d": 24 }
+        const limit = Math.min(5000, Math.ceil((days * 24) / (hpc[timeframe] || 1)) + 50)
+        const raw = await api.get(`/data/ohlcv?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`)
+        const rawCandles: OHLCVCandle[] = raw.candles
+
+        const volumes = rawCandles.map((c: OHLCVCandle) => ({ value: c.volume ?? 0 }))
+        const codeResult = runCustomCode(ind.code, rawCandles, volumes)
+
+        if (codeResult.error) { setResult({ error: `JS Hata: ${codeResult.error}` } as BacktestResult); return }
+
+        // Series → indicators (sadece overlay/main panel)
+        const indicators: Record<string, { time: number; value: number }[]> = {}
+        codeResult.series.forEach((s, i) => {
+          if (s.panel === "sub") return
+          const key = `custom_${i}_${s.title || i}`
+          indicators[key] = rawCandles
+            .map((c, idx) => ({ time: c.time, value: (s.values[idx] as number) }))
+            .filter(p => p.value != null && Number.isFinite(p.value))
+        })
+
+        const signals = codeResult.signals || []
+        const trades = clientBacktest(signals, rawCandles, 10000, 0.02, 1)
+        const metrics = computeMetrics(trades, 10000)
+
+        setResult({
+          ...metrics,
+          trades,
+          ohlcv: rawCandles,
+          indicators,
+          config: { symbol, timeframe, strategy: ind.name, days, candle_count: rawCandles.length },
+          custom: true,
+        })
+        return
+      }
+
+      // ── Normal strateji: backend ──
       const mergedParams = { ...selectedStrat.params, ...params }
       const res = await api.post("/backtest/run", {
         symbol, timeframe, strategy, days,
@@ -162,7 +332,16 @@ export default function StrategyViewPage() {
             <span className="text-xs text-slate-400">Strateji</span>
             <select value={strategy} onChange={e => { setStrategy(e.target.value); setParams({}) }}
               className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white">
-              {STRATEGIES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              <optgroup label="Yerleşik Stratejiler">
+                {STRATEGIES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </optgroup>
+              {customInds.length > 0 && (
+                <optgroup label="Özel İndikatörler">
+                  {customInds.map(i => (
+                    <option key={i.id} value={`custom__${i.id}`}>{i.name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </label>
 
@@ -174,6 +353,15 @@ export default function StrategyViewPage() {
             {loading ? "Yükleniyor..." : "Görüntüle"}
           </button>
         </div>
+
+        {/* Özel indikatör bilgisi */}
+        {strategy.startsWith("custom__") && (
+          <div className="border-t border-slate-800 pt-2">
+            <p className="text-[11px] text-purple-400">
+              ⚙ Özel indikatör — JS kodu tarayıcıda çalıştırılır. Sinyaller trade simülasyonuna dönüştürülür.
+            </p>
+          </div>
+        )}
 
         {/* Alt satır: Strateji Parametreleri */}
         {Object.keys(selectedStrat.params).length > 0 && (
@@ -225,12 +413,12 @@ export default function StrategyViewPage() {
         </div>
       )}
 
-      {/* Grafik — giriş/çıkış marker'lı */}
+      {/* Grafik */}
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-slate-300">Grafik</h2>
           <span className="text-[10px] text-slate-500">
-            ↑ LONG giriş &nbsp;·&nbsp; ↓ SHORT giriş &nbsp;·&nbsp; ● Çıkış (yeşil=kâr · kırmızı=zarar) &nbsp;·&nbsp; --- Bağlantı çizgisi
+            ↑ LONG giriş &nbsp;·&nbsp; ↓ SHORT giriş &nbsp;·&nbsp; ● Çıkış &nbsp;·&nbsp; --- Bağlantı
           </span>
         </div>
         {result && !result.error && result.ohlcv && result.ohlcv.length > 0 ? (
@@ -250,6 +438,11 @@ export default function StrategyViewPage() {
       {/* Özet Metrikler */}
       {result && !result.error && result.total_trades > 0 && (
         <>
+          {result.custom && (
+            <div className="text-[11px] text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded px-3 py-2">
+              Özel indikatör simülasyonu — $10,000 başlangıç, %2 risk, kaldıraçsız. Sinyaller: buy=LONG aç, sell=LONG kapat/SHORT aç.
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard label="Toplam İşlem" value={result.total_trades} />
             <StatCard
@@ -333,18 +526,20 @@ export default function StrategyViewPage() {
                       </td>
                       <td className="py-1.5 px-2">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                          t.exit_reason === "take_profit"  ? "bg-green-500/10 text-green-400" :
-                          t.exit_reason === "stop_loss"    ? "bg-red-500/10 text-red-400" :
-                          t.exit_reason === "liquidation"  ? "bg-red-600/20 text-red-300 font-semibold" :
+                          t.exit_reason === "take_profit"   ? "bg-green-500/10 text-green-400" :
+                          t.exit_reason === "stop_loss"     ? "bg-red-500/10 text-red-400" :
+                          t.exit_reason === "liquidation"   ? "bg-red-600/20 text-red-300 font-semibold" :
                           t.exit_reason === "bb_upper_band" || t.exit_reason === "bb_lower_band"
-                                                           ? "bg-blue-500/10 text-blue-400" :
+                                                            ? "bg-blue-500/10 text-blue-400" :
+                          t.exit_reason === "signal"        ? "bg-purple-500/10 text-purple-400" :
                           "bg-slate-700 text-slate-400"
                         }`}>
-                          {t.exit_reason === "take_profit"  ? "TP" :
-                           t.exit_reason === "stop_loss"    ? "SL" :
-                           t.exit_reason === "liquidation"  ? "LIQ" :
+                          {t.exit_reason === "take_profit"   ? "TP" :
+                           t.exit_reason === "stop_loss"     ? "SL" :
+                           t.exit_reason === "liquidation"   ? "LIQ" :
                            t.exit_reason === "bb_upper_band" ? "BB↑" :
                            t.exit_reason === "bb_lower_band" ? "BB↓" :
+                           t.exit_reason === "signal"        ? "SIG" :
                            t.exit_reason}
                         </span>
                       </td>
@@ -361,7 +556,7 @@ export default function StrategyViewPage() {
       {result && !result.error && result.total_trades === 0 && (
         <div className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-6 text-center">
           <p className="text-slate-500 text-sm">
-            Bu periyotta bu strateji hiç sinyal üretmedi. Farklı parametreler veya daha uzun süre deneyin.
+            Bu periyotta hiç sinyal üretilmedi. Farklı parametreler veya daha uzun süre deneyin.
           </p>
         </div>
       )}
