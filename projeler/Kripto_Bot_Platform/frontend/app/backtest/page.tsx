@@ -54,6 +54,7 @@ interface BacktestResult {
   trades: Trade[]
   equity_curve: EquityPoint[]
   ohlcv?: OHLCVCandle[]
+  indicators?: Record<string, { time: number; value: number }[]>
   config?: { symbol: string; timeframe: string; strategy: string; days: number; candle_count: number }
   error?: string
 }
@@ -320,7 +321,7 @@ export default function BacktestPage() {
             </span>
           </h2>
           {result.ohlcv && result.ohlcv.length > 0 ? (
-            <BacktestChart candles={result.ohlcv} trades={result.trades} />
+            <BacktestChart candles={result.ohlcv} trades={result.trades} indicators={result.indicators} />
           ) : (
             <div className="text-xs text-yellow-500 bg-yellow-950/30 border border-yellow-900 rounded px-3 py-4 text-center">
               Backend grafik verisi dondurmedi (ohlcv yok). Coolify&apos;da backend redeploy gerekebilir.

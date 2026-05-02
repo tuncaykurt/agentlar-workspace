@@ -155,6 +155,30 @@ const STRATEGIES: Strategy[] = [
     ],
   },
   {
+    id: "bb_ema_cross",
+    name: "BB-EMA Cross",
+    category: "Trend",
+    icon: "📡",
+    description: "Bollinger Band orta çizgisi kesişimi ile EMA çaprazlaması giriş, EMA dokunuşu yeniden giriş, BB bandı çıkışı.",
+    signals: ["BB orta çizgi kesişimi", "EMA çaprazlama onayı", "EMA dokunuş yeniden giriş"],
+    params: [
+      { key: "bb_period",     label: "BB Periyodu",       type: "number",  min: 5,   max: 100, default: 20,     description: "Bollinger Band SMA periyodu" },
+      { key: "bb_std",        label: "BB Std Sapma",      type: "number",  min: 0.5, max: 4,   step: 0.5, default: 2.0, description: "Bollinger Band standart sapma katsayısı" },
+      { key: "ema_fast",      label: "Hızlı EMA",         type: "number",  min: 2,   max: 50,  default: 5,      description: "Hızlı EMA periyodu" },
+      { key: "ema_slow",      label: "Yavaş EMA",         type: "number",  min: 3,   max: 100, default: 13,     description: "Yavaş EMA / destek dokunuş çizgisi" },
+      { key: "touch_pct",     label: "Dokunuş Eşiği %",   type: "number",  min: 0,   max: 5,   step: 0.1, default: 0.3, description: "EMA'ya yüzde yaklaşım (0 = sadece wick)" },
+      { key: "setup_lookback",label: "Setup Geriye Bakış", type: "number", min: 1,   max: 20,  default: 5,      description: "BB orta kesişimi için geriye bakış barlık" },
+      { key: "direction",     label: "Yön",               type: "select",  default: "both",   description: "İşlem yönü filtresi",
+        options: [
+          { value: "both",  label: "Long ve Short" },
+          { value: "long",  label: "Sadece Long" },
+          { value: "short", label: "Sadece Short" },
+        ],
+      },
+      { key: "exit_at_bands", label: "BB Bantında Çık",   type: "boolean", default: true,     description: "BB üst/alt bandına ulaşınca pozisyonu kapat" },
+    ],
+  },
+  {
     id: "funding_rate",
     name: "Funding Rate Arbitraj",
     category: "Volatility",
@@ -529,6 +553,32 @@ function StrategySignalCard({
         sell: [`Supertrend YEŞİLDEN KIRMIZIYA döner  ↘  (Trend aşağı, fiyat altta)`],
         filters: [],
         note: `Periyot küçük = hızlı sinyal (gürültülü) | Çarpan büyük = bant geniş (geç ama güvenilir)`,
+      }
+    }
+    if (strategyId === "bb_ema_cross") {
+      const bbP  = getParam("bb_period", 20)
+      const bbS  = getParam("bb_std", 2.0)
+      const fast = getParam("ema_fast", 5)
+      const slow = getParam("ema_slow", 13)
+      const tpct = getParam("touch_pct", 0.3)
+      const dir  = getParam("direction", "both")
+      const exit = getParam("exit_at_bands", true)
+      return {
+        algo: `BB(${bbP}, ${bbS}σ) orta çizgi kesişimi setup → EMA${fast}/EMA${slow} çaprazlama ile giriş.`,
+        buy: [
+          `Fiyat BB ortayı (SMA${bbP}) YUKARI keser → setup başlar ↗`,
+          `Sonraki barda EMA${fast} VE EMA${slow} BB ortanın üstüne çıkar → LONG giriş`,
+          `Yeniden giriş: EMA${slow}'e %${tpct} içinde fiyat dokunuşu → LONG`,
+        ],
+        sell: String(dir) === "long" ? [] : [
+          `Fiyat BB ortayı AŞAĞI keser → short setup ↘`,
+          `EMA${fast} VE EMA${slow} BB ortanın altına iner → SHORT giriş`,
+        ],
+        filters: [
+          ...(exit ? [`Çıkış: BB üst banda ulaşınca LONG kapat | Alt banda ulaşınca SHORT kapat`] : []),
+          `Yön: ${String(dir) === "both" ? "Long ve Short" : String(dir) === "long" ? "Yalnızca Long" : "Yalnızca Short"}`,
+        ],
+        note: `BB orta = SMA${bbP} | EMA${fast} hızlı sinyal çizgisi | EMA${slow} destek/direnç`,
       }
     }
     if (strategyId === "funding_rate") {

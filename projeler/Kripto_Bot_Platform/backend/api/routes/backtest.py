@@ -6,9 +6,48 @@ Backtest API Endpoint'leri
 """
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+import pandas as pd
 from bot.backtester import BacktestEngine
 from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
+
+
+def _compute_indicators(ohlcv: list, strategy: str, params: dict, step: int) -> dict:
+    """Grafik overlay için bar bar indikatör değerleri hesapla."""
+    closes = [c[4] for c in ohlcv]
+    timestamps = [c[0] // 1000 for c in ohlcv]
+    s = pd.Series(closes)
+    indicators: dict = {}
+
+    def make_line(series: pd.Series) -> list:
+        out = []
+        for t, v in zip(timestamps, series):
+            if pd.notna(v):
+                out.append({"time": int(t), "value": round(float(v), 8)})
+        return out[::step]
+
+    if strategy in ("bb_ema_cross", "bollinger_bounce"):
+        period  = int(params.get("bb_period") or params.get("period") or 20)
+        std_dev = float(params.get("bb_std") or params.get("std_dev") or 2.0)
+        sma   = s.rolling(period).mean()
+        std   = s.rolling(period).std()
+        indicators["bb_upper"] = make_line(sma + std_dev * std)
+        indicators["bb_mid"]   = make_line(sma)
+        indicators["bb_lower"] = make_line(sma - std_dev * std)
+
+    if strategy == "bb_ema_cross":
+        fast = int(params.get("ema_fast", 5))
+        slow = int(params.get("ema_slow", 13))
+        indicators["ema_fast"] = make_line(s.ewm(span=fast, adjust=False).mean())
+        indicators["ema_slow"] = make_line(s.ewm(span=slow, adjust=False).mean())
+
+    if strategy == "ema_cross":
+        fast = int(params.get("fast_ema", 9))
+        slow = int(params.get("slow_ema", 21))
+        indicators["ema_fast"] = make_line(s.ewm(span=fast, adjust=False).mean())
+        indicators["ema_slow"] = make_line(s.ewm(span=slow, adjust=False).mean())
+
+    return indicators
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
@@ -73,6 +112,8 @@ async def run_backtest(req: BacktestRequest):
         {"time": c[0] // 1000, "open": c[1], "high": c[2], "low": c[3], "close": c[4]}
         for c in ohlcv[::step]
     ]
+
+    result["indicators"] = _compute_indicators(ohlcv, req.strategy, req.params, step)
 
     return result
 
@@ -163,6 +204,17 @@ async def list_strategies():
                 "name": "Supertrend",
                 "description": "ATR tabanlı trend takip",
                 "params": {"period": 10, "mult": 3.0},
+            },
+            {
+                "id": "bb_ema_cross",
+                "name": "BB-EMA Cross",
+                "description": "Bollinger Band orta kesişim + EMA çaprazı giriş, EMA dokunuş yeniden giriş, BB band çıkışı",
+                "params": {
+                    "bb_period": 20, "bb_std": 2.0,
+                    "ema_fast": 5, "ema_slow": 13,
+                    "touch_pct": 0.3, "setup_lookback": 5,
+                    "direction": "both", "exit_at_bands": True,
+                },
             },
         ]
     }

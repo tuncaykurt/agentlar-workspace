@@ -43,6 +43,7 @@ interface BacktestResult {
   worst_trade: number
   trades: Trade[]
   ohlcv?: OHLCVCandle[]
+  indicators?: Record<string, { time: number; value: number }[]>
   config?: { symbol: string; timeframe: string; strategy: string; days: number; candle_count: number }
   error?: string
 }
@@ -233,7 +234,7 @@ export default function StrategyViewPage() {
           </span>
         </div>
         {result && !result.error && result.ohlcv && result.ohlcv.length > 0 ? (
-          <BacktestChart candles={result.ohlcv} trades={result.trades} />
+          <BacktestChart candles={result.ohlcv} trades={result.trades} indicators={result.indicators} />
         ) : (
           <div
             className="w-full bg-slate-950 rounded flex items-center justify-center"
@@ -291,6 +292,8 @@ export default function StrategyViewPage() {
                     <th className="text-left py-1.5 px-2">#</th>
                     <th className="text-left py-1.5 px-2">Tarih</th>
                     <th className="text-left py-1.5 px-2">Yön</th>
+                    <th className="text-right py-1.5 px-2">Margin</th>
+                    <th className="text-right py-1.5 px-2">Poz. Değeri</th>
                     <th className="text-right py-1.5 px-2">Giriş</th>
                     <th className="text-right py-1.5 px-2">Çıkış</th>
                     <th className="text-right py-1.5 px-2">PnL ($)</th>
@@ -309,6 +312,12 @@ export default function StrategyViewPage() {
                         <span className={t.side === "buy" ? "text-green-400" : "text-red-400"}>
                           {t.side === "buy" ? "LONG" : "SHORT"}
                         </span>
+                      </td>
+                      <td className="py-1.5 px-2 text-right text-slate-400 text-[11px]">
+                        {t.margin != null ? `$${t.margin.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
+                      </td>
+                      <td className="py-1.5 px-2 text-right text-slate-300 text-[11px]">
+                        {t.position_value != null ? `$${t.position_value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
                       </td>
                       <td className="py-1.5 px-2 text-right text-slate-300">
                         ${t.entry.toLocaleString(undefined, { maximumFractionDigits: 2 })}

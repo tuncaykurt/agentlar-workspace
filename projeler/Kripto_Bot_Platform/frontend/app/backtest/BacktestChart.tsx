@@ -24,12 +24,36 @@ interface Trade {
   exit_reason: string
 }
 
+interface IndicatorPoint {
+  time: number
+  value: number
+}
+
+interface Indicators {
+  bb_upper?: IndicatorPoint[]
+  bb_mid?: IndicatorPoint[]
+  bb_lower?: IndicatorPoint[]
+  ema_fast?: IndicatorPoint[]
+  ema_slow?: IndicatorPoint[]
+  [key: string]: IndicatorPoint[] | undefined
+}
+
+const INDICATOR_STYLES: Record<string, { color: string; lineWidth: number; lineStyle: number; title: string }> = {
+  bb_upper: { color: "rgba(96,165,250,0.6)",  lineWidth: 1, lineStyle: LineStyle.Dashed,   title: "BB ↑" },
+  bb_mid:   { color: "rgba(148,163,184,0.5)", lineWidth: 1, lineStyle: LineStyle.Dashed,   title: "BB mid" },
+  bb_lower: { color: "rgba(96,165,250,0.6)",  lineWidth: 1, lineStyle: LineStyle.Dashed,   title: "BB ↓" },
+  ema_fast: { color: "#22c55e",               lineWidth: 1, lineStyle: LineStyle.Solid,    title: "EMA fast" },
+  ema_slow: { color: "#fbbf24",               lineWidth: 1, lineStyle: LineStyle.Solid,    title: "EMA slow" },
+}
+
 export default function BacktestChart({
   candles,
   trades,
+  indicators,
 }: {
   candles: Candle[]
   trades: Trade[]
+  indicators?: Indicators
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -99,6 +123,38 @@ export default function BacktestChart({
       }
 
       candleSeries.setData(cleanCandles as never)
+
+      // ── İndikatör çizgileri ──
+      let indicatorCount = 0
+      if (indicators) {
+        for (const [key, points] of Object.entries(indicators)) {
+          if (!points || points.length === 0) continue
+          const style = INDICATOR_STYLES[key]
+          if (!style) continue
+
+          try {
+            const lineSeries = chart.addLineSeries({
+              color: style.color,
+              lineWidth: style.lineWidth as 1 | 2 | 3 | 4,
+              lineStyle: style.lineStyle,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              crosshairMarkerVisible: false,
+              title: style.title,
+            })
+
+            const cleanPoints = points
+              .filter(p => Number.isFinite(p.time) && Number.isFinite(p.value))
+              .sort((a, b) => a.time - b.time)
+              .map(p => ({ time: p.time as unknown as Time, value: p.value }))
+
+            if (cleanPoints.length > 0) {
+              lineSeries.setData(cleanPoints)
+              indicatorCount++
+            }
+          } catch { /* skip malformed indicator */ }
+        }
+      }
 
       // Marker zamanını en yakın candle'a snap et
       const candleTimes = cleanCandles.map(c => c.time)
@@ -184,7 +240,7 @@ export default function BacktestChart({
       })
 
       chart.timeScale().fitContent()
-      setInfo(`${cleanCandles.length} mum, ${trades.length} trade, ${markers.length} marker, ${lineCount} bağlantı`)
+      setInfo(`${cleanCandles.length} mum, ${trades.length} trade, ${markers.length} marker, ${lineCount} bağlantı${indicatorCount > 0 ? `, ${indicatorCount} indikatör` : ""}`)
       setErr(null)
     } catch (e) {
       setErr(`Veri yükleme hatası: ${e instanceof Error ? e.message : String(e)}`)
@@ -205,7 +261,7 @@ export default function BacktestChart({
       try { chart.remove() } catch { /* ignore */ }
       chartRef.current = null
     }
-  }, [candles, trades])
+  }, [candles, trades, indicators])
 
   return (
     <div>

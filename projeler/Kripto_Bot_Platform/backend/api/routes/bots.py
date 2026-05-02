@@ -22,8 +22,6 @@ _bot_tasks: dict[int, asyncio.Task] = {}
 class BotCreate(BaseModel):
     name: str
     symbol: str = "BTC/USDT:USDT"
-    # Mevcut stratejiler: ema_cross | rsi_oversold | macd_signal | bollinger_bounce |
-    #   supertrend | ut_bot | grid_bot | custom_signal | funding_rate | bb_ema_cross
     strategy: str = "ema_cross"
     paper_mode: bool = True
     leverage: int = 3
@@ -31,15 +29,10 @@ class BotCreate(BaseModel):
     max_daily_loss: float = 0.05
     initial_balance: float = 1000.0
     params: Optional[dict] = None
-    # bb_ema_cross parametreleri (params dict içinde):
-    #   bb_period      : int   = 20       BB SMA periyodu
-    #   bb_std         : float = 2.0      Standart sapma katsayısı
-    #   ema_fast       : int   = 5        Hızlı EMA periyodu
-    #   ema_slow       : int   = 13       Yavaş EMA / dokunuş çizgisi
-    #   touch_pct      : float = 0.3      EMA'ya % yaklaşım (0 = sadece wick)
-    #   setup_lookback : int   = 5        BB orta kesişimi için geriye bakış
-    #   direction      : str   = "both"   "long" | "short" | "both"
-    #   exit_at_bands  : bool  = True     BB bantlarında çıkış sinyali
+    strategy_params: Optional[dict] = None  # frontend alias, params yoksa kullanılır
+    tp_pct: Optional[float] = None
+    sl_pct: Optional[float] = None
+    trailing_sl: Optional[bool] = None
 
 
 @router.get("/")
@@ -71,6 +64,7 @@ async def list_bots():
 @router.post("/")
 async def create_bot(data: BotCreate):
     async with async_session() as session:
+        effective_params = data.params or data.strategy_params
         bot = Bot(
             name=data.name,
             symbol=data.symbol,
@@ -82,7 +76,7 @@ async def create_bot(data: BotCreate):
             risk_per_trade=data.risk_per_trade,
             max_daily_loss=data.max_daily_loss,
             initial_balance=data.initial_balance,
-            params=json.dumps(data.params) if data.params else None,
+            params=json.dumps(effective_params) if effective_params else None,
         )
         session.add(bot)
         await session.commit()
@@ -184,6 +178,7 @@ async def update_bot(bot_id: int, data: BotCreate):
         if not bot:
             raise HTTPException(404, "Bot bulunamadi")
 
+        effective_params = data.params or data.strategy_params
         await session.execute(
             update(Bot).where(Bot.id == bot_id).values(
                 name=data.name,
@@ -194,7 +189,7 @@ async def update_bot(bot_id: int, data: BotCreate):
                 risk_per_trade=data.risk_per_trade,
                 max_daily_loss=data.max_daily_loss,
                 initial_balance=data.initial_balance,
-                params=json.dumps(data.params) if data.params else None,
+                params=json.dumps(effective_params) if effective_params else None,
             )
         )
         await session.commit()
