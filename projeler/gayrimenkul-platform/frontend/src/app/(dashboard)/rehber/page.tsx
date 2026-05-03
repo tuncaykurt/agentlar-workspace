@@ -15,6 +15,8 @@ interface Contact {
   phone?: string
   email?: string
   birth_date?: string
+  company_name?: string
+  notes?: string
   client_type: string
   lead_status: string
 }
@@ -96,7 +98,7 @@ function downloadVCF(contacts: Contact[], filename = 'rehber.vcf') {
   URL.revokeObjectURL(url)
 }
 
-// Hitap combobox bileşeni
+// Hitap combobox bileşeni — hem serbest metin hem preset seçimi destekler
 function SalutationInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -109,41 +111,79 @@ function SalutationInput({ value, onChange }: { value: string; onChange: (v: str
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  // Yazılan metne göre filtrelenmiş presetler
+  const filteredPresets = value.trim()
+    ? SALUTATION_PRESETS.filter(s => s.toLocaleLowerCase('tr-TR').includes(value.toLocaleLowerCase('tr-TR')))
+    : SALUTATION_PRESETS
+
+  // Yazılan değer preset listesinde yok mu? (özel giriş)
+  const isCustom = value.trim() !== '' && !SALUTATION_PRESETS.includes(value.trim())
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === 'Tab') setOpen(false)
+    else if (e.key === 'Escape') setOpen(false)
+  }
+
   return (
     <div ref={ref} className="relative">
       <div className="flex items-center border border-outline rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary">
         <input
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onChange={e => { onChange(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
-          placeholder="Hitap şekli"
-          className="flex-1 px-3 py-2 text-sm focus:outline-none min-w-0"
+          onKeyDown={handleKeyDown}
+          placeholder="Yaz veya seç…"
+          className="flex-1 px-3 py-2 text-sm focus:outline-none min-w-0 bg-transparent"
         />
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
-          className="px-2 text-on-surface-variant hover:text-on-surface-variant"
+          className="px-2 text-on-surface-variant hover:text-on-surface transition-colors"
+          tabIndex={-1}
         >
-          <ChevronDown size={14} />
+          <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>
       </div>
       {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 w-full bg-surface-container border border-outline rounded-lg shadow-lg overflow-hidden">
+        <div className="absolute z-50 top-full left-0 mt-1 w-full bg-surface-container border border-outline rounded-lg shadow-lg overflow-hidden max-h-52 overflow-y-auto">
+          {/* Temizle */}
           <button
+            onMouseDown={e => e.preventDefault()}
             onClick={() => { onChange(''); setOpen(false) }}
-            className="w-full text-left px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high"
+            className="w-full text-left px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high border-b border-outline"
           >
             — (yok)
           </button>
-          {SALUTATION_PRESETS.map(s => (
+
+          {/* Özel / Manuel giriş onayı */}
+          {isCustom && (
             <button
-              key={s}
-              onClick={() => { onChange(s); setOpen(false) }}
-              className={`w-full text-left px-3 py-2 text-sm hover:bg-primary-container hover:text-primary ${value === s ? 'bg-primary-container text-primary font-medium' : 'text-on-surface'}`}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => setOpen(false)}
+              className="w-full text-left px-3 py-2 text-sm bg-indigo-50 text-indigo-700 font-medium hover:bg-indigo-100 border-b border-outline flex items-center gap-1.5"
             >
-              {s}
+              <span className="text-xs bg-indigo-200 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">Özel</span>
+              &ldquo;{value}&rdquo; ekle
             </button>
-          ))}
+          )}
+
+          {/* Filtrelenmiş presetler */}
+          {filteredPresets.length > 0 ? (
+            filteredPresets.map(s => (
+              <button
+                key={s}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { onChange(s); setOpen(false) }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-primary-container hover:text-primary transition-colors ${
+                  value === s ? 'bg-primary-container text-primary font-medium' : 'text-on-surface'
+                }`}
+              >
+                {s}
+              </button>
+            ))
+          ) : !isCustom ? (
+            <p className="px-3 py-2 text-xs text-on-surface-variant italic">Sonuç bulunamadı</p>
+          ) : null}
         </div>
       )}
     </div>
@@ -162,12 +202,12 @@ export default function RehberPage() {
 
   // Düzenleme
   const [editContact, setEditContact] = useState<Contact | null>(null)
-  const [editForm, setEditForm] = useState({ full_name: '', salutation: '', phone: '', email: '', birth_date: '', client_type: 'buyer' })
+  const [editForm, setEditForm] = useState({ full_name: '', salutation: '', phone: '', email: '', birth_date: '', company_name: '', notes: '', client_type: 'buyer' })
   const [saving, setSaving] = useState(false)
 
   // Yeni kişi oluşturma
   const [showCreate, setShowCreate] = useState(false)
-  const [createForm, setCreateForm] = useState({ full_name: '', salutation: '', phone: '', email: '', birth_date: '', client_type: 'buyer' })
+  const [createForm, setCreateForm] = useState({ full_name: '', salutation: '', phone: '', email: '', birth_date: '', company_name: '', notes: '', client_type: 'buyer' })
   const [creating, setCreating] = useState(false)
 
   // Silme
@@ -189,7 +229,7 @@ export default function RehberPage() {
     while (true) {
       let query = supabase
         .from('clients')
-        .select('id, full_name, salutation, phone, email, birth_date, client_type, lead_status')
+        .select('id, full_name, salutation, phone, email, birth_date, company_name, notes, client_type, lead_status')
         .eq('is_active', true)
         .order('full_name', { ascending: true })
         .range(from, from + PAGE - 1)
@@ -212,6 +252,8 @@ export default function RehberPage() {
       phone: c.phone || '',
       email: c.email || '',
       birth_date: c.birth_date || '',
+      company_name: c.company_name || '',
+      notes: c.notes || '',
       client_type: c.client_type,
     })
   }
@@ -228,6 +270,8 @@ export default function RehberPage() {
         phone: editForm.phone.trim() || null,
         email: editForm.email.trim() || null,
         birth_date: editForm.birth_date || null,
+        company_name: editForm.company_name.trim() || null,
+        notes: editForm.notes.trim() || null,
         client_type: editForm.client_type,
       })
       .eq('id', editContact.id)
@@ -280,12 +324,14 @@ export default function RehberPage() {
         phone: createForm.phone.trim() || null,
         email: createForm.email.trim() || null,
         birth_date: createForm.birth_date || null,
+        company_name: createForm.company_name.trim() || null,
+        notes: createForm.notes.trim() || null,
         client_type: createForm.client_type,
         lead_status: 'new',
         source: 'other',
         assigned_consultant_id: consultant?.id || null,
       })
-      .select('id, full_name, salutation, phone, email, birth_date, client_type, lead_status')
+      .select('id, full_name, salutation, phone, email, birth_date, company_name, notes, client_type, lead_status')
       .single()
 
     if (!error && newContact) {
@@ -519,7 +565,7 @@ export default function RehberPage() {
       {/* ── Düzenleme Modalı ─────────────────────────────────── */}
       {editContact && (
         <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/50 dark:bg-black/70 flex items-center justify-center p-4">
-          <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-md">
+          <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
               <h2 className="font-semibold text-on-surface">Kişiyi Düzenle</h2>
               <button onClick={() => setEditContact(null)} className="text-on-surface-variant hover:text-on-surface-variant">
@@ -527,7 +573,7 @@ export default function RehberPage() {
               </button>
             </div>
 
-            <div className="px-5 py-4 space-y-3">
+            <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
               {/* İsim + Hitap */}
               <div className="flex gap-2">
                 <div className="flex-1">
@@ -596,6 +642,29 @@ export default function RehberPage() {
                   className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
+
+              {/* Şirket */}
+              <div>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">Şirket / Kurum</label>
+                <input
+                  value={editForm.company_name}
+                  onChange={e => setEditForm(f => ({ ...f, company_name: e.target.value }))}
+                  placeholder="Örn. ABC Holding A.Ş."
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              {/* Hatırlatici Not */}
+              <div>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">Hatırlatıcı Not</label>
+                <textarea
+                  value={editForm.notes}
+                  onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Özel notlar, tercihler, hatırlatmalar..."
+                  rows={3}
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                />
+              </div>
             </div>
 
             <div className="flex gap-3 px-5 py-4 border-t border-outline">
@@ -616,7 +685,7 @@ export default function RehberPage() {
       {/* ── Yeni Kişi Oluşturma Modalı ──────────────────────── */}
       {showCreate && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-md">
+          <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
               <h2 className="font-semibold text-on-surface">Yeni Kişi Ekle</h2>
               <button onClick={() => setShowCreate(false)} className="text-on-surface-variant hover:text-on-surface-variant">
@@ -624,7 +693,7 @@ export default function RehberPage() {
               </button>
             </div>
 
-            <div className="px-5 py-4 space-y-3">
+            <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
               {/* İsim + Hitap */}
               <div className="flex gap-2">
                 <div className="flex-1">
@@ -693,6 +762,29 @@ export default function RehberPage() {
                   value={createForm.birth_date}
                   onChange={e => setCreateForm(f => ({ ...f, birth_date: e.target.value }))}
                   className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              {/* Şirket */}
+              <div>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">Şirket / Kurum</label>
+                <input
+                  value={createForm.company_name}
+                  onChange={e => setCreateForm(f => ({ ...f, company_name: e.target.value }))}
+                  placeholder="Örn. ABC Holding A.Ş."
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              {/* Hatırlatici Not */}
+              <div>
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">Hatırlatıcı Not</label>
+                <textarea
+                  value={createForm.notes}
+                  onChange={e => setCreateForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Özel notlar, tercihler, hatırlatmalar..."
+                  rows={3}
+                  className="w-full border border-outline rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 />
               </div>
             </div>
