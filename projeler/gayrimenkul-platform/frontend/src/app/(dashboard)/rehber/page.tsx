@@ -281,7 +281,10 @@ export default function RehberPage() {
       })
       .eq('id', editContact.id)
 
-    if (!error) {
+    if (error) {
+      console.error('Update error:', error)
+      alert('Kaydedilirken bir hata oluştu: ' + error.message)
+    } else {
       setContacts(prev => prev.map(c =>
         c.id === editContact.id
           ? { ...c, ...editForm, salutation: editForm.salutation || undefined, birth_date: editForm.birth_date || undefined }
@@ -339,9 +342,12 @@ export default function RehberPage() {
       .select('id, full_name, salutation, phone, email, birth_date, company_name, notes, client_type, lead_status')
       .single()
 
-    if (!error && newContact) {
+    if (error) {
+      console.error('Create error:', error)
+      alert('Kişi eklenirken bir hata oluştu: ' + error.message)
+    } else if (newContact) {
       setContacts(prev => [...prev, newContact as Contact].sort((a, b) => a.full_name.localeCompare(b.full_name, 'tr')))
-      setCreateForm({ full_name: '', salutation: '', phone: '', email: '', birth_date: '', client_type: 'buyer' })
+      setCreateForm({ full_name: '', salutation: '', phone: '', email: '', birth_date: '', company_name: '', notes: '', client_type: 'buyer' })
       setShowCreate(false)
     }
     setCreating(false)
