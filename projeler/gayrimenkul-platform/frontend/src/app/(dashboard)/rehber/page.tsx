@@ -6,6 +6,7 @@ import {
   Search, Phone, MessageCircle, BookUser,
   Pencil, Trash2, X, Save, Loader2, AlertTriangle,
   Download, CheckSquare, Square, ChevronDown, Plus,
+  Briefcase, Mail, Cake, FileText,
 } from 'lucide-react'
 
 interface Contact {
@@ -481,8 +482,8 @@ export default function RehberPage() {
                           {contact.full_name.charAt(0).toLocaleUpperCase('tr-TR')}
                         </div>
 
-                        {/* Bilgi */}
-                        <div className="flex-1 min-w-0">
+                        {/* Sol Bilgi (İsim, Telefon) */}
+                        <div className="w-[30%] min-w-[180px] pr-2">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-sm font-medium text-on-surface truncate">{contact.full_name}</span>
                             {contact.salutation && (
@@ -497,6 +498,34 @@ export default function RehberPage() {
                           )}
                           {contact.email && !contact.phone && (
                             <p className="text-xs text-on-surface-variant mt-0.5">{contact.email}</p>
+                          )}
+                        </div>
+
+                        {/* Orta Bilgi (Şirket, Mail, Doğum Tarihi, Not) */}
+                        <div className="flex-1 flex items-center gap-x-3 gap-y-2 flex-wrap text-xs text-on-surface-variant hidden md:flex overflow-hidden">
+                          {contact.company_name && (
+                            <div className="flex items-center gap-1.5 bg-surface-container-high px-2 py-1 rounded-md" title="Şirket">
+                              <Briefcase size={13} className="text-on-surface-variant/70 flex-shrink-0" />
+                              <span className="truncate max-w-[130px]">{contact.company_name}</span>
+                            </div>
+                          )}
+                          {contact.email && contact.phone && (
+                            <div className="flex items-center gap-1.5 bg-surface-container-high px-2 py-1 rounded-md" title="E-posta">
+                              <Mail size={13} className="text-on-surface-variant/70 flex-shrink-0" />
+                              <span className="truncate max-w-[150px]">{contact.email}</span>
+                            </div>
+                          )}
+                          {contact.birth_date && (
+                            <div className="flex items-center gap-1.5 bg-surface-container-high px-2 py-1 rounded-md" title="Doğum Tarihi">
+                              <Cake size={13} className="text-on-surface-variant/70 flex-shrink-0" />
+                              <span>{new Date(contact.birth_date).toLocaleDateString('tr-TR')}</span>
+                            </div>
+                          )}
+                          {contact.notes && (
+                            <div className="flex items-center gap-1.5 bg-surface-container-high px-2 py-1 rounded-md" title={contact.notes}>
+                              <FileText size={13} className="text-on-surface-variant/70 flex-shrink-0" />
+                              <span className="truncate max-w-[200px]">{contact.notes}</span>
+                            </div>
                           )}
                         </div>
 
