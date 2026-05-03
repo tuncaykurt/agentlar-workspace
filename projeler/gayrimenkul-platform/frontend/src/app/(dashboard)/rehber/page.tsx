@@ -30,6 +30,7 @@ const typeColors: Record<string, string> = {
   tenant:  'bg-teal-50 text-teal-700',
   landlord:'bg-rose-50 text-rose-700',
   network: 'bg-surface-container-high text-on-surface-variant',
+  emlakci: 'bg-indigo-50 text-indigo-700',
 }
 
 const typeLabels: Record<string, string> = {
@@ -40,6 +41,7 @@ const typeLabels: Record<string, string> = {
   tenant:  'Kiracı',
   landlord:'Ev Sahibi',
   network: 'Ağ / Tanışık',
+  emlakci: 'Emlakçı',
 }
 
 const SALUTATION_PRESETS = ['Bey', 'Hanım', 'Dr.', 'Op. Dr.', 'Uzm. Dr.', 'Av.', 'Prof.', 'Prof. Dr.', 'Doç.', 'Müh.']
@@ -204,11 +206,13 @@ export default function RehberPage() {
   // Düzenleme
   const [editContact, setEditContact] = useState<Contact | null>(null)
   const [editForm, setEditForm] = useState({ full_name: '', salutation: '', phone: '', email: '', birth_date: '', company_name: '', notes: '', client_type: 'buyer' })
+  const [customEditLabel, setCustomEditLabel] = useState('')
   const [saving, setSaving] = useState(false)
 
   // Yeni kişi oluşturma
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState({ full_name: '', salutation: '', phone: '', email: '', birth_date: '', company_name: '', notes: '', client_type: 'buyer' })
+  const [customCreateLabel, setCustomCreateLabel] = useState('')
   const [creating, setCreating] = useState(false)
 
   // Silme
@@ -622,7 +626,7 @@ export default function RehberPage() {
               {/* Etiket */}
               <div>
                 <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Etiket</label>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 items-center">
                   {Object.entries(typeLabels).map(([val, label]) => (
                     <button
                       key={val}
@@ -636,6 +640,35 @@ export default function RehberPage() {
                       {label}
                     </button>
                   ))}
+
+                  {/* Özel Etiket Görüntüleme */}
+                  {editForm.client_type && !(editForm.client_type in typeLabels) && (
+                    <button
+                      onClick={() => setEditForm(f => ({ ...f, client_type: editForm.client_type }))}
+                      className="text-xs px-2.5 py-1.5 rounded-full transition-colors font-medium bg-surface-container-high text-on-surface-variant border border-transparent ring-2 ring-offset-1 ring-primary"
+                    >
+                      {editForm.client_type}
+                    </button>
+                  )}
+
+                  {/* Özel Etiket Ekleme Alanı */}
+                  <input
+                    type="text"
+                    placeholder="+ Özel Ekle (Enter)"
+                    value={customEditLabel}
+                    onChange={e => setCustomEditLabel(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const val = customEditLabel.trim()
+                        if (val) {
+                          setEditForm(f => ({ ...f, client_type: val }))
+                          setCustomEditLabel('')
+                        }
+                      }
+                    }}
+                    className="text-xs px-2.5 py-1.5 rounded-full border border-outline bg-transparent text-on-surface focus:outline-none focus:border-primary w-[140px] placeholder:text-on-surface-variant/70"
+                  />
                 </div>
               </div>
 
@@ -744,7 +777,7 @@ export default function RehberPage() {
               {/* Etiket */}
               <div>
                 <label className="block text-xs font-medium text-on-surface-variant mb-1.5">Etiket</label>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 items-center">
                   {Object.entries(typeLabels).map(([val, label]) => (
                     <button
                       key={val}
@@ -758,6 +791,35 @@ export default function RehberPage() {
                       {label}
                     </button>
                   ))}
+
+                  {/* Özel Etiket Görüntüleme */}
+                  {createForm.client_type && !(createForm.client_type in typeLabels) && (
+                    <button
+                      onClick={() => setCreateForm(f => ({ ...f, client_type: createForm.client_type }))}
+                      className="text-xs px-2.5 py-1.5 rounded-full transition-colors font-medium bg-surface-container-high text-on-surface-variant border border-transparent ring-2 ring-offset-1 ring-primary"
+                    >
+                      {createForm.client_type}
+                    </button>
+                  )}
+
+                  {/* Özel Etiket Ekleme Alanı */}
+                  <input
+                    type="text"
+                    placeholder="+ Özel Ekle (Enter)"
+                    value={customCreateLabel}
+                    onChange={e => setCustomCreateLabel(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const val = customCreateLabel.trim()
+                        if (val) {
+                          setCreateForm(f => ({ ...f, client_type: val }))
+                          setCustomCreateLabel('')
+                        }
+                      }
+                    }}
+                    className="text-xs px-2.5 py-1.5 rounded-full border border-outline bg-transparent text-on-surface focus:outline-none focus:border-primary w-[140px] placeholder:text-on-surface-variant/70"
+                  />
                 </div>
               </div>
 
