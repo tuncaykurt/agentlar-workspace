@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useEffect, use } from 'react'
-import { createClient } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
 import { 
   MapPin, TrendingUp, Info, Activity, Star, Calendar, 
@@ -19,7 +18,7 @@ export default function ReportPage({ params }: { params: any }) {
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('ozet')
 
-  const supabase = createClient()
+
 
   useEffect(() => {
     // Handle both Promise and plain object params (Next.js 14/15 compatibility)
@@ -36,20 +35,24 @@ export default function ReportPage({ params }: { params: any }) {
     if (!id) return
 
     const fetchResearch = async () => {
-      const { data, error } = await supabase
-        .from('property_researches')
-        .select('*, consultants(full_name, phone, wa_instance, email, personality_preset)')
-        .eq('id', id)
-        .single()
-
-      if (!error && data) {
-        setResearch(data)
+      try {
+        const response = await fetch(`/api/report/${id}`)
+        if (response.ok) {
+          const data = await response.json()
+          setResearch(data)
+        } else {
+          const errData = await response.json()
+          console.error('API Error:', errData)
+        }
+      } catch (err) {
+        console.error('Fetch Error:', err)
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
 
     fetchResearch()
-  }, [id, supabase])
+  }, [id])
 
   if (!isLoading && !research) {
     notFound()
