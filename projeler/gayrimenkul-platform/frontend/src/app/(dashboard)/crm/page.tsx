@@ -53,8 +53,9 @@ const typeLabels: Record<ClientType, string> = {
 // ─── VCF Parser ──────────────────────────────────────────────────────────────
 
 function decodeQP(str: string): string {
-  // Handle soft line breaks (=\n or =\r\n)
-  const joined = str.replace(/=\r?\n/g, '')
+  // Quoted-Printable soft line breaks: "=" followed by optional whitespace and newline or end of string
+  const joined = str.replace(/=[ \t]*(\r?\n|$)/g, '')
+
   // Decode =XX hex sequences → byte array → UTF-8 string
   const bytes: number[] = []
   let i = 0
@@ -72,7 +73,8 @@ function decodeQP(str: string): string {
   }
   try {
     return new TextDecoder('utf-8').decode(new Uint8Array(bytes))
-  } catch {
+  } catch (err) {
+    console.error('QP decode error:', err)
     return joined
   }
 }
@@ -92,41 +94,73 @@ interface ParsedContact {
   notes: string
 }
 
-function detectSalutation(name: string): { cleanName: string; salutation: string } {
-  // Suffix-based (Turkish post-nominal honorifics)
-  const suffixRules: [RegExp, string][] = [
-    [/\s+Bey$/i, 'Bey'],
-    [/\s+Han[iı]m$/i, 'Hanım'],
-    [/\s+Efendi$/i, 'Efendi'],
-  ]
-  for (const [re, sal] of suffixRules) {
-    if (re.test(name)) {
-      return { cleanName: name.replace(re, '').trim(), salutation: sal }
-    }
-  }
+function detectSalutation(name: string): { cleanName: string; salutation: string; extraNotes: string } {
+  let salutation = ''
+  let cleanName = name.trim()
+  let extraNotes = ''
 
-  // Prefix-based (professional titles)
+  // 1. Professional prefixes (Dr., Av., Prof. etc.)
   const prefixRules: [RegExp, string][] = [
+    [/^Prof\.\s*Dr\.\s*/i, 'Prof. Dr.'],
+    [/^Doç\.\s*Dr\.\s*/i, 'Doç. Dr.'],
+    [/^Uzm\.\s*Dr\.\s*/i, 'Uzm. Dr.'],
+    [/^Yrd\.\s*Doç\.\s*/i, 'Yrd. Doç.'],
+    [/^Op\.\s*Dr\.\s*/i, 'Op. Dr.'],
     [/^Dr\.\s*/i, 'Dr.'],
     [/^Av\.\s*/i, 'Av.'],
-    [/^Prof\.\s*Dr\.\s*/i, 'Prof. Dr.'],
     [/^Prof\.\s*/i, 'Prof.'],
-    [/^Doç\.\s*Dr\.\s*/i, 'Doç. Dr.'],
     [/^Doç\.\s*/i, 'Doç.'],
-    [/^Uzm\.\s*Dr\.\s*/i, 'Uzm. Dr.'],
     [/^Uzm\.\s*/i, 'Uzm.'],
-    [/^Yrd\.\s*Doç\.\s*/i, 'Yrd. Doç.'],
     [/^Mh\.\s*/i, 'Mh.'],
     [/^Müh\.\s*/i, 'Müh.'],
-    [/^Op\.\s*Dr\.\s*/i, 'Op. Dr.'],
   ]
+
   for (const [re, sal] of prefixRules) {
-    if (re.test(name)) {
-      return { cleanName: name.replace(re, '').trim(), salutation: sal }
+    if (re.test(cleanName)) {
+      salutation = sal
+      cleanName = cleanName.replace(re, '').trim()
+      break
     }
   }
 
-  return { cleanName: name, salutation: '' }
+  // 2. Ayraçlara göre bölme ( - , ( ) [ ] | : / )
+  const separators = /[-|:()\[\]/]/
+  const sepMatch = cleanName.match(separators)
+  if (sepMatch) {
+    const idx = sepMatch.index!
+    const suffix = cleanName.substring(idx).replace(/[()\[\]]/g, '').trim()
+    if (suffix && suffix !== '-') {
+      extraNotes = suffix
+    }
+    cleanName = cleanName.substring(0, idx).trim()
+  }
+
+  // 3. Turkish honorifics (Bey, Hanım, Efendi) - search in middle
+  const honorifics = ['Bey', 'Hanım', 'Efendi']
+  const words = cleanName.split(/\s+/)
+  
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].replace(/[.,]/g, '')
+    const foundHon = honorifics.find(h => h.toLocaleLowerCase('tr-TR') === word.toLocaleLowerCase('tr-TR'))
+    if (foundHon) {
+      salutation = foundHon
+      const namePart = words.slice(0, i).join(' ')
+      const rest = words.slice(i + 1).join(' ')
+      extraNotes = extraNotes ? `${rest} ${extraNotes}`.trim() : rest.trim()
+      cleanName = namePart
+      return { cleanName: cleanName.trim(), salutation, extraNotes: extraNotes.trim() }
+    }
+  }
+
+  // 4. Kelime sayısına göre bölme (İlk 2 kelime isim-soyisim, kalanı not)
+  const finalWords = cleanName.split(/\s+/)
+  if (finalWords.length > 2) {
+    cleanName = finalWords.slice(0, 2).join(' ')
+    const rest = finalWords.slice(2).join(' ')
+    extraNotes = extraNotes ? `${rest} ${extraNotes}`.trim() : rest.trim()
+  }
+
+  return { cleanName: cleanName.trim(), salutation, extraNotes: extraNotes.trim() }
 }
 
 function parseVCF(text: string): ParsedContact[] {
@@ -142,8 +176,8 @@ function parseVCF(text: string): ParsedContact[] {
     // 1. RFC 2425 unfolding: satır başında boşluk/tab varsa önceki satıra ekle
     const unfolded = block.replace(/\n[ \t]/g, '')
 
-    // 2. vCard 2.1 QP unfolding: satır sonu = ile bitiyorsa sonraki satırı birleştir
-    const qpJoined = unfolded.replace(/=\n/g, '')
+    // 2. vCard 2.1 QP unfolding: join lines ending with "=" (possibly with spaces)
+    const qpJoined = unfolded.replace(/=[ \t]*\n/g, '')
 
     const lines = qpJoined.split('\n')
 
@@ -191,8 +225,15 @@ function parseVCF(text: string): ParsedContact[] {
     }
 
     if (!fn || !phone) continue
-
-    const { cleanName, salutation } = detectSalutation(fn)
+    
+    // Parse the name and check for extra descriptive parts to put in notes
+    const { cleanName, salutation, extraNotes } = detectSalutation(fn)
+    
+    // Merge extra notes from name with existing NOTE field
+    let combinedNotes = notes
+    if (extraNotes) {
+      combinedNotes = combinedNotes ? `${extraNotes} | ${combinedNotes}` : extraNotes
+    }
 
     contacts.push({
       full_name: cleanName || fn,
@@ -200,7 +241,7 @@ function parseVCF(text: string): ParsedContact[] {
       phone,
       email,
       org,
-      notes,
+      notes: combinedNotes,
     })
   }
 
@@ -355,8 +396,15 @@ export default function CRMPage() {
     let skipCount = 0
     for (let i = 0; i < rows.length; i += 50) {
       const batch = rows.slice(i, i + 50)
-      const { data, error } = await supabase.from('clients').insert(batch).select('id')
+      
+      // Upsert mantığı: Telefon numarası çakışırsa kaydı güncelle ve is_active yap
+      const { data, error } = await supabase
+        .from('clients')
+        .upsert(batch, { onConflict: 'phone' })
+        .select('id')
+
       if (error) {
+        console.error('Import error:', error)
         skipCount += batch.length
       } else {
         okCount += data?.length || 0

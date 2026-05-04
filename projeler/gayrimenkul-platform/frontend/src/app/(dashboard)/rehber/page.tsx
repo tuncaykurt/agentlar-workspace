@@ -6,7 +6,8 @@ import {
   Search, Phone, MessageCircle, BookUser,
   Pencil, Trash2, X, Save, Loader2, AlertTriangle,
   Download, CheckSquare, Square, ChevronDown, Plus,
-  Briefcase, Mail, Cake, FileText,
+  Briefcase, Mail, Cake, FileText, Upload, CheckCircle,
+  AlertCircle,
 } from 'lucide-react'
 
 interface Contact {
@@ -56,6 +57,178 @@ function normalize(str: string) {
 function firstLetter(name: string) {
   const ch = name.trim().charAt(0).toLocaleUpperCase('tr-TR')
   return /[A-ZÇĞİÖŞÜ]/.test(ch) ? ch : '#'
+}
+
+// ─── VCF Parser ──────────────────────────────────────────────────────────────
+
+function decodeQP(str: string): string {
+  // Quoted-Printable soft line breaks: "=" followed by optional whitespace and newline or end of string
+  const joined = str.replace(/=[ \t]*(\r?\n|$)/g, '')
+  
+  const bytes: number[] = []
+  let i = 0
+  while (i < joined.length) {
+    if (joined[i] === '=' && i + 2 < joined.length) {
+      const hex = joined.substring(i + 1, i + 3)
+      if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
+        bytes.push(parseInt(hex, 16))
+        i += 3
+        continue
+      }
+    }
+    bytes.push(joined.charCodeAt(i) & 0xff)
+    i++
+  }
+  try {
+    return new TextDecoder('utf-8').decode(new Uint8Array(bytes))
+  } catch (err) {
+    console.error('QP decode error:', err)
+    return joined
+  }
+}
+
+function decodeFieldValue(params: string[], value: string): string {
+  const isQP = params.some(p => /ENCODING=QUOTED-PRINTABLE/i.test(p))
+  if (isQP) return decodeQP(value)
+  return value
+}
+
+interface ParsedContact {
+  full_name: string
+  salutation: string
+  phone: string
+  email: string
+  org: string
+  notes: string
+}
+
+function detectSalutation(name: string): { cleanName: string; salutation: string; extraNotes: string } {
+  let salutation = ''
+  let cleanName = name.trim()
+  let extraNotes = ''
+
+  // 1. Professional prefixes (Dr., Av., Prof. etc.)
+  const prefixRules: [RegExp, string][] = [
+    [/^Prof\.\s*Dr\.\s*/i, 'Prof. Dr.'],
+    [/^Doç\.\s*Dr\.\s*/i, 'Doç. Dr.'],
+    [/^Uzm\.\s*Dr\.\s*/i, 'Uzm. Dr.'],
+    [/^Yrd\.\s*Doç\.\s*/i, 'Yrd. Doç.'],
+    [/^Op\.\s*Dr\.\s*/i, 'Op. Dr.'],
+    [/^Dr\.\s*/i, 'Dr.'],
+    [/^Av\.\s*/i, 'Av.'],
+    [/^Prof\.\s*/i, 'Prof.'],
+    [/^Doç\.\s*/i, 'Doç.'],
+    [/^Uzm\.\s*/i, 'Uzm.'],
+    [/^Mh\.\s*/i, 'Mh.'],
+    [/^Müh\.\s*/i, 'Müh.'],
+  ]
+
+  for (const [re, sal] of prefixRules) {
+    if (re.test(cleanName)) {
+      salutation = sal
+      cleanName = cleanName.replace(re, '').trim()
+      break
+    }
+  }
+
+  // 2. Ayraçlara göre bölme ( - , ( ) [ ] | : / )
+  // Örn: "Ali Yılmaz - Sahibinden" veya "Veli Can (Alıcı)"
+  const separators = /[-|:()\[\]/]/
+  const sepMatch = cleanName.match(separators)
+  if (sepMatch) {
+    const idx = sepMatch.index!
+    const suffix = cleanName.substring(idx).replace(/[()\[\]]/g, '').trim()
+    if (suffix && suffix !== '-') {
+      extraNotes = suffix
+    }
+    cleanName = cleanName.substring(0, idx).trim()
+  }
+
+  // 3. Turkish honorifics (Bey, Hanım, Efendi)
+  const honorifics = ['Bey', 'Hanım', 'Efendi']
+  const words = cleanName.split(/\s+/)
+  
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].replace(/[.,]/g, '')
+    const foundHon = honorifics.find(h => h.toLocaleLowerCase('tr-TR') === word.toLocaleLowerCase('tr-TR'))
+    if (foundHon) {
+      salutation = foundHon
+      const namePart = words.slice(0, i).join(' ')
+      const rest = words.slice(i + 1).join(' ')
+      extraNotes = extraNotes ? `${rest} ${extraNotes}`.trim() : rest.trim()
+      cleanName = namePart
+      return { cleanName: cleanName.trim(), salutation, extraNotes: extraNotes.trim() }
+    }
+  }
+
+  // 4. Kelime sayısına göre bölme (İlk 2 kelime isim-soyisim, kalanı not)
+  const finalWords = cleanName.split(/\s+/)
+  if (finalWords.length > 2) {
+    cleanName = finalWords.slice(0, 2).join(' ')
+    const rest = finalWords.slice(2).join(' ')
+    extraNotes = extraNotes ? `${rest} ${extraNotes}`.trim() : rest.trim()
+  }
+
+  return { cleanName: cleanName.trim(), salutation, extraNotes: extraNotes.trim() }
+}
+
+function parseVCF(text: string): ParsedContact[] {
+  const contacts: ParsedContact[] = []
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const cardBlocks = normalized.split(/^BEGIN:VCARD$/im)
+
+  for (const block of cardBlocks.slice(1)) {
+    const unfolded = block.replace(/\n[ \t]/g, '')
+    // 2. vCard 2.1 QP unfolding: join lines ending with "=" (possibly with spaces)
+    const qpJoined = unfolded.replace(/=[ \t]*\n/g, '')
+    const lines = qpJoined.split('\n')
+
+    let fn = ''
+    let phone = ''
+    let email = ''
+    let org = ''
+    let notes = ''
+
+    for (const line of lines) {
+      if (!line || /^END:VCARD/i.test(line)) continue
+      const colonIdx = line.indexOf(':')
+      if (colonIdx === -1) continue
+
+      const propPart = line.substring(0, colonIdx)
+      const valuePart = line.substring(colonIdx + 1).trim()
+      const propSegments = propPart.split(';')
+      const propName = propSegments[0].toUpperCase()
+      const params = propSegments.slice(1)
+      const decoded = decodeFieldValue(params, valuePart)
+
+      if (propName === 'FN') {
+        fn = decoded.trim()
+      } else if (propName === 'N' && !fn) {
+        const parts = decoded.split(';')
+        const last = parts[0]?.trim() || ''
+        const first = parts[1]?.trim() || ''
+        fn = [first, last].filter(Boolean).join(' ')
+      } else if (propName === 'TEL') {
+        if (!phone && valuePart.trim()) {
+          phone = valuePart.trim().replace(/[\s\-().]/g, '')
+        }
+      } else if (propName === 'EMAIL') {
+        if (!email) email = decoded.trim()
+      } else if (propName === 'ORG') {
+        org = decoded.split(';')[0].trim()
+      } else if (propName === 'NOTE') {
+        notes = decoded.trim()
+      }
+    }
+
+    if (!fn || !phone) continue
+    const { cleanName, salutation, extraNotes } = detectSalutation(fn)
+    let combinedNotes = notes
+    if (extraNotes) combinedNotes = combinedNotes ? `${extraNotes} | ${combinedNotes}` : extraNotes
+
+    contacts.push({ full_name: cleanName || fn, salutation, phone, email, org, notes: combinedNotes })
+  }
+  return contacts
 }
 
 // VCF çıktısı üret
@@ -219,6 +392,14 @@ export default function RehberPage() {
   const [deleteContact, setDeleteContact] = useState<Contact | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // VCF import
+  const [showImport, setShowImport] = useState(false)
+  const [parsedContacts, setParsedContacts] = useState<ParsedContact[]>([])
+  const [importSelected, setImportSelected] = useState<Set<number>>(new Set())
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ ok: number; skip: number } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => { fetchContacts() }, [])
 
   async function fetchContacts() {
@@ -299,9 +480,18 @@ export default function RehberPage() {
     if (!deleteContact) return
     setDeleting(true)
     const supabase = createClient()
-    await supabase.from('clients').update({ is_active: false }).eq('id', deleteContact.id)
-    setContacts(prev => prev.filter(c => c.id !== deleteContact.id))
-    setDeleteContact(null)
+    
+    // Rehber sayfası genellikle geçici liste olduğu için GERÇEK SİLME (Hard Delete) yapıyoruz
+    // Bu sayede "silip tekrar yükleme" senaryosunda eski kayıtlar çakışmaz.
+    const { error } = await supabase.from('clients').delete().eq('id', deleteContact.id)
+    
+    if (error) {
+      console.error('Delete error:', error)
+      alert('Silme işlemi başarısız oldu: ' + error.message)
+    } else {
+      setContacts(prev => prev.filter(c => c.id !== deleteContact.id))
+      setDeleteContact(null)
+    }
     setDeleting(false)
   }
 
@@ -310,11 +500,42 @@ export default function RehberPage() {
     setBulkDeleting(true)
     const supabase = createClient()
     const ids = Array.from(selected)
-    await supabase.from('clients').update({ is_active: false }).in('id', ids)
-    setContacts(prev => prev.filter(c => !selected.has(c.id)))
-    setSelected(new Set())
-    setConfirmBulk(false)
+    
+    const { error } = await supabase.from('clients').delete().in('id', ids)
+    
+    if (error) {
+      console.error('Bulk delete error:', error)
+      alert('Toplu silme işlemi başarısız oldu: ' + error.message)
+    } else {
+      setContacts(prev => prev.filter(c => !selected.has(c.id)))
+      setSelected(new Set())
+      setConfirmBulk(false)
+    }
     setBulkDeleting(false)
+  }
+
+  async function handleClearAll() {
+    if (!confirm('Tüm rehber kayıtlarını kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return
+    setLoading(true)
+    const supabase = createClient()
+    
+    // Sadece mevcut filtredeki (veya yetkili olunan) tüm kayıtları sil
+    const ids = filtered.map(c => c.id)
+    if (ids.length === 0) {
+      setLoading(false)
+      return
+    }
+
+    const { error } = await supabase.from('clients').delete().in('id', ids)
+    
+    if (error) {
+      console.error('Clear all error:', error)
+      alert('Tümünü silme işlemi başarısız oldu: ' + error.message)
+    } else {
+      setContacts([])
+      setSelected(new Set())
+    }
+    setLoading(false)
   }
 
   async function handleCreate() {
@@ -360,6 +581,86 @@ export default function RehberPage() {
       else next.add(id)
       return next
     })
+  }
+
+  // ── VCF handlers ──
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const contacts = parseVCF(text)
+      setParsedContacts(contacts)
+      setImportSelected(new Set(contacts.map((_, i) => i)))
+      setImportResult(null)
+    }
+    reader.readAsText(file, 'utf-8')
+  }
+
+  function toggleImportSelect(i: number) {
+    setImportSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
+      return next
+    })
+  }
+
+  function toggleAllImport() {
+    if (importSelected.size === parsedContacts.length) setImportSelected(new Set())
+    else setImportSelected(new Set(parsedContacts.map((_, i) => i)))
+  }
+
+  async function handleImport() {
+    if (importSelected.size === 0) return
+    setImporting(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: consultant } = await supabase.from('consultants').select('id').eq('user_id', user?.id).single()
+
+    const rows = Array.from(importSelected).map(i => {
+      const c = parsedContacts[i]
+      const notesParts = []
+      if (c.org) notesParts.push(`Firma: ${c.org}`)
+      if (c.notes) notesParts.push(c.notes)
+      return {
+        full_name: c.full_name,
+        salutation: c.salutation,
+        phone: c.phone,
+        email: c.email || null,
+        notes: notesParts.join('\n') || null,
+        client_type: 'buyer',
+        lead_status: 'new',
+        source: 'other',
+        assigned_consultant_id: consultant?.id || null,
+      }
+    })
+
+    let okCount = 0
+    let skipCount = 0
+    for (let i = 0; i < rows.length; i += 50) {
+      const batch = rows.slice(i, i + 50)
+      const { data, error } = await supabase.from('clients').insert(batch).select('id')
+      if (error) {
+        console.error('Import error:', error)
+        skipCount += batch.length
+      } else {
+        okCount += data?.length || 0
+      }
+    }
+
+    setImportResult({ ok: okCount, skip: skipCount })
+    setImporting(false)
+    fetchContacts()
+  }
+
+  function closeImport() {
+    setShowImport(false)
+    setParsedContacts([])
+    setImportSelected(new Set())
+    setImportResult(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   function toggleSelectAll() {
@@ -427,6 +728,19 @@ export default function RehberPage() {
               >
                 <Download size={14} />
                 {selected.size > 0 ? `${selected.size} Seçiliyi` : 'Tümünü'} VCF İndir
+              </button>
+              <button
+                onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-surface-container-high text-on-surface hover:bg-surface-container-highest rounded-lg text-sm font-medium transition-colors"
+              >
+                <Upload size={14} /> VCF İçe Aktar
+              </button>
+              <button
+                onClick={handleClearAll}
+                className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 rounded-lg text-sm font-medium transition-colors"
+                title="Listeyi tamamen temizle"
+              >
+                <Trash2 size={14} /> Tümünü Sil
               </button>
               <button
                 onClick={() => setShowCreate(true)}
@@ -952,6 +1266,118 @@ export default function RehberPage() {
                 {bulkDeleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                 {selected.size} Kişiyi Sil
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── VCF Import Modal ─────────────────────────────────────────────── */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/50 dark:bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
+              <div>
+                <h2 className="font-semibold text-on-surface">VCF Kişi Dosyası İçe Aktar</h2>
+                <p className="text-xs text-on-surface-variant mt-0.5">Telefondan indirilen .vcf dosyasını seçin</p>
+              </div>
+              <button onClick={closeImport} className="text-on-surface-variant hover:text-on-surface-variant">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".vcf,text/vcard"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full border-2 border-dashed border-outline rounded-xl py-6 flex flex-col items-center gap-2 text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                >
+                  <Upload size={24} />
+                  <span className="text-sm font-medium">
+                    {parsedContacts.length > 0
+                      ? `${parsedContacts.length} kişi bulundu — başka dosya seçmek için tıklayın`
+                      : '.vcf dosyasını seçmek için tıklayın'}
+                  </span>
+                </button>
+              </div>
+
+              {parsedContacts.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-on-surface">
+                      {importSelected.size} / {parsedContacts.length} kişi seçili
+                    </p>
+                    <button onClick={toggleAllImport} className="text-xs text-primary hover:underline">
+                      {importSelected.size === parsedContacts.length ? 'Tümünü Kaldır' : 'Tümünü Seç'}
+                    </button>
+                  </div>
+
+                  <div className="border border-outline rounded-xl overflow-hidden divide-y divide-outline max-h-80 overflow-y-auto">
+                    {parsedContacts.map((c, i) => (
+                      <label
+                        key={i}
+                        className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container-high ${importSelected.has(i) ? 'bg-primary-container/40' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={importSelected.has(i)}
+                          onChange={() => toggleImportSelect(i)}
+                          className="rounded border-outline text-primary"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {c.salutation && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium">
+                                {c.salutation}
+                              </span>
+                            )}
+                            <span className="text-sm font-medium text-on-surface truncate">{c.full_name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 text-xs text-on-surface-variant">
+                            <span>{c.phone}</span>
+                            {c.org && <span className="truncate text-on-surface-variant">{c.org}</span>}
+                            {c.notes && <span className="truncate text-on-surface-variant italic">({c.notes.slice(0, 30)}...)</span>}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {importResult && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                  importResult.skip > 0 ? 'bg-yellow-50 text-yellow-800' : 'bg-green-50 text-green-800'
+                }`}>
+                  {importResult.skip > 0 ? <AlertCircle size={15} /> : <CheckCircle size={15} />}
+                  <span>
+                    {importResult.ok} kişi başarıyla aktarıldı
+                    {importResult.skip > 0 && `, ${importResult.skip} kişi aktarılamadı`}.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 px-5 py-4 border-t border-outline">
+              <button onClick={closeImport} className="btn-secondary flex-1">
+                {importResult ? 'Kapat' : 'İptal'}
+              </button>
+              {!importResult && (
+                <button
+                  onClick={handleImport}
+                  disabled={importing || importSelected.size === 0}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {importing
+                    ? <><Loader2 size={15} className="animate-spin" /> Aktarılıyor...</>
+                    : <><Upload size={15} /> {importSelected.size} Kişiyi Aktar</>}
+                </button>
+              )}
             </div>
           </div>
         </div>
