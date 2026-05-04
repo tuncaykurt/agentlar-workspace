@@ -254,7 +254,7 @@ KRİTİK KURALLAR (Türk gayrimenkul piyasası enflasyonist — eski rakamlar bu
 
   research_property: {
     name: 'research_property',
-    description: 'Belirli bir ada/parsel için derin gayrimenkul araştırması yapar. Müşteri tapu fotoğrafı attığında veya ada/parsel bilgisi verdiğinde kullan.',
+    description: 'Belirli bir ada/parsel için derin gayrimenkul araştırması, bina yaşı hesabı ve vergi analizi yapar. Müşteri tapu fotoğrafı attığında veya ada/parsel bilgisi verdiğinde kullan.',
     parameters: {
       type: 'object',
       properties: {
@@ -263,6 +263,13 @@ KRİTİK KURALLAR (Türk gayrimenkul piyasası enflasyonist — eski rakamlar bu
         neighborhood: { type: 'string', description: 'Mahalle/Köy' },
         ada: { type: 'string', description: 'Ada No' },
         parsel: { type: 'string', description: 'Parsel No' },
+        owner_type: { type: 'string', enum: ['sahis', 'sirket'], description: 'Mülkiyet tipi (sahis veya sirket)' },
+        property_type: { type: 'string', description: 'Ana Taşınmaz Niteliği (örn: Arsa, Tarla, Kargir Apartman)' },
+        independent_unit_type: { type: 'string', description: 'Bağımsız Bölüm Niteliği (örn: Mesken, Dükkan)' },
+        acquisition_price: { type: 'number', description: 'Tapudaki Satış Bedeli (TL)' },
+        acquisition_date: { type: 'string', description: 'Edinme Tarihi (YYYY-MM-DD)' },
+        management_plan_date: { type: 'string', description: 'Yönetim Planı Tarihi (Bina yaşı için, YYYY-MM-DD)' },
+        floor_number: { type: 'string', description: 'Kat No' }
       },
       required: ['city', 'district', 'ada', 'parsel'],
     },
@@ -278,6 +285,13 @@ KRİTİK KURALLAR (Türk gayrimenkul piyasası enflasyonist — eski rakamlar bu
           neighborhood: args.neighborhood,
           ada: args.ada,
           parsel: args.parsel,
+          owner_type: args.owner_type || 'sahis',
+          property_type: args.property_type,
+          independent_unit_type: args.independent_unit_type,
+          acquisition_price: args.acquisition_price,
+          acquisition_date: args.acquisition_date,
+          management_plan_date: args.management_plan_date,
+          floor_number: args.floor_number,
           status: 'pending'
         })
         .select('id')
@@ -299,7 +313,8 @@ KRİTİK KURALLAR (Türk gayrimenkul piyasası enflasyonist — eski rakamlar bu
         details: {
           location: `${args.city}, ${args.district}, ${args.neighborhood || ''}`,
           ada: args.ada,
-          parsel: args.parsel
+          parsel: args.parsel,
+          info: 'Bina yaşı ve vergi analizi raporunuza dahil edilecektir.'
         }
       })
     },
@@ -395,7 +410,14 @@ export function buildSystemPrompt(opts: {
 GENEL ÇALIŞMA PRENSİPLERİ:
 - Her zaman kısa, net ve sonuç odaklı ol.
 - Bilgi gerektiren (mülk, fiyat, analiz vb.) her durumda mutlaka uygun aracı (tool) kullan.
-- Eğer bir tapu görseli gelirse veya ada/parsel bilgisi paylaşılırsa 'research_property' aracını kullanarak pazar analizi raporu hazırla.
+- EĞER BİR TAPU GÖRSELİ GELİRSE:
+    1. Görseli çok dikkatli incele.
+    2. 'Ada/Parsel' bilgilerini bul.
+    3. 'Malik' kısmına bak: Eğer bir şahıs ismiyse 'sahis', bir şirket unvanıysa 'sirket' olarak belirle (Vergi muafiyeti şahıslarda 5, şirketlerde 2 yıldır).
+    4. 'Bağımsız Bölüm' altındaki 'YÖN.PLANI' (Yönetim Planı) tarihini bul (bu bina yaşını belirler).
+    5. 'Satış Bedeli' ve 'Tarihi' kısımlarını bul (bu vergi hesabı için kritiktir).
+    6. 'Niteliği' kısmından mülkün tipini (Daire/Arsa/Tarla) belirle.
+    7. Tüm bu bilgileri kullanarak 'research_property' aracını çağır.
 - Bir işlem başlattığında (örn: rapor hazırlama), bunun başladığını ve yaklaşık ne kadar süreceğini (5-10 dk) KENDİ ÜSLUBUNA göre samimi veya profesyonel bir şekilde teyit et.
 - ASLA robotik kalıplar kullanma, her zaman doğal bir insan gibi cevap üret.
 - Sesli mesaj veya fotoğraf gelirse içeriğini anlamlandır ve doğal yanıt ver.

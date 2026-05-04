@@ -34,17 +34,37 @@ async function sendWhatsApp(phone: string, message: string, instance: string) {
   }
 }
 
-async function deepResearch(args: { city: string, district: string, neighborhood?: string, ada: string, parsel: string }) {
+async function deepResearch(args: { 
+  city: string, 
+  district: string, 
+  neighborhood?: string, 
+  ada: string, 
+  parsel: string,
+  property_type?: string,
+  acquisition_price?: number,
+  acquisition_date?: string,
+  management_plan_date?: string
+}) {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return 'Araştırma yapılamadı (API key eksik).'
 
-  const query = `${args.city} ${args.district} ${args.neighborhood || ''} Ada ${args.ada} Parsel ${args.parsel} gayrimenkul değerleme, piyasa analizi ve bölge raporu. 
+  const knownFacts = `
+  BİLİNEN TEKNİK VERİLER:
+  - Mülkiyet Tipi: ${args.owner_type === 'sirket' ? 'Kurumsal (Şirket - 2 Yıl Muafiyet)' : 'Bireysel (Şahıs - 5 Yıl Muafiyet)'}
+  - Mülk Tipi: ${args.property_type || 'Belirtilmedi'}
+  - Edinme Tarihi: ${args.acquisition_date || 'Belirtilmedi'}
+  - Edinme Bedeli: ${args.acquisition_price ? args.acquisition_price + ' TL' : 'Belirtilmedi'}
+  - Yönetim Planı Tarihi (Bina Yaşı İçin): ${args.management_plan_date || 'Belirtilmedi'}
+  `
+
+  const query = `${args.city} ${args.district} ${args.neighborhood || ''} Ada ${args.ada} Parsel ${args.parsel} gayrimenkul değerleme.
+  ${knownFacts}
   Lütfen şu bilgileri bul:
   1. Bu adresteki arsa/konut için tahmini m2 birim fiyatları (2026 güncel).
   2. Yakınlardaki emsal satış ilanları veya fiyat trendleri.
   3. Bölgedeki imar durumu hakkında genel bilgi.
   4. Çevredeki önemli noktalar (ulaşım, hastane, okul).
-  5. Yatırım potansiyeli yorumu.`
+  5. Yatırım potansiyeli yorumu. (Bina yaşını ve vergi durumunu yukarıdaki verilere göre yorumla)`
 
   try {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -61,25 +81,16 @@ async function deepResearch(args: { city: string, district: string, neighborhood
           {
             role: 'system',
             content: `Sen uzman bir gayrimenkul değerleme uzmanısın. 
-            Verilen ada/parsel için internetten derin araştırma yap ve profesyonel, şık, emojilerle zenginleştirilmiş bir SUNUM RAPORU hazırla.
+            Sana verilen ada/parsel ve teknik verileri kullanarak profesyonel, şık, emojilerle zenginleştirilmiş bir SUNUM RAPORU hazırla.
             
             RAPOR FORMATI:
-            📍 *BÖLGE VE KONUM ANALİZİ*
-            (Bölgenin genel popülaritesi ve konumu)
+            📍 **BÖLGE VE KONUM ANALİZİ**
+            💰 **PİYASA DEĞERLEMESİ**
+            🏗️ **İMAR VE YAPILAŞMA DURUMU**
+            🏫 **ÇEVRESEL OLANAKLAR**
+            📈 **YATIRIM YORUMU** (Burada bina yaşını ve finansal verileri mutlaka profesyonelce yorumla)
             
-            💰 *PİYASA DEĞERLEMESİ*
-            (Tahmini m2 fiyatları ve bölge ortalamaları)
-            
-            🏗️ *İMAR VE YAPILAŞMA DURUMU*
-            (Genel imar bilgileri)
-            
-            🏫 *ÇEVRESEL OLANAKLAR*
-            (Ulaşım, okul, hastane vb.)
-            
-            📈 *YATIRIM YORUMU*
-            (Gelecek projeksiyonu)
-            
-            Önemli: Rakamları güncel (2026) kaynaklara dayandır.`
+            Önemli: Başlıkları **BAŞLIK** formatında kullan. Verileri 2026 piyasasına göre yorumla.`
           },
           { role: 'user', content: query },
         ],
@@ -133,7 +144,12 @@ export async function POST(req: NextRequest) {
       district: research.district,
       neighborhood: research.neighborhood,
       ada: research.ada,
-      parsel: research.parsel
+      parsel: research.parsel,
+      owner_type: research.owner_type,
+      property_type: research.property_type,
+      acquisition_price: research.acquisition_price,
+      acquisition_date: research.acquisition_date,
+      management_plan_date: research.management_plan_date
     })
 
     // 4. Save report
