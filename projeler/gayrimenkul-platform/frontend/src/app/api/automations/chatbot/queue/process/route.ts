@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   // 1. Get messages that are due
   const { data: queue, error } = await supabase
     .from('whatsapp_outbound_queue')
-    .select('*, consultants(wa_instance)')
+    .select('*, consultants!consultant_id(wa_instance)')
     .eq('status', 'pending')
     .lte('scheduled_at', new Date().toISOString())
     .limit(10)

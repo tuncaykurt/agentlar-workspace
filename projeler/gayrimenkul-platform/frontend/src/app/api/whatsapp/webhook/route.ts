@@ -154,8 +154,47 @@ async function handlePOST(req: NextRequest) {
     }
   }
 
+  // --- VISION/AUDIO PRE-PROCESSING ---
+  // Eğer ana modelimiz multimodal değilse (örn: Perplexity), görseli/sesi Gemini ile metne çevirip ana modele öyle paslayacağız.
+  let mediaDescription = ""
+  if (mediaKind && mediaBase64) {
+    try {
+      const visionRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.0-flash-001',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: mediaKind === 'image' 
+                ? 'Bu bir gayrimenkul tapusu veya emlak görseli olabilir. Eğer bir tapu ise üzerindeki ŞEHİR, İLÇE, MAHALLE, ADA ve PARSEL bilgilerini bul ve oku. Eğer değilse görselde ne olduğunu kısaca açıkla.' 
+                : 'Bu sesli mesajı dinle ve söylenen her şeyi eksiksiz bir metne dönüştür.' 
+              },
+              { 
+                type: mediaKind === 'image' ? 'image_url' : 'input_audio',
+                [mediaKind === 'image' ? 'image_url' : 'input_audio']: mediaKind === 'image' 
+                  ? { url: `data:${mediaMimetype};base64,${mediaBase64}` }
+                  : { data: mediaBase64, format: (mediaMimetype.includes('mp4') || mediaMimetype.includes('m4a')) ? 'm4a' : 'ogg' }
+              }
+            ]
+          }]
+        })
+      })
+      if (visionRes.ok) {
+        const vData = await visionRes.json()
+        mediaDescription = vData?.choices?.[0]?.message?.content || ""
+      }
+    } catch (ve) {
+      console.error("Vision pre-processing error:", ve)
+    }
+  }
+
   // Build human-readable text for storage/history
-  const text = textContent.trim()
+  const text = (textContent.trim() + (mediaDescription ? `\n\n[Görsel/Ses İçeriği: ${mediaDescription}]` : ""))
     || (hasAudio ? '[Sesli mesaj]' : hasImage ? '[Fotoğraf]' : '')
 
   const remoteJid: string = key?.remoteJid || ''

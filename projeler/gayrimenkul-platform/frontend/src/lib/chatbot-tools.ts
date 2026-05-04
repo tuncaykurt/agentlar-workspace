@@ -293,14 +293,15 @@ KRİTİK KURALLAR (Türk gayrimenkul piyasası enflasyonist — eski rakamlar bu
         body: JSON.stringify({ researchId: resRecord.id })
       }).catch(e => console.error('Research trigger error:', e))
 
-      return `Harika! ${args.city}, ${args.district}, ${args.neighborhood || ''} bölgesindeki ${args.ada} ada / ${args.parsel} parsel için derin bir araştırma başlattım. 
-
-Bu işlem kapsamında:
-- Güncel piyasa değerlerini analiz edeceğim.
-- Bölgedeki emsal satışları ve trendleri inceleyeceğim.
-- İmar durumu ve çevresel faktörleri (hastane, ulaşım vb.) değerlendireceğim.
-
-Sizin için detaylı ve şık bir rapor hazırlamam yaklaşık 5-10 dakika sürecektir. Tamamlandığında raporu buradan size özel olarak ileteceğim. Beklemede kalın!`
+      return JSON.stringify({
+        status: 'success',
+        message: 'Araştırma işlemi arka planda başlatıldı.',
+        details: {
+          location: `${args.city}, ${args.district}, ${args.neighborhood || ''}`,
+          ada: args.ada,
+          parsel: args.parsel
+        }
+      })
     },
   },
 }
@@ -395,7 +396,10 @@ GENEL KURALLAR:
 - Emojileri abartma, doğal akışta kullan
 - Selamlama her mesajda gerekmez, akıcı bir konuşma sürdür
 - Sesli mesaj veya fotoğraf gelirse içeriğini anlamlandır ve doğal yanıt ver
-- Eğer kullanıcı bir tapu görseli ilettiyse veya mesajında ADA/PARSEL bilgisini açıkça paylaştıysa (örn: "şurdaki 123 ada 45 parseli bir araştır"), mutlaka 'research_property' tool'unu çağırarak pazar analizi başlat. Tool'u çağırdıktan sonra, müşteriye araştırmaya başladığını kendi üslubunla (danışmanın kendisi gibi) nazikçe belirt. Araştırmanın birkaç dakika süreceğini ve rapor hazır olduğunda ileteceğini söyle. ASLA kalıplaşmış, robotik cümleler kurma; samimi ve doğal ol. `
+- Eğer kullanıcı bir tapu görseli ilettiyse veya mesajında ADA/PARSEL bilgisini açıkça paylaştıysa (örn: "şurdaki 123 ada 45 parseli bir araştır"), mutlaka 'research_property' tool'unu çağırarak pazar analizi başlat. 
+- Tool'u çağırdıktan sonra, müşteriye araştırmaya başladığını KENDİ CÜMLELERİNLE (danışmanın kendisi gibi) samimi bir şekilde belirt. 
+- Araştırmanın yaklaşık 5-10 dakika süreceğini, bizzat derin bir analiz yapıp şık bir dijital rapor hazırlayacağını ve bittiğinde buradan linkini ileteceğini söyle. 
+- ASLA "sistemimiz", "otomatik", "asistan" gibi kelimeler kullanma. "Ben şimdi detaylıca bakıyorum", "senin için emsal fiyatları çıkarıyorum" gibi şahsi ifadeler kullan.` 
 
   return `${identity}${presetText}${examples}TEMEL TALİMAT: ${opts.basePrompt}\n${rules}${toolsSection}`
 }
