@@ -515,27 +515,38 @@ export default function RehberPage() {
   }
 
   async function handleClearAll() {
-    if (!confirm('Tüm rehber kayıtlarını kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return
+    if (!confirm(`Tüm rehber kayıtlarını (${filtered.length} kişi) kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return
     setLoading(true)
     const supabase = createClient()
     
-    // Sadece mevcut filtredeki (veya yetkili olunan) tüm kayıtları sil
     const ids = filtered.map(c => c.id)
     if (ids.length === 0) {
       setLoading(false)
       return
     }
 
-    const { error } = await supabase.from('clients').delete().in('id', ids)
-    
-    if (error) {
-      console.error('Clear all error:', error)
-      alert('Tümünü silme işlemi başarısız oldu: ' + error.message)
-    } else {
-      setContacts([])
+    try {
+      // Çok fazla kayıt olduğunda (örneğin 3000+) tek bir URL içinde tüm ID'leri göndermek
+      // "Failed to fetch" (URL length limit) hatasına yol açar. Bu yüzden parçalayarak siliyoruz.
+      const chunkSize = 200
+      let successCount = 0
+      
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize)
+        const { error } = await supabase.from('clients').delete().in('id', chunk)
+        if (error) throw error
+        successCount += chunk.length
+      }
+
+      setContacts(prev => prev.filter(c => !ids.includes(c.id)))
       setSelected(new Set())
+      alert(`${successCount} kişi başarıyla silindi.`)
+    } catch (err: any) {
+      console.error('Clear all error:', err)
+      alert('Silme işlemi sırasında bir hata oluştu: ' + (err.message || err.toString()))
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   async function handleCreate() {
