@@ -191,20 +191,22 @@ ${report.substring(0, 600)}${report.length > 600 ? '...' : ''}
 Detaylı bölge analizi, yatırım puanlaması ve imar detayları için yukarıdaki linke tıklayarak interaktif sunumu inceleyebilirsiniz. 📊🚀`
 
     // 6. INSERT INTO QUEUE with user-defined delay
-    let delayMinutes = 7
+    let delayMinutes = 5
     const { data: config } = await supabase
       .from('whatsapp_chatbot_config')
       .select('research_delay_minutes')
       .eq('consultant_id', research.consultant_id)
       .single()
     
-    if (config?.research_delay_minutes) {
+    if (config && typeof config.research_delay_minutes === 'number') {
       delayMinutes = config.research_delay_minutes
     }
 
-    const scheduledAt = new Date(Date.now() + delayMinutes * 60000).toISOString()
+    // Eğer delay 0 ise anında gönderilmek üzere ayarla
+    const scheduledAt = new Date(Date.now() + (delayMinutes * 60000)).toISOString()
+    console.log(`[research] scheduling message for: ${scheduledAt} (delay: ${delayMinutes}m)`)
     
-    await supabase.from('whatsapp_outbound_queue').insert({
+    const { error: qErr } = await supabase.from('whatsapp_outbound_queue').insert({
       consultant_id: research.consultant_id,
       customer_phone: research.customer_phone,
       message: finalMessage,
@@ -212,10 +214,19 @@ Detaylı bölge analizi, yatırım puanlaması ve imar detayları için yukarıd
       status: 'pending'
     })
 
-    // 7. Trigger Queue Processor (Optional/Kickstart)
+    if (qErr) console.error('[research] queue insert error:', qErr)
+
+    // 7. Trigger Queue Processor
+    // Eğer delay çok kısa ise (0 veya 1), hemen tetikleyelim. 
+    // Ama tam 1. dakikada gitmesi için bir cron job şart.
+    // Anlık test için delay=0 en iyisidir.
     fetch(`${baseUrl}/api/automations/chatbot/queue/process`).catch(() => {})
 
-    return NextResponse.json({ success: true, scheduled_at: scheduledAt })
+    return NextResponse.json({ 
+      success: true, 
+      scheduled_at: scheduledAt,
+      delay_minutes: delayMinutes
+    })
   } catch (e: any) {
     await supabase.from('property_researches').update({ status: 'failed' }).eq('id', researchId)
     return NextResponse.json({ error: e.message }, { status: 500 })
