@@ -40,6 +40,7 @@ async function deepResearch(args: {
   neighborhood?: string, 
   ada: string, 
   parsel: string,
+  owner_type?: string,
   property_type?: string,
   acquisition_price?: number,
   acquisition_date?: string,

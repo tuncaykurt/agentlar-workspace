@@ -2,7 +2,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { MapPin, TrendingUp, Info, Activity, Star, Calendar, ShieldAlert, Building2, Wallet, Clock, ChevronRight } from 'lucide-react'
+import { MapPin, TrendingUp, Info, Activity, Star, Calendar, ShieldAlert, Building2, Wallet, Clock, ChevronRight, User } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
