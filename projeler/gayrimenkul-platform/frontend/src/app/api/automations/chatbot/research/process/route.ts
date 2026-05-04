@@ -105,13 +105,18 @@ export async function POST(req: NextRequest) {
   const supabase = svc()
 
   // 1. Get research details
+  console.log(`[research] processing id: ${researchId}`)
   const { data: research, error: fetchErr } = await supabase
     .from('property_researches')
-    .select('*, consultants(wa_instance)')
+    .select('*, consultants!consultant_id(wa_instance)')
     .eq('id', researchId)
     .single()
-
-  if (fetchErr || !research) return NextResponse.json({ error: 'Research not found' }, { status: 404 })
+  
+  if (fetchErr) {
+    console.error(`[research] fetch error:`, fetchErr)
+    return NextResponse.json({ error: `Fetch error: ${fetchErr.message}` }, { status: 500 })
+  }
+  if (!research) return NextResponse.json({ error: 'Research not found' }, { status: 404 })
 
   // 2. Update status
   await supabase.from('property_researches').update({ status: 'researching' }).eq('id', researchId)
@@ -151,18 +156,36 @@ export async function POST(req: NextRequest) {
     
     const instance = (research.consultants as any)?.wa_instance || 'gayr-ofis'
     
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud'
+    const reportLink = `${baseUrl}/report/${researchId}`
+    
     const finalMessage = `🔔 *ADA/PARSEL ARAŞTIRMA RAPORUNUZ HAZIR*
 
-Sayın müşterimiz, talebiniz üzerine gerçekleştirdiğim derin araştırma sonuçları aşağıdadır:
+Sayın müşterimiz, talebiniz üzerine gerçekleştirdiğim derin araştırma sonuçları ve profesyonel dijital sunum dosyanız hazır.
+
+✨ *DİJİTAL SUNUM DOSYASI:*
+${reportLink}
 
 ---
-${report}
+📍 *ÖZET ANALİZ:*
+${report.substring(0, 600)}${report.length > 600 ? '...' : ''}
 ---
 
-Bu veriler genel piyasa araştırmasına dayanmaktadır. Daha detaylı inceleme ve yerinde ekspertiz için dilediğiniz zaman görüşebiliriz.`
+Detaylı bölge analizi, yatırım puanlaması ve imar detayları için yukarıdaki linke tıklayarak interaktif sunumu inceleyebilirsiniz. 📊🚀`
 
-    // 6. INSERT INTO QUEUE with 7-minute delay
-    const scheduledAt = new Date(Date.now() + 7 * 60000).toISOString() // 7 minutes delay
+    // 6. INSERT INTO QUEUE with user-defined delay
+    let delayMinutes = 7
+    const { data: config } = await supabase
+      .from('whatsapp_chatbot_config')
+      .select('research_delay_minutes')
+      .eq('consultant_id', research.consultant_id)
+      .single()
+    
+    if (config?.research_delay_minutes) {
+      delayMinutes = config.research_delay_minutes
+    }
+
+    const scheduledAt = new Date(Date.now() + delayMinutes * 60000).toISOString()
     
     await supabase.from('whatsapp_outbound_queue').insert({
       consultant_id: research.consultant_id,
@@ -171,6 +194,10 @@ Bu veriler genel piyasa araştırmasına dayanmaktadır. Daha detaylı inceleme 
       scheduled_at: scheduledAt,
       status: 'pending'
     })
+
+    // 7. Trigger Queue Processor (Optional/Kickstart)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud'
+    fetch(`${baseUrl}/api/automations/chatbot/queue/process`).catch(() => {})
 
     return NextResponse.json({ success: true, scheduled_at: scheduledAt })
   } catch (e: any) {

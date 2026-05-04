@@ -10,6 +10,7 @@ export interface ToolContext {
   supabase: SupabaseClient
   consultantId: string
   customerPhone: string
+  baseUrl?: string
 }
 
 export interface ToolDefinition {
@@ -285,7 +286,7 @@ KRİTİK KURALLAR (Türk gayrimenkul piyasası enflasyonist — eski rakamlar bu
       if (insErr) return `Araştırma başlatılamadı: ${insErr.message}`
 
       // 2. Arka planda araştırmayı tetikle
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud'
+      const baseUrl = ctx.baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud'
       fetch(`${baseUrl}/api/automations/chatbot/research/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.SUPABASE_SERVICE_ROLE_KEY! },
@@ -394,7 +395,7 @@ GENEL KURALLAR:
 - Emojileri abartma, doğal akışta kullan
 - Selamlama her mesajda gerekmez, akıcı bir konuşma sürdür
 - Sesli mesaj veya fotoğraf gelirse içeriğini anlamlandır ve doğal yanıt ver
-- Eğer kullanıcı bir tapu görseli ilettiyse veya mesajında ADA/PARSEL bilgisini açıkça paylaştıysa (örn: "şurdaki 123 ada 45 parseli bir araştır"), mutlaka 'research_property' tool'unu çağırarak pazar analizi başlat. Müşteriye "Hemen inceliyorum, birazdan size detaylı bir pazar analizi raporu ileteceğim" şeklinde bilgi ver.`
+- Eğer kullanıcı bir tapu görseli ilettiyse veya mesajında ADA/PARSEL bilgisini açıkça paylaştıysa (örn: "şurdaki 123 ada 45 parseli bir araştır"), mutlaka 'research_property' tool'unu çağırarak pazar analizi başlat. Tool'u çağırdıktan sonra, müşteriye araştırmaya başladığını kendi üslubunla (danışmanın kendisi gibi) nazikçe belirt. Araştırmanın birkaç dakika süreceğini ve rapor hazır olduğunda ileteceğini söyle. ASLA kalıplaşmış, robotik cümleler kurma; samimi ve doğal ol. `
 
   return `${identity}${presetText}${examples}TEMEL TALİMAT: ${opts.basePrompt}\n${rules}${toolsSection}`
 }

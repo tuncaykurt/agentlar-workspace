@@ -66,6 +66,11 @@ export async function GET(req: NextRequest) {
   const supabase = svc()
   const { time, date, mmdd } = nowTR()
 
+  // 1. Trigger Chatbot Queue Processor (Every minute)
+  // This ensures delayed messages are sent even if no birthday automations are due
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud'
+  fetch(`${baseUrl}/api/automations/chatbot/queue/process`).catch(e => console.error('Chatbot queue trigger error:', e))
+
   // Find enabled automations whose trigger_time matches current HH:MM
   // and haven't run today yet
   const { data: configs } = await supabase

@@ -357,10 +357,15 @@ async function handlePOST(req: NextRequest) {
       function: { name: t.name, description: t.description, parameters: t.parameters },
     }))
 
+  const protocol = req.headers.get('x-forwarded-proto') || 'http'
+  const host = req.headers.get('host')
+  const baseUrl = `${protocol}://${host}`
+
   const toolCtx: ToolContext = {
     supabase,
     consultantId: consultant.id,
     customerPhone,
+    baseUrl,
   }
 
   async function executeTool(name: string, argsJson: string): Promise<string> {
