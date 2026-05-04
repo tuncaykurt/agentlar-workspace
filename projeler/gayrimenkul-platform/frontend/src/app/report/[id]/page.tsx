@@ -11,25 +11,13 @@ import {
   MessageSquare, FileText
 } from 'lucide-react'
 
-export default function ReportPage({ params }: { params: any }) {
-  const [id, setId] = useState<string | null>(null)
+export default function ReportPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const [research, setResearch] = useState<any>(null)
   const [isDarkMode, setIsDarkMode] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('ozet')
-
-
-
-  useEffect(() => {
-    // Handle both Promise and plain object params (Next.js 14/15 compatibility)
-    if (params instanceof Promise) {
-      params.then(p => setId(p.id))
-    } else if (params && params.id) {
-      setId(params.id)
-    } else if (typeof (params as any)?.then === 'function') {
-      (params as any).then((p: any) => setId(p.id))
-    }
-  }, [params])
 
   useEffect(() => {
     if (!id) return
@@ -41,10 +29,12 @@ export default function ReportPage({ params }: { params: any }) {
           const data = await response.json()
           setResearch(data)
         } else {
-          const errData = await response.json()
+          const errData = await response.json().catch(() => ({ error: 'Bilinmeyen hata' }))
+          setError(errData.error || 'Rapor bulunamadı')
           console.error('API Error:', errData)
         }
       } catch (err) {
+        setError('Bağlantı hatası oluştu')
         console.error('Fetch Error:', err)
       } finally {
         setIsLoading(false)
@@ -54,15 +44,33 @@ export default function ReportPage({ params }: { params: any }) {
     fetchResearch()
   }, [id])
 
-  if (!isLoading && !research) {
-    notFound()
-  }
-
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#09090B] flex flex-col items-center justify-center text-center">
-        <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-zinc-500 font-medium">Analiz Dosyası Yükleniyor...</p>
+      <div className="min-h-screen bg-[#09090B] flex flex-col items-center justify-center text-center p-6">
+        <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
+        <h2 className="text-xl font-bold text-white mb-2">Analiz Dosyası Yükleniyor</h2>
+        <p className="text-zinc-500 max-w-xs mx-auto text-sm">Yapay zeka verileri işliyor ve raporu hazırlıyor. Lütfen bekleyin...</p>
+      </div>
+    )
+  }
+
+  if (error || !research) {
+    return (
+      <div className="min-h-screen bg-[#09090B] flex flex-col items-center justify-center text-center p-6">
+        <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6 border border-red-500/20">
+          <ShieldAlert className="w-10 h-10 text-red-500" />
+        </div>
+        <h1 className="text-2xl font-black text-white mb-2">Rapor Bulunamadı</h1>
+        <p className="text-zinc-500 mb-8 max-w-xs mx-auto text-sm">
+          {error === 'Report not found' ? 'Belirttiğiniz referans numarasına ait bir rapor kaydı bulunamadı.' : error}
+          <br /><span className="text-[10px] mt-2 block opacity-50 font-mono">ID: {id}</span>
+        </p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-8 py-4 bg-zinc-900 border border-zinc-800 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all active:scale-95"
+        >
+          Yeniden Dene
+        </button>
       </div>
     )
   }
@@ -136,6 +144,12 @@ export default function ReportPage({ params }: { params: any }) {
 
         {/* 2. REPORT HEADER */}
         <section className="space-y-4 px-2">
+          {!isCompleted && (
+            <div className="p-4 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-bold flex items-center gap-3 animate-pulse">
+              <Clock className="w-4 h-4 flex-shrink-0" />
+              <span>Analiz işlemi devam ediyor. Veriler henüz kesinleşmemiş olabilir.</span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">Gayrimenkul.AI</span>
             <span className={`text-[10px] font-medium ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>Rapor No: {id?.slice(0, 8).toUpperCase()}</span>

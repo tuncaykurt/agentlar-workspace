@@ -11,6 +11,10 @@ export async function GET(
     return NextResponse.json({ error: 'ID is required' }, { status: 400 })
   }
 
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: 'Server configuration error (missing key)' }, { status: 500 })
+  }
+
   const supabase = adminClient()
   const { data: research, error } = await supabase
     .from('property_researches')
