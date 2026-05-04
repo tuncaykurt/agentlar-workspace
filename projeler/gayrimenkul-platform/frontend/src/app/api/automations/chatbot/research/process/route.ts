@@ -59,7 +59,7 @@ async function deepResearch(args: {
 
   // 1. AŞAMA: PERPLEXITY İLE HAM VERİ TOPLAMA
   console.log(`[research] Phase 1: Searching for ${args.ada}/${args.parsel}...`)
-  const searchQuery = `${args.city} ${args.district} ${args.neighborhood || ''} Ada ${args.ada} Parsel ${args.parsel} emsal fiyatlar, bölge m2 birim fiyatları 2026, çevredeki yeni projeler ve imar durumu.`
+  const searchQuery = `${args.city} ${args.district} ${args.neighborhood || ''} Ada ${args.ada} Parsel ${args.parsel} emsal fiyatlar, bölge m2 birim fiyatları 2026, çevredeki yeni projeler ve imar durumu. Fiyatları TL bazında ver.`
   
   let rawData = ''
   try {
@@ -99,17 +99,20 @@ async function deepResearch(args: {
             content: `Sen üst düzey bir Gayrimenkul Yatırım Stratejistisin. 
             Sana verilen ham araştırma verilerini ve teknik detayları kullanarak, yatırımcıya güven veren, analitik ve premium bir rapor hazırla.
             
-            ÖNEMLİ KURALLAR:
-            1. Metin içinde asla [1], [2] gibi dipnotlar veya rakamlar bırakma. Tamamen temiz ve akıcı bir dil kullan.
-            2. Fiyatları "tahmini m2 birim fiyatı" ve "toplam değer" olarak net şekilde vurgula.
-            3. Raporun sonunda mutlaka JSON formatında şu skorları ver (Aşağıdaki metinden sonra ayır):
-               SKORLAR: { "ulasim": 8, "sosyal": 7, "yatirim": 9, "prim": 8 }
+            KRİTİK TALİMATLAR:
+            1. Metin içinde ASLA [1], [2], [3] gibi dipnot numaraları kullanma. Rakamlar sadece fiyat ve veri için olsun.
+            2. Cümle sonlarında veya kelime aralarında anlamsız karakterler bırakma.
+            3. Fiyatları "m2 birim fiyatı" ve "tahmini piyasa değeri" olarak NET vurgula.
+            4. Yatırım potansiyelini 10 üzerinden puanla.
             
-            RAPOR FORMATI:
+            RAPOR FORMATI (Mutlaka bu başlıkları kullan):
             - **BÖLGE VE KONUM ANALİZİ**
             - **PİYASA VE EMSAL KARŞILAŞTIRMASI**
             - **TEKNİK VE İMAR DURUMU**
-            - **YATIRIM VE GELECEK POTANSİYELİ**`
+            - **YATIRIM VE GELECEK POTANSİYELİ**
+
+            Raporun sonuna mutlaka şu formatta JSON skorlarını ekle:
+            SKORLAR: { "ulasim": 8, "sosyal": 7, "yatirim": 9, "prim": 8 }`
           },
           { 
             role: 'user', 
@@ -124,12 +127,15 @@ async function deepResearch(args: {
     }
 
     const synthData = await synthesisRes.json()
-    const content = synthData?.choices?.[0]?.message?.content
+    let content = synthData?.choices?.[0]?.message?.content
     
     if (!content) {
       console.error('[research] Gemini returned empty content:', synthData)
       return `Analiz raporu oluşturulamadı. Teknik Veriler: ${knownFacts}`
     }
+
+    // Temizlik: AI hala citation bırakırsa manuel temizle
+    content = content.replace(/\[\d+\]/g, '')
 
     console.log('[research] Synthesis completed successfully.')
     return content
