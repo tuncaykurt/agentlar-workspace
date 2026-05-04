@@ -202,7 +202,9 @@ async function handlePOST(req: NextRequest) {
     await logWebhook({ event, instance: instanceName, result: 'skipped: group' })
     return NextResponse.json({ ok: true, skipped: 'group' })
   }
-  const customerPhone = remoteJid.replace('@s.whatsapp.net', '')
+  
+  // Strip device suffix (e.g. 905xx:1@s.whatsapp.net -> 905xx)
+  const customerPhone = remoteJid.split('@')[0].split(':')[0]
 
   if (!instanceName) {
     await logWebhook({ event, payload: body, result: 'no instance in payload' })
