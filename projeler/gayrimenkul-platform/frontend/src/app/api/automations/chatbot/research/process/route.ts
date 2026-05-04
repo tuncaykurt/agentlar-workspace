@@ -50,57 +50,71 @@ async function deepResearch(args: {
   if (!apiKey) return 'Araştırma yapılamadı (API key eksik).'
 
   const knownFacts = `
-  BİLİNEN TEKNİK VERİLER:
-  - Mülkiyet Tipi: ${args.owner_type === 'sirket' ? 'Kurumsal (Şirket - 2 Yıl Muafiyet)' : 'Bireysel (Şahıs - 5 Yıl Muafiyet)'}
-  - Mülk Tipi: ${args.property_type || 'Belirtilmedi'}
-  - Edinme Tarihi: ${args.acquisition_date || 'Belirtilmedi'}
-  - Edinme Bedeli: ${args.acquisition_price ? args.acquisition_price + ' TL' : 'Belirtilmedi'}
-  - Yönetim Planı Tarihi (Bina Yaşı İçin): ${args.management_plan_date || 'Belirtilmedi'}
+  TEKNİK VERİLER:
+  - Mülkiyet: ${args.owner_type === 'sirket' ? 'Kurumsal' : 'Bireysel'}
+  - Edinme: ${args.acquisition_date || 'Bilinmiyor'} (${args.acquisition_price ? args.acquisition_price + ' TL' : 'Bedel Bilinmiyor'})
+  - Bina Yaşı Verisi (Yön. Planı): ${args.management_plan_date || 'Bilinmiyor'}
   `
 
-  const query = `${args.city} ${args.district} ${args.neighborhood || ''} Ada ${args.ada} Parsel ${args.parsel} gayrimenkul değerleme.
-  ${knownFacts}
-  Lütfen şu bilgileri bul:
-  1. Bu adresteki arsa/konut için tahmini m2 birim fiyatları (2026 güncel).
-  2. Yakınlardaki emsal satış ilanları veya fiyat trendleri.
-  3. Bölgedeki imar durumu hakkında genel bilgi.
-  4. Çevredeki önemli noktalar (ulaşım, hastane, okul).
-  5. Yatırım potansiyeli yorumu. (Bina yaşını ve vergi durumunu yukarıdaki verilere göre yorumla)`
-
+  // 1. AŞAMA: PERPLEXITY İLE HAM VERİ TOPLAMA
+  console.log('[research] Phase 1: Searching with Perplexity...')
+  const searchQuery = `${args.city} ${args.district} ${args.neighborhood || ''} Ada ${args.ada} Parsel ${args.parsel} emsal fiyatlar, bölge m2 birim fiyatları 2026, çevredeki yeni projeler ve imar durumu.`
+  
+  let rawData = ''
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const searchRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud',
-        'X-Title': 'Property Deep Research',
       },
       body: JSON.stringify({
         model: 'perplexity/sonar',
+        messages: [{ role: 'user', content: searchQuery }],
+      }),
+    })
+    const searchData = await searchRes.json()
+    rawData = searchData?.choices?.[0]?.message?.content || ''
+  } catch (e) {
+    console.error('Perplexity error:', e)
+  }
+
+  // 2. AŞAMA: GEMINI 2.0 İLE PROFESYONEL SENTEZ
+  console.log('[research] Phase 2: Synthesizing with Gemini 2.0...')
+  try {
+    const synthesisRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.0-flash-001',
         messages: [
           {
             role: 'system',
-            content: `Sen uzman bir gayrimenkul değerleme uzmanısın. 
-            Sana verilen ada/parsel ve teknik verileri kullanarak profesyonel, şık, emojilerle zenginleştirilmiş bir SUNUM RAPORU hazırla.
+            content: `Sen üst düzey bir Gayrimenkul Yatırım Stratejistisin. 
+            Sana verilen ham araştırma verilerini ve teknik detayları kullanarak, yatırımcıya güven veren, analitik ve premium bir rapor hazırla.
             
-            RAPOR FORMATI:
-            📍 **BÖLGE VE KONUM ANALİZİ**
-            💰 **PİYASA DEĞERLEMESİ**
-            🏗️ **İMAR VE YAPILAŞMA DURUMU**
-            🏫 **ÇEVRESEL OLANAKLAR**
-            📈 **YATIRIM YORUMU** (Burada bina yaşını ve finansal verileri mutlaka profesyonelce yorumla)
-            
-            Önemli: Başlıkları **BAŞLIK** formatında kullan. Verileri 2026 piyasasına göre yorumla.`
+            KURALLAR:
+            - Raporu mutlaka şu başlıklarla ayır: **BÖLGE VE KONUM ANALİZİ**, **PİYASA VE EMSAL KARŞILAŞTIRMASI**, **TEKNİK VE İMAR DURUMU**, **YATIRIM VE GELECEK POTANSİYELİ**.
+            - 'Yatırım Potansiyeli' kısmında mülke 10 üzerinden bir 'Yatırım Skoru' ver.
+            - Amortisman süresi (kira/fiyat oranı) tahmini yap.
+            - Teknik verileri (bina yaşı, vergi durumu) raporun içine profesyonelce yedir.
+            - Üslup: Profesyonel, vizyoner ve güven verici.
+            - Format: Markdown kullan, başlıkları **BAŞLIK** şeklinde yaz.`
           },
-          { role: 'user', content: query },
+          { 
+            role: 'user', 
+            content: `TEKNİK DETAYLAR: ${knownFacts}\n\nİNTERNET ARAŞTIRMA VERİLERİ:\n${rawData}\n\nLütfen bu mülk için profesyonel raporu hazırla.` 
+          },
         ],
       }),
     })
-    const data = await res.json()
-    return data?.choices?.[0]?.message?.content || 'Rapor oluşturulamadı.'
+    const synthData = await synthesisRes.json()
+    return synthData?.choices?.[0]?.message?.content || 'Rapor sentezlenemedi.'
   } catch (e: any) {
-    return `Araştırma sırasında hata oluştu: ${e.message}`
+    return `Sentez hatası: ${e.message}`
   }
 }
 
