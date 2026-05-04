@@ -196,7 +196,6 @@ Detaylı bölge analizi, yatırım puanlaması ve imar detayları için yukarıd
     })
 
     // 7. Trigger Queue Processor (Optional/Kickstart)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud'
     fetch(`${baseUrl}/api/automations/chatbot/queue/process`).catch(() => {})
 
     return NextResponse.json({ success: true, scheduled_at: scheduledAt })
