@@ -163,6 +163,42 @@ function detectSalutation(name: string): { cleanName: string; salutation: string
   return { cleanName: cleanName.trim(), salutation, extraNotes: extraNotes.trim() }
 }
 
+/**
+ * Telefon numaralarını +90 formatına normalize eder.
+ */
+function formatPhone(phone: string): string {
+  if (!phone) return ''
+  
+  // Sadece rakamları ve + işaretini temizle
+  let cleaned = phone.replace(/[^\d+]/g, '')
+  
+  // Sadece rakamlar
+  let digits = cleaned.replace(/\D/g, '')
+  
+  // 1. Durum: 5321234567 (10 hane) -> +905321234567
+  if (digits.length === 10 && digits.startsWith('5')) {
+    return '+90' + digits
+  }
+  
+  // 2. Durum: 05321234567 (11 hane) -> +905321234567
+  if (digits.length === 11 && digits.startsWith('05')) {
+    return '+90' + digits.substring(1)
+  }
+  
+  // 3. Durum: 905321234567 (12 hane) -> +905321234567
+  if (digits.length === 12 && digits.startsWith('90')) {
+    return '+' + digits
+  }
+  
+  // 4. Durum: Zaten +905321234567 formatındaysa olduğu gibi bırak
+  if (cleaned.startsWith('+90') && digits.length === 12) {
+    return cleaned
+  }
+  
+  // Diğer durumlar (yabancı numaralar vb.): Eğer + yoksa ekle
+  return cleaned.startsWith('+') ? cleaned : (cleaned ? '+' + cleaned : '')
+}
+
 function parseVCF(text: string): ParsedContact[] {
   const contacts: ParsedContact[] = []
 
@@ -212,8 +248,7 @@ function parseVCF(text: string): ParsedContact[] {
         fn = [first, last].filter(Boolean).join(' ')
       } else if (propName === 'TEL') {
         if (!phone && valuePart.trim()) {
-          // Boşluk ve tire gibi formatlamayı kaldır, sadece + ve rakamları bırak
-          phone = valuePart.trim().replace(/[\s\-().]/g, '')
+          phone = formatPhone(valuePart.trim())
         }
       } else if (propName === 'EMAIL') {
         if (!email) email = decoded.trim()
