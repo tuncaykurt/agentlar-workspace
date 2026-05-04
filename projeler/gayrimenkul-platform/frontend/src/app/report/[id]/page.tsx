@@ -13,14 +13,15 @@ const supabase = createClient(
 )
 
 interface ReportPageProps {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
 export async function generateMetadata({ params }: ReportPageProps): Promise<Metadata> {
+  const { id } = await params
   const { data: research } = await supabase
     .from('property_researches')
     .select('city, district, ada, parsel')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   const title = research ? `${research.city} ${research.ada}/${research.parsel} Analiz Raporu` : 'Gayrimenkul Analiz Raporu'
@@ -32,13 +33,25 @@ export async function generateMetadata({ params }: ReportPageProps): Promise<Met
 }
 
 export default async function ReportPage({ params }: ReportPageProps) {
+  const { id } = await params
+  
+  console.log('[ReportPage] Fetching research for ID:', id)
+
   const { data: research, error } = await supabase
     .from('property_researches')
     .select('*, consultants(full_name, phone, personality_preset)')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
-  if (error || !research) notFound()
+  if (error) {
+    console.error('[ReportPage] Database error:', error.message)
+    notFound()
+  }
+
+  if (!research) {
+    console.warn('[ReportPage] No research found for ID:', id)
+    notFound()
+  }
 
   const isCompleted = research.status === 'completed'
   const consultant = (research as any).consultants
