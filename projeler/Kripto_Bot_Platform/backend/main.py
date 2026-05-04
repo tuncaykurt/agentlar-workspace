@@ -98,10 +98,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS Ayarları
+origins = [
+    settings.FRONTEND_URL,
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=origins if settings.ENVIRONMENT == "production" else ["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -131,4 +138,17 @@ async def ws_bot(websocket: WebSocket, bot_id: int):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "1.0.0"}
+    db_status = "unknown"
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(select(1))
+            db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+        
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        "database": db_status,
+        "environment": settings.ENVIRONMENT
+    }

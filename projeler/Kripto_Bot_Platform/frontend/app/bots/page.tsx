@@ -895,11 +895,15 @@ export default function BotsPage() {
         setStep(0)
         setForm(defaultForm())
       } else {
-        setError("Bot oluşturulamadı. Backend bağlantısını kontrol et.")
+        setError("Bot oluşturulamadı. Beklenmedik yanıt formatı.")
       }
-    } catch (e: unknown) {
-      setError(`Hata: ${e instanceof Error ? e.message : "Sunucuya ulaşılamıyor"}`)
-    } finally { setSaving(false) }
+    } catch (e: any) {
+      console.error("Bot create error:", e)
+      const detail = e.message || "Sunucuya ulaşılamıyor"
+      setError(`Hata: ${detail}`)
+    } finally { 
+      setSaving(false) 
+    }
   }
 
   const handleEdit = async () => {

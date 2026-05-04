@@ -97,8 +97,23 @@ async def create_bot(data: BotCreate):
                 "running": False,
             }
     except Exception as e:
-        print(f"[Bot Create Error] {e}")
-        raise HTTPException(status_code=503, detail=f"Veritabanı hatası: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"[Bot Create Error] Exception: {str(e)}")
+        print(f"[Bot Create Error] Traceback: {error_trace}")
+        
+        # Validation errors or database constraint violations
+        if "integrity error" in str(e).lower() or "unique constraint" in str(e).lower():
+            raise HTTPException(status_code=400, detail=f"Kayıt hatası: Bot ismi veya parametreleri geçersiz. ({str(e)})")
+            
+        raise HTTPException(
+            status_code=503, 
+            detail={
+                "message": "Veritabanı veya Sunucu Hatası",
+                "error": str(e),
+                "type": type(e).__name__
+            }
+        )
 
 
 @router.post("/{bot_id}/start")
