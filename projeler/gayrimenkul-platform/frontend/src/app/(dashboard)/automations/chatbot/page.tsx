@@ -11,6 +11,7 @@ const TOOL_LIBRARY: Record<string, { label: string; emoji: string; description: 
   get_client_info:       { label: 'Müşteri CRM Bilgisi',      emoji: '👤', description: 'Müşteri kayıtlıysa geçmişini hatırlar' },
   web_search:            { label: 'İnternet Araştırması',     emoji: '🌐', description: 'Perplexity Sonar ile güncel bilgi (OpenRouter üzerinden)' },
   schedule_appointment:  { label: 'Randevu Kaydet',           emoji: '📅', description: 'AI randevu oluşturabilir' },
+  research_property:     { label: 'Gayrimenkul Araştırma',   emoji: '📊', description: 'Ada/Parsel ile derin pazar ve tapu analizi yapar' },
 }
 
 const PERSONALITY_OPTIONS = [
@@ -34,6 +35,7 @@ interface Config {
   example_dialogues: string
   enabled_tools: string[]
   debounce_seconds: number
+  research_delay_minutes: number
 }
 
 interface ORModel {
@@ -57,6 +59,7 @@ const DEFAULT: Config = {
   example_dialogues: '',
   enabled_tools: [],
   debounce_seconds: 5,
+  research_delay_minutes: 7,
 }
 
 export default function ChatbotPage() {
@@ -432,6 +435,53 @@ export default function ChatbotPage() {
               <p className="text-xs text-on-surface-variant mt-3 italic">
                 💡 Tool'lar OpenRouter "function calling" destekleyen modellerle çalışır (Claude, GPT-4, Gemini gibi).
               </p>
+            </div>
+
+            {/* Gayrimenkul Araştırma Ayarları */}
+            <div className="card border-l-4 border-l-primary">
+              <h2 className="font-semibold text-on-surface mb-1 flex items-center gap-2">
+                <Sparkles size={16} className="text-primary" /> Yapay Zeka Gayrimenkul Araştırma (Tapu Analizi)
+              </h2>
+              <p className="text-xs text-on-surface-variant mb-4">
+                Müşterileriniz ada/parsel veya tapu görseli ilettiğinde, AI otomatik olarak pazar analizi yapar. 
+                Müşteri algısını yönetmek için raporun ne kadar süre sonra gönderileceğini belirleyebilirsiniz.
+              </p>
+              
+              <div className="bg-surface-container/50 p-4 rounded-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-on-surface">Araştırma Gecikmesi</label>
+                    <p className="text-[11px] text-on-surface-variant">Raporun hazırlanıp müşteriye iletilme süresi (dakika)</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={config.research_delay_minutes}
+                      onChange={e => set({ research_delay_minutes: parseInt(e.target.value) || 1 })}
+                      className="w-16 border border-outline rounded-lg px-2 py-1 text-center font-bold text-primary"
+                    />
+                    <span className="text-xs text-on-surface-variant">dakika</span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                  <Info size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-[11px] text-blue-700 leading-relaxed">
+                    <strong>Tavsiye:</strong> Hemen verilen cevaplar "basit bir sorgu" algısı yaratabilir. 
+                    <strong> 5-10 dakika</strong> arası bir gecikme, müşterinin "arkada gerçekten derin bir araştırma yapılıyor" 
+                    şeklinde profesyonel bir algı edinmesini sağlar.
+                  </p>
+                </div>
+
+                {!config.enabled_tools.includes('research_property') && (
+                  <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-2 rounded-lg text-[11px]">
+                    <AlertCircle size={14} />
+                    <span>Bu özelliğin çalışması için yukarıdaki <strong>Gayrimenkul Araştırma</strong> tool'unu aktif etmelisiniz.</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Çalışma Saatleri */}

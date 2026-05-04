@@ -250,6 +250,58 @@ KRİTİK KURALLAR (Türk gayrimenkul piyasası enflasyonist — eski rakamlar bu
       return `Randevu kaydedildi: ${args.date_iso}. Danışman bilgilendirildi.`
     },
   },
+
+  research_property: {
+    name: 'research_property',
+    description: 'Belirli bir ada/parsel için derin gayrimenkul araştırması yapar. Müşteri tapu fotoğrafı attığında veya ada/parsel bilgisi verdiğinde kullan.',
+    parameters: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'Şehir' },
+        district: { type: 'string', description: 'İlçe' },
+        neighborhood: { type: 'string', description: 'Mahalle/Köy' },
+        ada: { type: 'string', description: 'Ada No' },
+        parsel: { type: 'string', description: 'Parsel No' },
+      },
+      required: ['city', 'district', 'ada', 'parsel'],
+    },
+    execute: async (args, ctx) => {
+      // 1. Kaydı veritabanına ekle
+      const { data: resRecord, error: insErr } = await ctx.supabase
+        .from('property_researches')
+        .insert({
+          consultant_id: ctx.consultantId,
+          customer_phone: ctx.customerPhone,
+          city: args.city,
+          district: args.district,
+          neighborhood: args.neighborhood,
+          ada: args.ada,
+          parsel: args.parsel,
+          status: 'pending'
+        })
+        .select('id')
+        .single()
+
+      if (insErr) return `Araştırma başlatılamadı: ${insErr.message}`
+
+      // 2. Arka planda araştırmayı tetikle
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://gayrimenkul.yapayzekaotomasyon.cloud'
+      fetch(`${baseUrl}/api/automations/chatbot/research/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.SUPABASE_SERVICE_ROLE_KEY! },
+        body: JSON.stringify({ researchId: resRecord.id })
+      }).catch(e => console.error('Research trigger error:', e))
+
+      return `Harika! ${args.city}, ${args.district}, ${args.neighborhood || ''} bölgesindeki ${args.ada} ada / ${args.parsel} parsel için derin bir araştırma başlattım. 
+
+Bu işlem kapsamında:
+- Güncel piyasa değerlerini analiz edeceğim.
+- Bölgedeki emsal satışları ve trendleri inceleyeceğim.
+- İmar durumu ve çevresel faktörleri (hastane, ulaşım vb.) değerlendireceğim.
+
+Sizin için detaylı ve şık bir rapor hazırlamam yaklaşık 5-10 dakika sürecektir. Tamamlandığında raporu buradan size özel olarak ileteceğim. Beklemede kalın!`
+    },
+  },
 }
 
 export const TOOL_LABELS: Record<string, { label: string; emoji: string; description: string }> = {
@@ -260,6 +312,7 @@ export const TOOL_LABELS: Record<string, { label: string; emoji: string; descrip
   get_client_info:       { label: 'Müşteri CRM Bilgisi',      emoji: '👤', description: 'Müşteri kayıtlıysa geçmişini hatırlar' },
   web_search:            { label: 'İnternet Araştırması',     emoji: '🌐', description: 'Perplexity ile güncel bilgi araması (semt fiyatı, piyasa, haber)' },
   schedule_appointment:  { label: 'Randevu Kaydet',           emoji: '📅', description: 'AI randevu oluşturabilir' },
+  research_property:     { label: 'Ada/Parsel Araştırma',     emoji: '🔬', description: 'Derin mülk analizi ve sunum raporu hazırlar (5-10 dk)' },
 }
 
 export const PERSONALITY_PRESETS: Record<string, string> = {
@@ -286,6 +339,8 @@ const TOOL_USAGE_HINTS: Record<string, string> = {
     'Güncel piyasa bilgisi, semt ortalama m2 fiyatı, mevzuat değişikliği, haber gibi WEB ARAŞTIRMASI gereken bir şey sorulursa çağır. Kafadan tahmin etme.',
   schedule_appointment:
     'Müşteri görüşmek/buluşmak/randevu istediğinde tarih-saat alıp çağır.',
+  research_property:
+    'Müşteri bir mülkün ada/parsel bilgisini verdiğinde veya tapu/bilgi görseli paylaştığında (ve sen oradan bilgileri ayıkladığında) derin araştırma ve rapor hazırlamak için çağır.',
 }
 
 function buildToolsSection(enabledTools?: string[]): string {
@@ -338,7 +393,8 @@ GENEL KURALLAR:
 - Mülk/fiyat/portföy bilgileri için mevcut tool'ları kullan
 - Emojileri abartma, doğal akışta kullan
 - Selamlama her mesajda gerekmez, akıcı bir konuşma sürdür
-- Sesli mesaj veya fotoğraf gelirse içeriğini anlamlandır ve doğal yanıt ver`
+- Sesli mesaj veya fotoğraf gelirse içeriğini anlamlandır ve doğal yanıt ver
+- Eğer kullanıcı bir tapu görseli ilettiyse veya mesajında ADA/PARSEL bilgisini açıkça paylaştıysa (örn: "şurdaki 123 ada 45 parseli bir araştır"), mutlaka 'research_property' tool'unu çağırarak pazar analizi başlat. Müşteriye "Hemen inceliyorum, birazdan size detaylı bir pazar analizi raporu ileteceğim" şeklinde bilgi ver.`
 
   return `${identity}${presetText}${examples}TEMEL TALİMAT: ${opts.basePrompt}\n${rules}${toolsSection}`
 }
