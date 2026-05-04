@@ -35,26 +35,33 @@ export async function generateMetadata({ params }: ReportPageProps): Promise<Met
 export default async function ReportPage({ params }: ReportPageProps) {
   const { id } = await params
   
-  console.log('[ReportPage] Fetching research for ID:', id)
-
   const { data: research, error } = await supabase
     .from('property_researches')
-    .select('*, consultants(full_name, phone, personality_preset)')
+    .select('*')
     .eq('id', id)
     .single()
 
   if (error) {
-    console.error('[ReportPage] Database error:', error.message)
-    notFound()
+    return (
+      <div className="p-10 text-red-500 font-mono">
+        <h1>Veritabanı Hatası!</h1>
+        <p>Hata Mesajı: {error.message}</p>
+        <p>Aranan ID: {id}</p>
+      </div>
+    )
   }
 
   if (!research) {
-    console.warn('[ReportPage] No research found for ID:', id)
-    notFound()
+    return (
+      <div className="p-10 text-amber-500 font-mono">
+        <h1>Kayıt Bulunamadı!</h1>
+        <p>Aranan ID ({id}) veritabanında mevcut değil.</p>
+      </div>
+    )
   }
 
   const isCompleted = research.status === 'completed'
-  const consultant = (research as any).consultants
+  const consultant = null // Geçici olarak devre dışı
 
   // Financial & Age Calculations
   const buildingAge = calculateAge(research.management_plan_date)
