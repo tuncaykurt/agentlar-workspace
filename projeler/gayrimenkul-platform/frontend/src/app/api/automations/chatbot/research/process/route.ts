@@ -51,13 +51,14 @@ async function deepResearch(args: {
 
   const knownFacts = `
   TEKNİK VERİLER:
+  - Konum: ${args.city} / ${args.district} / ${args.neighborhood || ''}
   - Mülkiyet: ${args.owner_type === 'sirket' ? 'Kurumsal' : 'Bireysel'}
   - Edinme: ${args.acquisition_date || 'Bilinmiyor'} (${args.acquisition_price ? args.acquisition_price + ' TL' : 'Bedel Bilinmiyor'})
   - Bina Yaşı Verisi (Yön. Planı): ${args.management_plan_date || 'Bilinmiyor'}
   `
 
   // 1. AŞAMA: PERPLEXITY İLE HAM VERİ TOPLAMA
-  console.log('[research] Phase 1: Searching with Perplexity...')
+  console.log(`[research] Phase 1: Searching for ${args.ada}/${args.parsel}...`)
   const searchQuery = `${args.city} ${args.district} ${args.neighborhood || ''} Ada ${args.ada} Parsel ${args.parsel} emsal fiyatlar, bölge m2 birim fiyatları 2026, çevredeki yeni projeler ve imar durumu.`
   
   let rawData = ''
@@ -75,8 +76,10 @@ async function deepResearch(args: {
     })
     const searchData = await searchRes.json()
     rawData = searchData?.choices?.[0]?.message?.content || ''
+    console.log(`[research] Perplexity data received (${rawData.length} chars)`)
   } catch (e) {
-    console.error('Perplexity error:', e)
+    console.error('[research] Perplexity error:', e)
+    rawData = 'İnternet verisi toplanamadı, sadece teknik verilerle devam ediliyor.'
   }
 
   // 2. AŞAMA: GEMINI 2.0 İLE PROFESYONEL SENTEZ
@@ -115,10 +118,24 @@ async function deepResearch(args: {
         ],
       }),
     })
+    
+    if (!synthesisRes.ok) {
+      throw new Error(`OpenRouter API error: ${synthesisRes.status}`)
+    }
+
     const synthData = await synthesisRes.json()
-    return synthData?.choices?.[0]?.message?.content || 'Rapor sentezlenemedi.'
+    const content = synthData?.choices?.[0]?.message?.content
+    
+    if (!content) {
+      console.error('[research] Gemini returned empty content:', synthData)
+      return `Analiz raporu oluşturulamadı. Teknik Veriler: ${knownFacts}`
+    }
+
+    console.log('[research] Synthesis completed successfully.')
+    return content
   } catch (e: any) {
-    return `Sentez hatası: ${e.message}`
+    console.error('[research] Synthesis error:', e)
+    return `Rapor sentezlenirken bir hata oluştu: ${e.message}\n\nTOPLANAN HAM VERİLER:\n${rawData}`
   }
 }
 
