@@ -96,17 +96,21 @@ async function deepResearch(args: {
             content: `Sen üst düzey bir Gayrimenkul Yatırım Stratejistisin. 
             Sana verilen ham araştırma verilerini ve teknik detayları kullanarak, yatırımcıya güven veren, analitik ve premium bir rapor hazırla.
             
-            KURALLAR:
-            - Raporu mutlaka şu başlıklarla ayır: **BÖLGE VE KONUM ANALİZİ**, **PİYASA VE EMSAL KARŞILAŞTIRMASI**, **TEKNİK VE İMAR DURUMU**, **YATIRIM VE GELECEK POTANSİYELİ**.
-            - 'Yatırım Potansiyeli' kısmında mülke 10 üzerinden bir 'Yatırım Skoru' ver.
-            - Amortisman süresi (kira/fiyat oranı) tahmini yap.
-            - Teknik verileri (bina yaşı, vergi durumu) raporun içine profesyonelce yedir.
-            - Üslup: Profesyonel, vizyoner ve güven verici.
-            - Format: Markdown kullan, başlıkları **BAŞLIK** şeklinde yaz.`
+            ÖNEMLİ KURALLAR:
+            1. Metin içinde asla [1], [2] gibi dipnotlar veya rakamlar bırakma. Tamamen temiz ve akıcı bir dil kullan.
+            2. Fiyatları "tahmini m2 birim fiyatı" ve "toplam değer" olarak net şekilde vurgula.
+            3. Raporun sonunda mutlaka JSON formatında şu skorları ver (Aşağıdaki metinden sonra ayır):
+               SKORLAR: { "ulasim": 8, "sosyal": 7, "yatirim": 9, "prim": 8 }
+            
+            RAPOR FORMATI:
+            - **BÖLGE VE KONUM ANALİZİ**
+            - **PİYASA VE EMSAL KARŞILAŞTIRMASI**
+            - **TEKNİK VE İMAR DURUMU**
+            - **YATIRIM VE GELECEK POTANSİYELİ**`
           },
           { 
             role: 'user', 
-            content: `TEKNİK DETAYLAR: ${knownFacts}\n\nİNTERNET ARAŞTIRMA VERİLERİ:\n${rawData}\n\nLütfen bu mülk için profesyonel raporu hazırla.` 
+            content: `TEKNİK DETAYLAR: ${knownFacts}\n\nİNTERNET ARAŞTIRMA VERİLERİ:\n${rawData}\n\nLütfen bu mülk için dipnotsuz, profesyonel raporu hazırla.` 
           },
         ],
       }),
