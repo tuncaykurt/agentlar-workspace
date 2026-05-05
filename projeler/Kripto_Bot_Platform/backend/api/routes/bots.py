@@ -77,10 +77,22 @@ async def create_bot(data: BotCreate):
             if data.trailing_sl is not None:
                 effective_params["trailing_sl"] = data.trailing_sl
 
+            # Strateji normalizasyonu:
+            # tradingview_webhook engine için custom_signal olarak saklanir,
+            # params içinde strateji tipi korunur.
+            strategy = data.strategy
+            if strategy == "tradingview_webhook":
+                # webhook_token'u params'a ekle (signal_source'dan al)
+                token = effective_params.get("webhook_token") or effective_params.get("signal_source", "")
+                if token and not token.startswith("builtin") and not token.startswith("custom__"):
+                    effective_params["webhook_token"] = token
+                effective_params["_strategy_display"] = "tradingview_webhook"
+                # Engine tradingview_webhook + custom_signal ikisini de yakalar
+
             bot = Bot(
                 name=data.name,
                 symbol=data.symbol,
-                strategy=data.strategy,
+                strategy=strategy,
                 exchange="bitget",
                 status=BotStatus.STOPPED,
                 paper_mode=data.paper_mode,
@@ -93,14 +105,14 @@ async def create_bot(data: BotCreate):
             session.add(bot)
             await session.commit()
             await session.refresh(bot)
-            print(f"[Bot Created] ID:{bot.id} Name:{data.name} Strategy:{data.strategy}")
+            print(f"[Bot Created] ID:{bot.id} Name:{data.name} Strategy:{strategy} Params:{effective_params}")
             return {
                 "id": bot.id,
                 "name": bot.name,
                 "symbol": bot.symbol,
                 "strategy": bot.strategy,
                 "paper_mode": bot.paper_mode,
-                "params": data.params,
+                "params": effective_params,  # önceki hatayı düzelttik: data.params değil effective_params
                 "running": False,
             }
     except Exception as e:

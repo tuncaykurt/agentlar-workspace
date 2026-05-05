@@ -84,6 +84,65 @@ async def get_signal_history(symbol: str, limit: int = 20):
 
 # ─── TradingView Webhook ───────────────────────────────────────────────────────
 
+# Bilinen CCXT futures sembol dönüşüm tablosu
+_TV_SYMBOL_MAP = {
+    # BTC varyantları
+    "BTCUSDT": "BTC/USDT:USDT", "BTCUSD": "BTC/USDT:USDT", "BTC": "BTC/USDT:USDT",
+    "BTCUSDTPERP": "BTC/USDT:USDT", "BTCPERP": "BTC/USDT:USDT",
+    # ETH
+    "ETHUSDT": "ETH/USDT:USDT", "ETHUSD": "ETH/USDT:USDT",
+    # SOL
+    "SOLUSDT": "SOL/USDT:USDT", "SOLUSD": "SOL/USDT:USDT",
+    # BNB
+    "BNBUSDT": "BNB/USDT:USDT",
+    # XRP
+    "XRPUSDT": "XRP/USDT:USDT",
+    # ADA
+    "ADAUSDT": "ADA/USDT:USDT",
+    # DOGE
+    "DOGEUSDT": "DOGE/USDT:USDT",
+    # AVAX
+    "AVAXUSDT": "AVAX/USDT:USDT",
+    # ARB
+    "ARBUSDT": "ARB/USDT:USDT",
+    # OP
+    "OPUSDT": "OP/USDT:USDT",
+    # LINK
+    "LINKUSDT": "LINK/USDT:USDT",
+    # SUI
+    "SUIUSDT": "SUI/USDT:USDT",
+    # INJ
+    "INJUSDT": "INJ/USDT:USDT",
+    # TON
+    "TONUSDT": "TON/USDT:USDT",
+    # NEAR
+    "NEARUSDT": "NEAR/USDT:USDT",
+}
+
+
+def _normalize_tv_symbol(raw: str) -> str:
+    """
+    TradingView ticker formatını CCXT futures formatına çevirir.
+    BTCUSDT / BTCUSDTPERP / BTC.P → BTC/USDT:USDT
+    Bilinmiyorsa orijinali döndürür.
+    """
+    if not raw:
+        return raw
+    # Büyük harfe çevir, exchange prefix'ini kaldır (BINANCE:BTCUSDT → BTCUSDT)
+    clean = raw.upper().split(":")[-1]
+    # .P veya .PERP suffix'i kaldır
+    clean = clean.replace(".PERP", "").replace(".P", "")
+    # Direkt map'te var mı?
+    if clean in _TV_SYMBOL_MAP:
+        return _TV_SYMBOL_MAP[clean]
+    # Genel kural: XYZUSDT → XYZ/USDT:USDT
+    if clean.endswith("USDT"):
+        base = clean[:-4]
+        return f"{base}/USDT:USDT"
+    # Bilinmiyor — orijinali döndür (bot engine de sembol aramayı dener)
+    return raw
+
+
 @router.post("/webhook/tv/{token}")
 async def tradingview_webhook(token: str, request: Request):
     """
@@ -97,12 +156,14 @@ async def tradingview_webhook(token: str, request: Request):
       "message": "{{strategy.order.comment}}"  // isteğe bağlı açıklama
     }
 
-    Webhook URL: http://SUNUCU_IP:8000/api/signals/webhook/tv/{token}
+    Webhook URL: https://SUNUCU_DOMAIN/api/signals/webhook/tv/{token}
     """
     try:
         body = await request.json()
     except Exception:
         return {"status": "error", "reason": "invalid JSON body"}
+
+    print(f"[TV Webhook] token={token} body={body}")
 
     # Action alanını normalize et
     action_raw = str(body.get("action", body.get("side", body.get("order_action", "")))).lower().strip()
@@ -111,43 +172,62 @@ async def tradingview_webhook(token: str, request: Request):
     elif action_raw in ("sell", "short", "open_short", "sell_market", "-1"):
         sig_type = "sell"
     else:
+        print(f"[TV Webhook] Tanınmayan action: '{action_raw}'")
         return {"status": "ignored", "reason": f"unrecognized action: '{action_raw}'"}
 
-    symbol  = str(body.get("symbol", body.get("ticker", ""))).strip()
-    price   = float(body.get("price", body.get("close", body.get("last", 0))) or 0)
+    # Sembol normalize et (BTCUSDT → BTC/USDT:USDT)
+    symbol_raw = str(body.get("symbol", body.get("ticker", ""))).strip()
+    symbol_ccxt = _normalize_tv_symbol(symbol_raw)   # CCXT format
+    price = float(body.get("price", body.get("close", body.get("last", 0))) or 0)
     message = str(body.get("message", body.get("comment", body.get("alert_message", ""))))
 
     payload = {
-        "symbol":  symbol,
-        "type":    sig_type,
-        "price":   price,
-        "source":  "TradingView",
-        "reason":  message or f"TV Alarm — {action_raw}",
-        "token":   token,
-        "ts":      datetime.utcnow().isoformat(),
+        "symbol":     symbol_ccxt,    # bot engine bunu kullanır
+        "symbol_raw": symbol_raw,     # orijinal TV sembolü (debug)
+        "type":       sig_type,
+        "price":      price,
+        "source":     "TradingView",
+        "reason":     message or f"TV Alarm — {action_raw}",
+        "token":      token,
+        "ts":         datetime.utcnow().isoformat(),
     }
+
+    print(f"[TV Webhook] {sig_type.upper()} | {symbol_raw} → {symbol_ccxt} @ {price}")
 
     try:
         from core.redis_client import get_redis
         redis = get_redis()
 
-        # Token bazlı anahtar — bot engine bu token'ı izler
+        # 1) Token bazlı anahtar — bot engine bu token'ı izleyebilir
         await redis.set(f"tv_webhook:{token}", json.dumps(payload), ex=600)
 
-        # Sembol bazlı custom_signal anahtarı — mevcut bot engine ile uyumlu
-        if symbol:
-            sym_key = f"custom_signal:{symbol.replace('/', '_').replace(':', '_')}"
-            await redis.set(sym_key, json.dumps(payload), ex=300)
+        # 2) CCXT sembol bazlı anahtar — bot engine custom_signal olarak okur
+        if symbol_ccxt:
+            sym_key = f"custom_signal:{symbol_ccxt.replace('/', '_').replace(':', '_')}"
+            await redis.set(sym_key, json.dumps(payload), ex=600)  # 10dk geçerli
 
-        # Webhook geçmişi (son 100 istek)
+            # Sinyal geçmişi (son 100)
+            hist_key = f"custom_signal_history:{symbol_ccxt.replace('/', '_').replace(':', '_')}"
+            await redis.lpush(hist_key, json.dumps(payload))
+            await redis.ltrim(hist_key, 0, 99)
+
+        # 3) Webhook geçmişi (son 100 istek — token bazlı)
         await redis.lpush(f"tv_webhook_history:{token}", json.dumps(payload))
         await redis.ltrim(f"tv_webhook_history:{token}", 0, 99)
 
     except Exception as e:
-        # Redis yoksa kaydet ama 200 dön (TradingView retry yapar aksi halde)
-        pass
+        print(f"[TV Webhook] Redis hatası: {e}")
+        # Redis yoksa 200 dön (TradingView retry yapar aksi halde)
 
-    return {"status": "ok", "received": {"type": sig_type, "symbol": symbol, "price": price}}
+    return {
+        "status": "ok",
+        "received": {
+            "type":       sig_type,
+            "symbol":     symbol_ccxt,
+            "symbol_raw": symbol_raw,
+            "price":      price,
+        }
+    }
 
 
 @router.get("/webhook/tv/{token}/history")

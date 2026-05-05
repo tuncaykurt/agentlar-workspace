@@ -383,9 +383,10 @@ class BotEngine:
 
     async def _run_custom_signal_cycle(self, redis, symbol: str):
         """
-        Özel Sinyal Stratejisi:
-        Frontend'den Redis'e yazılan buy/sell sinyallerini okur ve işlem açar.
-        Gelişmiş ayarlar: signal_mode, position_action, TP/SL, trailing stop
+        Özel Sinyal + TradingView Webhook Stratejisi:
+        - custom_signal:{symbol} anahtarını okur (ProChart / özel indikatör)
+        - tv_webhook:{token} anahtarını okur (TradingView alarm botu)
+        Her ikisi de aynı payload formatını kullanır.
         """
         # Trailing stop kontrolü
         if symbol in self._trailing:
@@ -400,19 +401,44 @@ class BotEngine:
             except Exception as e:
                 print(f"[Bot] Trailing stop kontrolü hatası: {e}")
 
-        key = f"custom_signal:{symbol.replace('/', '_').replace(':', '_')}"
-        raw = await redis.get(key)
-        if not raw:
-            return
+        params = self.config.get("params", {})
 
-        import json
-        sig = json.loads(raw)
+        # ── Sinyal arama: önce sembol bazlı, sonra webhook token bazlı ──
+        sig = None
+        sig_key = None
 
-        # Timestamp kontrolü
+        # 1) CCXT sembol bazlı anahtar (ProChart + TV webhook her ikisi de yazar)
+        sym_key = f"custom_signal:{symbol.replace('/', '_').replace(':', '_')}"
+        raw = await redis.get(sym_key)
+        if raw:
+            sig = json.loads(raw)
+            sig_key = sym_key
+
+        # 2) TradingView webhook token bazlı anahtar (sadece tradingview_webhook stratejisi)
+        if sig is None and self.config.get("strategy") == "tradingview_webhook":
+            token = params.get("webhook_token") or params.get("signal_source", "")
+            if token and not token.startswith("builtin") and not token.startswith("custom__"):
+                tv_key = f"tv_webhook:{token}"
+                raw = await redis.get(tv_key)
+                if raw:
+                    candidate = json.loads(raw)
+                    # Token'daki sembol bu bota ait mi kontrol et
+                    candidate_sym = candidate.get("symbol", "")
+                    if not candidate_sym or candidate_sym == symbol:
+                        sig = candidate
+                        sig_key = tv_key
+
+        if not sig:
+            return  # Sinyal yok
+
+        # Duplicate sinyal kontroli (aynı ts tekrar işleme)
         last_ts_key = f"bot:{self.config['id']}:last_custom_signal_ts"
         last_ts = await redis.get(last_ts_key)
-        if last_ts and last_ts.decode() == sig.get("ts", ""):
-            return
+        sig_ts = sig.get("ts", "")
+        if last_ts:
+            last_ts_str = last_ts.decode() if isinstance(last_ts, bytes) else str(last_ts)
+            if last_ts_str == sig_ts:
+                return  # Bu sinyal daha önce işlendi
 
         signal_type = sig.get("type")   # "buy" | "sell"
         price       = sig.get("price", 0)

@@ -186,65 +186,114 @@ class DataFetcher:
         3 katmanlı okuma:
         1. Redis cache → varsa anında döndür
         2. PostgreSQL → DB'den oku, Redis'e yaz
-        3. Borsa API → çek, DB + Redis'e yaz
+        3. Borsa API → çek (Bitget → Binance fallback), DB + Redis'e yaz
+
+        Not: Cache key limit'ten bağımsız tutulur — tek anahtar, verimli cache.
         """
-        cache_key = f"ohlcv:{self.exchange_name}:{symbol}:{timeframe}:{limit}"
+        # Limit'ten bağımsız standart cache key
+        cache_key = f"ohlcv:{self.exchange_name}:{symbol}:{timeframe}"
         redis = get_redis()
 
         # 1. Redis cache
         cached = await redis.get(cache_key)
         if cached:
-            return json.loads(cached)
+            all_cached = json.loads(cached)
+            # limit kadar son mumu döndür
+            return all_cached[-limit:] if len(all_cached) > limit else all_cached
 
         # 2. PostgreSQL
-        rows = await self._read_from_db(symbol, timeframe, limit)
+        rows = await self._read_from_db(symbol, timeframe, max(limit, 500))
         db_ohlcv = [[r.timestamp, r.open, r.high, r.low, r.close, r.volume] for r in rows] if rows else []
 
-        # 3. Borsadan son mumları çek (her zaman — DB'deki boşlukları doldur)
+        # 3. Borsa API — önce Bitget, sonra Binance public fallback
         exchange_candles = []
         try:
             exchange_candles = await self.exchange.exchange.fetch_ohlcv(
-                symbol, timeframe, limit=200,
+                symbol, timeframe, limit=min(limit, 200),
             )
+            print(f"[DataFetcher] Bitget'ten {len(exchange_candles)} mum alındı: {symbol} {timeframe}")
         except Exception as e:
-            print(f"[DataFetcher] Borsa hatası: {e}")
+            print(f"[DataFetcher] Bitget hatası ({symbol} {timeframe}): {e} — Binance fallback deneniyor")
+            exchange_candles = await self._binance_fallback(symbol, timeframe, limit)
 
         if exchange_candles:
-            # DB'ye kaydet
             db_rows = [
                 {
                     "exchange": self.exchange_name,
                     "symbol": symbol,
                     "timeframe": timeframe,
                     "timestamp": c[0],
-                    "open": c[1],
-                    "high": c[2],
-                    "low": c[3],
-                    "close": c[4],
-                    "volume": c[5],
+                    "open": float(c[1]),
+                    "high": float(c[2]),
+                    "low": float(c[3]),
+                    "close": float(c[4]),
+                    "volume": float(c[5]),
                 }
                 for c in exchange_candles
             ]
-            await self._upsert_rows(db_rows)
+            try:
+                await self._upsert_rows(db_rows)
+            except Exception as e:
+                print(f"[DataFetcher] DB upsert hatası: {e}")
 
-        # DB verisi + borsa verisini birleştir (timestamp'e göre deduplicate)
+        # DB verisi + borsa verisini birleştir
         if db_ohlcv:
             ts_map = {c[0]: c for c in db_ohlcv}
             for c in exchange_candles:
-                ts_map[c[0]] = c  # borsa verisi daha güncel, üstüne yaz
+                ts_map[c[0]] = list(c)  # borsa verisi daha güncel
             merged = sorted(ts_map.values(), key=lambda c: c[0])
-            # Son N tanesini al
-            result = merged[-limit:] if len(merged) > limit else merged
         elif exchange_candles:
-            result = exchange_candles
+            merged = [list(c) for c in exchange_candles]
         else:
+            print(f"[DataFetcher] Veri yok: {symbol} {timeframe}")
             return []
 
-        # Redis'e cache'le
+        # Redis'e cache'le (tüm veriy, son 500 mum)
+        to_cache = merged[-500:] if len(merged) > 500 else merged
         ttl = CACHE_TTL.get(timeframe, 3600)
-        await redis.set(cache_key, json.dumps(result), ex=ttl)
+        await redis.set(cache_key, json.dumps(to_cache), ex=ttl)
 
-        return result
+        # limit kadar son mumu döndür
+        return merged[-limit:] if len(merged) > limit else merged
+
+    async def _binance_fallback(
+        self,
+        symbol: str,
+        timeframe: str,
+        limit: int = 200,
+    ) -> list:
+        """
+        Binance public REST API — API key gerektirmez.
+        BTC/USDT:USDT → BTCUSDT formatına çevirir.
+        """
+        import httpx
+        # Sembolü Binance formatına çevir: BTC/USDT:USDT → BTCUSDT
+        bn_symbol = symbol.replace("/", "").replace(":USDT", "").replace(":", "")
+        # Timeframe çevirimi: ccxt → Binance interval
+        tf_map = {
+            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+            "1h": "1h", "2h": "2h", "4h": "4h", "6h": "6h", "12h": "12h",
+            "1d": "1d", "3d": "3d", "1w": "1w",
+        }
+        interval = tf_map.get(timeframe, "1h")
+        url = f"https://fapi.binance.com/fapi/v1/klines?symbol={bn_symbol}&interval={interval}&limit={min(limit, 500)}"
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    print(f"[DataFetcher] Binance fallback HTTP {resp.status_code}: {resp.text[:200]}")
+                    return []
+                data = resp.json()
+                # Binance format: [open_time, open, high, low, close, volume, ...]
+                candles = [
+                    [int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4]), float(c[5])]
+                    for c in data
+                ]
+                print(f"[DataFetcher] Binance fallback: {len(candles)} mum ({symbol} {timeframe})")
+                return candles
+        except Exception as e:
+            print(f"[DataFetcher] Binance fallback hatası: {e}")
+            return []
 
     # ─── Çoklu Sembol + Timeframe Toplu Çekme ───────────────────────────────
 
@@ -360,6 +409,7 @@ class DataFetcher:
 
         ohlcv = [[r.timestamp, r.open, r.high, r.low, r.close, r.volume] for r in rows]
         redis = get_redis()
-        cache_key = f"ohlcv:{self.exchange_name}:{symbol}:{timeframe}:500"
+        # Standart cache key (limit parametresi yok)
+        cache_key = f"ohlcv:{self.exchange_name}:{symbol}:{timeframe}"
         ttl = CACHE_TTL.get(timeframe, 3600)
         await redis.set(cache_key, json.dumps(ohlcv), ex=ttl)
