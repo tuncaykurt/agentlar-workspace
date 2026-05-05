@@ -35,7 +35,7 @@ class BotCreate(BaseModel):
     trailing_sl: Optional[bool] = None
 
 
-@router.get("/")
+@router.get("")
 async def list_bots():
     try:
         async with async_session() as session:
@@ -65,7 +65,7 @@ async def list_bots():
         return []
 
 
-@router.post("/")
+@router.post("")
 async def create_bot(data: BotCreate):
     try:
         async with async_session() as session:

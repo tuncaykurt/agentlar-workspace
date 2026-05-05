@@ -2,14 +2,6 @@ const getApiBase = () => {
   const base = process.env.NEXT_PUBLIC_API_URL || "";
   if (base) return base.endsWith("/api") ? base : base + "/api";
 
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    // Local dev fallback when Next.js rewrites are not active.
-    if (host === "localhost" || host === "127.0.0.1") {
-      return "http://localhost:8000/api";
-    }
-  }
-
   return "/api";
 };
 
@@ -19,11 +11,7 @@ function getWsBase() {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
   if (typeof window !== "undefined") {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    // If we are in production, the WS should probably go through the same domain
-    if (window.location.hostname !== "localhost") {
-      return `${protocol}//${window.location.host}`;
-    }
-    return `${protocol}//${window.location.hostname}:8001`;
+    return `${protocol}//${window.location.host}`;
   }
   return "ws://backend:8000";
 }
@@ -40,30 +28,32 @@ async function handleResponse(r: Response) {
   return r.json()
 }
 
+const normalizePath = (path: string) => path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
+
 export const api = {
   get: (path: string) =>
-    fetch(`${API_BASE}${path}`).then(handleResponse),
+    fetch(`${API_BASE}${normalizePath(path)}`).then(handleResponse),
 
   post: (path: string, body: unknown) =>
-    fetch(`${API_BASE}${path}`, {
+    fetch(`${API_BASE}${normalizePath(path)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }).then(handleResponse),
 
   patch: (path: string, body: unknown) =>
-    fetch(`${API_BASE}${path}`, {
+    fetch(`${API_BASE}${normalizePath(path)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }).then(handleResponse),
 
   delete: (path: string) =>
-    fetch(`${API_BASE}${path}`, { method: "DELETE" }).then(handleResponse),
+    fetch(`${API_BASE}${normalizePath(path)}`, { method: "DELETE" }).then(handleResponse),
 }
 
 export async function publicPost(path: string, body: unknown) {
-  const r = await fetch(`${API_BASE}${path}`, {
+  const r = await fetch(`${API_BASE}${normalizePath(path)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

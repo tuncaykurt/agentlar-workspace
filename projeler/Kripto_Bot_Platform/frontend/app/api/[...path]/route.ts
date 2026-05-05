@@ -37,6 +37,7 @@ async function proxy(req: NextRequest, { params }: { params: { path: string[] } 
       body: body ?? undefined,
       // @ts-ignore — Next.js fetch cache bypass
       cache: "no-store",
+      redirect: "manual",
     })
 
     const resHeaders = new Headers()
@@ -46,6 +47,14 @@ async function proxy(req: NextRequest, { params }: { params: { path: string[] } 
         resHeaders.set(key, value)
       }
     })
+
+    // Location başlığını düzelt (307/308 redirect'lerinde backend host'unu gizle)
+    if (resHeaders.has("location")) {
+      const location = resHeaders.get("location")
+      if (location && location.startsWith(BACKEND)) {
+        resHeaders.set("location", location.replace(BACKEND, ""))
+      }
+    }
 
     const resBody = await backendRes.arrayBuffer()
     return new NextResponse(resBody, {

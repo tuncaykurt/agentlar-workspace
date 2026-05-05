@@ -21,7 +21,7 @@ class ExchangeKeysRequest(BaseModel):
     passphrase: Optional[str] = ""
 
 
-@router.get("/")
+@router.get("")
 async def list_exchanges():
     redis = get_redis()
     result = []
