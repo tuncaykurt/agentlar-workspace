@@ -75,19 +75,22 @@ class DataFetcher:
         total_written = 0
         since = start_ts
 
-        print(f"[DataFetcher] {symbol} {timeframe} — son {days} gün çekiliyor...")
+        print(f"[DataFetcher] {symbol} {timeframe} — son {days} gün çekiliyor... (start_ts={start_ts})")
 
         while since < end_ts:
             try:
+                # Ensure since is an integer
+                since_val = int(since)
                 candles = await self.exchange.exchange.fetch_ohlcv(
-                    symbol, timeframe, since=since, limit=200,
+                    symbol, timeframe, since=since_val, limit=200,
                 )
             except Exception as e:
-                print(f"[DataFetcher] API hatası: {e} — 3s bekleniyor")
+                print(f"[DataFetcher] API hatası ({symbol} {timeframe} since={since}): {e} — 3s bekleniyor")
                 await asyncio.sleep(3)
                 continue
 
             if not candles:
+                print(f"[DataFetcher] {symbol} {timeframe} — Boş veri döndü (since={since})")
                 break
 
             # DB'ye batch upsert
@@ -96,12 +99,12 @@ class DataFetcher:
                     "exchange": self.exchange_name,
                     "symbol": symbol,
                     "timeframe": timeframe,
-                    "timestamp": c[0],
-                    "open": c[1],
-                    "high": c[2],
-                    "low": c[3],
-                    "close": c[4],
-                    "volume": c[5],
+                    "timestamp": int(c[0]),
+                    "open": float(c[1]),
+                    "high": float(c[2]),
+                    "low": float(c[3]),
+                    "close": float(c[4]),
+                    "volume": float(c[5]),
                 }
                 for c in candles
             ]
@@ -132,17 +135,21 @@ class DataFetcher:
         last_ts = await self._get_last_timestamp(symbol, timeframe)
 
         if last_ts:
-            since = last_ts + TF_MS.get(timeframe, 3_600_000)
+            since = int(last_ts + TF_MS.get(timeframe, 3_600_000))
         else:
             # Hiç veri yoksa son 7 günü çek
-            since = int(time.time() * 1000) - (7 * 86_400_000)
+            since = int((time.time() - (7 * 86_400)) * 1000)
+
+        print(f"[DataFetcher] sync_latest: {symbol} {timeframe} since={since}")
 
         try:
+            # Bitget V2 market candle endpoint has specific behavior with startTime
+            # We ensure since is passed as an integer millisecond timestamp
             candles = await self.exchange.exchange.fetch_ohlcv(
                 symbol, timeframe, since=since, limit=200,
             )
         except Exception as e:
-            print(f"[DataFetcher] sync hatası: {e}")
+            print(f"[DataFetcher] sync hatası ({symbol} {timeframe} since={since}): {e}")
             return 0
 
         if not candles:

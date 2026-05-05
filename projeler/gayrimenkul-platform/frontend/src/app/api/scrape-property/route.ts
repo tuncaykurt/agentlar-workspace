@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import Anthropic from '@anthropic-ai/sdk'
 
 const APIFY_TOKEN = process.env.APIFY_API_KEY || ''
 const APIFY_SAHIBINDEN_ACTOR = 'clearpath~sahibinden-scraper-pro'
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY || '',
+})
 
 // ── Platform tespiti ─────────────────────────────────────────────────────────
 function detectPlatform(url: string) {
@@ -154,42 +159,38 @@ function mapSahibindenItem(item: SahibindenItem, sourceUrl: string) {
 }
 
 // ── Fallback: HTML çek + Claude ile parse (Apify desteklemediği platformlar) ─
-async function callOpenRouter(prompt: string): Promise<string> {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://gayrimenkul.yapayzekaotomasyon.cloud',
-      'X-Title': 'Gayrimenkul Platform',
-    },
-    body: JSON.stringify({
-      model: 'anthropic/claude-haiku-4-5',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  })
-  if (!res.ok) throw new Error(`OpenRouter hata: ${res.status}`)
-  const data = await res.json()
-  return data.choices?.[0]?.message?.content || ''
-}
+async function callClaude(prompt: string): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    // Fallback to OpenRouter if Anthropic key is missing but OpenRouter is available
+    if (process.env.OPENROUTER_API_KEY) {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'anthropic/claude-3-haiku',
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      })
+      const data = await res.json()
+      return data.choices?.[0]?.message?.content || ''
+    }
+    throw new Error('API anahtarı bulunamadı (Anthropic veya OpenRouter)')
+  }
 
-async function fetchViaBrowserless(url: string): Promise<string> {
-  const browserlessUrl = process.env.BROWSERLESS_URL
-  const browserlessToken = process.env.BROWSERLESS_TOKEN
-  if (!browserlessUrl) throw new Error('BROWSERLESS_URL tanımlanmamış')
-  const res = await fetch(`${browserlessUrl}/content?token=${browserlessToken}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      url,
-      waitFor: 2000,
-      rejectResourceTypes: ['image', 'font', 'stylesheet'],
-    }),
-    signal: AbortSignal.timeout(45000),
+  const response = await anthropic.messages.create({
+    model: 'claude-3-haiku-20240307',
+    max_tokens: 2048,
+    messages: [{ role: 'user', content: prompt }],
   })
-  if (!res.ok) throw new Error(`Browserless hata: ${res.status}`)
-  return await res.text()
+
+  const content = response.content[0]
+  if (content.type === 'text') {
+    return content.text
+  }
+  return ''
 }
 
 function extractPhotos(html: string, baseUrl: string): string[] {
@@ -232,6 +233,24 @@ function cleanHtml(html: string): string {
     .trim()
 }
 
+async function fetchViaBrowserless(url: string): Promise<string> {
+  const browserlessUrl = process.env.BROWSERLESS_URL
+  const browserlessToken = process.env.BROWSERLESS_TOKEN
+  if (!browserlessUrl) throw new Error('BROWSERLESS_URL tanımlanmamış')
+  const res = await fetch(`${browserlessUrl}/content?token=${browserlessToken}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url,
+      waitFor: 2000,
+      rejectResourceTypes: ['image', 'font', 'stylesheet'],
+    }),
+    signal: AbortSignal.timeout(45000),
+  })
+  if (!res.ok) throw new Error(`Browserless hata: ${res.status}`)
+  return await res.text()
+}
+
 async function parseWithClaude(html: string, url: string) {
   const cleaned = cleanHtml(html)
   const prompt = `Aşağıdaki gayrimenkul ilan sayfasından bilgileri çıkar ve SADECE JSON döndür.
@@ -243,7 +262,8 @@ Alanlar (bulamazsan null):
 {"title":"","price":0,"currency":"TRY","property_type":"apartment|villa|land|commercial|office|shop|warehouse|detached_house|field","city":"","district":"","neighborhood":"","address":"","m2_gross":0,"m2_net":0,"room_count":"","bathroom_count":0,"floor":0,"total_floors":0,"age":0,"heating_type":"","deposit":0,"dues":0,"features":[],"description":""}
 
 Sadece JSON döndür.`
-  const text = await callOpenRouter(prompt)
+  
+  const text = await callClaude(prompt)
   const m = text.match(/\{[\s\S]*\}/)
   if (!m) throw new Error('Claude JSON döndürmedi')
   return JSON.parse(m[0])
