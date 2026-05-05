@@ -1,14 +1,7 @@
-let API_BASE = process.env.NEXT_PUBLIC_API_URL || ""
-if (API_BASE && !API_BASE.endsWith("/api")) {
-  API_BASE += "/api"
-}
-if (!API_BASE) {
-  API_BASE = "/api"
-}
+const API_BASE = "/api"
 
 function getWsBase() {
-  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL
-  if (typeof window === "undefined") return "ws://localhost:3000"
+  if (typeof window === "undefined") return "ws://backend:8000"
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:"
   return `${proto}//${window.location.host}`
 }
