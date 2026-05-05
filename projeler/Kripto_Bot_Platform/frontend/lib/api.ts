@@ -1,11 +1,20 @@
-const API_BASE = typeof window === "undefined" 
-  ? (process.env.BACKEND_URL || "http://backend:8000") + "/api"
-  : "/api"
+const getApiBase = () => {
+  let base = process.env.NEXT_PUBLIC_API_URL || "";
+  if (base && !base.endsWith("/api")) {
+    base += "/api";
+  }
+  return base || "/api";
+};
+
+const API_BASE = getApiBase();
 
 function getWsBase() {
-  if (typeof window === "undefined") return (process.env.BACKEND_URL || "http://backend:8000").replace("http", "ws")
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:"
-  return `${proto}//${window.location.host}`
+  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}`;
+  }
+  return "ws://backend:8000";
 }
 
 async function handleResponse(r: Response) {
