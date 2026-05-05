@@ -1,4 +1,10 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api"
+let API_BASE = process.env.NEXT_PUBLIC_API_URL || ""
+if (API_BASE && !API_BASE.endsWith("/api")) {
+  API_BASE += "/api"
+}
+if (!API_BASE) {
+  API_BASE = "/api"
+}
 
 function getWsBase() {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL
