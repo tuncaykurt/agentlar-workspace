@@ -59,11 +59,10 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: kripto-nginx
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     depends_on:
       - frontend
       - backend
