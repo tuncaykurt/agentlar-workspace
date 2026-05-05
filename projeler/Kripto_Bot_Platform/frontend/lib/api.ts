@@ -1,7 +1,9 @@
-const API_BASE = "/api"
+const API_BASE = typeof window === "undefined" 
+  ? (process.env.BACKEND_URL || "http://backend:8000") + "/api"
+  : "/api"
 
 function getWsBase() {
-  if (typeof window === "undefined") return "ws://backend:8000"
+  if (typeof window === "undefined") return (process.env.BACKEND_URL || "http://backend:8000").replace("http", "ws")
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:"
   return `${proto}//${window.location.host}`
 }
