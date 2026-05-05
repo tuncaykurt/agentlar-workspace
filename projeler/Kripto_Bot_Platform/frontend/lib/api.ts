@@ -1,9 +1,7 @@
 const getApiBase = () => {
-  let base = process.env.NEXT_PUBLIC_API_URL || "";
-  if (base && !base.endsWith("/api")) {
-    base += "/api";
-  }
-  return base || "/api";
+  const base = process.env.NEXT_PUBLIC_API_URL || "";
+  if (!base) return "/api";
+  return base.endsWith("/api") ? base : base + "/api";
 };
 
 const API_BASE = getApiBase();
@@ -11,8 +9,12 @@ const API_BASE = getApiBase();
 function getWsBase() {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
   if (typeof window !== "undefined") {
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${window.location.host}`;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    // If we are in production, the WS should probably go through the same domain
+    if (window.location.hostname !== "localhost") {
+      return `${protocol}//${window.location.host}`;
+    }
+    return `${protocol}//${window.location.hostname}:8001`;
   }
   return "ws://backend:8000";
 }

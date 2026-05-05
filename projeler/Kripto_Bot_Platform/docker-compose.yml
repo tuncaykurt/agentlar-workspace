@@ -8,12 +8,16 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8001
+      - PORT=3000
     depends_on:
       - backend
     restart: unless-stopped
     networks:
       - internal
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
 
   backend:
     build:
@@ -29,6 +33,10 @@ services:
     restart: unless-stopped
     networks:
       - internal
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
 
   kripto-db:
     image: postgres:15-alpine
@@ -45,6 +53,20 @@ services:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - internal
+
+  nginx:
+    image: nginx:alpine
+    container_name: kripto-nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - frontend
+      - backend
     restart: unless-stopped
     networks:
       - internal

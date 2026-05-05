@@ -137,7 +137,7 @@ async def ws_bot(websocket: WebSocket, bot_id: int):
     await bot_status_ws(websocket, bot_id)
 
 
-@app.get("/health")
+@app.get("/api/health")
 async def health():
     db_status = "unknown"
     try:
