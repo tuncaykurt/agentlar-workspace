@@ -61,8 +61,10 @@ class BotEngine:
                     await asyncio.sleep(10)   # 10sn'de bir fiyat kontrolü
                     continue
 
-                # ── Özel Sinyal Stratejisi ────────────────────────────
-                if strategy == "custom_signal":
+                # ── Özel Sinyal + TradingView Webhook Stratejileri ───────
+                # Her ikisi de aynı Redis anahtarından (custom_signal:SEMBOL) okur.
+                # TradingView webhook geldiğinde signals.py bu anahtara yazar.
+                if strategy in ("custom_signal", "tradingview_webhook"):
                     await self._run_custom_signal_cycle(redis, symbol)
                     await asyncio.sleep(30)   # 30sn'de bir kontrol
                     continue

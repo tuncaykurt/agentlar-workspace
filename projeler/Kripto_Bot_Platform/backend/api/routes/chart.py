@@ -390,6 +390,43 @@ def _order_blocks(ohlcv: list, n: int = 8) -> list:
 #  Endpoint
 # ═══════════════════════════════════════════════════════════════
 
+async def _fetch_ohlcv_fallback(symbol: str, interval: str, limit: int) -> list:
+    """
+    Bitget API başarısız olursa Binance public REST'ten veri çeker.
+    Auth gerektirmez — public endpoint.
+    """
+    import httpx
+
+    # Sembol dönüşümü: BTC/USDT:USDT → BTCUSDT
+    binance_symbol = symbol.replace("/", "").replace(":USDT", "").replace(":BTC", "")
+
+    # Binance timeframe → Bitget timeframe eşleşmesi
+    tf_map = {
+        "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
+        "30m": "30m", "1h": "1h", "2h": "2h", "4h": "4h",
+        "6h": "6h", "12h": "12h", "1d": "1d",
+    }
+    binance_tf = tf_map.get(interval, "1h")
+    fetch_limit = min(limit, 1000)
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.binance.com/api/v3/klines",
+                params={"symbol": binance_symbol, "interval": binance_tf, "limit": fetch_limit},
+            )
+            if resp.status_code == 200:
+                raw = resp.json()
+                # Binance format: [ts, open, high, low, close, vol, ...]
+                return [
+                    [int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4]), float(c[5])]
+                    for c in raw
+                ]
+    except Exception as e:
+        print(f"[Chart] Binance fallback hatası ({symbol}): {e}")
+    return []
+
+
 @router.get("/data")
 async def get_chart_data(
     symbol:   str = "BTC/USDT:USDT",
@@ -402,6 +439,15 @@ async def get_chart_data(
     liq_stats_task = get_liquidation_stats(symbol)
     liq_heatmap_task = get_liquidation_heatmap(symbol, hours=168)  # 7 gün
     ohlcv, liq_stats, liq_heatmap = await asyncio.gather(ohlcv_task, liq_stats_task, liq_heatmap_task)
+
+    # ── Fallback: Bitget başarısız olduysa Binance public REST'i dene ──
+    if not ohlcv:
+        print(f"[Chart] Bitget boş döndü, Binance fallback deneniyor ({symbol} {interval})...")
+        ohlcv = await _fetch_ohlcv_fallback(symbol, interval, limit)
+        if ohlcv:
+            print(f"[Chart] Binance fallback başarılı: {len(ohlcv)} mum")
+        else:
+            print(f"[Chart] Her iki kaynak da başarısız, boş veri dönüyor.")
 
     # Timestamp'e göre sırala ve duplikatları kaldır
     ohlcv.sort(key=lambda c: c[0])

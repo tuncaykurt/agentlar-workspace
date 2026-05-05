@@ -149,19 +149,80 @@ def _signal_markers(ohlcv: list, ema9: list, ema21: list) -> list:
     return markers[-20:]  # Son 20 sinyal
 
 
+async def _binance_ticker(symbol: str) -> dict | None:
+    """Binance public REST'ten anlık fiyat çeker (auth gerekmez)."""
+    import httpx
+    binance_symbol = symbol.replace("/", "").replace(":USDT", "").replace(":BTC", "")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(
+                "https://api.binance.com/api/v3/ticker/price",
+                params={"symbol": binance_symbol},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                price = float(data["price"])
+                return {"symbol": symbol, "last": price, "bid": price, "ask": price}
+    except Exception as e:
+        print(f"[Market] Binance ticker fallback hatası: {e}")
+    return None
+
+
+async def _binance_klines(symbol: str, interval: str, limit: int) -> list:
+    """Binance public REST'ten kline çeker (auth gerekmez)."""
+    import httpx
+    binance_symbol = symbol.replace("/", "").replace(":USDT", "").replace(":BTC", "")
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.get(
+                "https://api.binance.com/api/v3/klines",
+                params={"symbol": binance_symbol, "interval": interval, "limit": min(limit, 1000)},
+            )
+            if resp.status_code == 200:
+                return [
+                    [int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4]), float(c[5])]
+                    for c in resp.json()
+                ]
+    except Exception as e:
+        print(f"[Market] Binance klines fallback hatası: {e}")
+    return []
+
+
 @router.get("/ticker")
 async def get_ticker(symbol: str = "BTC/USDT:USDT"):
+    # 1. Redis cache
     redis = get_redis()
     raw = await redis.get(f"ticker:{symbol}")
     if raw:
         return json.loads(raw)
-    ticker = await bitget.exchange.fetch_ticker(symbol)
-    return {"symbol": symbol, "last": ticker["last"], "bid": ticker["bid"], "ask": ticker["ask"]}
+    # 2. Bitget
+    try:
+        ticker = await bitget.exchange.fetch_ticker(symbol)
+        if ticker.get("last"):
+            return {"symbol": symbol, "last": ticker["last"], "bid": ticker["bid"], "ask": ticker["ask"]}
+    except Exception as e:
+        print(f"[Market] Bitget ticker hatası: {e}")
+    # 3. Binance fallback
+    fallback = await _binance_ticker(symbol)
+    if fallback:
+        return fallback
+    return {"symbol": symbol, "last": 0, "bid": 0, "ask": 0}
 
 
 @router.get("/kline")
 async def get_kline(symbol: str = "BTC/USDT:USDT", interval: str = "1m", limit: int = 200):
-    ohlcv = await bitget.get_ohlcv(symbol, interval, limit)
+    # 1. Bitget
+    try:
+        ohlcv = await bitget.get_ohlcv(symbol, interval, limit)
+        if ohlcv:
+            return [
+                {"time": c[0] // 1000, "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]}
+                for c in ohlcv
+            ]
+    except Exception as e:
+        print(f"[Market] Bitget kline hatası: {e}")
+    # 2. Binance fallback
+    ohlcv = await _binance_klines(symbol, interval, limit)
     return [
         {"time": c[0] // 1000, "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]}
         for c in ohlcv
