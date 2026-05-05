@@ -69,7 +69,14 @@ async def list_bots():
 async def create_bot(data: BotCreate):
     try:
         async with async_session() as session:
-            effective_params = data.params or data.strategy_params
+            effective_params = data.params or data.strategy_params or {}
+            if data.tp_pct is not None:
+                effective_params["tp_pct"] = data.tp_pct
+            if data.sl_pct is not None:
+                effective_params["sl_pct"] = data.sl_pct
+            if data.trailing_sl is not None:
+                effective_params["trailing_sl"] = data.trailing_sl
+
             bot = Bot(
                 name=data.name,
                 symbol=data.symbol,
