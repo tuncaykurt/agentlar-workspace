@@ -57,7 +57,7 @@ services:
     networks:
       - internal
 
-  nginx:
+  kripto_nginx:
     build:
       context: .
       dockerfile: nginx.Dockerfile
