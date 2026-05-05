@@ -9,6 +9,11 @@ services:
       - "3000"
     environment:
       - PORT=3000
+      # SSR tarafında Next.js rewrites için backend servis adresi
+      - BACKEND_URL=http://backend:8000
+      # Tarayıcı (client) tarafı için — boş bırakıldığında /api prefix'ini kullanır
+      # (Coolify kendi domain'ini ekler, bu değişken /api yolunu sabitler)
+      - NEXT_PUBLIC_API_URL=
     depends_on:
       - backend
     restart: unless-stopped
