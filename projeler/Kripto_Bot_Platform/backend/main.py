@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import select
 from core.config import settings
+from core.database import async_session
 from core.database import engine, Base
 from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest
 from api.websocket import market_ws, bot_status_ws
