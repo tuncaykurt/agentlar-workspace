@@ -1,7 +1,16 @@
 const getApiBase = () => {
   const base = process.env.NEXT_PUBLIC_API_URL || "";
-  if (!base) return "/api";
-  return base.endsWith("/api") ? base : base + "/api";
+  if (base) return base.endsWith("/api") ? base : base + "/api";
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    // Local dev fallback when Next.js rewrites are not active.
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://localhost:8000/api";
+    }
+  }
+
+  return "/api";
 };
 
 const API_BASE = getApiBase();
