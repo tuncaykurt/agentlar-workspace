@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import select
 from core.config import settings
 from core.database import engine, Base
 from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest

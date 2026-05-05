@@ -8,8 +8,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Next.js sunucu taraflı proxy için — frontend container'dan backend'e erişim
-      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
     depends_on:
       - backend
     restart: unless-stopped
@@ -26,9 +25,20 @@ services:
       - .env
     depends_on:
       - kripto-redis
+      - kripto-db
     restart: unless-stopped
     networks:
-      - coolify
+      - internal
+
+  kripto-db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=kriptobots
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
       - internal
 
   kripto-redis:
@@ -41,9 +51,8 @@ services:
 
 volumes:
   redis_data:
+  postgres_data:
 
 networks:
-  coolify:
-    external: true
   internal:
     driver: bridge

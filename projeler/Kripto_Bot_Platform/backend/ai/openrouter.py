@@ -9,8 +9,8 @@ import httpx
 from core.config import settings
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-FAST_MODEL = "deepseek/deepseek-chat"
-DEEP_MODEL = "anthropic/claude-sonnet-4.6"
+FAST_MODEL = settings.AI_FAST_MODEL
+DEEP_MODEL = settings.AI_DEEP_MODEL
 
 
 async def _call(model: str, prompt: str, max_tokens: int = 600) -> dict:
