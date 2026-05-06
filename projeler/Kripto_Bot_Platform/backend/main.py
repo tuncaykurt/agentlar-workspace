@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import select
@@ -99,6 +99,18 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def fix_double_api_prefix(request: Request, call_next):
+    """Frontend proxy /api/api/... üretirse /api/... olarak düzelt."""
+    path = request.scope.get("path", "")
+    if path.startswith("/api/api/"):
+        new_path = path[4:]  # /api/api/market → /api/market
+        request.scope["path"] = new_path
+        request.scope["raw_path"] = new_path.encode()
+    return await call_next(request)
+
 
 # CORS Ayarları
 origins = [
