@@ -199,16 +199,22 @@ class DataFetcher:
         cache_key = f"ohlcv:{self.exchange_name}:{symbol}:{timeframe}"
         redis = get_redis()
 
-        # 1. Redis cache
-        cached = await redis.get(cache_key)
-        if cached:
-            all_cached = json.loads(cached)
-            # limit kadar son mumu döndür
-            return all_cached[-limit:] if len(all_cached) > limit else all_cached
+        # 1. Redis cache (bağlantı hatası olsa bile devam et)
+        try:
+            cached = await redis.get(cache_key)
+            if cached:
+                all_cached = json.loads(cached)
+                return all_cached[-limit:] if len(all_cached) > limit else all_cached
+        except Exception as e:
+            print(f"[DataFetcher] Redis cache okunamadı ({symbol} {timeframe}): {e}")
 
-        # 2. PostgreSQL
-        rows = await self._read_from_db(symbol, timeframe, max(limit, 500))
-        db_ohlcv = [[r.timestamp, r.open, r.high, r.low, r.close, r.volume] for r in rows] if rows else []
+        # 2. PostgreSQL (bağlantı hatası olsa bile devam et)
+        db_ohlcv = []
+        try:
+            rows = await self._read_from_db(symbol, timeframe, max(limit, 500))
+            db_ohlcv = [[r.timestamp, r.open, r.high, r.low, r.close, r.volume] for r in rows] if rows else []
+        except Exception as e:
+            print(f"[DataFetcher] DB okunamadı ({symbol} {timeframe}): {e}")
 
         # 3. Borsa API — önce Bitget, sonra Binance public fallback
         exchange_candles = []
@@ -253,10 +259,13 @@ class DataFetcher:
             print(f"[DataFetcher] Veri yok: {symbol} {timeframe}")
             return []
 
-        # Redis'e cache'le (tüm veriy, son 500 mum)
+        # Redis'e cache'le (tüm veri, son 500 mum) — hata olsa devam et
         to_cache = merged[-500:] if len(merged) > 500 else merged
         ttl = CACHE_TTL.get(timeframe, 3600)
-        await redis.set(cache_key, json.dumps(to_cache), ex=ttl)
+        try:
+            await redis.set(cache_key, json.dumps(to_cache), ex=ttl)
+        except Exception as e:
+            print(f"[DataFetcher] Redis cache yazılamadı ({symbol} {timeframe}): {e}")
 
         # limit kadar son mumu döndür
         return merged[-limit:] if len(merged) > limit else merged

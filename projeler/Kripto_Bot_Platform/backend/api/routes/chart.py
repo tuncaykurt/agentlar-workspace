@@ -435,12 +435,18 @@ async def get_chart_data(
 ):
     """Tüm teknik indikatörleri döner."""
     import asyncio
-    ohlcv_task = _fetcher.get_ohlcv(symbol, interval, limit)
     liq_stats_task = get_liquidation_stats(symbol)
     liq_heatmap_task = get_liquidation_heatmap(symbol, hours=168)  # 7 gün
-    ohlcv, liq_stats, liq_heatmap = await asyncio.gather(ohlcv_task, liq_stats_task, liq_heatmap_task)
 
-    # ── Fallback: Bitget başarısız olduysa Binance public REST'i dene ──
+    ohlcv = []
+    try:
+        ohlcv = await _fetcher.get_ohlcv(symbol, interval, limit)
+    except Exception as e:
+        print(f"[Chart] get_ohlcv hata ({symbol} {interval}): {e}")
+
+    liq_stats, liq_heatmap = await asyncio.gather(liq_stats_task, liq_heatmap_task)
+
+    # ── Fallback: Bitget/cache başarısız olduysa Binance public REST'i dene ──
     if not ohlcv:
         print(f"[Chart] Bitget boş döndü, Binance fallback deneniyor ({symbol} {interval})...")
         ohlcv = await _fetch_ohlcv_fallback(symbol, interval, limit)

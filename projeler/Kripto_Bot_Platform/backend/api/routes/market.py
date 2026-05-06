@@ -150,21 +150,24 @@ def _signal_markers(ohlcv: list, ema9: list, ema21: list) -> list:
 
 
 async def _binance_ticker(symbol: str) -> dict | None:
-    """Binance public REST'ten anlık fiyat çeker (auth gerekmez)."""
+    """Binance public REST'ten anlık fiyat çeker — önce futures, sonra spot."""
     import httpx
     binance_symbol = symbol.replace("/", "").replace(":USDT", "").replace(":BTC", "")
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(
-                "https://api.binance.com/api/v3/ticker/price",
-                params={"symbol": binance_symbol},
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                price = float(data["price"])
-                return {"symbol": symbol, "last": price, "bid": price, "ask": price}
-    except Exception as e:
-        print(f"[Market] Binance ticker fallback hatası: {e}")
+    endpoints = [
+        f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={binance_symbol}",
+        f"https://api.binance.com/api/v3/ticker/price?symbol={binance_symbol}",
+    ]
+    async with httpx.AsyncClient(timeout=5) as client:
+        for url in endpoints:
+            try:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    price = float(data["price"])
+                    if price > 0:
+                        return {"symbol": symbol, "last": price, "bid": price, "ask": price}
+            except Exception as e:
+                print(f"[Market] Binance ticker hata ({url}): {e}")
     return None
 
 
@@ -190,11 +193,14 @@ async def _binance_klines(symbol: str, interval: str, limit: int) -> list:
 
 @router.get("/ticker")
 async def get_ticker(symbol: str = "BTC/USDT:USDT"):
-    # 1. Redis cache
-    redis = get_redis()
-    raw = await redis.get(f"ticker:{symbol}")
-    if raw:
-        return json.loads(raw)
+    # 1. Redis cache (hata olsa devam et)
+    try:
+        redis = get_redis()
+        raw = await redis.get(f"ticker:{symbol}")
+        if raw:
+            return json.loads(raw)
+    except Exception as e:
+        print(f"[Market] Redis ticker okunamadı: {e}")
     # 2. Bitget
     try:
         ticker = await bitget.exchange.fetch_ticker(symbol)
