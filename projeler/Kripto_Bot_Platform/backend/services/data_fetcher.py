@@ -81,8 +81,9 @@ class DataFetcher:
             try:
                 # Ensure since is an integer
                 since_val = int(since)
+                end_ts_current = int(time.time() * 1000)
                 candles = await self.exchange.exchange.fetch_ohlcv(
-                    symbol, timeframe, since=since_val, limit=200,
+                    symbol, timeframe, since=since_val, limit=200, params={"startTime": str(since_val), "endTime": str(end_ts_current)}
                 )
             except Exception as e:
                 print(f"[DataFetcher] API hatası ({symbol} {timeframe} since={since}): {e} — 3s bekleniyor")
@@ -140,13 +141,17 @@ class DataFetcher:
             # Hiç veri yoksa son 7 günü çek
             since = int((time.time() - (7 * 86_400)) * 1000)
 
-        print(f"[DataFetcher] sync_latest: {symbol} {timeframe} since={since}")
+        end_ts = int(time.time() * 1000)
+        if since >= end_ts:
+            return 0
+
+        print(f"[DataFetcher] sync_latest: {symbol} {timeframe} since={since} end={end_ts}")
 
         try:
             # Bitget V2 market candle endpoint has specific behavior with startTime
             # We ensure since is passed as an integer millisecond timestamp
             candles = await self.exchange.exchange.fetch_ohlcv(
-                symbol, timeframe, since=since, limit=200,
+                symbol, timeframe, since=since, limit=200, params={"startTime": str(since), "endTime": str(end_ts)}
             )
         except Exception as e:
             print(f"[DataFetcher] sync hatası ({symbol} {timeframe} since={since}): {e}")

@@ -174,7 +174,7 @@ async def start_bot(bot_id: int):
 @router.post("/{bot_id}/stop")
 async def stop_bot(bot_id: int):
     if bot_id not in _running_bots:
-        raise HTTPException(400, "Bot calismiypr")
+        raise HTTPException(400, "Bot çalışmıyor")
 
     _running_bots[bot_id].stop()
     _bot_tasks[bot_id].cancel()
@@ -220,12 +220,26 @@ async def update_bot(bot_id: int, data: BotCreate):
         if not bot:
             raise HTTPException(404, "Bot bulunamadi")
 
-        effective_params = data.params or data.strategy_params
+        effective_params = data.params or data.strategy_params or {}
+        if data.tp_pct is not None:
+            effective_params["tp_pct"] = data.tp_pct
+        if data.sl_pct is not None:
+            effective_params["sl_pct"] = data.sl_pct
+        if data.trailing_sl is not None:
+            effective_params["trailing_sl"] = data.trailing_sl
+
+        strategy = data.strategy
+        if strategy == "tradingview_webhook":
+            token = effective_params.get("webhook_token") or effective_params.get("signal_source", "")
+            if token and not token.startswith("builtin") and not token.startswith("custom__"):
+                effective_params["webhook_token"] = token
+            effective_params["_strategy_display"] = "tradingview_webhook"
+
         await session.execute(
             update(Bot).where(Bot.id == bot_id).values(
                 name=data.name,
                 symbol=data.symbol,
-                strategy=data.strategy,
+                strategy=strategy,
                 paper_mode=data.paper_mode,
                 leverage=data.leverage,
                 risk_per_trade=data.risk_per_trade,
@@ -235,7 +249,7 @@ async def update_bot(bot_id: int, data: BotCreate):
             )
         )
         await session.commit()
-        print(f"[Bot Updated] ID:{bot_id} Name:{data.name}")
+        print(f"[Bot Updated] ID:{bot_id} Name:{data.name} Strategy:{strategy} Params:{effective_params}")
 
     return {"id": bot_id, **data.dict(), "running": False}
 

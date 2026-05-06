@@ -1077,8 +1077,8 @@ export default function BotsPage() {
                         {selectedStrategy.icon} {selectedStrategy.name} — Strateji Parametreleri
                       </span>
 
-                      {/* ── Sinyal Kaynağı Seçici — TÜM özel indikatörler (Grid Bot için gösterilmez) ── */}
-                      {form.strategy !== "grid_bot" && <div className="space-y-3">
+                      {/* ── Sinyal Kaynağı Seçici — Grid Bot ve TradingView Webhook için gösterilmez ── */}
+                      {form.strategy !== "grid_bot" && form.strategy !== "tradingview_webhook" && <div className="space-y-3">
                         <p className="text-xs text-slate-400 font-medium">Sinyal Kaynağı Seç</p>
 
                         {/* Dahili algoritma kartı */}

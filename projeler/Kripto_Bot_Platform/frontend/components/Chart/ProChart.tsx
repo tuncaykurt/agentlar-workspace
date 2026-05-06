@@ -609,9 +609,19 @@ export default function ProChart({
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // ── Canlı fiyat güncellemesi (ticker polling + WS fallback) ──
+  // ── Canlı fiyat güncellemesi (ticker polling) ──
+  const liveCandleRef = useRef<{ time: number; open: number; high: number; low: number } | null>(null)
+
+  // symbol/tf/data değişince live candle sıfırla
+  useEffect(() => { liveCandleRef.current = null }, [symbol, tf, data])
+
   useEffect(() => {
-    // Ticker polling: her 3 saniyede bir son mumu güncelle
+    const tfSeconds: Record<string, number> = {
+      "1m": 60, "3m": 180, "5m": 300, "15m": 900,
+      "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400,
+    }
+    const tfSec = tfSeconds[tf] ?? 3600
+
     const poll = async () => {
       if (!candleSeriesRef.current || !data) return
       try {
@@ -619,15 +629,36 @@ export default function ProChart({
         const ticker = await fetch(
           `${API_URL}/market/ticker?symbol=${enc}`
         ).then(r => r.json())
-        if (!ticker?.last) return
-        const price = parseFloat(ticker.last)
-        const lastCandle = data.candles[data.candles.length - 1]
-        if (!lastCandle) return
+        const price = parseFloat(ticker?.last)
+        if (ticker?.last == null || isNaN(price) || price <= 0) return
+
+        // Mevcut mum periyodunun başlangıç zamanı
+        const now = Math.floor(Date.now() / 1000)
+        const candleTime = Math.floor(now / tfSec) * tfSec
+
+        if (!liveCandleRef.current || liveCandleRef.current.time !== candleTime) {
+          // Yeni mum periyodu: tarihi veriyle başlat (eğer aynı periyotsa)
+          const lastCandle = data.candles[data.candles.length - 1]
+          if (lastCandle && lastCandle.time === candleTime) {
+            liveCandleRef.current = {
+              time: candleTime,
+              open: lastCandle.open,
+              high: Math.max(lastCandle.high, price),
+              low:  Math.min(lastCandle.low,  price),
+            }
+          } else {
+            liveCandleRef.current = { time: candleTime, open: price, high: price, low: price }
+          }
+        } else {
+          liveCandleRef.current.high = Math.max(liveCandleRef.current.high, price)
+          liveCandleRef.current.low  = Math.min(liveCandleRef.current.low,  price)
+        }
+
         candleSeriesRef.current.update({
-          time:  lastCandle.time as Time,
-          open:  lastCandle.open,
-          high:  Math.max(lastCandle.high, price),
-          low:   Math.min(lastCandle.low,  price),
+          time:  candleTime as Time,
+          open:  liveCandleRef.current.open,
+          high:  liveCandleRef.current.high,
+          low:   liveCandleRef.current.low,
           close: price,
         })
       } catch { /* sessizce geç */ }
@@ -635,7 +666,7 @@ export default function ProChart({
     poll()
     const id = setInterval(poll, 3000)
     return () => clearInterval(id)
-  }, [symbol, data])
+  }, [symbol, tf, data])
 
   // ── Mum kapanış geri sayımı ──────────────────────────────────
   useEffect(() => {
