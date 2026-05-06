@@ -8,9 +8,8 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   async rewrites() {
-    // BACKEND_URL env ile override edilebilir (Coolify ortamı için)
-    // Varsayılan: docker-compose servis adı "backend"
-    const backendUrl = process.env.BACKEND_URL || "http://backend:8000"
+    // Trailing /api strip et — BACKEND_URL=http://backend:8000/api gibi hatalı env'lere karşı
+    const backendUrl = (process.env.BACKEND_URL || "http://backend:8000").replace(/\/api\/?$/, "")
     return [
       {
         source: '/api/:path*',

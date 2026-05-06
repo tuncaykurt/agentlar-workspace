@@ -9,12 +9,13 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 
-const BACKEND = process.env.BACKEND_URL || "http://backend:8000"
+// Trailing /api varsa strip et (ör: BACKEND_URL=http://backend:8000/api → http://backend:8000)
+const BACKEND = (process.env.BACKEND_URL || "http://backend:8000").replace(/\/api\/?$/, "")
 
 async function proxy(req: NextRequest, { params }: { params: { path: string[] } }) {
-  const pathSegments = params.path ?? []
   const search = req.nextUrl.search ?? ""
-  const targetUrl = `${BACKEND}/api/${pathSegments.join("/")}${search}`
+  // req.nextUrl.pathname zaten /api/... içerir — BACKEND_URL ne olursa olsun çift prefix olmaz
+  const targetUrl = `${BACKEND}${req.nextUrl.pathname}${search}`
 
   // Body okuma (GET/HEAD dışı)
   let body: BodyInit | null = null
