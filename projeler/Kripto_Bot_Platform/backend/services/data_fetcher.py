@@ -79,11 +79,9 @@ class DataFetcher:
 
         while since < end_ts:
             try:
-                # Ensure since is an integer
                 since_val = int(since)
-                end_ts_current = int(time.time() * 1000)
                 candles = await self.exchange.exchange.fetch_ohlcv(
-                    symbol, timeframe, since=since_val, limit=200, params={"startTime": str(since_val), "endTime": str(end_ts_current)}
+                    symbol, timeframe, since=since_val, limit=200
                 )
             except Exception as e:
                 print(f"[DataFetcher] API hatası ({symbol} {timeframe} since={since}): {e} — 3s bekleniyor")
@@ -148,10 +146,8 @@ class DataFetcher:
         print(f"[DataFetcher] sync_latest: {symbol} {timeframe} since={since} end={end_ts}")
 
         try:
-            # Bitget V2 market candle endpoint has specific behavior with startTime
-            # We ensure since is passed as an integer millisecond timestamp
             candles = await self.exchange.exchange.fetch_ohlcv(
-                symbol, timeframe, since=since, limit=200, params={"startTime": str(since), "endTime": str(end_ts)}
+                symbol, timeframe, since=since, limit=200
             )
         except Exception as e:
             print(f"[DataFetcher] sync hatası ({symbol} {timeframe} since={since}): {e}")
@@ -216,7 +212,7 @@ class DataFetcher:
         except Exception as e:
             print(f"[DataFetcher] DB okunamadı ({symbol} {timeframe}): {e}")
 
-        # 3. Borsa API — önce Bitget, sonra Binance public fallback
+        # 3. Borsa API — Bitget CCXT → Bitget V2 direct → Binance fallback
         exchange_candles = []
         try:
             exchange_candles = await self.exchange.exchange.fetch_ohlcv(
@@ -224,8 +220,11 @@ class DataFetcher:
             )
             print(f"[DataFetcher] Bitget'ten {len(exchange_candles)} mum alındı: {symbol} {timeframe}")
         except Exception as e:
-            print(f"[DataFetcher] Bitget hatası ({symbol} {timeframe}): {e} — Binance fallback deneniyor")
-            exchange_candles = await self._binance_fallback(symbol, timeframe, limit)
+            print(f"[DataFetcher] Bitget CCXT hatası ({symbol} {timeframe}): {e} — V2 direct deneniyor")
+            exchange_candles = await self._bitget_v2_direct(symbol, timeframe, limit)
+            if not exchange_candles:
+                print(f"[DataFetcher] Bitget V2 direct başarısız — Binance fallback deneniyor")
+                exchange_candles = await self._binance_fallback(symbol, timeframe, limit)
 
         if exchange_candles:
             db_rows = [
@@ -269,6 +268,49 @@ class DataFetcher:
 
         # limit kadar son mumu döndür
         return merged[-limit:] if len(merged) > limit else merged
+
+    async def _bitget_v2_direct(
+        self,
+        symbol: str,
+        timeframe: str,
+        limit: int = 200,
+    ) -> list:
+        """
+        Direkt Bitget V2 public REST API (httpx) — CCXT'yi bypass eder.
+        CCXT'nin startTime/endTime param sorunlarını atlatır.
+        """
+        import httpx
+        inst_id = symbol.replace("/", "").replace(":USDT", "").replace(":", "")
+        tf_map = {
+            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+            "1h": "1H", "2h": "2H", "4h": "4H", "6h": "6H", "12h": "12H",
+            "1d": "1D", "3d": "3D", "1w": "1W",
+        }
+        granularity = tf_map.get(timeframe, "1H")
+        url = "https://api.bitget.com/api/v2/mix/market/candles"
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.get(url, params={
+                    "symbol": inst_id,
+                    "productType": "USDT-FUTURES",
+                    "granularity": granularity,
+                    "limit": str(min(limit, 1000)),
+                })
+                if resp.status_code == 200:
+                    data = resp.json()
+                    candles_raw = data.get("data", [])
+                    candles = [
+                        [int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4]), float(c[5])]
+                        for c in candles_raw if len(c) >= 6
+                    ]
+                    candles.sort(key=lambda c: c[0])
+                    print(f"[DataFetcher] Bitget V2 direct: {len(candles)} mum ({symbol} {timeframe})")
+                    return candles
+                else:
+                    print(f"[DataFetcher] Bitget V2 direct HTTP {resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            print(f"[DataFetcher] Bitget V2 direct hatası: {e}")
+        return []
 
     async def _binance_fallback(
         self,

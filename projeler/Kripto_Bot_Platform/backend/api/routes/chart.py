@@ -392,38 +392,63 @@ def _order_blocks(ohlcv: list, n: int = 8) -> list:
 
 async def _fetch_ohlcv_fallback(symbol: str, interval: str, limit: int) -> list:
     """
-    Bitget API başarısız olursa Binance public REST'ten veri çeker.
+    Bitget API başarısız olursa önce Bitget V2 direct, sonra Binance REST dener.
     Auth gerektirmez — public endpoint.
     """
     import httpx
 
-    # Sembol dönüşümü: BTC/USDT:USDT → BTCUSDT
-    binance_symbol = symbol.replace("/", "").replace(":USDT", "").replace(":BTC", "")
-
-    # Binance timeframe → Bitget timeframe eşleşmesi
+    inst_id = symbol.replace("/", "").replace(":USDT", "").replace(":BTC", "").replace(":", "")
     tf_map = {
-        "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
-        "30m": "30m", "1h": "1h", "2h": "2h", "4h": "4h",
-        "6h": "6h", "12h": "12h", "1d": "1d",
+        "1m": ("1m", "1m"), "3m": ("3m", "3m"), "5m": ("5m", "5m"),
+        "15m": ("15m", "15m"), "30m": ("30m", "30m"),
+        "1h": ("1H", "1h"), "2h": ("2H", "2h"), "4h": ("4H", "4h"),
+        "6h": ("6H", "6h"), "12h": ("12H", "12h"), "1d": ("1D", "1d"),
     }
-    binance_tf = tf_map.get(interval, "1h")
+    bitget_tf, binance_tf = tf_map.get(interval, ("1H", "1h"))
     fetch_limit = min(limit, 1000)
 
+    # 1. Bitget V2 direct
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.get(
-                "https://api.binance.com/api/v3/klines",
-                params={"symbol": binance_symbol, "interval": binance_tf, "limit": fetch_limit},
+                "https://api.bitget.com/api/v2/mix/market/candles",
+                params={"symbol": inst_id, "productType": "USDT-FUTURES", "granularity": bitget_tf, "limit": str(min(fetch_limit, 1000))},
             )
             if resp.status_code == 200:
-                raw = resp.json()
-                # Binance format: [ts, open, high, low, close, vol, ...]
-                return [
-                    [int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4]), float(c[5])]
-                    for c in raw
-                ]
+                candles_raw = resp.json().get("data", [])
+                if candles_raw:
+                    candles = [
+                        [int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4]), float(c[5])]
+                        for c in candles_raw if len(c) >= 6
+                    ]
+                    candles.sort(key=lambda c: c[0])
+                    print(f"[Chart] Bitget V2 fallback başarılı: {len(candles)} mum")
+                    return candles
     except Exception as e:
-        print(f"[Chart] Binance fallback hatası ({symbol}): {e}")
+        print(f"[Chart] Bitget V2 fallback hatası ({symbol}): {e}")
+
+    # 2. Binance futures fallback
+    for base_url, endpoint in [
+        ("https://fapi.binance.com", f"/fapi/v1/klines"),
+        ("https://api.binance.com", f"/api/v3/klines"),
+    ]:
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.get(
+                    f"{base_url}{endpoint}",
+                    params={"symbol": inst_id, "interval": binance_tf, "limit": fetch_limit},
+                )
+                if resp.status_code == 200:
+                    raw = resp.json()
+                    if raw:
+                        print(f"[Chart] Binance fallback başarılı ({base_url}): {len(raw)} mum")
+                        return [
+                            [int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4]), float(c[5])]
+                            for c in raw
+                        ]
+        except Exception as e:
+            print(f"[Chart] Binance fallback hatası ({base_url}, {symbol}): {e}")
+
     return []
 
 

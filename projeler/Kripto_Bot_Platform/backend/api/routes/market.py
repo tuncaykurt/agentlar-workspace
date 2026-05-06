@@ -149,6 +149,31 @@ def _signal_markers(ohlcv: list, ema9: list, ema21: list) -> list:
     return markers[-20:]  # Son 20 sinyal
 
 
+async def _bitget_v2_ticker(symbol: str) -> dict | None:
+    """Direkt Bitget V2 public REST ticker — CCXT'yi bypass eder."""
+    import httpx
+    inst_id = symbol.replace("/", "").replace(":USDT", "").replace(":", "")
+    url = f"https://api.bitget.com/api/v2/mix/market/ticker?symbol={inst_id}&productType=USDT-FUTURES"
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("data", [])
+                item = items[0] if isinstance(items, list) and items else {}
+                price = float(item.get("lastPr", 0) or 0)
+                if price > 0:
+                    return {
+                        "symbol": symbol,
+                        "last": price,
+                        "bid": float(item.get("bidPr", price) or price),
+                        "ask": float(item.get("askPr", price) or price),
+                    }
+    except Exception as e:
+        print(f"[Market] Bitget V2 ticker hata: {e}")
+    return None
+
+
 async def _binance_ticker(symbol: str) -> dict | None:
     """Binance public REST'ten anlık fiyat çeker — önce futures, sonra spot."""
     import httpx
@@ -201,14 +226,19 @@ async def get_ticker(symbol: str = "BTC/USDT:USDT"):
             return json.loads(raw)
     except Exception as e:
         print(f"[Market] Redis ticker okunamadı: {e}")
-    # 2. Bitget
+    # 2. Bitget CCXT
     try:
         ticker = await bitget.exchange.fetch_ticker(symbol)
-        if ticker.get("last"):
-            return {"symbol": symbol, "last": ticker["last"], "bid": ticker["bid"], "ask": ticker["ask"]}
+        price = float(ticker.get("last") or ticker.get("close") or 0)
+        if price > 0:
+            return {"symbol": symbol, "last": price, "bid": float(ticker.get("bid") or price), "ask": float(ticker.get("ask") or price)}
     except Exception as e:
-        print(f"[Market] Bitget ticker hatası: {e}")
-    # 3. Binance fallback
+        print(f"[Market] Bitget CCXT ticker hatası: {e}")
+    # 3. Bitget V2 direct fallback
+    v2 = await _bitget_v2_ticker(symbol)
+    if v2:
+        return v2
+    # 4. Binance fallback
     fallback = await _binance_ticker(symbol)
     if fallback:
         return fallback
