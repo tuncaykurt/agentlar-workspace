@@ -14,8 +14,9 @@ const BACKEND = (process.env.BACKEND_URL || "http://backend:8000").replace(/\/ap
 
 async function proxy(req: NextRequest, { params }: { params: { path: string[] } }) {
   const search = req.nextUrl.search ?? ""
-  // req.nextUrl.pathname zaten /api/... içerir — BACKEND_URL ne olursa olsun çift prefix olmaz
-  const targetUrl = `${BACKEND}${req.nextUrl.pathname}${search}`
+  // /api/api/... → /api/... normalize et (NEXT_PUBLIC_API_URL build-time inject edilmediğinde oluşan double prefix)
+  const pathname = req.nextUrl.pathname.replace(/^\/api\/api\//, "/api/")
+  const targetUrl = `${BACKEND}${pathname}${search}`
 
   // Body okuma (GET/HEAD dışı)
   let body: BodyInit | null = null
