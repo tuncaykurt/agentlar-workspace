@@ -145,13 +145,20 @@ class DataFetcher:
 
         print(f"[DataFetcher] sync_latest: {symbol} {timeframe} since={since} end={end_ts}")
 
+        candles = []
         try:
             candles = await self.exchange.exchange.fetch_ohlcv(
                 symbol, timeframe, since=since, limit=200
             )
         except Exception as e:
-            print(f"[DataFetcher] sync hatası ({symbol} {timeframe} since={since}): {e}")
-            return 0
+            print(f"[DataFetcher] sync CCXT hatası ({symbol} {timeframe}): {e} — V2 direct deneniyor")
+
+        if not candles:
+            # CCXT başarısız olduysa Bitget V2 direct ile son mumları al, since'den büyükleri filtrele
+            all_candles = await self._bitget_v2_direct(symbol, timeframe, 200)
+            candles = [c for c in all_candles if c[0] >= since]
+            if candles:
+                print(f"[DataFetcher] sync V2 direct: {len(candles)} yeni mum ({symbol} {timeframe})")
 
         if not candles:
             return 0
