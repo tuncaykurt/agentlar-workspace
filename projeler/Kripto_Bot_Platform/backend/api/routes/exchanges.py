@@ -111,15 +111,11 @@ async def test_order(exchange: str, data: TestOrderRequest):
         except Exception as e:
             print(f"[TestOrder] Leverage ayar hatası (devam): {e}")
 
-        # Miktar hesapla (USDT -> kontrat)
+        # Miktar hesapla (USDT -> kontrat adedi)
         contract_size = market.get("contractSize", 1) or 1
-        amount = data.amount_usdt / (current_price * contract_size)
-        # MEXC minimum hassasiyet
-        precision = market.get("precision", {}).get("amount", 8)
-        if isinstance(precision, int):
-            amount = round(amount, precision)
-        else:
-            amount = round(amount, 4)
+        raw_amount = data.amount_usdt / (current_price * contract_size)
+        # MEXC swap: amount = kontrat sayısı (tam sayı), minimum 1
+        amount = max(1, int(raw_amount))
 
         # Market emri aç
         order = await client.create_order(
