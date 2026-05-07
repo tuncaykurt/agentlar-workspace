@@ -250,7 +250,7 @@ export default function BotCard({
             ? `$${exchBalance.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`
             : bot.initial_balance
               ? `$${bot.initial_balance.toLocaleString()}`
-              : "\u2014"
+              : "—"
 
         return status ? (
           <div className="grid grid-cols-3 gap-2">
@@ -260,8 +260,8 @@ export default function BotCard({
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2">
-            <div className="opacity-30"><Stat label="Fiyat" value="\u2014" /></div>
-            <div className="opacity-30"><Stat label="Gunluk PnL" value="\u2014" /></div>
+            <div className="opacity-30"><Stat label="Fiyat" value="—" /></div>
+            <div className="opacity-30"><Stat label="Gunluk PnL" value="—" /></div>
             <Stat label={`Bakiye${exchLabel}`} value={balanceVal} />
           </div>
         )
