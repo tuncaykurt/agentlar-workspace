@@ -51,16 +51,16 @@ export default function BotCard({
     return () => ws.close()
   }, [bot.id, running])
 
-  // Borsa bakiyesini çek (bot duruyorsa)
+  // Borsa bakiyesini çek (exchange bilgisi varsa her zaman)
   useEffect(() => {
-    if (running || !bot.exchange) return
+    if (!bot.exchange) return
     api.get(`/exchanges/${bot.exchange}/balance`)
       .then((data: any) => {
         const usdt = data?.total ?? data?.free ?? null
         if (usdt != null) setExchBalance(Number(usdt))
       })
       .catch(() => {})
-  }, [bot.exchange, running])
+  }, [bot.exchange])
 
   const toggle = async () => {
     setLoading(true)
@@ -150,22 +150,30 @@ export default function BotCard({
       </div>
 
       {/* Stats */}
-      {status ? (
-        <div className="grid grid-cols-3 gap-2">
-          <Stat label="Fiyat" value={`$${status.price?.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`} />
-          <Stat label="Günlük PnL" value={`${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} className={pnlColor} />
-          <Stat label="Bakiye" value={`$${status.risk?.balance?.toLocaleString("tr-TR", {maximumFractionDigits: 0})}`} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-2">
-          <div className="opacity-30"><Stat label="Fiyat" value="—" /></div>
-          <div className="opacity-30"><Stat label="Günlük PnL" value="—" /></div>
-          <Stat
-            label={`Bakiye${bot.exchange ? ` (${bot.exchange.toUpperCase()})` : ""}`}
-            value={exchBalance != null ? `$${exchBalance.toLocaleString("tr-TR", {maximumFractionDigits: 2})}` : bot.initial_balance ? `$${bot.initial_balance.toLocaleString()}` : "—"}
-          />
-        </div>
-      )}
+      {(() => {
+        const exchLabel = bot.exchange ? ` (${bot.exchange.toUpperCase()})` : ""
+        const balanceVal = status?.risk?.balance
+          ? `$${status.risk.balance.toLocaleString("tr-TR", {maximumFractionDigits: 0})}`
+          : exchBalance != null
+            ? `$${exchBalance.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`
+            : bot.initial_balance
+              ? `$${bot.initial_balance.toLocaleString()}`
+              : "—"
+
+        return status ? (
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="Fiyat" value={`$${status.price?.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`} />
+            <Stat label="Günlük PnL" value={`${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} className={pnlColor} />
+            <Stat label={`Bakiye${exchLabel}`} value={balanceVal} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            <div className="opacity-30"><Stat label="Fiyat" value="—" /></div>
+            <div className="opacity-30"><Stat label="Günlük PnL" value="—" /></div>
+            <Stat label={`Bakiye${exchLabel}`} value={balanceVal} />
+          </div>
+        )
+      })()}
 
       {status?.risk?.killed && (
         <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-2.5 py-1.5">
