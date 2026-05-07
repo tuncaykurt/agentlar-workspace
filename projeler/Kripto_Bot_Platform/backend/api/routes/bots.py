@@ -23,6 +23,7 @@ class BotCreate(BaseModel):
     name: str
     symbol: str = "BTC/USDT:USDT"
     strategy: str = "ema_cross"
+    exchange: str = "bitget"
     paper_mode: bool = True
     leverage: int = 3
     risk_per_trade: float = 0.01
@@ -93,7 +94,7 @@ async def create_bot(data: BotCreate):
                 name=data.name,
                 symbol=data.symbol,
                 strategy=strategy,
-                exchange="bitget",
+                exchange=data.exchange,
                 status=BotStatus.STOPPED,
                 paper_mode=data.paper_mode,
                 leverage=data.leverage,

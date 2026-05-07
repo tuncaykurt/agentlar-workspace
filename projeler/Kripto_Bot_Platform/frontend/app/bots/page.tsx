@@ -257,6 +257,7 @@ const defaultForm = () => ({
   name: "",
   symbol: "BTC/USDT:USDT",
   strategy: "ema_cross",
+  exchange: "mexc",
   paper_mode: true,
   leverage: 10,
   risk_mode: "pct" as "pct" | "usdt",   // % veya sabit USDT
@@ -855,6 +856,7 @@ export default function BotsPage() {
         name: f.name,
         symbol: f.symbol,
         strategy: "grid_bot",
+        exchange: f.exchange,
         paper_mode: f.paper_mode,
         leverage: 1,
         risk_per_trade: 0.01,
@@ -875,6 +877,7 @@ export default function BotsPage() {
       strategy: useCustomSig ? "custom_signal"
         : f.strategy.startsWith("custom__") ? "custom_signal"
         : f.strategy,
+      exchange: f.exchange,
       paper_mode: f.paper_mode,
       leverage: f.leverage,
       risk_per_trade: f.risk_mode === "pct"
@@ -1380,6 +1383,25 @@ export default function BotsPage() {
               {/* ── Adım 1: Sembol & Zaman ── */}
               {step === 1 && (
                 <div className="space-y-5">
+                  <Field label="Borsa" description="Botun işlem yapacağı borsa">
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { v: "mexc",   label: "MEXC",   icon: "🟢" },
+                        { v: "bitget", label: "Bitget", icon: "🔵" },
+                        { v: "binance", label: "Binance", icon: "🟡" },
+                      ].map(o => (
+                        <button key={o.v} onClick={() => set("exchange", o.v)}
+                          className={`py-2.5 px-3 rounded-lg border text-sm font-medium transition-all ${
+                            form.exchange === o.v
+                              ? "border-blue-500/60 bg-blue-500/10 text-blue-300"
+                              : "border-slate-800 text-slate-400 hover:border-slate-600 hover:text-white"
+                          }`}>
+                          <span className="mr-1.5">{o.icon}</span>{o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+
                   <Field label="İşlem Sembolü" description="Botun işlem yapacağı futures kontrat">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-64 overflow-y-auto pr-1">
                       {SYMBOLS.map(s => (
@@ -1441,7 +1463,7 @@ export default function BotsPage() {
                         <p className="text-xs text-slate-500 mt-0.5">
                           {form.paper_mode
                             ? "Gerçek para kullanılmaz. Stratejiyi güvenle test et."
-                            : "Gerçek işlem açılır. Bitget API bağlantısı gereklidir."}
+                            : `Gerçek işlem açılır. ${form.exchange.toUpperCase()} API bağlantısı gereklidir.`}
                         </p>
                       </div>
                     </div>
@@ -1558,6 +1580,7 @@ export default function BotsPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {[
                       { label: "Strateji",   value: selectedStrategy.name,                   icon: selectedStrategy.icon },
+                      { label: "Borsa",      value: form.exchange.toUpperCase(),             icon: "🏦" },
                       { label: "Sembol",     value: fmtSymbol(form.symbol),                       icon: "🪙" },
                       { label: "Kaldıraç",   value: `${form.leverage}x`,                   icon: "⚡" },
                       { label: "Bakiye",     value: `$${form.initial_balance.toLocaleString()}`, icon: "💵" },
