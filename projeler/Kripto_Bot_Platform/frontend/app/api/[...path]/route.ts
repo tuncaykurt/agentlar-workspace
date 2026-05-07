@@ -1,30 +1,24 @@
 /**
  * Catch-all API Route — /api/* → Backend Proxy
  *
- * Next.js standalone build'de rewrites() middleware'i bazen runtime'da
- * çalışmaz. Bu route handler her /api/* isteğini backend'e yönlendirir.
- *
- * BACKEND_URL env ile yapılandırılabilir (Coolify panelinden set edilebilir).
- * Varsayılan: http://backend:8000 (docker-compose servis adı)
+ * Tüm /api/* isteklerini backend'e proxy eder.
+ * redirect: "follow" ile 307 redirect'ler server-side takip edilir,
+ * internal URL'ler (http://backend:8000) tarayıcıya ASLA sızmaz.
  */
 import { NextRequest, NextResponse } from "next/server"
 
-// Trailing /api varsa strip et (ör: BACKEND_URL=http://backend:8000/api → http://backend:8000)
 const BACKEND = (process.env.BACKEND_URL || "http://backend:8000").replace(/\/api\/?$/, "")
 
 async function proxy(req: NextRequest, { params }: { params: { path: string[] } }) {
   const search = req.nextUrl.search ?? ""
-  // /api/api/... → /api/... normalize et (NEXT_PUBLIC_API_URL build-time inject edilmediğinde oluşan double prefix)
   const pathname = req.nextUrl.pathname.replace(/^\/api\/api\//, "/api/")
   const targetUrl = `${BACKEND}${pathname}${search}`
 
-  // Body okuma (GET/HEAD dışı)
-  let body: BodyInit | null = null
+  let body: ArrayBuffer | null = null
   if (req.method !== "GET" && req.method !== "HEAD") {
     body = await req.arrayBuffer()
   }
 
-  // Yönlendirme başlıkları (host hariç — backend kendi hostname'ini bilir)
   const headers = new Headers()
   req.headers.forEach((value, key) => {
     if (key.toLowerCase() !== "host") {
@@ -37,26 +31,17 @@ async function proxy(req: NextRequest, { params }: { params: { path: string[] } 
       method: req.method,
       headers,
       body: body ?? undefined,
-      // @ts-ignore — Next.js fetch cache bypass
+      // @ts-ignore
       cache: "no-store",
-      redirect: "manual",
+      redirect: "follow",
     })
 
     const resHeaders = new Headers()
     backendRes.headers.forEach((value, key) => {
-      // Transfer-encoding ve connection başlıklarını geçirme
       if (!["transfer-encoding", "connection"].includes(key.toLowerCase())) {
         resHeaders.set(key, value)
       }
     })
-
-    // Location başlığını düzelt (307/308 redirect'lerinde backend host'unu gizle)
-    if (resHeaders.has("location")) {
-      const location = resHeaders.get("location")
-      if (location && location.startsWith(BACKEND)) {
-        resHeaders.set("location", location.replace(BACKEND, ""))
-      }
-    }
 
     const resBody = await backendRes.arrayBuffer()
     return new NextResponse(resBody, {
@@ -66,7 +51,7 @@ async function proxy(req: NextRequest, { params }: { params: { path: string[] } 
   } catch (err) {
     console.error(`[API Proxy] ${req.method} ${targetUrl} → Hata:`, err)
     return NextResponse.json(
-      { detail: "Backend'e ulaşılamıyor. Lütfen servis durumunu kontrol edin." },
+      { detail: "Backend'e ulaşılamıyor." },
       { status: 502 }
     )
   }
