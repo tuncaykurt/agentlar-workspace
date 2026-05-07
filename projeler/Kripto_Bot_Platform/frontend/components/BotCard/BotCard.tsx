@@ -15,6 +15,16 @@ interface Bot {
   initial_balance?: number
 }
 
+interface Position {
+  side: string
+  size: number
+  entry_price: number
+  notional: number
+  pnl_usdt: number
+  pnl_pct: number
+  leverage: number
+}
+
 interface BotStatus {
   signal: string | null
   price: number
@@ -24,6 +34,7 @@ interface BotStatus {
     daily_pnl_pct: number
     killed: boolean
   }
+  position?: Position | null
 }
 
 interface Filters {
@@ -266,6 +277,49 @@ export default function BotCard({
           </div>
         )
       })()}
+
+      {/* Açık Pozisyon */}
+      {status?.position && (
+        <div className={clsx(
+          "rounded-lg border p-2.5 space-y-1.5",
+          status.position.side === "long"
+            ? "bg-green-500/5 border-green-500/20"
+            : "bg-red-500/5 border-red-500/20"
+        )}>
+          <div className="flex items-center justify-between">
+            <span className={clsx(
+              "text-xs font-bold px-2 py-0.5 rounded",
+              status.position.side === "long"
+                ? "bg-green-500/15 text-green-400"
+                : "bg-red-500/15 text-red-400"
+            )}>
+              {status.position.side === "long" ? "LONG" : "SHORT"} {status.position.leverage}x
+            </span>
+            <span className={clsx(
+              "text-sm font-bold",
+              status.position.pnl_usdt >= 0 ? "text-green-400" : "text-red-400"
+            )}>
+              {status.position.pnl_usdt >= 0 ? "+" : ""}{status.position.pnl_usdt.toFixed(2)} USDT
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-[11px]">
+            <div>
+              <span className="text-slate-500">Giris</span>
+              <p className="text-slate-300 font-medium">${status.position.entry_price.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
+            </div>
+            <div>
+              <span className="text-slate-500">Miktar</span>
+              <p className="text-slate-300 font-medium">${status.position.notional.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
+            </div>
+            <div>
+              <span className="text-slate-500">PnL %</span>
+              <p className={clsx("font-medium", status.position.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                {status.position.pnl_pct >= 0 ? "+" : ""}{status.position.pnl_pct.toFixed(2)}%
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {status?.risk?.killed && (
         <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-2.5 py-1.5">

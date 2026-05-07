@@ -328,6 +328,37 @@ class BotEngine:
         print(f"[Bot] {msg}")
         await self._alert(msg)
 
+    async def _get_position_info(self, symbol: str) -> dict | None:
+        """Açık pozisyon bilgisi: side, size, entry, pnl, pnl_pct"""
+        try:
+            positions = await self.exchange.exchange.fetch_positions([symbol])
+            for pos in positions:
+                contracts = float(pos.get("contracts", 0))
+                if contracts == 0:
+                    continue
+                entry = float(pos.get("entryPrice", 0) or 0)
+                notional = float(pos.get("notional", 0) or 0)
+                unrealized_pnl = float(pos.get("unrealizedPnl", 0) or 0)
+                # info alanından da bakabiliriz
+                info = pos.get("info", {})
+                if not unrealized_pnl and info:
+                    unrealized_pnl = float(info.get("unrealizedPnl", 0) or 0)
+                if not notional and info:
+                    notional = float(info.get("positionValue", 0) or info.get("openOrderInitialMargin", 0) or 0)
+                pnl_pct = (unrealized_pnl / notional * 100) if notional else 0
+                return {
+                    "side": pos.get("side", ""),
+                    "size": contracts,
+                    "entry_price": entry,
+                    "notional": round(notional, 2),
+                    "pnl_usdt": round(unrealized_pnl, 4),
+                    "pnl_pct": round(pnl_pct, 2),
+                    "leverage": int(pos.get("leverage", 0) or 0),
+                }
+        except Exception as e:
+            print(f"[Bot] Pozisyon bilgisi hatası: {e}")
+        return None
+
     async def _log_signal(
         self,
         signal_type: str,
@@ -507,6 +538,7 @@ class BotEngine:
         if not sig:
             # Sinyal yok ama status güncelle (frontend fiyat görsün)
             if cur_price:
+                position = await self._get_position_info(symbol)
                 status_data = {
                     "signal": None,
                     "price": cur_price,
@@ -516,6 +548,7 @@ class BotEngine:
                         "daily_pnl_pct": self.risk.daily_pnl_pct,
                         "killed": self.risk.killed,
                     },
+                    "position": position,
                     "ts": datetime.utcnow().isoformat(),
                 }
                 await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
@@ -623,6 +656,7 @@ class BotEngine:
                 action="rejected", reject_reason="Pozisyon boyutu 0 (risk manager)")
 
         # Status'u Redis'e yaz (frontend görebilsin)
+        position = await self._get_position_info(symbol)
         status_data = {
             "signal": signal_type,
             "price": cur_price or price,
@@ -632,6 +666,7 @@ class BotEngine:
                 "daily_pnl_pct": self.risk.daily_pnl_pct,
                 "killed": self.risk.killed,
             },
+            "position": position,
             "ts": datetime.utcnow().isoformat(),
         }
         await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
