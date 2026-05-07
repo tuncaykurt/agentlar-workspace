@@ -836,6 +836,7 @@ export default function BotsPage() {
   const [allCustomInds,    setAllCustomInds]    = useState<Array<{id:string;name:string;producesSignals:boolean}>>([])
   const [exchangeBalance,  setExchangeBalance]  = useState<number | null>(null)
   const [balanceLoading,   setBalanceLoading]   = useState(false)
+  const [filter,           setFilter]           = useState<"all"|"active"|"stopped"|"paper"|"live">("all")
 
   useEffect(() => {
     api.get("/bots/").then(data => {
@@ -1726,6 +1727,36 @@ export default function BotsPage() {
           </div>
         )}
 
+        {/* ── Filtre Butonları ── */}
+        {bots.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {([
+              { key: "all",     label: "Tümü",    count: bots.length },
+              { key: "active",  label: "Aktif",   count: bots.filter(b => b.running).length },
+              { key: "stopped", label: "Durdurulmuş", count: bots.filter(b => !b.running).length },
+              { key: "paper",   label: "Paper",   count: bots.filter(b => b.paper_mode).length },
+              { key: "live",    label: "Canlı",   count: bots.filter(b => !b.paper_mode).length },
+            ] as const).map(f => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  filter === f.key
+                    ? f.key === "active"  ? "bg-green-500/15 text-green-400 border-green-500/30"
+                    : f.key === "stopped" ? "bg-slate-500/15 text-slate-300 border-slate-500/30"
+                    : f.key === "paper"   ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
+                    : f.key === "live"    ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                    : "bg-slate-700/50 text-white border-slate-600"
+                    : "bg-transparent text-slate-500 border-slate-800 hover:text-slate-300 hover:border-slate-700"
+                }`}
+              >
+                {f.label}
+                <span className="ml-1.5 text-[10px] opacity-60">{f.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* ── Bot Listesi ── */}
         {bots.length === 0 && !creating ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -1735,7 +1766,15 @@ export default function BotsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {bots.map(bot => (
+            {bots
+              .filter(b =>
+                filter === "all"     ? true :
+                filter === "active"  ? b.running :
+                filter === "stopped" ? !b.running :
+                filter === "paper"   ? b.paper_mode :
+                filter === "live"    ? !b.paper_mode : true
+              )
+              .map(bot => (
               <BotCard
                 key={bot.id}
                 bot={bot}
