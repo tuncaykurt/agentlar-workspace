@@ -197,6 +197,50 @@ async def test_order(exchange: str, data: TestOrderRequest):
         await client.close()
 
 
+class ClosePositionRequest(BaseModel):
+    symbol: str = "ETH/USDT:USDT"
+
+
+@router.post("/{exchange}/close-position")
+async def close_position(exchange: str, data: ClosePositionRequest):
+    """Açık pozisyonu kapat"""
+    redis = get_redis()
+    raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{exchange}")
+    if not raw:
+        raise HTTPException(404, f"{exchange} için API key bulunamadı")
+
+    keys = json.loads(raw)
+    client = create_exchange_client(exchange, keys["api_key"], keys["secret"], keys.get("passphrase", ""))
+
+    try:
+        await client.load_markets()
+        positions = await client.fetch_positions([data.symbol])
+        closed = []
+        for pos in positions:
+            contracts = float(pos.get("contracts", 0))
+            if contracts == 0:
+                continue
+            side = "sell" if pos["side"] == "long" else "buy"
+            order = await client.create_order(
+                symbol=data.symbol,
+                type="market",
+                side=side,
+                amount=contracts,
+                params={"reduceOnly": True},
+            )
+            closed.append({
+                "side": pos["side"],
+                "contracts": contracts,
+                "order_id": order.get("id"),
+            })
+        return {"status": "ok", "closed": closed}
+    except Exception as e:
+        import traceback
+        raise HTTPException(400, f"Pozisyon kapatma hatası: {str(e)}\n{traceback.format_exc()}")
+    finally:
+        await client.close()
+
+
 @router.get("/{exchange}/balance")
 async def get_balance(exchange: str):
     redis = get_redis()

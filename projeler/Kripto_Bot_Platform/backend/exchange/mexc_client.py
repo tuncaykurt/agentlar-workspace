@@ -31,8 +31,16 @@ class MEXCClient:
         amount: float,
         order_type: str = "market",
         price: float = None,
+        tp_price: float = None,
+        sl_price: float = None,
     ) -> dict:
         params = {}
+        # TP/SL doğrudan market emrine ekle (MEXC destekliyor)
+        if tp_price:
+            params["takeProfitPrice"] = tp_price
+        if sl_price:
+            params["stopLossPrice"] = sl_price
+
         if order_type == "market":
             order = await self.exchange.create_market_order(symbol, side, amount, params=params)
         else:

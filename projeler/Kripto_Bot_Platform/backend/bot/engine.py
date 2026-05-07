@@ -273,8 +273,32 @@ class BotEngine:
         if paper:
             self.paper_trades.append(trade)
         else:
-            await self.exchange.set_leverage(self.config["symbol"], self.risk.leverage)
-            await self.exchange.place_order(self.config["symbol"], side, qty, "market")
+            symbol = self.config["symbol"]
+            await self.exchange.set_leverage(symbol, self.risk.leverage)
+
+            # Kontrat boyutu hesabı (MEXC swap: tam sayı kontrat)
+            amount = qty
+            try:
+                await self.exchange.exchange.load_markets()
+                market = self.exchange.exchange.market(symbol)
+                contract_size = market.get("contractSize", 1) or 1
+                if contract_size < 1:
+                    # MEXC gibi borsalarda kontrat adedi tam sayı olmalı
+                    raw_amount = (qty * price) / (price * contract_size)
+                    amount = max(1, int(raw_amount))
+                    # qty zaten coin cinsinden, kontrata çevir
+                    amount = max(1, int(qty / contract_size))
+            except Exception as e:
+                print(f"[Bot] Kontrat hesabı hatası (devam): {e}")
+
+            # TP/SL fiyatları hesapla
+            tp_price = round(take_profit, 2) if take_profit else None
+            sl_price = round(stop_loss, 2) if stop_loss else None
+
+            await self.exchange.place_order(
+                symbol, side, amount, "market",
+                tp_price=tp_price, sl_price=sl_price,
+            )
 
         self.signal_history.append(trade)
 
