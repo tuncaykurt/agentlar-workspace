@@ -86,8 +86,10 @@ export default function BotCard({
 
   return (
     <div className={clsx(
-      "rounded-xl border p-4 space-y-3 transition-colors",
-      running ? "border-blue-500/30 bg-[#0d1117]" : "border-slate-800 bg-[#0d1117]"
+      "rounded-xl border p-4 space-y-3 transition-all duration-300",
+      running
+        ? "border-green-500/30 bg-[#0d1117] shadow-[0_0_15px_rgba(34,197,94,0.08)]"
+        : "border-slate-800 bg-[#0d1117]/70 opacity-75"
     )}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
@@ -143,17 +145,25 @@ export default function BotCard({
               </svg>
             </button>
           )}
+          {/* Toggle Switch */}
           <button
             onClick={toggle}
             disabled={loading}
-            className={clsx(
-              "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border",
-              running
-                ? "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                : "border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
-            )}
+            title={running ? "Durdur" : "Başlat"}
+            className="relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none disabled:opacity-50"
+            style={{ backgroundColor: running ? "#22c55e" : "#334155" }}
           >
-            {loading ? "..." : running ? "Durdur" : "Başlat"}
+            <span
+              className={clsx(
+                "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-300",
+                running ? "translate-x-6" : "translate-x-1"
+              )}
+            />
+            {loading && (
+              <span className="absolute inset-0 flex items-center justify-center">
+                <span className="w-3 h-3 border-2 border-white/60 border-t-transparent rounded-full animate-spin" />
+              </span>
+            )}
           </button>
         </div>
       </div>
