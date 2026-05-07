@@ -604,9 +604,9 @@ class BotEngine:
         params = self.config.get("params", {})
         signal_mode = params.get("signal_mode", "normal")
         position_action = params.get("position_action", "close_and_open")
-        take_profit_pct = params.get("take_profit_pct", 0)
-        stop_loss_pct = params.get("stop_loss_pct", 0)
-        trailing_stop_pct = params.get("trailing_stop_pct", 0)
+        take_profit_pct = params.get("take_profit_pct") or params.get("tp_pct", 0)
+        stop_loss_pct = params.get("stop_loss_pct") or params.get("sl_pct", 0)
+        trailing_stop_pct = params.get("trailing_stop_pct") or params.get("trailing_sl_pct", 0)
         max_position_hours = params.get("max_position_hours", 0)
 
         # Sinyal moduna göre yönü belirle

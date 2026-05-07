@@ -9,6 +9,8 @@ interface Bot {
   id: number; name: string; symbol: string
   strategy: string; paper_mode: boolean; running: boolean
   exchange?: string; initial_balance?: number
+  leverage?: number; risk_per_trade?: number; max_daily_loss?: number
+  params?: Record<string, any> | null
 }
 
 // ─── Semboller ────────────────────────────────────────────────────────────────
@@ -942,8 +944,8 @@ export default function BotsPage() {
         : f.risk_per_trade / f.initial_balance,
       max_daily_loss: f.max_daily_loss / 100,
       initial_balance: f.initial_balance,
-      tp_pct: f.tp_pct / 100,
-      sl_pct: f.sl_pct / 100,
+      tp_pct: f.tp_pct,
+      sl_pct: f.sl_pct,
       trailing_sl: f.trailing_sl,
       strategy_params: useCustomSig
         ? { signal_source: sigSrc, ...Object.fromEntries(
@@ -1007,12 +1009,24 @@ export default function BotsPage() {
 
   const openEdit = (bot: Bot) => {
     setEditingBot(bot)
+    const p = bot.params || {}
     setForm({
       ...defaultForm(),
       name: bot.name,
       symbol: bot.symbol,
-      strategy: bot.strategy,
+      strategy: p._strategy_display || bot.strategy,
+      exchange: bot.exchange || "mexc",
       paper_mode: bot.paper_mode,
+      leverage: bot.leverage || 10,
+      risk_per_trade: (bot.risk_per_trade || 0.01) * 100,
+      max_daily_loss: (bot.max_daily_loss || 0.05) * 100,
+      initial_balance: bot.initial_balance || 1000,
+      tp_pct: p.tp_pct || 0,
+      sl_pct: p.sl_pct || 0,
+      trailing_sl: p.trailing_sl || false,
+      strategy_params: Object.fromEntries(
+        Object.entries(p).filter(([k]) => !["tp_pct", "sl_pct", "trailing_sl", "_strategy_display"].includes(k))
+      ),
     })
     setStep(0)
   }
@@ -1376,7 +1390,7 @@ export default function BotsPage() {
                         <NumInput
                           value={form.tp_pct}
                           onChange={v => set("tp_pct", v)}
-                          min={0} max={100} step={0.5} suffix="%"
+                          min={0} max={1000} step={0.5} suffix="%"
                         />
                       </Field>
                       <Field label="Stop Loss %" description="Pozisyon kaç % zararda kapansın (0 = kapalı)">
