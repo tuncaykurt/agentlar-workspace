@@ -290,16 +290,28 @@ function Field({ label, description, children }: {
 }
 
 function NumInput({ value, onChange, min, max, step = 1, prefix, suffix }: {
-  value: number; onChange: (v: number) => void
+  value: number | string; onChange: (v: number) => void
   min?: number; max?: number; step?: number
   prefix?: string; suffix?: string
 }) {
+  const [raw, setRaw] = React.useState(String(value))
+  React.useEffect(() => { setRaw(String(value)) }, [value])
   return (
     <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg overflow-hidden focus-within:border-blue-500 transition-colors">
       {prefix && <span className="px-2.5 text-slate-500 text-xs border-r border-slate-700 py-2">{prefix}</span>}
       <input
-        type="number" value={value} min={min} max={max} step={step}
-        onChange={e => onChange(parseFloat(e.target.value) || 0)}
+        type="number" value={raw} min={min} max={max} step={step}
+        onChange={e => {
+          setRaw(e.target.value)
+          const n = parseFloat(e.target.value)
+          if (!isNaN(n)) onChange(n)
+        }}
+        onBlur={() => {
+          if (raw === "" || isNaN(parseFloat(raw))) {
+            setRaw("0")
+            onChange(0)
+          }
+        }}
         className="flex-1 bg-transparent px-3 py-2 text-white text-sm focus:outline-none text-right min-w-0"
       />
       {suffix && <span className="px-2.5 text-slate-500 text-xs border-l border-slate-700 py-2">{suffix}</span>}
