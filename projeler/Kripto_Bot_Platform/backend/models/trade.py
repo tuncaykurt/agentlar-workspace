@@ -52,6 +52,59 @@ class Trade(Base):
     exchange_order_id = Column(String, nullable=True)
     opened_at = Column(DateTime(timezone=True), server_default=func.now())
     closed_at = Column(DateTime(timezone=True), nullable=True)
+    # Zengin metadata — akıllı filtreler için
+    exchange = Column(String, nullable=True)
+    session_type = Column(String, nullable=True)      # asia, europe, america
+    exit_reason = Column(String, nullable=True)       # tp, sl, trailing, manual, liquidation, signal
+    volatility_1h = Column(Float, nullable=True)      # ATR bazlı volatilite
+    volume_ratio = Column(Float, nullable=True)       # ortalamaya göre hacim oranı
+    funding_rate = Column(Float, nullable=True)       # giriş anındaki funding
+    rsi_at_entry = Column(Float, nullable=True)       # girişteki RSI
+    ema200_trend = Column(String, nullable=True)      # bull, bear, sideways
+    leverage_used = Column(Integer, nullable=True)    # kullanılan kaldıraç
+    duration_minutes = Column(Integer, nullable=True) # işlem süresi dakika
+
+
+class EconomicEvent(Base):
+    """Ekonomik takvim olayları — FED, CPI, PPI, NFP vb."""
+    __tablename__ = "economic_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    country = Column(String, nullable=True)           # US, EU, CN, CRYPTO
+    category = Column(String, nullable=True)          # interest_rate, inflation, employment, crypto
+    impact = Column(String, nullable=False)            # high, medium, low
+    event_time = Column(DateTime(timezone=True), nullable=False)
+    actual = Column(String, nullable=True)
+    forecast = Column(String, nullable=True)
+    previous = Column(String, nullable=True)
+    source = Column(String, default="finnhub")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_event_time", "event_time"),
+        Index("ix_event_impact", "impact", "event_time"),
+    )
+
+
+class BotFilter(Base):
+    """Bot bazlı akıllı filtre ayarları"""
+    __tablename__ = "bot_filters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bot_id = Column(Integer, nullable=False, unique=True)
+    # Toggle'lar
+    smart_hours_enabled = Column(Boolean, default=False)       # Akıllı saat filtresi
+    news_protection_enabled = Column(Boolean, default=False)   # Haber koruması
+    self_learning_enabled = Column(Boolean, default=False)     # Öz-öğrenme
+    trend_filter_enabled = Column(Boolean, default=False)      # EMA200 trend filtresi
+    volatility_filter_enabled = Column(Boolean, default=False) # Volatilite limiti
+    # Parametreler
+    news_blackout_minutes = Column(Integer, default=30)        # Haberden ±X dk işlem yasağı
+    min_win_rate_threshold = Column(Float, default=0.4)        # Öz-öğrenme: min %40 başarı
+    max_volatility_atr = Column(Float, nullable=True)          # Maks ATR değeri
+    blocked_hours = Column(Text, nullable=True)                # JSON: [3,4,5] yasaklı saatler (UTC)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class OHLCV(Base):

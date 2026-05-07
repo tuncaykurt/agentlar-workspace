@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     CRYPTOPANIC_API_KEY: str = ""    # cryptopanic.com ücretsiz kayıt
     COINGLASS_API_KEY: str = ""      # coinglass.com ücretsiz kayıt
+    FINNHUB_API_KEY: str = ""        # finnhub.io ücretsiz kayıt
 
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""

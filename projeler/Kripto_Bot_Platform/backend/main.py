@@ -7,11 +7,12 @@ from sqlalchemy import select, text
 from core.config import settings
 from core.database import async_session
 from core.database import engine, Base
-from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest
+from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest, calendar
 from api.websocket import market_ws, bot_status_ws
 from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
 from services.liquidation_collector import start_liquidation_collector
+from services.economic_calendar import start_calendar_sync
 
 
 async def _init_db():
@@ -29,6 +30,19 @@ async def _init_db():
         ("bots", "params", "ALTER TABLE bots ADD COLUMN params TEXT"),
         ("bots", "risk_per_trade", "ALTER TABLE bots ADD COLUMN risk_per_trade FLOAT DEFAULT 0.01"),
         ("bots", "max_daily_loss", "ALTER TABLE bots ADD COLUMN max_daily_loss FLOAT DEFAULT 0.05"),
+        # Trade zengin metadata
+        ("trades", "exchange", "ALTER TABLE trades ADD COLUMN exchange VARCHAR"),
+        ("trades", "session_type", "ALTER TABLE trades ADD COLUMN session_type VARCHAR"),
+        ("trades", "exit_reason", "ALTER TABLE trades ADD COLUMN exit_reason VARCHAR"),
+        ("trades", "volatility_1h", "ALTER TABLE trades ADD COLUMN volatility_1h FLOAT"),
+        ("trades", "volume_ratio", "ALTER TABLE trades ADD COLUMN volume_ratio FLOAT"),
+        ("trades", "funding_rate", "ALTER TABLE trades ADD COLUMN funding_rate FLOAT"),
+        ("trades", "rsi_at_entry", "ALTER TABLE trades ADD COLUMN rsi_at_entry FLOAT"),
+        ("trades", "ema200_trend", "ALTER TABLE trades ADD COLUMN ema200_trend VARCHAR"),
+        ("trades", "leverage_used", "ALTER TABLE trades ADD COLUMN leverage_used INTEGER"),
+        ("trades", "duration_minutes", "ALTER TABLE trades ADD COLUMN duration_minutes INTEGER"),
+        # Bot filters
+        ("bot_filters", "volatility_filter_enabled", "ALTER TABLE bot_filters ADD COLUMN volatility_filter_enabled BOOLEAN DEFAULT FALSE"),
     ]
     for table, column, sql in migrations:
         try:
@@ -99,6 +113,13 @@ async def lifespan(app: FastAPI):
             tasks.extend(liq_tasks)
         except Exception as e:
             print(f"[Main] LiqCollector başlatılamadı (devam ediliyor): {e}")
+
+        # 5. Ekonomik takvim senkronizasyonu (FinnHub — key varsa)
+        try:
+            tasks.append(asyncio.create_task(start_calendar_sync()))
+            print("[Main] Ekonomik takvim senkronizasyonu başlatıldı.")
+        except Exception as e:
+            print(f"[Main] EconCal başlatılamadı (devam ediliyor): {e}")
     except Exception as e:
         print(f"[Main] Başlatma hatası (devam ediliyor): {e}")
 
@@ -147,6 +168,7 @@ for _prefix in ["/api", "/api/api"]:
     app.include_router(signals.router, prefix=_prefix)
     app.include_router(data.router, prefix=_prefix)
     app.include_router(backtest.router, prefix=_prefix)
+    app.include_router(calendar.router, prefix=_prefix)
 
 
 # WebSocket routes

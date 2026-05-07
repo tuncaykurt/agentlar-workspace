@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/bots",          label: "Botlar" },
   { href: "/backtest",      label: "Backtest" },
   { href: "/strategy-view", label: "Strateji" },
+  { href: "/news",           label: "Haberler" },
   { href: "/settings",      label: "Borsa Bağlantısı" },
 ]
 
