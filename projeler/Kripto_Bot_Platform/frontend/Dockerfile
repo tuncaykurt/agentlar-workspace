@@ -6,6 +6,7 @@ RUN npm install --frozen-lockfile || npm install
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+# cache-bust: v3
 COPY . .
 # NEXT_PUBLIC_* değişkenler build-time'da bake edilir.
 # Boş bırakarak client tarayıcıda relative /api kullanılmasını sağlıyoruz.

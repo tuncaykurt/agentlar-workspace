@@ -32,8 +32,6 @@ services:
       - "8000"
     env_file:
       - .env
-    command: >
-      sh -c "grep -q 'redirect_slashes' /app/main.py || sed -i 's/app = FastAPI(/app = FastAPI(redirect_slashes=False,/' /app/main.py; uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1"
     depends_on:
       - kripto-redis
       - kripto-db
