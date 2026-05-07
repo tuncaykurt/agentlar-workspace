@@ -85,131 +85,62 @@ async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Veritabanı tablolarını oluştur (hata olursa devam et)
-    await _init_db()
-
-    symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT"]
+    print("[Main] Lifespan başlıyor...")
     tasks = []
 
+    # 1. Veritabanı tablolarını oluştur (max 15sn, hata olursa devam et)
+    try:
+        await asyncio.wait_for(_init_db(), timeout=15)
+    except asyncio.TimeoutError:
+        print("[Main] DB init timeout (15s) — devam ediliyor.")
+    except Exception as e:
+        print(f"[Main] DB init hatası (devam ediliyor): {e}")
+
+    symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT"]
+
+    # 2. Bitget WebSocket akışları
     try:
         if settings.BITGET_API_KEY:
-            # 2. WebSocket akışlarını başlat
             for sym in symbols:
                 tasks.append(asyncio.create_task(bitget.subscribe_kline(sym, "1m")))
                 tasks.append(asyncio.create_task(bitget.subscribe_ticker(sym)))
             print(f"[Main] {len(symbols)} sembol için veri akışı başlatıldı.")
 
-            # 3. Arka plan veri senkronizasyonu başlat (DB erişilebilirse)
             try:
                 fetcher = DataFetcher(bitget)
                 tasks.append(asyncio.create_task(_start_data_sync(fetcher, symbols)))
-                print("[Main] Arka plan veri senkronizasyonu başlatıldı.")
             except Exception as e:
-                print(f"[Main] DataSync başlatılamadı (devam ediliyor): {e}")
+                print(f"[Main] DataSync başlatılamadı: {e}")
         else:
             print("[Main] BITGET_API_KEY tanımlı değil — WebSocket başlatılmadı.")
-
-        # 4. Likidasyon collector başlat (Binance WS — her zaman, Coinglass — key varsa)
-        try:
-            liq_tasks = await start_liquidation_collector()
-            tasks.extend(liq_tasks)
-        except Exception as e:
-            print(f"[Main] LiqCollector başlatılamadı (devam ediliyor): {e}")
-
-        # 5. Ekonomik takvim senkronizasyonu (FinnHub — key varsa)
-        try:
-            tasks.append(asyncio.create_task(start_calendar_sync()))
-            print("[Main] Ekonomik takvim senkronizasyonu başlatıldı.")
-        except Exception as e:
-            print(f"[Main] EconCal başlatılamadı (devam ediliyor): {e}")
-
-        # 6. DB'de status=running olan botları otomatik başlat (deploy/restart sonrası)
-        try:
-            from models.trade import Bot, BotStatus
-            from bot.engine import BotEngine
-            from api.routes.bots import _running_bots, _bot_tasks
-            from exchange.exchange_factory import create_exchange_client
-            from core.redis_client import get_redis
-            import json as _json
-
-            async with async_session() as session:
-                result = await session.execute(
-                    select(Bot).where(Bot.status == BotStatus.RUNNING)
-                )
-                running_bots = result.scalars().all()
-
-                # _ExClient wrapper class — döngü dışında tanımla
-                class _ExClient:
-                    def __init__(self, ex):
-                        self.exchange = ex
-                    async def set_leverage(self, symbol, leverage):
-                        await self.exchange.set_leverage(leverage, symbol)
-                    async def place_order(self, symbol, side, amount, order_type="market", price=None, tp_price=None, sl_price=None):
-                        params = {}
-                        if tp_price: params["takeProfitPrice"] = tp_price
-                        if sl_price: params["stopLossPrice"] = sl_price
-                        if order_type == "market":
-                            return await self.exchange.create_market_order(symbol, side, amount, params=params)
-                        return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
-                    async def fetch_positions(self, symbols=None):
-                        return await self.exchange.fetch_positions(symbols)
-                    async def get_funding_rate(self, symbol):
-                        t = await self.exchange.fetch_ticker(symbol)
-                        return float(t.get("info", {}).get("fundingRate", 0))
-                    async def get_ohlcv(self, symbol, tf="1m", limit=200):
-                        return await self.exchange.fetch_ohlcv(symbol, tf, limit=limit)
-
-                redis = get_redis()
-
-                for bot in running_bots:
-                    try:
-                        raw = await redis.get(f"exchange_keys:default:{bot.exchange or 'bitget'}")
-                        if raw:
-                            keys = _json.loads(raw)
-                            ex_client_raw = create_exchange_client(
-                                bot.exchange or "bitget",
-                                keys["api_key"], keys["secret"], keys.get("passphrase", "")
-                            )
-                            ex_client = _ExClient(ex_client_raw)
-                        else:
-                            ex_client = bitget  # fallback to bitget
-
-                        config = {
-                            "id": bot.id,
-                            "name": bot.name,
-                            "symbol": bot.symbol,
-                            "strategy": bot.strategy,
-                            "paper_mode": bot.paper_mode,
-                            "leverage": bot.leverage,
-                            "risk_per_trade": bot.risk_per_trade,
-                            "max_daily_loss": bot.max_daily_loss,
-                            "initial_balance": bot.initial_balance or 1000.0,
-                            "params": _json.loads(bot.params) if bot.params else {},
-                        }
-                        engine_inst = BotEngine(config, ex_client)
-                        _running_bots[bot.id] = engine_inst
-
-                        async def _safe_run(eng, bot_id):
-                            """Bot engine'i güvenli çalıştır — crash olursa logla, uygulamayı çökertme."""
-                            try:
-                                await eng.run()
-                            except Exception as e:
-                                print(f"[Main] Bot #{bot_id} çalışırken hata: {e}")
-
-                        task = asyncio.create_task(_safe_run(engine_inst, bot.id))
-                        _bot_tasks[bot.id] = task
-                        print(f"[Main] Bot #{bot.id} '{bot.name}' otomatik başlatıldı.")
-                    except Exception as e:
-                        print(f"[Main] Bot #{bot.id} başlatma hatası: {e}")
-
-                if running_bots:
-                    print(f"[Main] {len(running_bots)} bot otomatik olarak yeniden başlatıldı.")
-        except Exception as e:
-            print(f"[Main] Bot auto-start hatası (devam ediliyor): {e}")
-
     except Exception as e:
-        print(f"[Main] Başlatma hatası (devam ediliyor): {e}")
+        print(f"[Main] Bitget WS hatası (devam ediliyor): {e}")
 
+    # 3. Likidasyon collector (max 10sn timeout)
+    try:
+        liq_tasks = await asyncio.wait_for(start_liquidation_collector(), timeout=10)
+        tasks.extend(liq_tasks)
+    except asyncio.TimeoutError:
+        print("[Main] LiqCollector timeout (10s) — devam ediliyor.")
+    except Exception as e:
+        print(f"[Main] LiqCollector hatası (devam ediliyor): {e}")
+
+    # 4. Ekonomik takvim senkronizasyonu
+    try:
+        tasks.append(asyncio.create_task(start_calendar_sync()))
+        print("[Main] Ekonomik takvim senkronizasyonu başlatıldı.")
+    except Exception as e:
+        print(f"[Main] EconCal hatası (devam ediliyor): {e}")
+
+    # 5. Bot auto-start (max 15sn timeout)
+    try:
+        await asyncio.wait_for(_auto_start_bots(tasks), timeout=15)
+    except asyncio.TimeoutError:
+        print("[Main] Bot auto-start timeout (15s) — devam ediliyor.")
+    except Exception as e:
+        print(f"[Main] Bot auto-start hatası (devam ediliyor): {e}")
+
+    print("[Main] ✓ Uygulama hazır.")
     yield
 
     # Kapatma
@@ -219,6 +150,90 @@ async def lifespan(app: FastAPI):
         await bitget.close()
     except Exception:
         pass
+
+
+async def _auto_start_bots(tasks: list):
+    """DB'de status=running olan botları otomatik başlat."""
+    from models.trade import Bot, BotStatus
+    from bot.engine import BotEngine
+    from api.routes.bots import _running_bots, _bot_tasks
+    from exchange.exchange_factory import create_exchange_client
+    from core.redis_client import get_redis
+    import json as _json
+
+    class _ExClient:
+        def __init__(self, ex):
+            self.exchange = ex
+        async def set_leverage(self, symbol, leverage):
+            await self.exchange.set_leverage(leverage, symbol)
+        async def place_order(self, symbol, side, amount, order_type="market", price=None, tp_price=None, sl_price=None):
+            params = {}
+            if tp_price: params["takeProfitPrice"] = tp_price
+            if sl_price: params["stopLossPrice"] = sl_price
+            if order_type == "market":
+                return await self.exchange.create_market_order(symbol, side, amount, params=params)
+            return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
+        async def fetch_positions(self, symbols=None):
+            return await self.exchange.fetch_positions(symbols)
+        async def get_funding_rate(self, symbol):
+            t = await self.exchange.fetch_ticker(symbol)
+            return float(t.get("info", {}).get("fundingRate", 0))
+        async def get_ohlcv(self, symbol, tf="1m", limit=200):
+            return await self.exchange.fetch_ohlcv(symbol, tf, limit=limit)
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(Bot).where(Bot.status == BotStatus.RUNNING)
+        )
+        running_bots = result.scalars().all()
+
+    if not running_bots:
+        print("[Main] Otomatik başlatılacak bot yok.")
+        return
+
+    redis = get_redis()
+
+    for bot in running_bots:
+        try:
+            raw = await redis.get(f"exchange_keys:default:{bot.exchange or 'bitget'}")
+            if raw:
+                keys = _json.loads(raw)
+                ex_client_raw = create_exchange_client(
+                    bot.exchange or "bitget",
+                    keys["api_key"], keys["secret"], keys.get("passphrase", "")
+                )
+                ex_client = _ExClient(ex_client_raw)
+            else:
+                ex_client = bitget
+
+            config = {
+                "id": bot.id,
+                "name": bot.name,
+                "symbol": bot.symbol,
+                "strategy": bot.strategy,
+                "paper_mode": bot.paper_mode,
+                "leverage": bot.leverage,
+                "risk_per_trade": bot.risk_per_trade,
+                "max_daily_loss": bot.max_daily_loss,
+                "initial_balance": bot.initial_balance or 1000.0,
+                "params": _json.loads(bot.params) if bot.params else {},
+            }
+            engine_inst = BotEngine(config, ex_client)
+            _running_bots[bot.id] = engine_inst
+
+            async def _safe_run(eng, bot_id):
+                try:
+                    await eng.run()
+                except Exception as e:
+                    print(f"[Main] Bot #{bot_id} çalışırken hata: {e}")
+
+            task = asyncio.create_task(_safe_run(engine_inst, bot.id))
+            _bot_tasks[bot.id] = task
+            print(f"[Main] Bot #{bot.id} '{bot.name}' otomatik başlatıldı.")
+        except Exception as e:
+            print(f"[Main] Bot #{bot.id} başlatma hatası: {e}")
+
+    print(f"[Main] {len(running_bots)} bot otomatik olarak yeniden başlatıldı.")
 
 
 app = FastAPI(
