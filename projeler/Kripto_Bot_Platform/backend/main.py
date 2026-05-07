@@ -43,6 +43,8 @@ async def _init_db():
         ("trades", "duration_minutes", "ALTER TABLE trades ADD COLUMN duration_minutes INTEGER"),
         # Bot filters
         ("bot_filters", "volatility_filter_enabled", "ALTER TABLE bot_filters ADD COLUMN volatility_filter_enabled BOOLEAN DEFAULT FALSE"),
+        # Signal logs ek kolonları (tablo create_all ile oluşur, bu sadece güvenlik)
+        ("signal_logs", "raw_payload", "ALTER TABLE signal_logs ADD COLUMN raw_payload TEXT"),
     ]
     for table, column, sql in migrations:
         try:
@@ -136,10 +138,31 @@ async def lifespan(app: FastAPI):
                 )
                 running_bots = result.scalars().all()
 
+                # _ExClient wrapper class — döngü dışında tanımla
+                class _ExClient:
+                    def __init__(self, ex):
+                        self.exchange = ex
+                    async def set_leverage(self, symbol, leverage):
+                        await self.exchange.set_leverage(leverage, symbol)
+                    async def place_order(self, symbol, side, amount, order_type="market", price=None, tp_price=None, sl_price=None):
+                        params = {}
+                        if tp_price: params["takeProfitPrice"] = tp_price
+                        if sl_price: params["stopLossPrice"] = sl_price
+                        if order_type == "market":
+                            return await self.exchange.create_market_order(symbol, side, amount, params=params)
+                        return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
+                    async def fetch_positions(self, symbols=None):
+                        return await self.exchange.fetch_positions(symbols)
+                    async def get_funding_rate(self, symbol):
+                        t = await self.exchange.fetch_ticker(symbol)
+                        return float(t.get("info", {}).get("fundingRate", 0))
+                    async def get_ohlcv(self, symbol, tf="1m", limit=200):
+                        return await self.exchange.fetch_ohlcv(symbol, tf, limit=limit)
+
+                redis = get_redis()
+
                 for bot in running_bots:
                     try:
-                        # Bot'un exchange client'ını oluştur
-                        redis = get_redis()
                         raw = await redis.get(f"exchange_keys:default:{bot.exchange or 'bitget'}")
                         if raw:
                             keys = _json.loads(raw)
@@ -147,26 +170,6 @@ async def lifespan(app: FastAPI):
                                 bot.exchange or "bitget",
                                 keys["api_key"], keys["secret"], keys.get("passphrase", "")
                             )
-                            # BotEngine bir wrapper client bekliyor, exchange attr ile
-                            class _ExClient:
-                                def __init__(self, ex):
-                                    self.exchange = ex
-                                async def set_leverage(self, symbol, leverage):
-                                    await self.exchange.set_leverage(leverage, symbol)
-                                async def place_order(self, symbol, side, amount, order_type="market", price=None, tp_price=None, sl_price=None):
-                                    params = {}
-                                    if tp_price: params["takeProfitPrice"] = tp_price
-                                    if sl_price: params["stopLossPrice"] = sl_price
-                                    if order_type == "market":
-                                        return await self.exchange.create_market_order(symbol, side, amount, params=params)
-                                    return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
-                                async def fetch_positions(self, symbols=None):
-                                    return await self.exchange.fetch_positions(symbols)
-                                async def get_funding_rate(self, symbol):
-                                    t = await self.exchange.fetch_ticker(symbol)
-                                    return float(t.get("info", {}).get("fundingRate", 0))
-                                async def get_ohlcv(self, symbol, tf="1m", limit=200):
-                                    return await self.exchange.fetch_ohlcv(symbol, tf, limit=limit)
                             ex_client = _ExClient(ex_client_raw)
                         else:
                             ex_client = bitget  # fallback to bitget
@@ -185,7 +188,15 @@ async def lifespan(app: FastAPI):
                         }
                         engine_inst = BotEngine(config, ex_client)
                         _running_bots[bot.id] = engine_inst
-                        task = asyncio.create_task(engine_inst.run())
+
+                        async def _safe_run(eng, bot_id):
+                            """Bot engine'i güvenli çalıştır — crash olursa logla, uygulamayı çökertme."""
+                            try:
+                                await eng.run()
+                            except Exception as e:
+                                print(f"[Main] Bot #{bot_id} çalışırken hata: {e}")
+
+                        task = asyncio.create_task(_safe_run(engine_inst, bot.id))
                         _bot_tasks[bot.id] = task
                         print(f"[Main] Bot #{bot.id} '{bot.name}' otomatik başlatıldı.")
                     except Exception as e:

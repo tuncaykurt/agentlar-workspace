@@ -16,7 +16,8 @@ from ai.market_context import collect_full_context
 from services.data_fetcher import DataFetcher
 from core.redis_client import get_redis
 from core.database import async_session
-from models.trade import SignalLog
+from models.trade import SignalLog, BotFilter
+from services.economic_calendar import is_news_blackout
 from bot.strategies.rsi_oversold import RSIOversoldStrategy
 from bot.strategies.macd_signal import MACDSignalStrategy
 from bot.strategies.bollinger_bounce import BollingerBounceStrategy
@@ -102,6 +103,16 @@ class BotEngine:
                     print(f"[Bot] Teknik sinyal: {signal} @ {close}")
                     # Sinyal geldi — logla
                     await self._log_signal(signal, close, source=strategy, reason="Teknik sinyal", action="received")
+
+                    # Haber koruması kontrolü
+                    blackout = await self._check_news_protection()
+                    if blackout:
+                        reason = blackout.get("reason", "Haber blackout")
+                        print(f"[Bot] Haber koruması aktif — sinyal filtrelendi: {reason}")
+                        await self._log_signal(signal, close, source=strategy, action="filtered",
+                            reject_reason=f"Haber koruması: {reason}")
+                        await asyncio.sleep(300)
+                        continue
 
                     # 3. Tüm piyasa bağlamını paralel topla
                     funding = await self._get_funding(symbol)
@@ -359,6 +370,24 @@ class BotEngine:
             print(f"[Bot] Pozisyon bilgisi hatası: {e}")
         return None
 
+    async def _check_news_protection(self) -> dict | None:
+        """Haber koruması aktifse blackout kontrolü yap. Blackout varsa dict döner, yoksa None."""
+        try:
+            async with async_session() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(BotFilter).where(BotFilter.bot_id == self.config["id"])
+                )
+                f = result.scalar_one_or_none()
+                if f and f.news_protection_enabled:
+                    minutes = f.news_blackout_minutes or 30
+                    blackout = await is_news_blackout(minutes_buffer=minutes)
+                    if blackout.get("blackout"):
+                        return blackout
+        except Exception as e:
+            print(f"[Bot] Haber koruması kontrol hatası: {e}")
+        return None
+
     async def _log_signal(
         self,
         signal_type: str,
@@ -597,6 +626,16 @@ class BotEngine:
         # Sinyal geldi — logla
         await self._log_signal(signal_type, price, source=source, reason=reason,
             action="received", raw_payload=json.dumps(sig))
+
+        # Haber koruması kontrolü
+        blackout = await self._check_news_protection()
+        if blackout:
+            bl_reason = blackout.get("reason", "Haber blackout")
+            print(f"[Bot {self.config['name']}] Haber koruması aktif — sinyal filtrelendi: {bl_reason}")
+            await self._log_signal(signal_type, price, source=source, reason=reason,
+                action="filtered", reject_reason=f"Haber koruması: {bl_reason}")
+            await redis.set(last_ts_key, sig.get("ts", ""), ex=600)
+            return
 
         # Mevcut pozisyon kontrolü
         current_position = await self._get_current_position(symbol)
