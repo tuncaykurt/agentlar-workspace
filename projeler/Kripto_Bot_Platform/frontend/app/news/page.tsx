@@ -159,8 +159,47 @@ function formatEventTime(iso: string | null): { date: string; time: string; rela
   }
 }
 
+interface CryptoNews {
+  id: number | string
+  title: string
+  url: string
+  source: string
+  published_at: string
+  currencies: string[]
+  kind: string
+  votes: { positive: number; negative: number; important: number }
+  sentiment: string
+}
+
+const SENTIMENT_COLORS: Record<string, string> = {
+  bullish: "text-green-400 bg-green-500/10 border-green-500/20",
+  bearish: "text-red-400 bg-red-500/10 border-red-500/20",
+  neutral: "text-slate-400 bg-slate-500/10 border-slate-500/20",
+}
+
+const SENTIMENT_LABELS: Record<string, string> = {
+  bullish: "Yukselis",
+  bearish: "Dusus",
+  neutral: "Notr",
+}
+
+function timeAgo(dateStr: string): string {
+  if (!dateStr) return ""
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diffMin = Math.round((now.getTime() - d.getTime()) / 60000)
+  if (diffMin < 1) return "az once"
+  if (diffMin < 60) return `${diffMin} dk once`
+  if (diffMin < 1440) return `${Math.round(diffMin / 60)} saat once`
+  return `${Math.round(diffMin / 1440)} gun once`
+}
+
 export default function NewsPage() {
+  const [tab, setTab] = useState<"calendar" | "crypto">("calendar")
   const [events, setEvents] = useState<EconEvent[]>([])
+  const [cryptoNews, setCryptoNews] = useState<CryptoNews[]>([])
+  const [newsLoading, setNewsLoading] = useState(false)
+  const [newsCurrency, setNewsCurrency] = useState("")
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [filter, setFilter] = useState<string>("all")
@@ -186,10 +225,30 @@ export default function NewsPage() {
     }
   }, [])
 
+  const fetchCryptoNews = useCallback(async (currency = "") => {
+    setNewsLoading(true)
+    try {
+      const params = currency ? `?currency=${currency}&limit=50` : "?limit=50"
+      const data = await api.get(`/calendar/crypto-news${params}`)
+      if (Array.isArray(data)) setCryptoNews(data)
+    } catch (e) {
+      console.error("Crypto news fetch error:", e)
+    } finally {
+      setNewsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchEvents()
     fetchBlackout()
   }, [fetchEvents, fetchBlackout])
+
+  useEffect(() => {
+    if (tab === "crypto" && cryptoNews.length === 0) {
+      fetchCryptoNews(newsCurrency)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   const handleSync = async () => {
     setSyncing(true)
@@ -220,17 +279,135 @@ export default function NewsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Ekonomik Takvim</h1>
-          <p className="text-sm text-slate-400">Piyasalari etkileyen global ekonomik olaylar</p>
+          <h1 className="text-xl font-bold">Haberler & Takvim</h1>
+          <p className="text-sm text-slate-400">Kripto haberler ve ekonomik olaylar</p>
         </div>
+        <div className="flex items-center gap-2">
+          {tab === "calendar" && (
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
+            >
+              {syncing ? "Guncelleniyor..." : "Guncelle"}
+            </button>
+          )}
+          {tab === "crypto" && (
+            <button
+              onClick={() => fetchCryptoNews(newsCurrency)}
+              disabled={newsLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
+            >
+              {newsLoading ? "Yukleniyor..." : "Yenile"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-800">
         <button
-          onClick={handleSync}
-          disabled={syncing}
-          className="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
+          onClick={() => setTab("calendar")}
+          className={`flex-1 px-4 py-2 text-sm rounded-md font-medium transition-all ${
+            tab === "calendar"
+              ? "bg-blue-600 text-white shadow"
+              : "text-slate-400 hover:text-white"
+          }`}
         >
-          {syncing ? "Guncelleniyor..." : "Guncelle"}
+          Ekonomik Takvim
+        </button>
+        <button
+          onClick={() => setTab("crypto")}
+          className={`flex-1 px-4 py-2 text-sm rounded-md font-medium transition-all ${
+            tab === "crypto"
+              ? "bg-blue-600 text-white shadow"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          Kripto Haberler
         </button>
       </div>
+
+      {/* ═══ Kripto Haberler Sekmesi ═══ */}
+      {tab === "crypto" && (
+        <div className="space-y-4">
+          {/* Currency Filter */}
+          <div className="flex gap-2 flex-wrap">
+            {["", "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE"].map(c => (
+              <button
+                key={c}
+                onClick={() => { setNewsCurrency(c); fetchCryptoNews(c) }}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  newsCurrency === c
+                    ? "bg-blue-600/20 border-blue-500/40 text-blue-400"
+                    : "border-slate-700 text-slate-400 hover:border-slate-600 hover:text-white"
+                }`}
+              >
+                {c || "Tumu"}
+              </button>
+            ))}
+          </div>
+
+          {/* News List */}
+          {newsLoading ? (
+            <div className="text-center py-12 text-slate-400">Yukleniyor...</div>
+          ) : cryptoNews.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <p className="text-lg mb-2">Haber bulunamadi</p>
+              <p className="text-sm">CryptoPanic API anahtarini Coolify env&apos;ye ekleyin veya RSS kaynaklari kontrol ediliyor.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {cryptoNews.map((news) => {
+                const sentColor = SENTIMENT_COLORS[news.sentiment] || SENTIMENT_COLORS.neutral
+                const sentLabel = SENTIMENT_LABELS[news.sentiment] || "Notr"
+                const totalVotes = news.votes.positive + news.votes.negative
+                return (
+                  <a
+                    key={news.id}
+                    href={news.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-3 rounded-lg border border-slate-800 hover:border-slate-600 transition-colors group"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors line-clamp-2">
+                          {news.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <span className="text-xs text-slate-500">{news.source}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${sentColor}`}>
+                            {sentLabel}
+                          </span>
+                          {news.currencies.length > 0 && news.currencies.map(c => (
+                            <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              {c}
+                            </span>
+                          ))}
+                          {totalVotes > 0 && (
+                            <span className="text-[10px] text-slate-600">
+                              {news.votes.positive > 0 && <span className="text-green-500">+{news.votes.positive}</span>}
+                              {news.votes.negative > 0 && <span className="text-red-500 ml-1">-{news.votes.negative}</span>}
+                              {news.votes.important > 0 && <span className="text-yellow-500 ml-1">!{news.votes.important}</span>}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-slate-500">{timeAgo(news.published_at)}</p>
+                      </div>
+                    </div>
+                  </a>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ Ekonomik Takvim Sekmesi ═══ */}
+      {tab === "calendar" && <>
 
       {/* Blackout Banner */}
       {blackout?.blackout && (
@@ -400,6 +577,8 @@ export default function NewsPage() {
           ))}
         </div>
       )}
+
+      </>}
     </div>
   )
 }

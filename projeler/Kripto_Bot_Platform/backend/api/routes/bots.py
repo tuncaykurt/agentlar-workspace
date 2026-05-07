@@ -263,3 +263,69 @@ async def bot_status(bot_id: int):
     if not raw:
         return {"status": "no_data"}
     return json.loads(raw)
+
+
+# ─── Akıllı Filtreler ────────────────────────────────────────────────────────
+
+class FilterUpdate(BaseModel):
+    smart_hours_enabled: Optional[bool] = None
+    news_protection_enabled: Optional[bool] = None
+    self_learning_enabled: Optional[bool] = None
+    trend_filter_enabled: Optional[bool] = None
+    volatility_filter_enabled: Optional[bool] = None
+    news_blackout_minutes: Optional[int] = None
+    min_win_rate_threshold: Optional[float] = None
+    max_volatility_atr: Optional[float] = None
+    blocked_hours: Optional[str] = None
+
+
+@router.get("/{bot_id}/filters")
+async def get_filters(bot_id: int):
+    from models.trade import BotFilter
+    async with async_session() as session:
+        result = await session.execute(select(BotFilter).where(BotFilter.bot_id == bot_id))
+        f = result.scalar_one_or_none()
+        if not f:
+            return {
+                "bot_id": bot_id,
+                "smart_hours_enabled": False,
+                "news_protection_enabled": False,
+                "self_learning_enabled": False,
+                "trend_filter_enabled": False,
+                "volatility_filter_enabled": False,
+                "news_blackout_minutes": 30,
+                "min_win_rate_threshold": 0.4,
+                "max_volatility_atr": None,
+                "blocked_hours": None,
+            }
+        return {
+            "bot_id": f.bot_id,
+            "smart_hours_enabled": f.smart_hours_enabled,
+            "news_protection_enabled": f.news_protection_enabled,
+            "self_learning_enabled": f.self_learning_enabled,
+            "trend_filter_enabled": f.trend_filter_enabled,
+            "volatility_filter_enabled": f.volatility_filter_enabled,
+            "news_blackout_minutes": f.news_blackout_minutes,
+            "min_win_rate_threshold": f.min_win_rate_threshold,
+            "max_volatility_atr": f.max_volatility_atr,
+            "blocked_hours": f.blocked_hours,
+        }
+
+
+@router.patch("/{bot_id}/filters")
+async def update_filters(bot_id: int, data: FilterUpdate):
+    from models.trade import BotFilter
+    async with async_session() as session:
+        result = await session.execute(select(BotFilter).where(BotFilter.bot_id == bot_id))
+        f = result.scalar_one_or_none()
+        if not f:
+            f = BotFilter(bot_id=bot_id)
+            session.add(f)
+
+        for field, value in data.dict(exclude_none=True).items():
+            setattr(f, field, value)
+
+        await session.commit()
+        await session.refresh(f)
+
+    return {"status": "ok", "bot_id": bot_id}

@@ -26,9 +26,43 @@ interface BotStatus {
   }
 }
 
+interface Filters {
+  smart_hours_enabled: boolean
+  news_protection_enabled: boolean
+  self_learning_enabled: boolean
+  trend_filter_enabled: boolean
+  volatility_filter_enabled: boolean
+}
+
+const FILTER_DEFS = [
+  { key: "smart_hours_enabled",      label: "Akilli Saat Filtresi",  icon: "clock" },
+  { key: "news_protection_enabled",  label: "Haber Korumasi",        icon: "shield" },
+  { key: "self_learning_enabled",    label: "Oz-Ogrenme Modu",       icon: "brain" },
+  { key: "trend_filter_enabled",     label: "Trend Filtresi (EMA200)", icon: "trend" },
+  { key: "volatility_filter_enabled", label: "Volatilite Limiti",    icon: "zap" },
+] as const
+
 // "BTC/USDT:USDT" → "BTCUSDT.P"
 function fmtSymbol(s: string) {
   return s.replace("/USDT:USDT", "USDT.P").replace("/", "")
+}
+
+function FilterIcon({ type }: { type: string }) {
+  const cls = "w-3 h-3"
+  switch (type) {
+    case "clock":
+      return <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    case "shield":
+      return <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    case "brain":
+      return <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/><path d="M9 21h6M10 17v4M14 17v4"/></svg>
+    case "trend":
+      return <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+    case "zap":
+      return <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    default:
+      return null
+  }
 }
 
 export default function BotCard({
@@ -44,6 +78,14 @@ export default function BotCard({
   const [running, setRunning] = useState(bot.running)
   const [loading, setLoading] = useState(false)
   const [exchBalance, setExchBalance] = useState<number | null>(null)
+  const [filters, setFilters] = useState<Filters>({
+    smart_hours_enabled: false,
+    news_protection_enabled: false,
+    self_learning_enabled: false,
+    trend_filter_enabled: false,
+    volatility_filter_enabled: false,
+  })
+  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     if (!running) { setStatus(null); return }
@@ -71,6 +113,24 @@ export default function BotCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bot.id])
 
+  // Filtreleri çek
+  useEffect(() => {
+    api.get(`/bots/${bot.id}/filters`)
+      .then((data: any) => {
+        if (data && !data.error) {
+          setFilters({
+            smart_hours_enabled: data.smart_hours_enabled ?? false,
+            news_protection_enabled: data.news_protection_enabled ?? false,
+            self_learning_enabled: data.self_learning_enabled ?? false,
+            trend_filter_enabled: data.trend_filter_enabled ?? false,
+            volatility_filter_enabled: data.volatility_filter_enabled ?? false,
+          })
+        }
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bot.id])
+
   const toggle = async () => {
     setLoading(true)
     try {
@@ -80,6 +140,19 @@ export default function BotCard({
       setRunning(r => !r)
     } finally { setLoading(false) }
   }
+
+  const toggleFilter = async (key: string) => {
+    const newVal = !filters[key as keyof Filters]
+    setFilters(prev => ({ ...prev, [key]: newVal }))
+    try {
+      await api.patch(`/bots/${bot.id}/filters`, { [key]: newVal })
+    } catch {
+      // Geri al
+      setFilters(prev => ({ ...prev, [key]: !newVal }))
+    }
+  }
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length
 
   const pnlPct  = status?.risk?.daily_pnl_pct ?? 0
   const pnlColor = pnlPct >= 0 ? "text-green-400" : "text-red-400"
@@ -104,17 +177,17 @@ export default function BotCard({
             {running && (
               <span className="flex items-center gap-1 text-[10px] text-green-400 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                Çalışıyor
+                Calisiyor
               </span>
             )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             <span className="text-slate-400 font-medium">{fmtSymbol(bot.symbol)}</span>
-            <span className="mx-1">·</span>
+            <span className="mx-1">&middot;</span>
             {bot.strategy}
             {bot.exchange && (
               <>
-                <span className="mx-1">·</span>
+                <span className="mx-1">&middot;</span>
                 <span className="text-slate-400">{bot.exchange.toUpperCase()}</span>
               </>
             )}
@@ -127,7 +200,7 @@ export default function BotCard({
             <button
               onClick={onEdit}
               className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
-              title="Düzenle"
+              title="Duzenle"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -149,7 +222,7 @@ export default function BotCard({
           <button
             onClick={toggle}
             disabled={loading}
-            title={running ? "Durdur" : "Başlat"}
+            title={running ? "Durdur" : "Baslat"}
             className="relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none disabled:opacity-50"
             style={{ backgroundColor: running ? "#22c55e" : "#334155" }}
           >
@@ -177,18 +250,18 @@ export default function BotCard({
             ? `$${exchBalance.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`
             : bot.initial_balance
               ? `$${bot.initial_balance.toLocaleString()}`
-              : "—"
+              : "\u2014"
 
         return status ? (
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Fiyat" value={`$${status.price?.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`} />
-            <Stat label="Günlük PnL" value={`${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} className={pnlColor} />
+            <Stat label="Gunluk PnL" value={`${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} className={pnlColor} />
             <Stat label={`Bakiye${exchLabel}`} value={balanceVal} />
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2">
-            <div className="opacity-30"><Stat label="Fiyat" value="—" /></div>
-            <div className="opacity-30"><Stat label="Günlük PnL" value="—" /></div>
+            <div className="opacity-30"><Stat label="Fiyat" value="\u2014" /></div>
+            <div className="opacity-30"><Stat label="Gunluk PnL" value="\u2014" /></div>
             <Stat label={`Bakiye${exchLabel}`} value={balanceVal} />
           </div>
         )
@@ -196,7 +269,7 @@ export default function BotCard({
 
       {status?.risk?.killed && (
         <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-2.5 py-1.5">
-          Kill switch aktif — günlük limit aşıldı
+          Kill switch aktif — gunluk limit asildi
         </div>
       )}
 
@@ -207,9 +280,73 @@ export default function BotCard({
             ? "text-green-400 bg-green-500/10 border-green-500/20"
             : "text-red-400 bg-red-500/10 border-red-500/20"
         )}>
-          {status.signal === "buy" ? "▲ AL sinyali tespit edildi" : "▼ SAT sinyali tespit edildi"}
+          {status.signal === "buy" ? "AL sinyali tespit edildi" : "SAT sinyali tespit edildi"}
         </div>
       )}
+
+      {/* Akıllı Filtreler */}
+      <div className="border-t border-slate-800 pt-2">
+        <button
+          onClick={() => setShowFilters(p => !p)}
+          className="flex items-center justify-between w-full text-xs text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <span className="flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            Akilli Filtreler
+            {activeFilterCount > 0 && (
+              <span className="bg-blue-500/20 text-blue-400 text-[10px] px-1.5 py-0.5 rounded-full font-medium">
+                {activeFilterCount}/{FILTER_DEFS.length}
+              </span>
+            )}
+          </span>
+          <svg
+            className={clsx("w-3.5 h-3.5 transition-transform", showFilters && "rotate-180")}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {showFilters && (
+          <div className="mt-2 space-y-1">
+            {FILTER_DEFS.map(f => {
+              const enabled = filters[f.key as keyof Filters]
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => toggleFilter(f.key)}
+                  className={clsx(
+                    "flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs transition-all",
+                    enabled
+                      ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                      : "bg-slate-900/40 text-slate-500 border border-slate-800 hover:text-slate-300 hover:border-slate-700"
+                  )}
+                >
+                  {/* Mini toggle */}
+                  <div
+                    className={clsx(
+                      "relative w-7 h-4 rounded-full transition-colors shrink-0",
+                      enabled ? "bg-blue-500" : "bg-slate-700"
+                    )}
+                  >
+                    <div
+                      className={clsx(
+                        "absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform",
+                        enabled ? "translate-x-3.5" : "translate-x-0.5"
+                      )}
+                    />
+                  </div>
+                  <FilterIcon type={f.icon} />
+                  <span className="truncate">{f.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

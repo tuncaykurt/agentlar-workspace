@@ -83,3 +83,16 @@ async def trigger_sync():
     key_status = f"{key[:6]}...{key[-4:]}" if len(key) > 10 else ("empty" if not key else "short")
     count = await sync_economic_events()
     return {"synced": count, "key_status": key_status}
+
+
+@router.get("/crypto-news")
+async def crypto_news(
+    currency: str = Query("", description="BTC, ETH vb. filtre"),
+    limit: int = Query(30, ge=1, le=100),
+):
+    """Kripto haberleri — CryptoPanic API veya RSS fallback"""
+    from services.crypto_news import fetch_crypto_news
+    try:
+        return await fetch_crypto_news(currency=currency, limit=limit)
+    except Exception as e:
+        return {"error": str(e), "results": []}
