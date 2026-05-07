@@ -112,8 +112,13 @@ async def create_bot(data: BotCreate):
                 "name": bot.name,
                 "symbol": bot.symbol,
                 "strategy": bot.strategy,
+                "exchange": bot.exchange,
                 "paper_mode": bot.paper_mode,
-                "params": effective_params,  # önceki hatayı düzelttik: data.params değil effective_params
+                "leverage": bot.leverage,
+                "risk_per_trade": bot.risk_per_trade,
+                "max_daily_loss": bot.max_daily_loss,
+                "initial_balance": bot.initial_balance,
+                "params": effective_params,
                 "running": False,
             }
     except Exception as e:
@@ -252,7 +257,20 @@ async def update_bot(bot_id: int, data: BotCreate):
         await session.commit()
         print(f"[Bot Updated] ID:{bot_id} Name:{data.name} Strategy:{strategy} Params:{effective_params}")
 
-    return {"id": bot_id, **data.dict(), "running": False}
+    return {
+        "id": bot_id,
+        "name": data.name,
+        "symbol": data.symbol,
+        "strategy": strategy,
+        "exchange": data.exchange,
+        "paper_mode": data.paper_mode,
+        "leverage": data.leverage,
+        "risk_per_trade": data.risk_per_trade,
+        "max_daily_loss": data.max_daily_loss,
+        "initial_balance": data.initial_balance,
+        "params": effective_params,
+        "running": bot_id in _running_bots,
+    }
 
 
 @router.get("/{bot_id}/status")
