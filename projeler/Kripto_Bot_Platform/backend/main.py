@@ -95,6 +95,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
+    redirect_slashes=False,
     title="Kripto Bot Platform API",
     version="1.0.0",
     lifespan=lifespan,
