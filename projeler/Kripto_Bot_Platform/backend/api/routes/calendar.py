@@ -78,5 +78,8 @@ async def blackout_status(minutes: int = Query(30, ge=5, le=120)):
 @router.post("/sync")
 async def trigger_sync():
     """Manuel takvim senkronizasyonu tetikle"""
+    from core.config import settings
+    key = getattr(settings, "FINNHUB_API_KEY", "")
+    key_status = f"{key[:6]}...{key[-4:]}" if len(key) > 10 else ("empty" if not key else "short")
     count = await sync_economic_events()
-    return {"synced": count}
+    return {"synced": count, "key_status": key_status}
