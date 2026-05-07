@@ -8,6 +8,7 @@ import BotCard from "@/components/BotCard/BotCard"
 interface Bot {
   id: number; name: string; symbol: string
   strategy: string; paper_mode: boolean; running: boolean
+  exchange?: string; initial_balance?: number
 }
 
 // ─── Semboller ────────────────────────────────────────────────────────────────
@@ -802,6 +803,8 @@ export default function BotsPage() {
   const [customStrategies, setCustomStrategies] = useState<Strategy[]>([])
   // Tüm kayıtlı özel indikatörler (producesSignals filtresi yok)
   const [allCustomInds,    setAllCustomInds]    = useState<Array<{id:string;name:string;producesSignals:boolean}>>([])
+  const [exchangeBalance,  setExchangeBalance]  = useState<number | null>(null)
+  const [balanceLoading,   setBalanceLoading]   = useState(false)
 
   useEffect(() => {
     api.get("/bots/").then(data => {
@@ -837,6 +840,23 @@ export default function BotsPage() {
     allStrategies.find(s => s.id === form.strategy) ??
     STRATEGIES.find(s => s.id === "custom_signal")!
   )
+
+  // Borsa değiştiğinde bakiye çek
+  useEffect(() => {
+    if (!form.exchange || (!creating && !editingBot)) return
+    setBalanceLoading(true)
+    setExchangeBalance(null)
+    api.get(`/exchanges/${form.exchange}/balance`)
+      .then((data: any) => {
+        const usdt = data?.total ?? data?.free ?? null
+        if (usdt != null && Number(usdt) > 0) {
+          setExchangeBalance(Number(usdt))
+          setForm(f => ({ ...f, initial_balance: Math.floor(Number(usdt)) }))
+        }
+      })
+      .catch(() => {})
+      .finally(() => setBalanceLoading(false))
+  }, [form.exchange, creating, editingBot])
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm(f => ({ ...f, [k]: v }))
@@ -1523,7 +1543,11 @@ export default function BotsPage() {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <Field label="Başlangıç Bakiyesi" description="Bot için ayrılan USDT miktarı">
+                        <Field label="Başlangıç Bakiyesi" description={
+                          exchangeBalance != null
+                            ? `${form.exchange.toUpperCase()} bakiyesi: $${exchangeBalance.toLocaleString("tr-TR", {maximumFractionDigits: 2})} USDT`
+                            : balanceLoading ? "Bakiye sorgulanıyor..." : "Bot için ayrılan USDT miktarı"
+                        }>
                           <NumInput value={form.initial_balance} onChange={v => set("initial_balance", v)} min={10} prefix="$" suffix="USDT" />
                         </Field>
                         <Field label="İşlem Başına Risk" description={form.risk_mode === "pct" ? "Bakiyenin kaçta biri riske atılsın" : "İşlem başına sabit USDT miktarı"}>
@@ -1615,7 +1639,7 @@ export default function BotsPage() {
                   {!form.paper_mode && (
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-300">
                       <span className="shrink-0 mt-0.5">⚠</span>
-                      <span>Gerçek işlem modu seçili. Bot başlatıldığında Bitget API üzerinden gerçek emir açılır.</span>
+                      <span>Gerçek işlem modu seçili. Bot başlatıldığında {form.exchange.toUpperCase()} API üzerinden gerçek emir açılır.</span>
                     </div>
                   )}
                   {error && (

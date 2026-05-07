@@ -11,6 +11,8 @@ interface Bot {
   strategy: string
   paper_mode: boolean
   running: boolean
+  exchange?: string
+  initial_balance?: number
 }
 
 interface BotStatus {
@@ -41,12 +43,24 @@ export default function BotCard({
   const [status,  setStatus]  = useState<BotStatus | null>(null)
   const [running, setRunning] = useState(bot.running)
   const [loading, setLoading] = useState(false)
+  const [exchBalance, setExchBalance] = useState<number | null>(null)
 
   useEffect(() => {
     if (!running) { setStatus(null); return }
     const ws = createBotWS(bot.id, (data) => setStatus(data as BotStatus))
     return () => ws.close()
   }, [bot.id, running])
+
+  // Borsa bakiyesini çek (bot duruyorsa)
+  useEffect(() => {
+    if (running || !bot.exchange) return
+    api.get(`/exchanges/${bot.exchange}/balance`)
+      .then((data: any) => {
+        const usdt = data?.total ?? data?.free ?? null
+        if (usdt != null) setExchBalance(Number(usdt))
+      })
+      .catch(() => {})
+  }, [bot.exchange, running])
 
   const toggle = async () => {
     setLoading(true)
@@ -87,6 +101,12 @@ export default function BotCard({
             <span className="text-slate-400 font-medium">{fmtSymbol(bot.symbol)}</span>
             <span className="mx-1">·</span>
             {bot.strategy}
+            {bot.exchange && (
+              <>
+                <span className="mx-1">·</span>
+                <span className="text-slate-400">{bot.exchange.toUpperCase()}</span>
+              </>
+            )}
           </p>
         </div>
 
@@ -137,10 +157,13 @@ export default function BotCard({
           <Stat label="Bakiye" value={`$${status.risk?.balance?.toLocaleString("tr-TR", {maximumFractionDigits: 0})}`} />
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-2 opacity-30">
-          <Stat label="Fiyat" value="—" />
-          <Stat label="Günlük PnL" value="—" />
-          <Stat label="Bakiye" value="—" />
+        <div className="grid grid-cols-3 gap-2">
+          <div className="opacity-30"><Stat label="Fiyat" value="—" /></div>
+          <div className="opacity-30"><Stat label="Günlük PnL" value="—" /></div>
+          <Stat
+            label={`Bakiye${bot.exchange ? ` (${bot.exchange.toUpperCase()})` : ""}`}
+            value={exchBalance != null ? `$${exchBalance.toLocaleString("tr-TR", {maximumFractionDigits: 2})}` : bot.initial_balance ? `$${bot.initial_balance.toLocaleString()}` : "—"}
+          />
         </div>
       )}
 
