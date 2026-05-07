@@ -15,6 +15,8 @@ from ai.openrouter import quick_filter, deep_analysis
 from ai.market_context import collect_full_context
 from services.data_fetcher import DataFetcher
 from core.redis_client import get_redis
+from core.database import async_session
+from models.trade import SignalLog
 from bot.strategies.rsi_oversold import RSIOversoldStrategy
 from bot.strategies.macd_signal import MACDSignalStrategy
 from bot.strategies.bollinger_bounce import BollingerBounceStrategy
@@ -98,6 +100,8 @@ class BotEngine:
 
                 if signal:
                     print(f"[Bot] Teknik sinyal: {signal} @ {close}")
+                    # Sinyal geldi — logla
+                    await self._log_signal(signal, close, source=strategy, reason="Teknik sinyal", action="received")
 
                     # 3. Tüm piyasa bağlamını paralel topla
                     funding = await self._get_funding(symbol)
@@ -148,9 +152,15 @@ class BotEngine:
 
                         if qty > 0:
                             await self._execute(signal, close, qty, stop_loss, ai_result)
+                            await self._log_signal(signal, close, source=strategy, action="executed",
+                                confidence=ai_result.get("confidence"),
+                                tp_price=ai_result.get("take_profit"), sl_price=stop_loss)
                     else:
                         reason = ai_result.get("analysis", "Güven skoru yetersiz")
                         print(f"[Bot] Sinyal reddedildi: {reason}")
+                        await self._log_signal(signal, close, source=strategy, action="rejected",
+                            reject_reason=f"AI confidence={ai_result.get('confidence', 0)}, min={min_confidence}. {reason}",
+                            confidence=ai_result.get("confidence"))
 
                 # Durumu Redis'e yaz
                 status_data = {
@@ -317,6 +327,41 @@ class BotEngine:
         )
         print(f"[Bot] {msg}")
         await self._alert(msg)
+
+    async def _log_signal(
+        self,
+        signal_type: str,
+        price: float,
+        source: str = "",
+        reason: str = "",
+        action: str = "received",
+        reject_reason: str = "",
+        confidence: float = None,
+        tp_price: float = None,
+        sl_price: float = None,
+        raw_payload: str = None,
+    ):
+        """Gelen sinyali DB'ye kaydet — işleme girsin girmesin"""
+        try:
+            async with async_session() as session:
+                log = SignalLog(
+                    bot_id=self.config["id"],
+                    symbol=self.config["symbol"],
+                    signal_type=signal_type,
+                    source=source or self.config.get("strategy", "unknown"),
+                    price=price,
+                    reason=reason,
+                    action=action,
+                    reject_reason=reject_reason,
+                    confidence=confidence,
+                    tp_price=tp_price,
+                    sl_price=sl_price,
+                    raw_payload=raw_payload,
+                )
+                session.add(log)
+                await session.commit()
+        except Exception as e:
+            print(f"[Bot] Sinyal log hatası: {e}")
 
     async def _get_funding(self, symbol: str) -> float:
         try:
@@ -485,11 +530,19 @@ class BotEngine:
         if signal_mode == "inverse":
             signal_type = "sell" if signal_type == "buy" else "buy"
         elif signal_mode == "buy_only" and signal_type == "sell":
-            return  # Short sinyallerini görmezden gel
+            await self._log_signal(signal_type, price, source=source, reason=reason,
+                action="filtered", reject_reason="signal_mode=buy_only, sell sinyali filtrelendi")
+            return
         elif signal_mode == "sell_only" and signal_type == "buy":
-            return  # Long sinyallerini görmezden gel
+            await self._log_signal(signal_type, price, source=source, reason=reason,
+                action="filtered", reject_reason="signal_mode=sell_only, buy sinyali filtrelendi")
+            return
 
         print(f"[Bot {self.config['name']}] Özel sinyal: {signal_type} @ {price} — {source}: {reason}")
+
+        # Sinyal geldi — logla
+        await self._log_signal(signal_type, price, source=source, reason=reason,
+            action="received", raw_payload=json.dumps(sig))
 
         # Mevcut pozisyon kontrolü
         current_position = await self._get_current_position(symbol)
@@ -542,6 +595,11 @@ class BotEngine:
                 "analysis": f"{source} — {reason}",
             }
             await self._execute(signal_type, price, qty, stop_loss, ai_result)
+            await self._log_signal(signal_type, price, source=source, reason=reason,
+                action="executed", confidence=75, tp_price=take_profit, sl_price=stop_loss)
+        else:
+            await self._log_signal(signal_type, price, source=source, reason=reason,
+                action="rejected", reject_reason="Pozisyon boyutu 0 (risk manager)")
 
         # Status'u Redis'e yaz (frontend görebilsin)
         status_data = {

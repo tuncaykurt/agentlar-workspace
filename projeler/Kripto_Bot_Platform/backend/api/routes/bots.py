@@ -312,6 +312,66 @@ async def get_filters(bot_id: int):
         }
 
 
+@router.get("/signals/all")
+async def get_all_signal_logs(limit: int = 100, action: str = None):
+    """Tüm botlardan gelen sinyal logları"""
+    from models.trade import SignalLog
+    async with async_session() as session:
+        query = select(SignalLog).order_by(SignalLog.created_at.desc())
+        if action:
+            query = query.where(SignalLog.action == action)
+        query = query.limit(limit)
+        result = await session.execute(query)
+        logs = result.scalars().all()
+        return [
+            {
+                "id": l.id,
+                "bot_id": l.bot_id,
+                "symbol": l.symbol,
+                "signal_type": l.signal_type,
+                "source": l.source,
+                "price": l.price,
+                "reason": l.reason,
+                "action": l.action,
+                "reject_reason": l.reject_reason,
+                "confidence": l.confidence,
+                "tp_price": l.tp_price,
+                "sl_price": l.sl_price,
+                "created_at": l.created_at.isoformat() if l.created_at else None,
+            }
+            for l in logs
+        ]
+
+
+@router.get("/{bot_id}/signals")
+async def get_signal_logs(bot_id: int, limit: int = 50, action: str = None):
+    """Bot'a gelen tüm sinyallerin logunu döner"""
+    from models.trade import SignalLog
+    async with async_session() as session:
+        query = select(SignalLog).where(SignalLog.bot_id == bot_id).order_by(SignalLog.created_at.desc())
+        if action:
+            query = query.where(SignalLog.action == action)
+        query = query.limit(limit)
+        result = await session.execute(query)
+        logs = result.scalars().all()
+        return [
+            {
+                "id": l.id,
+                "signal_type": l.signal_type,
+                "source": l.source,
+                "price": l.price,
+                "reason": l.reason,
+                "action": l.action,
+                "reject_reason": l.reject_reason,
+                "confidence": l.confidence,
+                "tp_price": l.tp_price,
+                "sl_price": l.sl_price,
+                "created_at": l.created_at.isoformat() if l.created_at else None,
+            }
+            for l in logs
+        ]
+
+
 @router.patch("/{bot_id}/filters")
 async def update_filters(bot_id: int, data: FilterUpdate):
     from models.trade import BotFilter

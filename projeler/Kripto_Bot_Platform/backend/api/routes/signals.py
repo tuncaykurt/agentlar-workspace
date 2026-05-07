@@ -219,6 +219,26 @@ async def tradingview_webhook(token: str, request: Request):
         print(f"[TV Webhook] Redis hatası: {e}")
         # Redis yoksa 200 dön (TradingView retry yapar aksi halde)
 
+    # DB'ye sinyal logu kaydet (bot_id=0 çünkü henüz hangi bot alacağı belli değil)
+    try:
+        from core.database import async_session
+        from models.trade import SignalLog
+        async with async_session() as session:
+            log = SignalLog(
+                bot_id=0,
+                symbol=symbol_ccxt or symbol_raw,
+                signal_type=sig_type,
+                source="TradingView",
+                price=price,
+                reason=message or f"TV Alarm — {action_raw}",
+                action="received",
+                raw_payload=json.dumps(body),
+            )
+            session.add(log)
+            await session.commit()
+    except Exception as e:
+        print(f"[TV Webhook] Signal log DB hatası: {e}")
+
     return {
         "status": "ok",
         "received": {

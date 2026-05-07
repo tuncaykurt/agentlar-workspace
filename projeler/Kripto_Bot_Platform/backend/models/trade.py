@@ -107,6 +107,31 @@ class BotFilter(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class SignalLog(Base):
+    """Gelen tüm sinyaller — işleme girsin girmesin hepsi kaydedilir"""
+    __tablename__ = "signal_logs"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    bot_id = Column(Integer, nullable=False)
+    symbol = Column(String, nullable=False)
+    signal_type = Column(String, nullable=False)          # buy, sell
+    source = Column(String, nullable=True)                 # tradingview, custom, strategy_name
+    price = Column(Float, nullable=True)
+    reason = Column(Text, nullable=True)                   # sinyal açıklaması
+    action = Column(String, nullable=False, default="received")  # received, executed, rejected, filtered
+    reject_reason = Column(Text, nullable=True)            # neden reddedildi
+    confidence = Column(Float, nullable=True)              # AI güven skoru
+    tp_price = Column(Float, nullable=True)
+    sl_price = Column(Float, nullable=True)
+    raw_payload = Column(Text, nullable=True)              # ham sinyal JSON
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_signal_bot_time", "bot_id", "created_at"),
+        Index("ix_signal_action", "action", "created_at"),
+    )
+
+
 class OHLCV(Base):
     """
     Geçmiş mum verileri.
