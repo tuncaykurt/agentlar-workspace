@@ -71,7 +71,7 @@ export default function NewsPage() {
   const fetchEvents = useCallback(async () => {
     try {
       const data = await api.get("/calendar/events?days=14")
-      setEvents(data)
+      if (Array.isArray(data)) setEvents(data)
     } catch (e) {
       console.error("Events fetch error:", e)
     } finally {

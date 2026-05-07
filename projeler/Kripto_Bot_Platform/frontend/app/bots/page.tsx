@@ -872,13 +872,16 @@ export default function BotsPage() {
     STRATEGIES.find(s => s.id === "custom_signal")!
   )
 
-  // Borsa değiştiğinde bakiye çek
+  // Borsa değiştiğinde bakiye çek (sadece wizard açıkken)
+  const wizardOpen = creating || !!editingBot
   useEffect(() => {
-    if (!form.exchange || (!creating && !editingBot)) return
+    if (!form.exchange || !wizardOpen) return
+    let cancelled = false
     setBalanceLoading(true)
     setExchangeBalance(null)
     api.get(`/exchanges/${form.exchange}/balance`)
       .then((data: any) => {
+        if (cancelled) return
         const usdt = data?.total ?? data?.free ?? null
         if (usdt != null && Number(usdt) > 0) {
           setExchangeBalance(Number(usdt))
@@ -886,8 +889,10 @@ export default function BotsPage() {
         }
       })
       .catch(() => {})
-      .finally(() => setBalanceLoading(false))
-  }, [form.exchange, creating, editingBot])
+      .finally(() => { if (!cancelled) setBalanceLoading(false) })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.exchange, wizardOpen])
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm(f => ({ ...f, [k]: v }))

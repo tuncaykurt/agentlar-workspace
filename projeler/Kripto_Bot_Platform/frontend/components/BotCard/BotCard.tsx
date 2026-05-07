@@ -47,20 +47,29 @@ export default function BotCard({
 
   useEffect(() => {
     if (!running) { setStatus(null); return }
-    const ws = createBotWS(bot.id, (data) => setStatus(data as BotStatus))
-    return () => ws.close()
+    let ws: WebSocket | null = null
+    try {
+      ws = createBotWS(bot.id, (data) => setStatus(data as BotStatus))
+      ws.onerror = () => {}
+      ws.onclose = () => {}
+    } catch { /* WS bağlantı hatası — sessizce geç */ }
+    return () => { try { ws?.close() } catch {} }
   }, [bot.id, running])
 
-  // Borsa bakiyesini çek (exchange bilgisi varsa her zaman)
+  // Borsa bakiyesini çek (mount'ta bir kez)
   useEffect(() => {
     if (!bot.exchange) return
+    let cancelled = false
     api.get(`/exchanges/${bot.exchange}/balance`)
       .then((data: any) => {
+        if (cancelled) return
         const usdt = data?.total ?? data?.free ?? null
         if (usdt != null) setExchBalance(Number(usdt))
       })
       .catch(() => {})
-  }, [bot.exchange])
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bot.id])
 
   const toggle = async () => {
     setLoading(true)
