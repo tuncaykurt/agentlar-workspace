@@ -26,18 +26,21 @@ async def _init_db():
     # Eksik kolonları ekle (mevcut tabloya ALTER TABLE)
     migrations = [
         ("bots", "initial_balance", "ALTER TABLE bots ADD COLUMN initial_balance FLOAT DEFAULT 1000.0"),
+        ("bots", "params", "ALTER TABLE bots ADD COLUMN params TEXT"),
+        ("bots", "risk_per_trade", "ALTER TABLE bots ADD COLUMN risk_per_trade FLOAT DEFAULT 0.01"),
+        ("bots", "max_daily_loss", "ALTER TABLE bots ADD COLUMN max_daily_loss FLOAT DEFAULT 0.05"),
     ]
-    try:
-        async with engine.begin() as conn:
-            for table, column, sql in migrations:
+    for table, column, sql in migrations:
+        try:
+            async with engine.begin() as conn:
                 result = await conn.execute(text(
                     f"SELECT column_name FROM information_schema.columns WHERE table_name='{table}' AND column_name='{column}'"
                 ))
                 if not result.fetchone():
                     await conn.execute(text(sql))
                     print(f"[Migration] {table}.{column} kolonu eklendi.")
-    except Exception as e:
-        print(f"[Migration] Hata (uygulama devam ediyor): {e}")
+        except Exception as e:
+            print(f"[Migration] {table}.{column} hatası (devam ediliyor): {e}")
 
 
 async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
