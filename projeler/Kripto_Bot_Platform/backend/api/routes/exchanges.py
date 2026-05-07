@@ -117,14 +117,6 @@ async def test_order(exchange: str, data: TestOrderRequest):
         # MEXC swap: amount = kontrat sayısı (tam sayı), minimum 1
         amount = max(1, int(raw_amount))
 
-        # Market emri aç
-        order = await client.create_order(
-            symbol=data.symbol,
-            type="market",
-            side=data.side,
-            amount=amount,
-        )
-
         # TP/SL hesapla
         if data.side == "buy":
             tp_price = round(current_price * (1 + data.tp_pct / 100), 2)
@@ -133,39 +125,52 @@ async def test_order(exchange: str, data: TestOrderRequest):
             tp_price = round(current_price * (1 - data.tp_pct / 100), 2)
             sl_price = round(current_price * (1 + data.sl_pct / 100), 2)
 
-        # TP emri
-        tp_order = None
-        try:
-            tp_side = "sell" if data.side == "buy" else "buy"
-            tp_order = await client.create_order(
-                symbol=data.symbol,
-                type="limit",
-                side=tp_side,
-                amount=amount,
-                price=tp_price,
-                params={"reduceOnly": True},
-            )
-        except Exception as e:
-            tp_order = {"error": str(e)}
+        # Market emri aç — TP/SL dahil
+        order = await client.create_order(
+            symbol=data.symbol,
+            type="market",
+            side=data.side,
+            amount=amount,
+            params={
+                "takeProfitPrice": tp_price,
+                "stopLossPrice": sl_price,
+            },
+        )
 
-        # SL emri — MEXC trigger/stop-limit
+        # Yedek: TP/SL params ile acilmadiysa ayri emir olarak dene
+        tp_order = None
         sl_order = None
-        try:
-            sl_side = "sell" if data.side == "buy" else "buy"
-            sl_order = await client.create_order(
-                symbol=data.symbol,
-                type="limit",
-                side=sl_side,
-                amount=amount,
-                price=sl_price,
-                params={
-                    "reduceOnly": True,
-                    "stopPrice": sl_price,
-                    "triggerType": "1",   # MEXC: 1=trigger order
-                },
-            )
-        except Exception as e:
-            sl_order = {"error": str(e)}
+        tp_in_order = order.get("takeProfitPrice") or order.get("info", {}).get("takeProfitPrice")
+        sl_in_order = order.get("stopLossPrice") or order.get("info", {}).get("stopLossPrice")
+
+        if not tp_in_order:
+            try:
+                tp_side = "sell" if data.side == "buy" else "buy"
+                tp_order = await client.create_order(
+                    symbol=data.symbol,
+                    type="limit",
+                    side=tp_side,
+                    amount=amount,
+                    price=tp_price,
+                    params={"reduceOnly": True},
+                )
+            except Exception as e:
+                tp_order = {"error": str(e)}
+
+        if not sl_in_order:
+            try:
+                sl_side = "sell" if data.side == "buy" else "buy"
+                # MEXC trigger order
+                sl_order = await client.create_order(
+                    symbol=data.symbol,
+                    type="limit",
+                    side=sl_side,
+                    amount=amount,
+                    price=sl_price,
+                    params={"stopPrice": sl_price, "reduceOnly": True, "triggerType": "1"},
+                )
+            except Exception as e:
+                sl_order = {"error": str(e)}
 
         return {
             "status": "ok",

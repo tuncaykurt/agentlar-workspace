@@ -133,11 +133,17 @@ async def sync_economic_events():
                 )
                 row = existing.scalar_one_or_none()
 
+                def _clean_val(v):
+                    """None, 'None', '' → None, aksi halde str"""
+                    if v is None or str(v).strip() in ("", "None", "null"):
+                        return None
+                    return str(v)
+
                 if row:
                     # Güncelle
-                    row.actual = str(ev.get("actual", "")) or None
-                    row.forecast = str(ev.get("estimate", "")) or None
-                    row.previous = str(ev.get("prev", "")) or None
+                    row.actual = _clean_val(ev.get("actual"))
+                    row.forecast = _clean_val(ev.get("estimate"))
+                    row.previous = _clean_val(ev.get("prev"))
                 else:
                     # Yeni ekle
                     new_event = EconomicEvent(
@@ -146,9 +152,9 @@ async def sync_economic_events():
                         category=_classify_category(title),
                         impact=impact,
                         event_time=event_time,
-                        actual=str(ev.get("actual", "")) or None,
-                        forecast=str(ev.get("estimate", "")) or None,
-                        previous=str(ev.get("prev", "")) or None,
+                        actual=_clean_val(ev.get("actual")),
+                        forecast=_clean_val(ev.get("estimate")),
+                        previous=_clean_val(ev.get("prev")),
                         source="finnhub",
                     )
                     session.add(new_event)
