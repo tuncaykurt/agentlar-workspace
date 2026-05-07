@@ -950,7 +950,7 @@ export default function BotsPage() {
       strategy_params: useCustomSig
         ? { signal_source: sigSrc, ...Object.fromEntries(
             Object.entries(f.strategy_params).filter(([k]) =>
-              ["signal_mode","position_action","signal_tf","wait_candle_close","max_position_hours","max_trades_per_day"].includes(k)
+              ["signal_mode","position_action","signal_tf","wait_candle_close","max_position_hours","max_trades_per_day","webhook_token"].includes(k)
             )
           )}
         : f.strategy_params,
@@ -1377,8 +1377,8 @@ export default function BotsPage() {
                     <TradingViewWebhookCard
                       token={form.strategy_params.webhook_token as string || ""}
                       onTokenInit={t => setParam("webhook_token", t)}
-                      direction={form.strategy_params.tv_direction as string || "both"}
-                      onDirection={v => setParam("tv_direction", v)}
+                      direction={form.strategy_params.signal_mode === "buy_only" ? "buy_only" : form.strategy_params.signal_mode === "sell_only" ? "sell_only" : "both"}
+                      onDirection={v => setParam("signal_mode", v === "both" ? "normal" : v)}
                     />
                   )}
 
