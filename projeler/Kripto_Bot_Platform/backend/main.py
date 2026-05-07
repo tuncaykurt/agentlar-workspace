@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from core.config import settings
 from core.database import async_session
 from core.database import engine, Base
@@ -22,6 +22,22 @@ async def _init_db():
         print("[Main] Veritabanı tabloları hazır.")
     except Exception as e:
         print(f"[Main] DB bağlantı hatası (uygulama devam ediyor): {e}")
+
+    # Eksik kolonları ekle (mevcut tabloya ALTER TABLE)
+    migrations = [
+        ("bots", "initial_balance", "ALTER TABLE bots ADD COLUMN initial_balance FLOAT DEFAULT 1000.0"),
+    ]
+    try:
+        async with engine.begin() as conn:
+            for table, column, sql in migrations:
+                result = await conn.execute(text(
+                    f"SELECT column_name FROM information_schema.columns WHERE table_name='{table}' AND column_name='{column}'"
+                ))
+                if not result.fetchone():
+                    await conn.execute(text(sql))
+                    print(f"[Migration] {table}.{column} kolonu eklendi.")
+    except Exception as e:
+        print(f"[Migration] Hata (uygulama devam ediyor): {e}")
 
 
 async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
