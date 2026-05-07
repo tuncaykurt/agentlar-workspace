@@ -497,8 +497,29 @@ class BotEngine:
                         sig = candidate
                         sig_key = tv_key
 
+        # Sinyal olmasa bile fiyat ve status güncelle
+        try:
+            ticker = await self.exchange.exchange.fetch_ticker(symbol)
+            cur_price = float(ticker["last"])
+        except Exception:
+            cur_price = 0
+
         if not sig:
-            return  # Sinyal yok
+            # Sinyal yok ama status güncelle (frontend fiyat görsün)
+            if cur_price:
+                status_data = {
+                    "signal": None,
+                    "price": cur_price,
+                    "risk": {
+                        "balance": self.risk.balance,
+                        "daily_pnl": self.risk.daily_pnl,
+                        "daily_pnl_pct": self.risk.daily_pnl_pct,
+                        "killed": self.risk.killed,
+                    },
+                    "ts": datetime.utcnow().isoformat(),
+                }
+                await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
+            return
 
         # Duplicate sinyal kontroli (aynı ts tekrar işleme)
         last_ts_key = f"bot:{self.config['id']}:last_custom_signal_ts"
@@ -604,13 +625,14 @@ class BotEngine:
         # Status'u Redis'e yaz (frontend görebilsin)
         status_data = {
             "signal": signal_type,
-            "price": price,
+            "price": cur_price or price,
             "risk": {
                 "balance": self.risk.balance,
                 "daily_pnl": self.risk.daily_pnl,
                 "daily_pnl_pct": self.risk.daily_pnl_pct,
                 "killed": self.risk.killed,
             },
+            "ts": datetime.utcnow().isoformat(),
         }
         await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
 
