@@ -166,6 +166,7 @@ export default function BotCard({
   const activeFilterCount = Object.values(filters).filter(Boolean).length
 
   const pnlPct  = status?.risk?.daily_pnl_pct ?? 0
+  const pnlUsdt = status?.risk?.daily_pnl ?? 0
   const pnlColor = pnlPct >= 0 ? "text-green-400" : "text-red-400"
 
   return (
@@ -266,7 +267,7 @@ export default function BotCard({
         return status ? (
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Fiyat" value={`$${status.price?.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`} />
-            <Stat label="Gunluk PnL" value={`${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`} className={pnlColor} />
+            <Stat label="Gunluk PnL" value={`${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)}$ (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%)`} className={pnlColor} />
             <Stat label={`Bakiye${exchLabel}`} value={balanceVal} />
           </div>
         ) : (

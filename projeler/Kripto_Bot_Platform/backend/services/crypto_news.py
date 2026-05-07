@@ -8,6 +8,42 @@ from datetime import datetime
 from core.config import settings
 
 
+async def summarize_news_turkish(title: str, url: str) -> dict:
+    """
+    Haberin basligini ve URL'ini alip Turkce ozet + sentiment analizi yapar.
+    DeepSeek (ucuz) kullanir.
+    """
+    from ai.openrouter import _call, FAST_MODEL
+
+    prompt = f"""Asagidaki kripto haberi icin Turkce ozet ve piyasa etkisi analizi yap.
+
+Baslik: {title}
+URL: {url}
+
+JSON formatinda cevap ver:
+{{
+  "title_tr": "Haberin Turkce basligi",
+  "summary": "2-3 cumlede Turkce ozet",
+  "sentiment": "bullish/bearish/neutral",
+  "impact": "high/medium/low",
+  "affected_coins": ["BTC", "ETH"],
+  "trading_note": "Trader icin 1 cumlelik not (Turkce)"
+}}"""
+
+    try:
+        result = await _call(FAST_MODEL, prompt, max_tokens=400)
+        return result
+    except Exception as e:
+        return {
+            "title_tr": title,
+            "summary": "Ozet alinamadi",
+            "sentiment": "neutral",
+            "impact": "low",
+            "affected_coins": [],
+            "trading_note": str(e),
+        }
+
+
 async def fetch_crypto_news(
     currency: str = "",
     kind: str = "news",       # news, media, all

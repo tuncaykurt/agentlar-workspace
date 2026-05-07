@@ -171,6 +171,22 @@ interface CryptoNews {
   sentiment: string
 }
 
+interface NewsSummary {
+  title_tr: string
+  summary: string
+  sentiment: string
+  impact: string
+  affected_coins: string[]
+  trading_note: string
+}
+
+const IMPACT_LABELS: Record<string, string> = { high: "Yuksek", medium: "Orta", low: "Dusuk" }
+const IMPACT_COLORS: Record<string, string> = {
+  high: "text-red-400 bg-red-500/10 border-red-500/20",
+  medium: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20",
+  low: "text-green-400 bg-green-500/10 border-green-500/20",
+}
+
 const SENTIMENT_COLORS: Record<string, string> = {
   bullish: "text-green-400 bg-green-500/10 border-green-500/20",
   bearish: "text-red-400 bg-red-500/10 border-red-500/20",
@@ -200,6 +216,9 @@ export default function NewsPage() {
   const [cryptoNews, setCryptoNews] = useState<CryptoNews[]>([])
   const [newsLoading, setNewsLoading] = useState(false)
   const [newsCurrency, setNewsCurrency] = useState("")
+  const [selectedNews, setSelectedNews] = useState<CryptoNews | null>(null)
+  const [summary, setSummary] = useState<NewsSummary | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [filter, setFilter] = useState<string>("all")
@@ -242,6 +261,24 @@ export default function NewsPage() {
     fetchEvents()
     fetchBlackout()
   }, [fetchEvents, fetchBlackout])
+
+  const openNewsSummary = async (news: CryptoNews) => {
+    setSelectedNews(news)
+    setSummary(null)
+    setSummaryLoading(true)
+    try {
+      const data = await api.post("/calendar/crypto-news/summarize", {
+        title: news.title,
+        url: news.url,
+      })
+      if (data && !data.error) setSummary(data as NewsSummary)
+      else setSummary({ title_tr: news.title, summary: "Ozet alinamadi", sentiment: "neutral", impact: "low", affected_coins: [], trading_note: "" })
+    } catch {
+      setSummary({ title_tr: news.title, summary: "Ozet alinamadi", sentiment: "neutral", impact: "low", affected_coins: [], trading_note: "" })
+    } finally {
+      setSummaryLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (tab === "crypto" && cryptoNews.length === 0) {
@@ -363,12 +400,10 @@ export default function NewsPage() {
                 const sentLabel = SENTIMENT_LABELS[news.sentiment] || "Notr"
                 const totalVotes = news.votes.positive + news.votes.negative
                 return (
-                  <a
+                  <button
                     key={news.id}
-                    href={news.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block p-3 rounded-lg border border-slate-800 hover:border-slate-600 transition-colors group"
+                    onClick={() => openNewsSummary(news)}
+                    className="block w-full text-left p-3 rounded-lg border border-slate-800 hover:border-blue-500/30 hover:bg-blue-500/[0.03] transition-colors group"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -398,11 +433,89 @@ export default function NewsPage() {
                         <p className="text-xs text-slate-500">{timeAgo(news.published_at)}</p>
                       </div>
                     </div>
-                  </a>
+                  </button>
                 )
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ═══ Haber Ozet Modal ═══ */}
+      {selectedNews && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setSelectedNews(null)}>
+          <div className="bg-[#0d1117] border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="flex items-start justify-between p-4 border-b border-slate-800">
+              <div className="min-w-0 flex-1 pr-3">
+                <p className="text-sm font-medium text-white">{selectedNews.title}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-slate-500">{selectedNews.source}</span>
+                  <span className="text-xs text-slate-600">{timeAgo(selectedNews.published_at)}</span>
+                </div>
+              </div>
+              <button onClick={() => setSelectedNews(null)} className="text-slate-500 hover:text-white text-xl shrink-0">x</button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-3">
+              {summaryLoading ? (
+                <div className="flex items-center justify-center py-8 gap-3">
+                  <span className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm text-slate-400">AI ile Turkce ozet hazirlaniyor...</span>
+                </div>
+              ) : summary ? (
+                <>
+                  {/* Turkce baslik */}
+                  <h3 className="text-base font-semibold text-white">{summary.title_tr}</h3>
+
+                  {/* Ozet */}
+                  <p className="text-sm text-slate-300 leading-relaxed">{summary.summary}</p>
+
+                  {/* Sentiment + Impact */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs px-2 py-1 rounded border font-medium ${SENTIMENT_COLORS[summary.sentiment] || SENTIMENT_COLORS.neutral}`}>
+                      {SENTIMENT_LABELS[summary.sentiment] || "Notr"}
+                    </span>
+                    <span className={`text-xs px-2 py-1 rounded border font-medium ${IMPACT_COLORS[summary.impact] || IMPACT_COLORS.low}`}>
+                      Etki: {IMPACT_LABELS[summary.impact] || "Dusuk"}
+                    </span>
+                    {summary.affected_coins?.map(c => (
+                      <span key={c} className="text-xs px-2 py-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Trading Note */}
+                  {summary.trading_note && (
+                    <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-3">
+                      <p className="text-[10px] text-slate-500 mb-1">Islem Notu</p>
+                      <p className="text-sm text-slate-200">{summary.trading_note}</p>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center gap-2 p-4 border-t border-slate-800">
+              <a
+                href={selectedNews.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-center px-4 py-2 text-sm rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:border-slate-600 transition-colors"
+              >
+                Orijinal Haberi Ac
+              </a>
+              <button
+                onClick={() => setSelectedNews(null)}
+                className="flex-1 px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

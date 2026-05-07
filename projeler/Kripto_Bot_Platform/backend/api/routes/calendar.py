@@ -85,6 +85,20 @@ async def trigger_sync():
     return {"synced": count, "key_status": key_status}
 
 
+@router.post("/crypto-news/summarize")
+async def summarize_news(data: dict):
+    """Haberin Turkce ozet + sentiment analizini AI ile yapar"""
+    from services.crypto_news import summarize_news_turkish
+    title = data.get("title", "")
+    url = data.get("url", "")
+    if not title:
+        return {"error": "title gerekli"}
+    try:
+        return await summarize_news_turkish(title, url)
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/crypto-news")
 async def crypto_news(
     currency: str = Query("", description="BTC, ETH vb. filtre"),
