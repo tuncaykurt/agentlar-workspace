@@ -1,18 +1,6 @@
 const getApiBase = () => {
-  // Build-time env varsa kullan
   const base = process.env.NEXT_PUBLIC_API_URL || "";
   if (base) return base.endsWith("/api") ? base : base + "/api";
-
-  // Tarayıcıda: aynı hostname + backend subdomain üzerinden doğrudan API'ye git
-  // Bu sayede Next.js rewrite proxy'sine gerek kalmaz (Mixed Content sorunu çözülür)
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    // kriptobot.xxx → kriptobot-api.xxx
-    const apiHost = host.replace(/^kriptobot\./, "kriptobot-api.");
-    if (apiHost !== host) {
-      return `${window.location.protocol}//${apiHost}/api`;
-    }
-  }
 
   return "/api";
 };
@@ -40,7 +28,7 @@ async function handleResponse(r: Response) {
   return r.json()
 }
 
-const normalizePath = (path: string) => path.endsWith("/") ? path : path + "/";
+const normalizePath = (path: string) => path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
 
 export const api = {
   get: (path: string) =>
