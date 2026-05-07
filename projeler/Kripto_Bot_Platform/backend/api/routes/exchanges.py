@@ -148,19 +148,21 @@ async def test_order(exchange: str, data: TestOrderRequest):
         except Exception as e:
             tp_order = {"error": str(e)}
 
-        # SL emri
+        # SL emri — MEXC trigger/stop-limit
         sl_order = None
         try:
             sl_side = "sell" if data.side == "buy" else "buy"
-            sl_params = {"stopPrice": sl_price, "reduceOnly": True}
-            # MEXC stop-market
             sl_order = await client.create_order(
                 symbol=data.symbol,
-                type="stop",
+                type="limit",
                 side=sl_side,
                 amount=amount,
                 price=sl_price,
-                params=sl_params,
+                params={
+                    "reduceOnly": True,
+                    "stopPrice": sl_price,
+                    "triggerType": "1",   # MEXC: 1=trigger order
+                },
             )
         except Exception as e:
             sl_order = {"error": str(e)}
