@@ -28,7 +28,7 @@ async function handleResponse(r: Response) {
   return r.json()
 }
 
-const normalizePath = (path: string) => path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
+const normalizePath = (path: string) => path.endsWith("/") ? path : path + "/";
 
 export const api = {
   get: (path: string) =>
