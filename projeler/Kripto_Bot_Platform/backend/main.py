@@ -120,6 +120,82 @@ async def lifespan(app: FastAPI):
             print("[Main] Ekonomik takvim senkronizasyonu başlatıldı.")
         except Exception as e:
             print(f"[Main] EconCal başlatılamadı (devam ediliyor): {e}")
+
+        # 6. DB'de status=running olan botları otomatik başlat (deploy/restart sonrası)
+        try:
+            from models.trade import Bot, BotStatus
+            from bot.engine import BotEngine
+            from api.routes.bots import _running_bots, _bot_tasks
+            from exchange.exchange_factory import create_exchange_client
+            from core.redis_client import get_redis
+            import json as _json
+
+            async with async_session() as session:
+                result = await session.execute(
+                    select(Bot).where(Bot.status == BotStatus.RUNNING)
+                )
+                running_bots = result.scalars().all()
+
+                for bot in running_bots:
+                    try:
+                        # Bot'un exchange client'ını oluştur
+                        redis = get_redis()
+                        raw = await redis.get(f"exchange_keys:default:{bot.exchange or 'bitget'}")
+                        if raw:
+                            keys = _json.loads(raw)
+                            ex_client_raw = create_exchange_client(
+                                bot.exchange or "bitget",
+                                keys["api_key"], keys["secret"], keys.get("passphrase", "")
+                            )
+                            # BotEngine bir wrapper client bekliyor, exchange attr ile
+                            class _ExClient:
+                                def __init__(self, ex):
+                                    self.exchange = ex
+                                async def set_leverage(self, symbol, leverage):
+                                    await self.exchange.set_leverage(leverage, symbol)
+                                async def place_order(self, symbol, side, amount, order_type="market", price=None, tp_price=None, sl_price=None):
+                                    params = {}
+                                    if tp_price: params["takeProfitPrice"] = tp_price
+                                    if sl_price: params["stopLossPrice"] = sl_price
+                                    if order_type == "market":
+                                        return await self.exchange.create_market_order(symbol, side, amount, params=params)
+                                    return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
+                                async def fetch_positions(self, symbols=None):
+                                    return await self.exchange.fetch_positions(symbols)
+                                async def get_funding_rate(self, symbol):
+                                    t = await self.exchange.fetch_ticker(symbol)
+                                    return float(t.get("info", {}).get("fundingRate", 0))
+                                async def get_ohlcv(self, symbol, tf="1m", limit=200):
+                                    return await self.exchange.fetch_ohlcv(symbol, tf, limit=limit)
+                            ex_client = _ExClient(ex_client_raw)
+                        else:
+                            ex_client = bitget  # fallback to bitget
+
+                        config = {
+                            "id": bot.id,
+                            "name": bot.name,
+                            "symbol": bot.symbol,
+                            "strategy": bot.strategy,
+                            "paper_mode": bot.paper_mode,
+                            "leverage": bot.leverage,
+                            "risk_per_trade": bot.risk_per_trade,
+                            "max_daily_loss": bot.max_daily_loss,
+                            "initial_balance": bot.initial_balance or 1000.0,
+                            "params": _json.loads(bot.params) if bot.params else {},
+                        }
+                        engine_inst = BotEngine(config, ex_client)
+                        _running_bots[bot.id] = engine_inst
+                        task = asyncio.create_task(engine_inst.run())
+                        _bot_tasks[bot.id] = task
+                        print(f"[Main] Bot #{bot.id} '{bot.name}' otomatik başlatıldı.")
+                    except Exception as e:
+                        print(f"[Main] Bot #{bot.id} başlatma hatası: {e}")
+
+                if running_bots:
+                    print(f"[Main] {len(running_bots)} bot otomatik olarak yeniden başlatıldı.")
+        except Exception as e:
+            print(f"[Main] Bot auto-start hatası (devam ediliyor): {e}")
+
     except Exception as e:
         print(f"[Main] Başlatma hatası (devam ediliyor): {e}")
 
