@@ -28,32 +28,30 @@ async function handleResponse(r: Response) {
   return r.json()
 }
 
-const normalizePath = (path: string) => path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
-
 export const api = {
   get: (path: string) =>
-    fetch(`${API_BASE}${normalizePath(path)}`).then(handleResponse),
+    fetch(`${API_BASE}${path}`).then(handleResponse),
 
   post: (path: string, body: unknown) =>
-    fetch(`${API_BASE}${normalizePath(path)}`, {
+    fetch(`${API_BASE}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }).then(handleResponse),
 
   patch: (path: string, body: unknown) =>
-    fetch(`${API_BASE}${normalizePath(path)}`, {
+    fetch(`${API_BASE}${path}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }).then(handleResponse),
 
   delete: (path: string) =>
-    fetch(`${API_BASE}${normalizePath(path)}`, { method: "DELETE" }).then(handleResponse),
+    fetch(`${API_BASE}${path}`, { method: "DELETE" }).then(handleResponse),
 }
 
 export async function publicPost(path: string, body: unknown) {
-  const r = await fetch(`${API_BASE}${normalizePath(path)}`, {
+  const r = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
