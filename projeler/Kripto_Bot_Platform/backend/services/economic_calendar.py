@@ -109,11 +109,17 @@ async def sync_economic_events():
                 impact = _classify_impact(ev.get("impact", "low"))
                 event_time_str = ev.get("time", ev.get("date", ""))
 
-                # Zaman parse
-                if "T" in str(event_time_str):
-                    event_time = datetime.fromisoformat(event_time_str.replace("Z", "+00:00"))
-                else:
-                    event_time = datetime.strptime(str(event_time_str), "%Y-%m-%d")
+                # Zaman parse — FinnHub formatları: "2026-05-07 01:30:00", "2026-05-07T01:30:00Z", "2026-05-07"
+                event_time_raw = str(event_time_str).strip()
+                try:
+                    if "T" in event_time_raw:
+                        event_time = datetime.fromisoformat(event_time_raw.replace("Z", "+00:00"))
+                    elif " " in event_time_raw:
+                        event_time = datetime.strptime(event_time_raw, "%Y-%m-%d %H:%M:%S")
+                    else:
+                        event_time = datetime.strptime(event_time_raw, "%Y-%m-%d")
+                except ValueError:
+                    event_time = datetime.strptime(event_time_raw[:10], "%Y-%m-%d")
 
                 # Aynı olay var mı kontrol et
                 existing = await session.execute(
