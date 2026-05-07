@@ -298,25 +298,56 @@ function NumInput({ value, onChange, min, max, step = 1, prefix, suffix }: {
 }) {
   const [raw, setRaw] = React.useState(String(value))
   React.useEffect(() => { setRaw(String(value)) }, [value])
+
+  const clamp = (n: number) => {
+    if (min != null && n < min) return min
+    if (max != null && n > max) return max
+    return n
+  }
+  const adjust = (dir: 1 | -1) => {
+    const cur = parseFloat(raw) || 0
+    const next = clamp(parseFloat((cur + step * dir).toFixed(10)))
+    setRaw(String(next))
+    onChange(next)
+  }
+
   return (
-    <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg overflow-hidden focus-within:border-blue-500 transition-colors">
-      {prefix && <span className="px-2.5 text-slate-500 text-xs border-r border-slate-700 py-2">{prefix}</span>}
+    <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg overflow-hidden focus-within:border-blue-500/60 focus-within:ring-1 focus-within:ring-blue-500/20 transition-all">
+      {prefix && <span className="px-2.5 text-slate-500 text-xs border-r border-slate-700 py-2 select-none">{prefix}</span>}
+      <button
+        type="button" tabIndex={-1} onClick={() => adjust(-1)}
+        className="px-2.5 py-2 text-slate-500 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors select-none"
+      >
+        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+          <path d="M2.5 6h7" />
+        </svg>
+      </button>
       <input
-        type="number" value={raw} min={min} max={max} step={step}
+        type="text" inputMode="decimal" value={raw}
         onChange={e => {
-          setRaw(e.target.value)
-          const n = parseFloat(e.target.value)
-          if (!isNaN(n)) onChange(n)
+          const v = e.target.value.replace(/[^0-9.\-]/g, "")
+          setRaw(v)
+          const n = parseFloat(v)
+          if (!isNaN(n)) onChange(clamp(n))
         }}
         onBlur={() => {
           if (raw === "" || isNaN(parseFloat(raw))) {
-            setRaw("0")
-            onChange(0)
+            const fallback = min != null ? min : 0
+            setRaw(String(fallback))
+            onChange(fallback)
           }
         }}
-        className="flex-1 bg-transparent px-3 py-2 text-white text-sm focus:outline-none text-right min-w-0"
+        className="flex-1 bg-transparent px-1 py-2 text-white text-sm font-medium focus:outline-none text-center min-w-0 tabular-nums"
       />
-      {suffix && <span className="px-2.5 text-slate-500 text-xs border-l border-slate-700 py-2">{suffix}</span>}
+      <button
+        type="button" tabIndex={-1} onClick={() => adjust(1)}
+        className="px-2.5 py-2 text-slate-500 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors select-none"
+      >
+        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+          <path d="M6 2.5v7M2.5 6h7" />
+        </svg>
+      </button>
+      {suffix && <span className="px-2.5 text-slate-500 text-xs border-l border-slate-700 py-2 select-none">{suffix}</span>}
     </div>
   )
 }
