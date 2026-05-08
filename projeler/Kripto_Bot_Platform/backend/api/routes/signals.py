@@ -162,6 +162,32 @@ def _normalize_tv_symbol(raw: str) -> str:
     return raw
 
 
+@router.get("/webhook/tv/{token}")
+async def tradingview_webhook_info(token: str):
+    """Browser'dan webhook URL'i test edildiğinde bilgi döner."""
+    from core.redis_client import get_redis
+    redis = get_redis()
+    try:
+        await redis.ping()
+        redis_ok = True
+    except Exception:
+        redis_ok = False
+
+    # Bu token'a ait son sinyal var mı?
+    last_raw = await redis.get(f"tv_webhook:{token}")
+    last_signal = json.loads(last_raw) if last_raw else None
+    hist_len = await redis.llen(f"tv_webhook_history:{token}")
+
+    return {
+        "webhook_active": True,
+        "token": token,
+        "redis_ok": redis_ok,
+        "last_signal": last_signal,
+        "total_signals_received": hist_len,
+        "info": "Bu URL aktif. TradingView alarm ayarlarinda Webhook URL olarak kullanin. Sadece POST istekleri sinyal olarak islenir.",
+    }
+
+
 @router.post("/webhook/tv/{token}")
 async def tradingview_webhook(token: str, request: Request):
     """
@@ -256,11 +282,6 @@ async def tradingview_webhook(token: str, request: Request):
 
             if matched_bots:
                 for bot in matched_bots:
-                    params = json.loads(bot.params) if bot.params else {}
-                    # Token eşleşmesi kontrolü
-                    bot_token = params.get("webhook_token") or params.get("signal_source", "")
-                    if bot_token and bot_token != token:
-                        continue  # Bu bot farklı bir token izliyor
 
                     tp_pct = params.get("tp_pct") or params.get("take_profit_pct") or 0
                     sl_pct = params.get("sl_pct") or params.get("stop_loss_pct") or 0
