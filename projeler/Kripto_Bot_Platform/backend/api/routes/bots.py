@@ -207,7 +207,16 @@ async def start_bot(bot_id: int):
         exchange_client = await _get_exchange_client(bot.exchange or "bitget")
         engine = BotEngine(config, exchange_client)
         _running_bots[bot_id] = engine
-        task = asyncio.create_task(engine.run())
+
+        async def _safe_run(eng, bid):
+            try:
+                await eng.run()
+            except Exception as e:
+                import traceback
+                print(f"[Bot #{bid}] ENGINE ÇÖKTÜ: {e}")
+                traceback.print_exc()
+
+        task = asyncio.create_task(_safe_run(engine, bot_id))
         _bot_tasks[bot_id] = task
 
         await session.execute(

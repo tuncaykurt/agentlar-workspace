@@ -50,7 +50,16 @@ class BotEngine:
         redis = get_redis()
         symbol = self.config["symbol"]
         strategy = self.config.get("strategy", "ema_cross")
-        print(f"[Bot {self.config['name']}] Başlatıldı — {symbol} | Strateji: {strategy}")
+        print(f"[Bot {self.config['name']}] Başlatıldı — {symbol} | Strateji: {strategy} | Exchange: {type(self.exchange).__name__}")
+
+        # İlk bağlantı testi
+        try:
+            ticker = await self.exchange.exchange.fetch_ticker(symbol)
+            print(f"[Bot {self.config['name']}] Bağlantı OK — fiyat: {ticker.get('last')}")
+        except Exception as e:
+            print(f"[Bot {self.config['name']}] BAĞLANTI HATASI: {e}")
+            import traceback
+            traceback.print_exc()
 
         while self.running:
             try:
