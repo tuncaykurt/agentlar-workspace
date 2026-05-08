@@ -219,11 +219,30 @@ async def tradingview_webhook(token: str, request: Request):
         print(f"[TV Webhook] Redis hatası: {e}")
         # Redis yoksa 200 dön (TradingView retry yapar aksi halde)
 
-    # DB'ye sinyal logu kaydet (bot_id=0 çünkü henüz hangi bot alacağı belli değil)
+    # DB'ye sinyal logu kaydet — WebhookProfile varsa TP/SL hesapla
     try:
         from core.database import async_session
-        from models.trade import SignalLog
+        from models.trade import SignalLog, WebhookProfile
+        from sqlalchemy import select as sa_select
+
+        tp_price = None
+        sl_price = None
+
         async with async_session() as session:
+            # Token'a ait profil var mı? (TP/SL ayarları)
+            result = await session.execute(
+                sa_select(WebhookProfile).where(WebhookProfile.token == token)
+            )
+            profile = result.scalar_one_or_none()
+
+            if profile and profile.enabled and price > 0:
+                if sig_type == "buy":
+                    tp_price = round(price * (1 + profile.tp_pct / 100), 6)
+                    sl_price = round(price * (1 - profile.sl_pct / 100), 6)
+                else:  # sell / short
+                    tp_price = round(price * (1 - profile.tp_pct / 100), 6)
+                    sl_price = round(price * (1 + profile.sl_pct / 100), 6)
+
             log = SignalLog(
                 bot_id=0,
                 symbol=symbol_ccxt or symbol_raw,
@@ -232,10 +251,16 @@ async def tradingview_webhook(token: str, request: Request):
                 price=price,
                 reason=message or f"TV Alarm — {action_raw}",
                 action="received",
+                tp_price=tp_price,
+                sl_price=sl_price,
+                outcome="open" if (tp_price and sl_price) else None,
                 raw_payload=json.dumps(body),
             )
             session.add(log)
             await session.commit()
+
+        if tp_price:
+            print(f"[TV Webhook] Performans takibi: TP={tp_price} SL={sl_price}")
     except Exception as e:
         print(f"[TV Webhook] Signal log DB hatası: {e}")
 
@@ -260,3 +285,148 @@ async def tv_webhook_history(token: str, limit: int = 20):
         return {"history": [json.loads(i) for i in items]}
     except:
         return {"history": []}
+
+
+# ─── Webhook Profil Yönetimi (Token bazlı TP/SL) ─────────────────────────────
+
+class WebhookProfileData(BaseModel):
+    token: str
+    name: str = ""
+    tp_pct: float = 2.0
+    sl_pct: float = 1.0
+    enabled: bool = True
+
+
+@router.get("/webhook-profiles")
+async def list_webhook_profiles():
+    """Tüm webhook profillerini listele."""
+    from core.database import async_session
+    from models.trade import WebhookProfile
+    from sqlalchemy import select as sa_select
+    async with async_session() as session:
+        result = await session.execute(sa_select(WebhookProfile).order_by(WebhookProfile.id.desc()))
+        profiles = result.scalars().all()
+        return [
+            {
+                "id": p.id,
+                "token": p.token,
+                "name": p.name,
+                "tp_pct": p.tp_pct,
+                "sl_pct": p.sl_pct,
+                "enabled": p.enabled,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in profiles
+        ]
+
+
+@router.post("/webhook-profiles")
+async def create_webhook_profile(data: WebhookProfileData):
+    """Yeni webhook profili oluştur veya mevcut olanı güncelle."""
+    from core.database import async_session
+    from models.trade import WebhookProfile
+    from sqlalchemy import select as sa_select
+    async with async_session() as session:
+        result = await session.execute(
+            sa_select(WebhookProfile).where(WebhookProfile.token == data.token)
+        )
+        profile = result.scalar_one_or_none()
+        if profile:
+            profile.name = data.name or profile.name
+            profile.tp_pct = data.tp_pct
+            profile.sl_pct = data.sl_pct
+            profile.enabled = data.enabled
+        else:
+            profile = WebhookProfile(
+                token=data.token,
+                name=data.name,
+                tp_pct=data.tp_pct,
+                sl_pct=data.sl_pct,
+                enabled=data.enabled,
+            )
+            session.add(profile)
+        await session.commit()
+        await session.refresh(profile)
+        return {
+            "id": profile.id,
+            "token": profile.token,
+            "name": profile.name,
+            "tp_pct": profile.tp_pct,
+            "sl_pct": profile.sl_pct,
+            "enabled": profile.enabled,
+        }
+
+
+@router.delete("/webhook-profiles/{token}")
+async def delete_webhook_profile(token: str):
+    from core.database import async_session
+    from models.trade import WebhookProfile
+    from sqlalchemy import delete as sa_delete
+    async with async_session() as session:
+        await session.execute(sa_delete(WebhookProfile).where(WebhookProfile.token == token))
+        await session.commit()
+    return {"status": "deleted"}
+
+
+# ─── Sinyal Performans Analizi ────────────────────────────────────────────────
+
+@router.get("/performance/{token}")
+async def signal_performance(token: str):
+    """
+    Token'a ait sinyallerin geçmişe dönük performans analizi.
+    TP/SL vuruş oranı, ortalama kâr/zarar, toplam sinyal sayısı.
+    """
+    from core.database import async_session
+    from models.trade import SignalLog
+    from sqlalchemy import select as sa_select
+
+    async with async_session() as session:
+        # Bu token'a ait tüm sinyaller (bot_id=0, source=TradingView)
+        result = await session.execute(
+            sa_select(SignalLog).where(
+                SignalLog.bot_id == 0,
+                SignalLog.outcome.isnot(None),
+                SignalLog.raw_payload.contains(token),
+            ).order_by(SignalLog.created_at.desc())
+        )
+        signals = result.scalars().all()
+
+    total = len(signals)
+    tp_hits = [s for s in signals if s.outcome == "tp_hit"]
+    sl_hits = [s for s in signals if s.outcome == "sl_hit"]
+    still_open = [s for s in signals if s.outcome == "open"]
+    expired = [s for s in signals if s.outcome == "expired"]
+
+    pnl_list = [s.outcome_pnl_pct for s in signals if s.outcome_pnl_pct is not None]
+    avg_pnl = sum(pnl_list) / len(pnl_list) if pnl_list else 0
+    total_pnl = sum(pnl_list)
+
+    closed = len(tp_hits) + len(sl_hits)
+    win_rate = (len(tp_hits) / closed * 100) if closed > 0 else 0
+
+    return {
+        "token": token,
+        "total_signals": total,
+        "open": len(still_open),
+        "tp_hit": len(tp_hits),
+        "sl_hit": len(sl_hits),
+        "expired": len(expired),
+        "win_rate": round(win_rate, 1),
+        "avg_pnl_pct": round(avg_pnl, 2),
+        "total_pnl_pct": round(total_pnl, 2),
+        "signals": [
+            {
+                "id": s.id,
+                "signal_type": s.signal_type,
+                "price": s.price,
+                "tp_price": s.tp_price,
+                "sl_price": s.sl_price,
+                "outcome": s.outcome,
+                "outcome_price": s.outcome_price,
+                "outcome_pnl_pct": s.outcome_pnl_pct,
+                "outcome_at": s.outcome_at.isoformat() if s.outcome_at else None,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in signals[:50]
+        ],
+    }

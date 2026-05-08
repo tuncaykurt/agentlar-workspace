@@ -124,12 +124,35 @@ class SignalLog(Base):
     tp_price = Column(Float, nullable=True)
     sl_price = Column(Float, nullable=True)
     raw_payload = Column(Text, nullable=True)              # ham sinyal JSON
+    # Performans takibi — bot kapalıyken bile sinyal sonucu izlenir
+    outcome = Column(String, nullable=True)                # tp_hit, sl_hit, open, expired
+    outcome_price = Column(Float, nullable=True)           # sonuç fiyatı
+    outcome_pnl_pct = Column(Float, nullable=True)         # kâr/zarar yüzdesi
+    outcome_at = Column(DateTime(timezone=True), nullable=True)  # sonuç zamanı
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_signal_bot_time", "bot_id", "created_at"),
         Index("ix_signal_action", "action", "created_at"),
     )
+
+
+class WebhookProfile(Base):
+    """
+    Token bazlı webhook profili.
+    Her token için TP/SL yüzdeleri saklanır.
+    Bot kapalıyken bile gelen sinyaller bu ayarlarla değerlendirilir.
+    """
+    __tablename__ = "webhook_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, nullable=False, unique=True, index=True)
+    name = Column(String, nullable=True)                   # profil adı (opsiyonel)
+    tp_pct = Column(Float, nullable=False, default=2.0)    # Take Profit %
+    sl_pct = Column(Float, nullable=False, default=1.0)    # Stop Loss %
+    enabled = Column(Boolean, default=True)                 # aktif mi
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class OHLCV(Base):

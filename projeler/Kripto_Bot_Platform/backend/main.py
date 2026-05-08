@@ -13,6 +13,7 @@ from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
 from services.liquidation_collector import start_liquidation_collector
 from services.economic_calendar import start_calendar_sync
+from services.signal_tracker import start_signal_tracker
 
 
 async def _init_db():
@@ -45,6 +46,11 @@ async def _init_db():
         ("bot_filters", "volatility_filter_enabled", "ALTER TABLE bot_filters ADD COLUMN volatility_filter_enabled BOOLEAN DEFAULT FALSE"),
         # Signal logs ek kolonları (tablo create_all ile oluşur, bu sadece güvenlik)
         ("signal_logs", "raw_payload", "ALTER TABLE signal_logs ADD COLUMN raw_payload TEXT"),
+        # Sinyal performans takibi
+        ("signal_logs", "outcome", "ALTER TABLE signal_logs ADD COLUMN outcome VARCHAR"),
+        ("signal_logs", "outcome_price", "ALTER TABLE signal_logs ADD COLUMN outcome_price FLOAT"),
+        ("signal_logs", "outcome_pnl_pct", "ALTER TABLE signal_logs ADD COLUMN outcome_pnl_pct FLOAT"),
+        ("signal_logs", "outcome_at", "ALTER TABLE signal_logs ADD COLUMN outcome_at TIMESTAMPTZ"),
     ]
     for table, column, sql in migrations:
         try:
@@ -132,7 +138,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Main] EconCal hatası (devam ediliyor): {e}")
 
-    # 5. Bot auto-start (max 15sn timeout)
+    # 5. Sinyal sonuç takipçisi (TP/SL vuruş kontrolü)
+    try:
+        tasks.append(asyncio.create_task(start_signal_tracker()))
+    except Exception as e:
+        print(f"[Main] SignalTracker hatası (devam ediliyor): {e}")
+
+    # 6. Bot auto-start (max 15sn timeout)
     try:
         await asyncio.wait_for(_auto_start_bots(tasks), timeout=15)
     except asyncio.TimeoutError:
