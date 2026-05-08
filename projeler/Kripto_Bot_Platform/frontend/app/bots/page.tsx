@@ -270,6 +270,7 @@ const defaultForm = () => ({
   tp_pct: 2,              // % take profit
   sl_pct: 1,              // % stop loss
   trailing_sl: false,
+  order_type: "market" as "market" | "limit",
   max_positions: 1,
   strategy_params: {} as Record<string, number | string | boolean>,
 })
@@ -947,6 +948,7 @@ export default function BotsPage() {
       tp_pct: f.tp_pct,
       sl_pct: f.sl_pct,
       trailing_sl: f.trailing_sl,
+      order_type: f.order_type,
       strategy_params: useCustomSig
         ? { signal_source: sigSrc, ...Object.fromEntries(
             Object.entries(f.strategy_params).filter(([k]) =>
@@ -1024,8 +1026,9 @@ export default function BotsPage() {
       tp_pct: p.tp_pct || 0,
       sl_pct: p.sl_pct || 0,
       trailing_sl: p.trailing_sl || false,
+      order_type: (p.order_type || "market") as "market" | "limit",
       strategy_params: Object.fromEntries(
-        Object.entries(p).filter(([k]) => !["tp_pct", "sl_pct", "trailing_sl", "_strategy_display"].includes(k))
+        Object.entries(p).filter(([k]) => !["tp_pct", "sl_pct", "trailing_sl", "_strategy_display", "order_type"].includes(k))
       ),
     })
     setStep(0)
@@ -1539,6 +1542,32 @@ export default function BotsPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Emir Türü */}
+                  <div className="p-4 rounded-xl border border-slate-700/50 bg-slate-800/30">
+                    <p className="text-sm font-medium text-slate-300 mb-3">📋 Emir Türü</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["market", "limit"] as const).map(t => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => set("order_type", t)}
+                          className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                            form.order_type === t
+                              ? "bg-blue-500/20 border-blue-500/50 text-blue-300 border"
+                              : "bg-slate-800/50 border-slate-700/30 text-slate-400 border hover:border-slate-600"
+                          }`}
+                        >
+                          {t === "market" ? "⚡ Market" : "📊 Limit"}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      {form.order_type === "market"
+                        ? "Anlık piyasa fiyatından işlem açılır. Hızlı ve garantili."
+                        : "Sinyal fiyatından limit emir verilir. Daha iyi fiyat, ama dolmama riski var."}
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -1660,6 +1689,7 @@ export default function BotsPage() {
                       { label: "Kaldıraç",   value: `${form.leverage}x`,                   icon: "⚡" },
                       { label: "Bakiye",     value: `$${form.initial_balance.toLocaleString()}`, icon: "💵" },
                       { label: "TP / SL",    value: `${form.tp_pct}% / ${form.sl_pct}%`,   icon: "🎯" },
+                      { label: "Emir Türü",  value: form.order_type === "market" ? "Market" : "Limit", icon: "📋" },
                       { label: "Mod",        value: form.paper_mode ? "Paper" : "Gerçek",  icon: form.paper_mode ? "🛡" : "⚡" },
                     ].map(item => (
                       <div key={item.label} className="p-3 rounded-xl border border-slate-800 bg-slate-900/40">

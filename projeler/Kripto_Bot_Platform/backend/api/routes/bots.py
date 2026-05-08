@@ -74,6 +74,7 @@ class BotCreate(BaseModel):
     tp_pct: Optional[float] = None
     sl_pct: Optional[float] = None
     trailing_sl: Optional[bool] = None
+    order_type: Optional[str] = "market"  # "market" veya "limit"
 
 
 @router.get("")
@@ -117,6 +118,8 @@ async def create_bot(data: BotCreate):
                 effective_params["sl_pct"] = data.sl_pct
             if data.trailing_sl is not None:
                 effective_params["trailing_sl"] = data.trailing_sl
+            if data.order_type:
+                effective_params["order_type"] = data.order_type
 
             # Strateji normalizasyonu:
             # tradingview_webhook engine için custom_signal olarak saklanir,
@@ -302,6 +305,8 @@ async def update_bot(bot_id: int, data: BotCreate):
             effective_params["sl_pct"] = data.sl_pct
         if data.trailing_sl is not None:
             effective_params["trailing_sl"] = data.trailing_sl
+        if data.order_type:
+            effective_params["order_type"] = data.order_type
 
         strategy = data.strategy
         if strategy == "tradingview_webhook":

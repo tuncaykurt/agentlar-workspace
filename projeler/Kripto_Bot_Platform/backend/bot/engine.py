@@ -50,14 +50,24 @@ class BotEngine:
         redis = get_redis()
         symbol = self.config["symbol"]
         strategy = self.config.get("strategy", "ema_cross")
-        print(f"[Bot {self.config['name']}] Başlatıldı — {symbol} | Strateji: {strategy} | Exchange: {type(self.exchange).__name__}")
+        bot_name = self.config['name']
+        print(f"[Bot {bot_name}] Başlatıldı — {symbol} | Strateji: {strategy} | Exchange: {type(self.exchange).__name__}")
+        print(f"[Bot {bot_name}] Config: paper_mode={self.config.get('paper_mode')}, leverage={self.config.get('leverage')}, params={self.config.get('params')}")
 
-        # İlk bağlantı testi
+        # İlk bağlantı testi — load_markets zorunlu (MEXC vb. için)
+        try:
+            await self.exchange.exchange.load_markets()
+            print(f"[Bot {bot_name}] load_markets() OK — {len(self.exchange.exchange.markets)} market yüklendi")
+        except Exception as e:
+            print(f"[Bot {bot_name}] load_markets() HATASI: {e}")
+            import traceback
+            traceback.print_exc()
+
         try:
             ticker = await self.exchange.exchange.fetch_ticker(symbol)
-            print(f"[Bot {self.config['name']}] Bağlantı OK — fiyat: {ticker.get('last')}")
+            print(f"[Bot {bot_name}] Bağlantı OK — fiyat: {ticker.get('last')}")
         except Exception as e:
-            print(f"[Bot {self.config['name']}] BAĞLANTI HATASI: {e}")
+            print(f"[Bot {bot_name}] BAĞLANTI HATASI: {e}")
             import traceback
             traceback.print_exc()
 
@@ -285,9 +295,12 @@ class BotEngine:
     async def _execute(self, side: str, price: float, qty: float, stop_loss: float, ai_result: dict):
         paper = self.config.get("paper_mode", True)
         mode = "📝 PAPER" if paper else "🟢 CANLI"
+        bot_name = self.config['name']
         confidence = ai_result.get("confidence", 0)
         take_profit = ai_result.get("take_profit")
         analysis = ai_result.get("analysis", "")
+        params = self.config.get("params", {})
+        order_type = params.get("order_type", "market")  # market veya limit
 
         trade = {
             "side": side,
@@ -301,42 +314,38 @@ class BotEngine:
         }
 
         if paper:
+            print(f"[Bot {bot_name}] 📝 PAPER trade: {side} {qty} @ {price}")
             self.paper_trades.append(trade)
         else:
             symbol = self.config["symbol"]
             try:
                 await self.exchange.set_leverage(symbol, self.risk.leverage)
+                print(f"[Bot {bot_name}] Leverage {self.risk.leverage}x ayarlandı")
             except Exception as e:
-                print(f"[Bot {self.config['name']}] Leverage ayar hatası (devam): {e}")
+                print(f"[Bot {bot_name}] Leverage ayar hatası (devam): {e}")
 
             # Kontrat boyutu hesabı (MEXC swap: tam sayı kontrat)
             amount = qty
             try:
-                await self.exchange.exchange.load_markets()
                 market = self.exchange.exchange.market(symbol)
                 contract_size = market.get("contractSize", 1) or 1
                 if contract_size < 1:
-                    # MEXC gibi borsalarda kontrat adedi tam sayı olmalı
                     amount = max(1, int(qty / contract_size))
+                print(f"[Bot {bot_name}] Kontrat: qty={qty} → amount={amount} (contractSize={contract_size})")
             except Exception as e:
-                print(f"[Bot {self.config['name']}] Kontrat hesabı hatası (devam): {e}")
+                print(f"[Bot {bot_name}] Kontrat hesabı hatası (devam): {e}")
 
             # TP/SL fiyatları hesapla
             tp_price = round(take_profit, 2) if take_profit else None
             sl_price = round(stop_loss, 2) if stop_loss else None
 
-            print(f"[Bot {self.config['name']}] İşlem açılıyor: {side} {amount} {symbol} TP={tp_price} SL={sl_price}")
-            try:
-                order = await self.exchange.place_order(
-                    symbol, side, amount, "market",
-                    tp_price=tp_price, sl_price=sl_price,
-                )
-                print(f"[Bot {self.config['name']}] İşlem başarılı: {order.get('id', 'N/A')}")
-            except Exception as e:
-                print(f"[Bot {self.config['name']}] İŞLEM HATASI: {e}")
-                import traceback
-                traceback.print_exc()
-                raise
+            print(f"[Bot {bot_name}] İşlem açılıyor: {side} {amount} {symbol} type={order_type} TP={tp_price} SL={sl_price}")
+            order = await self.exchange.place_order(
+                symbol, side, amount, order_type,
+                price=price if order_type == "limit" else None,
+                tp_price=tp_price, sl_price=sl_price,
+            )
+            print(f"[Bot {bot_name}] ✓ İşlem başarılı: order_id={order.get('id', 'N/A')}")
 
         self.signal_history.append(trade)
 
@@ -534,6 +543,9 @@ class BotEngine:
         - tv_webhook:{token} anahtarını okur (TradingView alarm botu)
         Her ikisi de aynı payload formatını kullanır.
         """
+        bot_name = self.config['name']
+        bot_id = self.config['id']
+
         # Trailing stop kontrolü
         if symbol in self._trailing:
             try:
@@ -545,7 +557,7 @@ class BotEngine:
                         await self._close_position(symbol, pos)
                         await self._alert(f"📊 Trailing Stop tetiklendi — {symbol} @ ${cur_price:,.2f}")
             except Exception as e:
-                print(f"[Bot] Trailing stop kontrolü hatası: {e}")
+                print(f"[Bot {bot_name}] Trailing stop kontrolü hatası: {e}")
 
         params = self.config.get("params", {})
 
@@ -579,7 +591,7 @@ class BotEngine:
             ticker = await self.exchange.exchange.fetch_ticker(symbol)
             cur_price = float(ticker["last"])
         except Exception as e:
-            print(f"[Bot {self.config['name']}] fetch_ticker hatası: {e}")
+            print(f"[Bot {bot_name}] fetch_ticker hatası: {e}")
             cur_price = 0
 
         if not sig:
@@ -588,7 +600,7 @@ class BotEngine:
             try:
                 position = await self._get_position_info(symbol)
             except Exception as e:
-                print(f"[Bot {self.config['name']}] Pozisyon bilgisi alınamadı: {e}")
+                print(f"[Bot {bot_name}] Pozisyon bilgisi alınamadı: {e}")
             status_data = {
                 "signal": None,
                 "price": cur_price,
@@ -601,11 +613,11 @@ class BotEngine:
                 "position": position,
                 "ts": datetime.utcnow().isoformat(),
             }
-            await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
+            await redis.set(f"bot:{bot_id}:status", json.dumps(status_data))
             return
 
         # Duplicate sinyal kontroli (aynı ts tekrar işleme)
-        last_ts_key = f"bot:{self.config['id']}:last_custom_signal_ts"
+        last_ts_key = f"bot:{bot_id}:last_custom_signal_ts"
         last_ts = await redis.get(last_ts_key)
         sig_ts = sig.get("ts", "")
         if last_ts:
@@ -618,7 +630,20 @@ class BotEngine:
         source      = sig.get("source", "Özel İndikatör")
         reason      = sig.get("reason", "")
 
+        print(f"[Bot {bot_name}] ▶ SİNYAL BULUNDU: type={signal_type} price={price} source={source} key={sig_key}")
+
         if signal_type not in ("buy", "sell"):
+            print(f"[Bot {bot_name}] ✗ Geçersiz sinyal tipi: '{signal_type}' — atlanıyor")
+            await redis.set(last_ts_key, sig_ts, ex=600)
+            return
+
+        # Fiyat 0 ise cur_price'ı kullan
+        if not price or price <= 0:
+            print(f"[Bot {bot_name}] ⚠ Sinyal fiyatı 0 — cur_price kullanılıyor: {cur_price}")
+            price = cur_price
+        if not price or price <= 0:
+            print(f"[Bot {bot_name}] ✗ Fiyat alınamadı (price=0, cur_price=0) — sinyal atlanıyor")
+            await redis.set(last_ts_key, sig_ts, ex=600)
             return
 
         # Bot parametrelerini al
@@ -628,21 +653,27 @@ class BotEngine:
         take_profit_pct = params.get("take_profit_pct") or params.get("tp_pct", 0)
         stop_loss_pct = params.get("stop_loss_pct") or params.get("sl_pct", 0)
         trailing_stop_pct = params.get("trailing_stop_pct") or params.get("trailing_sl_pct", 0)
-        max_position_hours = params.get("max_position_hours", 0)
+
+        print(f"[Bot {bot_name}] Params: mode={signal_mode} tp={take_profit_pct}% sl={stop_loss_pct}% action={position_action}")
 
         # Sinyal moduna göre yönü belirle
         if signal_mode == "inverse":
             signal_type = "sell" if signal_type == "buy" else "buy"
+            print(f"[Bot {bot_name}] Inverse mod — sinyal tersine çevrildi: {signal_type}")
         elif signal_mode == "buy_only" and signal_type == "sell":
+            print(f"[Bot {bot_name}] ✗ buy_only mod — sell sinyali filtrelendi")
             await self._log_signal(signal_type, price, source=source, reason=reason,
                 action="filtered", reject_reason="signal_mode=buy_only, sell sinyali filtrelendi")
+            await redis.set(last_ts_key, sig_ts, ex=600)
             return
         elif signal_mode == "sell_only" and signal_type == "buy":
+            print(f"[Bot {bot_name}] ✗ sell_only mod — buy sinyali filtrelendi")
             await self._log_signal(signal_type, price, source=source, reason=reason,
                 action="filtered", reject_reason="signal_mode=sell_only, buy sinyali filtrelendi")
+            await redis.set(last_ts_key, sig_ts, ex=600)
             return
 
-        print(f"[Bot {self.config['name']}] Özel sinyal: {signal_type} @ {price} — {source}: {reason}")
+        print(f"[Bot {bot_name}] ✓ Sinyal kabul edildi: {signal_type} @ {price}")
 
         # Sinyal geldi — logla
         await self._log_signal(signal_type, price, source=source, reason=reason,
@@ -652,36 +683,36 @@ class BotEngine:
         blackout = await self._check_news_protection()
         if blackout:
             bl_reason = blackout.get("reason", "Haber blackout")
-            print(f"[Bot {self.config['name']}] Haber koruması aktif — sinyal filtrelendi: {bl_reason}")
+            print(f"[Bot {bot_name}] ✗ Haber koruması aktif — sinyal filtrelendi: {bl_reason}")
             await self._log_signal(signal_type, price, source=source, reason=reason,
                 action="filtered", reject_reason=f"Haber koruması: {bl_reason}")
-            await redis.set(last_ts_key, sig.get("ts", ""), ex=600)
+            await redis.set(last_ts_key, sig_ts, ex=600)
             return
 
         # Mevcut pozisyon kontrolü
         current_position = await self._get_current_position(symbol)
-        
+        print(f"[Bot {bot_name}] Mevcut pozisyon: {current_position}")
+
         # Pozisyon yönetimi
         if current_position:
             if position_action == "close_only":
-                # Sadece kapat
                 if (current_position["side"] == "long" and signal_type == "sell") or \
                    (current_position["side"] == "short" and signal_type == "buy"):
                     await self._close_position(symbol, current_position)
+                await redis.set(last_ts_key, sig_ts, ex=600)
                 return
             elif position_action == "reverse":
-                # Ters çevir
                 await self._close_position(symbol, current_position)
             elif position_action == "add":
-                # Hedge - ters yönde pozisyon aç
                 pass
             else:  # close_and_open
-                # Kapat ve yeni aç (eğer ters yöndeyse)
                 if (current_position["side"] == "long" and signal_type == "sell") or \
                    (current_position["side"] == "short" and signal_type == "buy"):
                     await self._close_position(symbol, current_position)
                 elif current_position["side"] == ("long" if signal_type == "buy" else "short"):
-                    return  # Aynı yönde pozisyon var, işlem yapma
+                    print(f"[Bot {bot_name}] ✗ Aynı yönde pozisyon var — işlem yapılmıyor")
+                    await redis.set(last_ts_key, sig_ts, ex=600)
+                    return
 
         # TP/SL hesapla (max %99 güvenlik — negatif fiyat önleme)
         take_profit = None
@@ -701,6 +732,7 @@ class BotEngine:
             stop_loss = self.risk.atr_stop_loss(price, atr_approx, signal_type)
 
         qty = self.risk.position_size(price, stop_loss)
+        print(f"[Bot {bot_name}] Hesaplama: TP={take_profit} SL={stop_loss} qty={qty} (balance={self.risk.balance}, risk_per_trade={self.risk.risk_per_trade})")
 
         if qty > 0:
             ai_result = {
@@ -710,15 +742,27 @@ class BotEngine:
                 "take_profit": take_profit,
                 "analysis": f"{source} — {reason}",
             }
-            await self._execute(signal_type, price, qty, stop_loss, ai_result)
-            await self._log_signal(signal_type, price, source=source, reason=reason,
-                action="executed", confidence=75, tp_price=take_profit, sl_price=stop_loss)
+            try:
+                await self._execute(signal_type, price, qty, stop_loss, ai_result)
+                await self._log_signal(signal_type, price, source=source, reason=reason,
+                    action="executed", confidence=75, tp_price=take_profit, sl_price=stop_loss)
+                print(f"[Bot {bot_name}] ✓ İşlem başarıyla açıldı!")
+            except Exception as e:
+                print(f"[Bot {bot_name}] ✗ İşlem açma hatası: {e}")
+                import traceback
+                traceback.print_exc()
+                await self._log_signal(signal_type, price, source=source, reason=reason,
+                    action="error", reject_reason=f"İşlem hatası: {str(e)[:200]}")
         else:
+            print(f"[Bot {bot_name}] ✗ qty=0 — risk manager pozisyon boyutunu 0 hesapladı")
             await self._log_signal(signal_type, price, source=source, reason=reason,
                 action="rejected", reject_reason="Pozisyon boyutu 0 (risk manager)")
 
         # Status'u Redis'e yaz (frontend görebilsin)
-        position = await self._get_position_info(symbol)
+        try:
+            position = await self._get_position_info(symbol)
+        except Exception:
+            position = None
         status_data = {
             "signal": signal_type,
             "price": cur_price or price,
@@ -731,9 +775,10 @@ class BotEngine:
             "position": position,
             "ts": datetime.utcnow().isoformat(),
         }
-        await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
+        await redis.set(f"bot:{bot_id}:status", json.dumps(status_data))
 
-        await redis.set(last_ts_key, sig.get("ts", ""), ex=600)
+        # Sinyal işlendi — tekrar işlenmesini engelle
+        await redis.set(last_ts_key, sig_ts, ex=600)
 
     async def _get_current_position(self, symbol: str):
         """Mevcut pozisyonu döndür"""
@@ -744,10 +789,10 @@ class BotEngine:
                     return {
                         "side": "long" if pos["side"] == "long" else "short",
                         "size": float(pos["contracts"]),
-                        "entry": float(pos["entryPrice"]),
+                        "entry": float(pos.get("entryPrice") or 0),
                     }
-        except:
-            pass
+        except Exception as e:
+            print(f"[Bot {self.config['name']}] fetch_positions hatası: {e}")
         return None
 
     async def _close_position(self, symbol: str, position: dict):
