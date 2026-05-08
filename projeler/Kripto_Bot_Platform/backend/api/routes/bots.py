@@ -431,6 +431,60 @@ async def get_signal_logs(bot_id: int, limit: int = 50, action: str = None):
         ]
 
 
+@router.get("/{bot_id}/performance")
+async def bot_performance(bot_id: int):
+    """Bot'un sinyal performansı — TP/SL vuruş oranı, kâr/zarar özeti."""
+    from models.trade import SignalLog
+    async with async_session() as session:
+        result = await session.execute(
+            select(SignalLog).where(
+                SignalLog.bot_id == bot_id,
+                SignalLog.outcome.isnot(None),
+            ).order_by(SignalLog.created_at.desc())
+        )
+        signals = result.scalars().all()
+
+    total = len(signals)
+    tp_hits = sum(1 for s in signals if s.outcome == "tp_hit")
+    sl_hits = sum(1 for s in signals if s.outcome == "sl_hit")
+    still_open = sum(1 for s in signals if s.outcome == "open")
+    expired = sum(1 for s in signals if s.outcome == "expired")
+
+    pnl_list = [s.outcome_pnl_pct for s in signals if s.outcome_pnl_pct is not None]
+    avg_pnl = sum(pnl_list) / len(pnl_list) if pnl_list else 0
+    total_pnl = sum(pnl_list)
+
+    closed = tp_hits + sl_hits
+    win_rate = (tp_hits / closed * 100) if closed > 0 else 0
+
+    return {
+        "bot_id": bot_id,
+        "total_signals": total,
+        "open": still_open,
+        "tp_hit": tp_hits,
+        "sl_hit": sl_hits,
+        "expired": expired,
+        "win_rate": round(win_rate, 1),
+        "avg_pnl_pct": round(avg_pnl, 2),
+        "total_pnl_pct": round(total_pnl, 2),
+        "last_signals": [
+            {
+                "id": s.id,
+                "signal_type": s.signal_type,
+                "price": s.price,
+                "tp_price": s.tp_price,
+                "sl_price": s.sl_price,
+                "outcome": s.outcome,
+                "outcome_price": s.outcome_price,
+                "outcome_pnl_pct": s.outcome_pnl_pct,
+                "outcome_at": s.outcome_at.isoformat() if s.outcome_at else None,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in signals[:20]
+        ],
+    }
+
+
 @router.patch("/{bot_id}/filters")
 async def update_filters(bot_id: int, data: FilterUpdate):
     from models.trade import BotFilter

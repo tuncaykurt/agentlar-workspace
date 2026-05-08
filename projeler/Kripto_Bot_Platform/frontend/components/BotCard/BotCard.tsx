@@ -97,6 +97,35 @@ export default function BotCard({
     volatility_filter_enabled: false,
   })
   const [showFilters, setShowFilters] = useState(false)
+  const [showPerf, setShowPerf] = useState(false)
+  const [perf, setPerf] = useState<{
+    total_signals: number
+    open: number
+    tp_hit: number
+    sl_hit: number
+    expired: number
+    win_rate: number
+    avg_pnl_pct: number
+    total_pnl_pct: number
+    last_signals: Array<{
+      id: number
+      signal_type: string
+      price: number
+      tp_price: number | null
+      sl_price: number | null
+      outcome: string
+      outcome_pnl_pct: number | null
+      created_at: string | null
+    }>
+  } | null>(null)
+
+  // Sinyal performansını çek
+  useEffect(() => {
+    api.get(`/bots/${bot.id}/performance`)
+      .then((data: any) => { if (data && !data.error) setPerf(data) })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bot.id])
 
   useEffect(() => {
     if (!running) { setStatus(null); return }
@@ -336,6 +365,116 @@ export default function BotCard({
             : "text-red-400 bg-red-500/10 border-red-500/20"
         )}>
           {status.signal === "buy" ? "AL sinyali tespit edildi" : "SAT sinyali tespit edildi"}
+        </div>
+      )}
+
+      {/* Sinyal Performansı */}
+      {perf && perf.total_signals > 0 && (
+        <div className="border-t border-slate-800 pt-2">
+          <button
+            onClick={() => setShowPerf(p => !p)}
+            className="flex items-center justify-between w-full text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Sinyal Performansi
+              <span className={clsx(
+                "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                perf.win_rate >= 50
+                  ? "bg-green-500/20 text-green-400"
+                  : perf.win_rate > 0
+                    ? "bg-red-500/20 text-red-400"
+                    : "bg-slate-700/50 text-slate-400"
+              )}>
+                {perf.tp_hit + perf.sl_hit > 0 ? `%${perf.win_rate} basari` : `${perf.open} acik`}
+              </span>
+            </span>
+            <svg
+              className={clsx("w-3.5 h-3.5 transition-transform", showPerf && "rotate-180")}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showPerf && (
+            <div className="mt-2 space-y-2">
+              {/* Özet istatistikler */}
+              <div className="grid grid-cols-4 gap-1.5">
+                <div className="bg-slate-900/60 rounded-lg p-1.5 text-center border border-slate-800">
+                  <p className="text-[9px] text-slate-500">Toplam</p>
+                  <p className="text-xs font-bold text-white">{perf.total_signals}</p>
+                </div>
+                <div className="bg-green-500/5 rounded-lg p-1.5 text-center border border-green-500/20">
+                  <p className="text-[9px] text-green-400/70">TP</p>
+                  <p className="text-xs font-bold text-green-400">{perf.tp_hit}</p>
+                </div>
+                <div className="bg-red-500/5 rounded-lg p-1.5 text-center border border-red-500/20">
+                  <p className="text-[9px] text-red-400/70">SL</p>
+                  <p className="text-xs font-bold text-red-400">{perf.sl_hit}</p>
+                </div>
+                <div className="bg-blue-500/5 rounded-lg p-1.5 text-center border border-blue-500/20">
+                  <p className="text-[9px] text-blue-400/70">Acik</p>
+                  <p className="text-xs font-bold text-blue-400">{perf.open}</p>
+                </div>
+              </div>
+
+              {/* Kâr/Zarar özeti */}
+              {(perf.tp_hit + perf.sl_hit > 0) && (
+                <div className="flex items-center justify-between bg-slate-900/60 rounded-lg p-2 border border-slate-800">
+                  <div>
+                    <p className="text-[9px] text-slate-500">Toplam PnL</p>
+                    <p className={clsx("text-sm font-bold", perf.total_pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                      {perf.total_pnl_pct >= 0 ? "+" : ""}{perf.total_pnl_pct}%
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] text-slate-500">Ort. PnL</p>
+                    <p className={clsx("text-sm font-bold", perf.avg_pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                      {perf.avg_pnl_pct >= 0 ? "+" : ""}{perf.avg_pnl_pct}%
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] text-slate-500">Basari</p>
+                    <p className={clsx("text-sm font-bold", perf.win_rate >= 50 ? "text-green-400" : "text-red-400")}>
+                      %{perf.win_rate}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Son sinyaller */}
+              {perf.last_signals.length > 0 && (
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {perf.last_signals.map(s => (
+                    <div key={s.id} className={clsx(
+                      "flex items-center justify-between text-[10px] px-2 py-1 rounded-lg border",
+                      s.outcome === "tp_hit"
+                        ? "bg-green-500/5 border-green-500/15 text-green-400"
+                        : s.outcome === "sl_hit"
+                          ? "bg-red-500/5 border-red-500/15 text-red-400"
+                          : s.outcome === "open"
+                            ? "bg-blue-500/5 border-blue-500/15 text-blue-400"
+                            : "bg-slate-900/40 border-slate-800 text-slate-500"
+                    )}>
+                      <span className="font-medium">
+                        {s.signal_type === "buy" ? "LONG" : "SHORT"} @ ${s.price?.toLocaleString("tr-TR", {maximumFractionDigits: 2})}
+                      </span>
+                      <span>
+                        {s.outcome === "tp_hit" ? "TP" : s.outcome === "sl_hit" ? "SL" : s.outcome === "open" ? "Acik" : "Suresi doldu"}
+                        {s.outcome_pnl_pct != null && ` ${s.outcome_pnl_pct >= 0 ? "+" : ""}${s.outcome_pnl_pct}%`}
+                      </span>
+                      <span className="text-slate-600">
+                        {s.created_at ? new Date(s.created_at).toLocaleString("tr-TR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

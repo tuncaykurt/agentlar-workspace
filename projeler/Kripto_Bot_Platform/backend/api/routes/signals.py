@@ -219,48 +219,73 @@ async def tradingview_webhook(token: str, request: Request):
         print(f"[TV Webhook] Redis hatası: {e}")
         # Redis yoksa 200 dön (TradingView retry yapar aksi halde)
 
-    # DB'ye sinyal logu kaydet — WebhookProfile varsa TP/SL hesapla
+    # DB'ye sinyal logu kaydet — eşleşen botların TP/SL ayarlarıyla performans takibi
     try:
         from core.database import async_session
-        from models.trade import SignalLog, WebhookProfile
+        from models.trade import SignalLog, Bot
         from sqlalchemy import select as sa_select
 
-        tp_price = None
-        sl_price = None
-
         async with async_session() as session:
-            # Token'a ait profil var mı? (TP/SL ayarları)
+            # Bu token veya sembol'e bağlı TradingView webhook botlarını bul
             result = await session.execute(
-                sa_select(WebhookProfile).where(WebhookProfile.token == token)
+                sa_select(Bot).where(
+                    Bot.strategy.in_(["tradingview_webhook", "custom_signal"]),
+                    Bot.symbol == symbol_ccxt,
+                )
             )
-            profile = result.scalar_one_or_none()
+            matched_bots = result.scalars().all()
 
-            if profile and profile.enabled and price > 0:
-                if sig_type == "buy":
-                    tp_price = round(price * (1 + profile.tp_pct / 100), 6)
-                    sl_price = round(price * (1 - profile.sl_pct / 100), 6)
-                else:  # sell / short
-                    tp_price = round(price * (1 - profile.tp_pct / 100), 6)
-                    sl_price = round(price * (1 + profile.sl_pct / 100), 6)
+            if matched_bots:
+                for bot in matched_bots:
+                    params = json.loads(bot.params) if bot.params else {}
+                    # Token eşleşmesi kontrolü
+                    bot_token = params.get("webhook_token") or params.get("signal_source", "")
+                    if bot_token and bot_token != token:
+                        continue  # Bu bot farklı bir token izliyor
 
-            log = SignalLog(
-                bot_id=0,
-                symbol=symbol_ccxt or symbol_raw,
-                signal_type=sig_type,
-                source="TradingView",
-                price=price,
-                reason=message or f"TV Alarm — {action_raw}",
-                action="received",
-                tp_price=tp_price,
-                sl_price=sl_price,
-                outcome="open" if (tp_price and sl_price) else None,
-                raw_payload=json.dumps(body),
-            )
-            session.add(log)
+                    tp_pct = params.get("tp_pct") or params.get("take_profit_pct") or 0
+                    sl_pct = params.get("sl_pct") or params.get("stop_loss_pct") or 0
+
+                    tp_price = None
+                    sl_price = None
+                    if tp_pct > 0 and sl_pct > 0 and price > 0:
+                        if sig_type == "buy":
+                            tp_price = round(price * (1 + tp_pct / 100), 6)
+                            sl_price = round(price * (1 - sl_pct / 100), 6)
+                        else:
+                            tp_price = round(price * (1 - tp_pct / 100), 6)
+                            sl_price = round(price * (1 + sl_pct / 100), 6)
+
+                    log = SignalLog(
+                        bot_id=bot.id,
+                        symbol=symbol_ccxt or symbol_raw,
+                        signal_type=sig_type,
+                        source="TradingView",
+                        price=price,
+                        reason=message or f"TV Alarm — {action_raw}",
+                        action="received",
+                        tp_price=tp_price,
+                        sl_price=sl_price,
+                        outcome="open" if (tp_price and sl_price) else None,
+                        raw_payload=json.dumps(body),
+                    )
+                    session.add(log)
+                    print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' sinyali kaydedildi — TP={tp_price} SL={sl_price}")
+            else:
+                # Eşleşen bot yok — genel kayıt (bot_id=0)
+                log = SignalLog(
+                    bot_id=0,
+                    symbol=symbol_ccxt or symbol_raw,
+                    signal_type=sig_type,
+                    source="TradingView",
+                    price=price,
+                    reason=message or f"TV Alarm — {action_raw}",
+                    action="received",
+                    raw_payload=json.dumps(body),
+                )
+                session.add(log)
+
             await session.commit()
-
-        if tp_price:
-            print(f"[TV Webhook] Performans takibi: TP={tp_price} SL={sl_price}")
     except Exception as e:
         print(f"[TV Webhook] Signal log DB hatası: {e}")
 
