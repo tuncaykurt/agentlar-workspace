@@ -584,21 +584,24 @@ class BotEngine:
 
         if not sig:
             # Sinyal yok ama status güncelle (frontend fiyat görsün)
-            if cur_price:
+            position = None
+            try:
                 position = await self._get_position_info(symbol)
-                status_data = {
-                    "signal": None,
-                    "price": cur_price,
-                    "risk": {
-                        "balance": self.risk.balance,
-                        "daily_pnl": self.risk.daily_pnl,
-                        "daily_pnl_pct": self.risk.daily_pnl_pct,
-                        "killed": self.risk.killed,
-                    },
-                    "position": position,
-                    "ts": datetime.utcnow().isoformat(),
-                }
-                await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
+            except Exception as e:
+                print(f"[Bot {self.config['name']}] Pozisyon bilgisi alınamadı: {e}")
+            status_data = {
+                "signal": None,
+                "price": cur_price,
+                "risk": {
+                    "balance": self.risk.balance,
+                    "daily_pnl": self.risk.daily_pnl,
+                    "daily_pnl_pct": self.risk.daily_pnl_pct,
+                    "killed": self.risk.killed,
+                },
+                "position": position,
+                "ts": datetime.utcnow().isoformat(),
+            }
+            await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
             return
 
         # Duplicate sinyal kontroli (aynı ts tekrar işleme)
