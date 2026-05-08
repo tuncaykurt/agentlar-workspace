@@ -317,6 +317,97 @@ async def debug_bot(bot_id: int):
     return result
 
 
+@router.get("/{bot_id}/test-cycle")
+async def test_cycle(bot_id: int):
+    """Tek bir sinyal cycle'ını çalıştırıp sonucu döndür (debug)."""
+    from core.redis_client import get_redis
+    import traceback as tb
+    steps = []
+
+    async with async_session() as session:
+        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot = result.scalar_one_or_none()
+    if not bot:
+        raise HTTPException(404, "Bot bulunamadı")
+
+    params = json.loads(bot.params) if bot.params else {}
+    steps.append(f"1. Bot: {bot.name} | symbol={bot.symbol} | strategy={bot.strategy}")
+    steps.append(f"   Params: {params}")
+
+    # Exchange client oluştur
+    try:
+        ex_client = await _get_exchange_client(bot.exchange or "bitget")
+        steps.append("2. Exchange client oluşturuldu ✓")
+    except Exception as e:
+        steps.append(f"2. Exchange client HATASI: {e}")
+        return {"steps": steps}
+
+    # load_markets
+    try:
+        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=30)
+        steps.append(f"3. load_markets OK — {len(ex_client.exchange.markets)} market")
+    except Exception as e:
+        steps.append(f"3. load_markets HATASI: {e}")
+
+    # fetch_ticker
+    try:
+        ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(bot.symbol), timeout=15)
+        cur_price = float(ticker.get("last", 0))
+        steps.append(f"4. fetch_ticker OK — price={cur_price}")
+    except Exception as e:
+        steps.append(f"4. fetch_ticker HATASI: {e}")
+        cur_price = 0
+
+    # Redis sinyal kontrol
+    try:
+        redis = get_redis()
+        sym_key = f"custom_signal:{bot.symbol.replace('/', '_').replace(':', '_')}"
+        raw = await redis.get(sym_key)
+        if raw:
+            sig = json.loads(raw)
+            steps.append(f"5. Redis sinyal BULUNDU: type={sig.get('type')} price={sig.get('price')} ts={sig.get('ts')}")
+        else:
+            steps.append("5. Redis'te aktif sinyal YOK (custom_signal key boş)")
+
+        # TV webhook token kontrolü
+        token = params.get("webhook_token") or params.get("signal_source", "")
+        if token:
+            tv_raw = await redis.get(f"tv_webhook:{token}")
+            if tv_raw:
+                tv_sig = json.loads(tv_raw)
+                steps.append(f"   TV webhook sinyal: type={tv_sig.get('type')} ts={tv_sig.get('ts')}")
+            else:
+                steps.append(f"   TV webhook sinyal YOK (token={token[:8]}...)")
+    except Exception as e:
+        steps.append(f"5. Redis HATASI: {e}")
+
+    # fetch_positions
+    try:
+        positions = await asyncio.wait_for(ex_client.exchange.fetch_positions([bot.symbol]), timeout=15)
+        open_pos = [p for p in positions if float(p.get("contracts", 0)) != 0]
+        if open_pos:
+            p = open_pos[0]
+            steps.append(f"6. Açık pozisyon: side={p['side']} contracts={p['contracts']} entry={p.get('entryPrice')}")
+        else:
+            steps.append("6. Açık pozisyon YOK")
+    except Exception as e:
+        steps.append(f"6. fetch_positions HATASI: {e}")
+
+    # Engine durumu
+    if bot_id in _running_bots:
+        engine = _running_bots[bot_id]
+        steps.append(f"7. Engine: running={engine.running} paper_trades={len(engine.paper_trades)} signal_history={len(engine.signal_history)}")
+    else:
+        steps.append("7. Engine: NOT in _running_bots")
+
+    try:
+        await ex_client.close()
+    except Exception:
+        pass
+
+    return {"bot_id": bot_id, "steps": steps}
+
+
 @router.post("/{bot_id}/stop")
 async def stop_bot(bot_id: int):
     if bot_id not in _running_bots:
