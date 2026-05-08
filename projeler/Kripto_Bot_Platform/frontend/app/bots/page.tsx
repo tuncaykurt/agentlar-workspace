@@ -400,6 +400,7 @@ function TradingViewWebhookCard({
   onDirection: (v: string) => void
 }) {
   const [copied, setCopied] = useState<"url"|"json"|null>(null)
+  const [alarmType, setAlarmType] = useState<"indicator"|"strategy">("indicator")
 
   // Token yoksa otomatik oluştur
   useEffect(() => {
@@ -411,13 +412,24 @@ function TradingViewWebhookCard({
   }, [])
 
   const webhookUrl = `${TV_SERVER}/api/signals/webhook/tv/${token}`
-  const jsonTemplate = `{
+
+  // Botun yönüne göre action belirleme
+  const actionForIndicator = direction === "sell_only" ? "sell" : "buy"
+
+  const jsonTemplateIndicator = `{
+  "action": "${actionForIndicator}",
+  "symbol": "{{ticker}}",
+  "price":  {{close}}
+}`
+
+  const jsonTemplateStrategy = `{
   "action": "{{strategy.order.action}}",
-  "alert_name": "{{strategy.order.alert_id}}",
   "symbol": "{{ticker}}",
   "price":  {{close}},
   "message": "{{strategy.order.comment}}"
 }`
+
+  const activeTemplate = alarmType === "indicator" ? jsonTemplateIndicator : jsonTemplateStrategy
 
   const copy = (text: string, key: "url"|"json") => {
     navigator.clipboard.writeText(text).then(() => {
@@ -446,37 +458,87 @@ function TradingViewWebhookCard({
             {copied === "url" ? "✓ Kopyalandı" : "Kopyala"}
           </button>
         </div>
+      </div>
 
-        {/* Adımlar */}
-        <ol className="text-xs text-slate-400 space-y-1.5 list-decimal list-inside">
-          <li>TradingView'de istediğin indikatöre alarm ekle (sağ tık → Alarm Ekle)</li>
-          <li><span className="text-white font-medium">Bildirimler</span> sekmesi → <span className="text-white font-medium">Webhook URL</span> alanına yukarıdaki URL'yi yapıştır</li>
-          <li><span className="text-white font-medium">Mesaj</span> alanına aşağıdaki JSON şablonunu yapıştır</li>
-          <li>Alarmı kaydet — tetiklenince bot otomatik işlem açar</li>
-        </ol>
+      {/* Alarm Tipi Seçimi */}
+      <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/50 space-y-3">
+        <p className="text-xs font-semibold text-slate-300">Alarm Tipi</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setAlarmType("indicator")}
+            className={`flex-1 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+              alarmType === "indicator"
+                ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300"
+                : "border-slate-700 text-slate-400 hover:text-white"
+            }`}
+          >
+            Indikator Alarmi
+          </button>
+          <button
+            type="button"
+            onClick={() => setAlarmType("strategy")}
+            className={`flex-1 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+              alarmType === "strategy"
+                ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300"
+                : "border-slate-700 text-slate-400 hover:text-white"
+            }`}
+          >
+            Strateji Alarmi
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-500">
+          {alarmType === "indicator"
+            ? "Indikatorden gelen alarm (ornegin RSI, MACD, SuperTrend). Islem yonu bot ayarina gore sabit gonderilir."
+            : "Pine Script strateji alarmi. {{strategy.order.action}} otomatik olarak buy/sell degerini alir."}
+        </p>
       </div>
 
       {/* JSON Şablonu */}
       <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/50 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-slate-300">Alarm Mesajı (JSON Şablonu)</p>
+          <p className="text-xs font-semibold text-slate-300">
+            Alarm Mesaji (JSON Sablonu)
+            {alarmType === "indicator" && (
+              <span className="ml-2 text-[10px] text-emerald-400 font-normal">
+                action: {actionForIndicator}
+              </span>
+            )}
+          </p>
           <button
             type="button"
-            onClick={() => copy(jsonTemplate, "json")}
+            onClick={() => copy(activeTemplate, "json")}
             className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-slate-400 text-[11px] hover:text-white transition-colors"
           >
             {copied === "json" ? "✓ Kopyalandı" : "Kopyala"}
           </button>
         </div>
-        <pre className="text-[11px] font-mono text-emerald-300 leading-relaxed bg-black/40 rounded-lg px-3 py-2.5 overflow-x-auto">{jsonTemplate}</pre>
-        <p className="text-[10px] text-slate-600">
-          {"{{strategy.order.action}}"} → buy veya sell değerini otomatik doldurur. Manuel alarm için "buy" veya "sell" yaz.
-        </p>
+        <pre className="text-[11px] font-mono text-emerald-300 leading-relaxed bg-black/40 rounded-lg px-3 py-2.5 overflow-x-auto">{activeTemplate}</pre>
+        {alarmType === "indicator" ? (
+          <p className="text-[10px] text-slate-500">
+            Bu mesaji TradingView alarm mesaji alanina yapiştir. <span className="text-amber-400">action</span> degeri bot yonune gore otomatik ayarlandi ({actionForIndicator === "buy" ? "AL — Long" : "SAT — Short"}).
+          </p>
+        ) : (
+          <p className="text-[10px] text-slate-500">
+            {"{{strategy.order.action}}"} → Pine Script strateji buy/sell degerini otomatik doldurur.
+          </p>
+        )}
+      </div>
+
+      {/* Kurulum Adımları */}
+      <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/30 space-y-1.5">
+        <p className="text-xs font-semibold text-slate-400">Kurulum Adimlari</p>
+        <ol className="text-[11px] text-slate-500 space-y-1 list-decimal list-inside">
+          <li>TradingView'de {alarmType === "indicator" ? "indikatore" : "stratejiye"} alarm ekle (sag tik → Alarm Ekle)</li>
+          <li><span className="text-slate-300">Bildirimler</span> → <span className="text-slate-300">Webhook URL</span> alanina yukaridaki URL'yi yapistir</li>
+          <li><span className="text-slate-300">Mesaj</span> alanina yukaridaki JSON sablonunu yapistir</li>
+          <li>Alarmi kaydet — tetiklenince bot otomatik islem acar</li>
+        </ol>
       </div>
 
       {/* İşlem Yönü */}
       <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 space-y-2">
-        <p className="text-xs font-medium text-slate-400">İşlem Yönü Filtresi</p>
+        <p className="text-xs font-medium text-slate-400">Islem Yonu Filtresi</p>
         <div className="flex gap-2">
           {[
             { value: "both",      label: "AL ve SAT" },
