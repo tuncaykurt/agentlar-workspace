@@ -9,7 +9,6 @@ import json
 from bot.engine import BotEngine
 from exchange.bitget_client import bitget
 from exchange.mexc_client import MEXCClient
-from exchange.bybit_client import BybitClient
 from core.database import async_session
 from models.trade import Bot, BotStatus
 from sqlalchemy import select, update, delete
@@ -26,6 +25,7 @@ def _get_exchange_client(exchange: str):
         if exchange == "mexc":
             _exchange_clients[exchange] = MEXCClient()
         elif exchange == "bybit":
+            from exchange.bybit_client import BybitClient
             _exchange_clients[exchange] = BybitClient()
         else:
             raise ValueError(f"Desteklenmeyen borsa: {exchange}")

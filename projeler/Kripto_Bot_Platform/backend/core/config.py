@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     MEXC_API_KEY: str = ""
     MEXC_API_SECRET: str = ""
 
+    BYBIT_API_KEY: str = ""
+    BYBIT_API_SECRET: str = ""
+    BYBIT_TESTNET: bool = False
+
     OPENROUTER_API_KEY: str = ""
     AI_FAST_MODEL: str = "deepseek/deepseek-chat"
     AI_DEEP_MODEL: str = "anthropic/claude-3.5-sonnet"
