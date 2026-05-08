@@ -295,7 +295,10 @@ class BotEngine:
             self.paper_trades.append(trade)
         else:
             symbol = self.config["symbol"]
-            await self.exchange.set_leverage(symbol, self.risk.leverage)
+            try:
+                await self.exchange.set_leverage(symbol, self.risk.leverage)
+            except Exception as e:
+                print(f"[Bot {self.config['name']}] Leverage ayar hatası (devam): {e}")
 
             # Kontrat boyutu hesabı (MEXC swap: tam sayı kontrat)
             amount = qty
@@ -305,21 +308,26 @@ class BotEngine:
                 contract_size = market.get("contractSize", 1) or 1
                 if contract_size < 1:
                     # MEXC gibi borsalarda kontrat adedi tam sayı olmalı
-                    raw_amount = (qty * price) / (price * contract_size)
-                    amount = max(1, int(raw_amount))
-                    # qty zaten coin cinsinden, kontrata çevir
                     amount = max(1, int(qty / contract_size))
             except Exception as e:
-                print(f"[Bot] Kontrat hesabı hatası (devam): {e}")
+                print(f"[Bot {self.config['name']}] Kontrat hesabı hatası (devam): {e}")
 
             # TP/SL fiyatları hesapla
             tp_price = round(take_profit, 2) if take_profit else None
             sl_price = round(stop_loss, 2) if stop_loss else None
 
-            await self.exchange.place_order(
-                symbol, side, amount, "market",
-                tp_price=tp_price, sl_price=sl_price,
-            )
+            print(f"[Bot {self.config['name']}] İşlem açılıyor: {side} {amount} {symbol} TP={tp_price} SL={sl_price}")
+            try:
+                order = await self.exchange.place_order(
+                    symbol, side, amount, "market",
+                    tp_price=tp_price, sl_price=sl_price,
+                )
+                print(f"[Bot {self.config['name']}] İşlem başarılı: {order.get('id', 'N/A')}")
+            except Exception as e:
+                print(f"[Bot {self.config['name']}] İŞLEM HATASI: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
 
         self.signal_history.append(trade)
 
@@ -561,7 +569,8 @@ class BotEngine:
         try:
             ticker = await self.exchange.exchange.fetch_ticker(symbol)
             cur_price = float(ticker["last"])
-        except Exception:
+        except Exception as e:
+            print(f"[Bot {self.config['name']}] fetch_ticker hatası: {e}")
             cur_price = 0
 
         if not sig:
@@ -662,16 +671,18 @@ class BotEngine:
                 elif current_position["side"] == ("long" if signal_type == "buy" else "short"):
                     return  # Aynı yönde pozisyon var, işlem yapma
 
-        # TP/SL hesapla
+        # TP/SL hesapla (max %99 güvenlik — negatif fiyat önleme)
         take_profit = None
         stop_loss = None
-        
-        if take_profit_pct > 0:
-            tp_multiplier = 1 + (take_profit_pct / 100) if signal_type == "buy" else 1 - (take_profit_pct / 100)
+        safe_tp_pct = min(take_profit_pct, 99) if take_profit_pct > 0 else 0
+        safe_sl_pct = min(stop_loss_pct, 99) if stop_loss_pct > 0 else 0
+
+        if safe_tp_pct > 0:
+            tp_multiplier = 1 + (safe_tp_pct / 100) if signal_type == "buy" else 1 - (safe_tp_pct / 100)
             take_profit = price * tp_multiplier
-            
-        if stop_loss_pct > 0:
-            sl_multiplier = 1 - (stop_loss_pct / 100) if signal_type == "buy" else 1 + (stop_loss_pct / 100)
+
+        if safe_sl_pct > 0:
+            sl_multiplier = 1 - (safe_sl_pct / 100) if signal_type == "buy" else 1 + (safe_sl_pct / 100)
             stop_loss = price * sl_multiplier
         else:
             atr_approx = price * 0.01
