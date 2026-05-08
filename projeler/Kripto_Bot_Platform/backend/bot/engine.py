@@ -56,20 +56,20 @@ class BotEngine:
 
         # İlk bağlantı testi — load_markets zorunlu (MEXC vb. için)
         try:
-            await self.exchange.exchange.load_markets()
+            await asyncio.wait_for(self.exchange.exchange.load_markets(), timeout=30)
             print(f"[Bot {bot_name}] load_markets() OK — {len(self.exchange.exchange.markets)} market yüklendi")
+        except asyncio.TimeoutError:
+            print(f"[Bot {bot_name}] load_markets() TIMEOUT (30s) — devam ediliyor")
         except Exception as e:
             print(f"[Bot {bot_name}] load_markets() HATASI: {e}")
-            import traceback
-            traceback.print_exc()
 
         try:
-            ticker = await self.exchange.exchange.fetch_ticker(symbol)
+            ticker = await asyncio.wait_for(self.exchange.exchange.fetch_ticker(symbol), timeout=15)
             print(f"[Bot {bot_name}] Bağlantı OK — fiyat: {ticker.get('last')}")
+        except asyncio.TimeoutError:
+            print(f"[Bot {bot_name}] fetch_ticker TIMEOUT (15s) — devam ediliyor")
         except Exception as e:
             print(f"[Bot {bot_name}] BAĞLANTI HATASI: {e}")
-            import traceback
-            traceback.print_exc()
 
         while self.running:
             try:
@@ -387,7 +387,9 @@ class BotEngine:
     async def _get_position_info(self, symbol: str) -> dict | None:
         """Açık pozisyon bilgisi: side, size, entry, pnl, pnl_pct"""
         try:
-            positions = await self.exchange.exchange.fetch_positions([symbol])
+            positions = await asyncio.wait_for(
+                self.exchange.exchange.fetch_positions([symbol]), timeout=15
+            )
             for pos in positions:
                 contracts = float(pos.get("contracts", 0))
                 if contracts == 0:
@@ -607,8 +609,11 @@ class BotEngine:
 
         # Sinyal olmasa bile fiyat ve status güncelle
         try:
-            ticker = await self.exchange.exchange.fetch_ticker(symbol)
+            ticker = await asyncio.wait_for(self.exchange.exchange.fetch_ticker(symbol), timeout=15)
             cur_price = float(ticker["last"])
+        except asyncio.TimeoutError:
+            print(f"[Bot {bot_name}] fetch_ticker TIMEOUT (15s)")
+            cur_price = 0
         except Exception as e:
             print(f"[Bot {bot_name}] fetch_ticker hatası: {e}")
             cur_price = 0
@@ -802,7 +807,9 @@ class BotEngine:
     async def _get_current_position(self, symbol: str):
         """Mevcut pozisyonu döndür"""
         try:
-            positions = await self.exchange.exchange.fetch_positions([symbol])
+            positions = await asyncio.wait_for(
+                self.exchange.exchange.fetch_positions([symbol]), timeout=15
+            )
             for pos in positions:
                 if float(pos.get("contracts", 0)) != 0:
                     return {
@@ -810,6 +817,8 @@ class BotEngine:
                         "size": float(pos["contracts"]),
                         "entry": float(pos.get("entryPrice") or 0),
                     }
+        except asyncio.TimeoutError:
+            print(f"[Bot {self.config['name']}] fetch_positions TIMEOUT (15s)")
         except Exception as e:
             print(f"[Bot {self.config['name']}] fetch_positions hatası: {e}")
         return None
