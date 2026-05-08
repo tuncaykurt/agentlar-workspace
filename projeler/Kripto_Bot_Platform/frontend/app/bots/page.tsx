@@ -1456,14 +1456,14 @@ export default function BotsPage() {
                         <NumInput
                           value={form.tp_pct}
                           onChange={v => set("tp_pct", v)}
-                          min={0} max={1000} step={0.5} suffix="%"
+                          min={0} max={1000} step={0.1} suffix="%"
                         />
                       </Field>
                       <Field label="Stop Loss %" description="Pozisyon kaç % zararda kapansın (0 = kapalı)">
                         <NumInput
                           value={form.sl_pct}
                           onChange={v => set("sl_pct", v)}
-                          min={0} max={1000} step={0.5} suffix="%"
+                          min={0} max={1000} step={0.1} suffix="%"
                         />
                       </Field>
                       <Field label="Trailing Stop Loss" description="Stop fiyatı kâr peşinden sürüklensin">
