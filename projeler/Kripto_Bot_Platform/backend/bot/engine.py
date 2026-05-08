@@ -715,7 +715,7 @@ class BotEngine:
     async def _get_current_position(self, symbol: str):
         """Mevcut pozisyonu döndür"""
         try:
-            positions = await self.exchange.fetch_positions([symbol])
+            positions = await self.exchange.exchange.fetch_positions([symbol])
             for pos in positions:
                 if float(pos.get("contracts", 0)) != 0:
                     return {

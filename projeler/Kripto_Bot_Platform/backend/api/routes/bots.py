@@ -8,9 +8,28 @@ import asyncio
 import json
 from bot.engine import BotEngine
 from exchange.bitget_client import bitget
+from exchange.mexc_client import MEXCClient
+from exchange.bybit_client import BybitClient
 from core.database import async_session
 from models.trade import Bot, BotStatus
 from sqlalchemy import select, update, delete
+
+# Exchange client cache (lazy init)
+_exchange_clients: dict[str, object] = {}
+
+
+def _get_exchange_client(exchange: str):
+    """Bot'un exchange ayarına göre doğru client döner."""
+    if exchange == "bitget":
+        return bitget  # module-level singleton
+    if exchange not in _exchange_clients:
+        if exchange == "mexc":
+            _exchange_clients[exchange] = MEXCClient()
+        elif exchange == "bybit":
+            _exchange_clients[exchange] = BybitClient()
+        else:
+            raise ValueError(f"Desteklenmeyen borsa: {exchange}")
+    return _exchange_clients[exchange]
 
 router = APIRouter(prefix="/bots", tags=["bots"])
 
@@ -164,7 +183,8 @@ async def start_bot(bot_id: int):
             "params": json.loads(bot.params) if bot.params else {},
         }
 
-        engine = BotEngine(config, bitget)
+        exchange_client = _get_exchange_client(bot.exchange or "bitget")
+        engine = BotEngine(config, exchange_client)
         _running_bots[bot_id] = engine
         task = asyncio.create_task(engine.run())
         _bot_tasks[bot_id] = task
