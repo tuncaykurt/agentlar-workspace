@@ -413,6 +413,7 @@ function TradingViewWebhookCard({
   const webhookUrl = `${TV_SERVER}/api/signals/webhook/tv/${token}`
   const jsonTemplate = `{
   "action": "{{strategy.order.action}}",
+  "alert_name": "{{strategy.order.alert_id}}",
   "symbol": "{{ticker}}",
   "price":  {{close}},
   "message": "{{strategy.order.comment}}"

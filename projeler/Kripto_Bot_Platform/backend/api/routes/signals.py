@@ -162,6 +162,20 @@ def _normalize_tv_symbol(raw: str) -> str:
     return raw
 
 
+@router.get("/webhook/tv/{token}/history")
+async def tradingview_webhook_history(token: str, limit: int = 20):
+    """Bu token'a gelen tüm ham webhook isteklerini döndürür (debug)."""
+    from core.redis_client import get_redis
+    redis = get_redis()
+    raw_items = await redis.lrange(f"tv_webhook_raw:{token}", 0, limit - 1)
+    processed_items = await redis.lrange(f"tv_webhook_history:{token}", 0, limit - 1)
+    return {
+        "token": token,
+        "raw_webhooks": [json.loads(i) for i in raw_items],
+        "processed_signals": [json.loads(i) for i in processed_items],
+    }
+
+
 @router.get("/webhook/tv/{token}")
 async def tradingview_webhook_info(token: str):
     """Browser'dan webhook URL'i test edildiğinde bilgi döner."""
@@ -206,12 +220,47 @@ async def tradingview_webhook(token: str, request: Request):
     try:
         body = await request.json()
     except Exception:
-        return {"status": "error", "reason": "invalid JSON body"}
+        # JSON parse başarısız — raw body'yi text olarak oku
+        raw_text = (await request.body()).decode("utf-8", errors="replace")
+        print(f"[TV Webhook] JSON parse HATASI — raw body: {raw_text[:500]}")
+        # Ham mesajdan aksiyon tespit etmeye çalış
+        raw_lower = raw_text.lower()
+        if any(w in raw_lower for w in ("long", "buy")):
+            body = {"action": "buy", "symbol": "ETHUSDT", "price": 0, "message": raw_text[:200]}
+        elif any(w in raw_lower for w in ("short", "sell")):
+            body = {"action": "sell", "symbol": "ETHUSDT", "price": 0, "message": raw_text[:200]}
+        else:
+            return {"status": "error", "reason": "invalid JSON body", "raw": raw_text[:200]}
 
     print(f"[TV Webhook] token={token} body={body}")
 
+    # ── Tüm gelen webhook'ları kaydet (debug için) ──
+    try:
+        from core.redis_client import get_redis
+        _r = get_redis()
+        await _r.lpush(f"tv_webhook_raw:{token}", json.dumps({"body": body, "ts": datetime.utcnow().isoformat()}))
+        await _r.ltrim(f"tv_webhook_raw:{token}", 0, 49)
+    except Exception:
+        pass
+
     # Action alanını normalize et
     action_raw = str(body.get("action", body.get("side", body.get("order_action", "")))).lower().strip()
+
+    # {{strategy.order.action}} çözülmemiş template — alert adından tespit et
+    if "{{" in action_raw or not action_raw:
+        # Mesaj veya diğer alanlardan tespit etmeye çalış
+        fallback_text = json.dumps(body).lower()
+        alert_name = str(body.get("alert_name", body.get("name", ""))).lower()
+        if any(w in alert_name for w in ("long", "buy")) or any(w in fallback_text for w in ('"long"', '"buy"')):
+            action_raw = "buy"
+            print(f"[TV Webhook] Template çözülmemiş — fallback: BUY (alert_name veya body'den tespit)")
+        elif any(w in alert_name for w in ("short", "sell")) or any(w in fallback_text for w in ('"short"', '"sell"')):
+            action_raw = "sell"
+            print(f"[TV Webhook] Template çözülmemiş — fallback: SELL (alert_name veya body'den tespit)")
+        else:
+            print(f"[TV Webhook] Template çözülmemiş ve tespit edilemedi: body={body}")
+            return {"status": "ignored", "reason": f"unresolved template, cannot detect action from body"}
+
     if action_raw in ("buy", "long", "open_long", "buy_market", "1"):
         sig_type = "buy"
     elif action_raw in ("sell", "short", "open_short", "sell_market", "-1"):
