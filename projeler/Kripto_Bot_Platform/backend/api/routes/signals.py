@@ -3,7 +3,7 @@ Sinyal Endpoint'leri
 - /signals/custom      : Frontend JS indikatörlerinden gelen sinyaller
 - /signals/webhook/tv/{token} : TradingView alarm webhook'u
 """
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from datetime import datetime
 import json
@@ -294,7 +294,16 @@ class WebhookProfileData(BaseModel):
     name: str = ""
     tp_pct: float = 2.0
     sl_pct: float = 1.0
+    leverage: int = 20
     enabled: bool = True
+
+
+class WebhookProfileUpdate(BaseModel):
+    name: str | None = None
+    tp_pct: float | None = None
+    sl_pct: float | None = None
+    leverage: int | None = None
+    enabled: bool | None = None
 
 
 @router.get("/webhook-profiles")
@@ -309,10 +318,12 @@ async def list_webhook_profiles():
         return [
             {
                 "id": p.id,
+                "username": p.username,
                 "token": p.token,
                 "name": p.name,
                 "tp_pct": p.tp_pct,
                 "sl_pct": p.sl_pct,
+                "leverage": p.leverage,
                 "enabled": p.enabled,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
             }
@@ -335,6 +346,7 @@ async def create_webhook_profile(data: WebhookProfileData):
             profile.name = data.name or profile.name
             profile.tp_pct = data.tp_pct
             profile.sl_pct = data.sl_pct
+            profile.leverage = data.leverage
             profile.enabled = data.enabled
         else:
             profile = WebhookProfile(
@@ -342,9 +354,47 @@ async def create_webhook_profile(data: WebhookProfileData):
                 name=data.name,
                 tp_pct=data.tp_pct,
                 sl_pct=data.sl_pct,
+                leverage=data.leverage,
                 enabled=data.enabled,
             )
             session.add(profile)
+        await session.commit()
+        await session.refresh(profile)
+        return {
+            "id": profile.id,
+            "username": profile.username,
+            "token": profile.token,
+            "name": profile.name,
+            "tp_pct": profile.tp_pct,
+            "sl_pct": profile.sl_pct,
+            "leverage": profile.leverage,
+            "enabled": profile.enabled,
+        }
+
+
+@router.patch("/webhook-profiles/{token}")
+async def update_webhook_profile(token: str, data: WebhookProfileUpdate):
+    """Webhook profil ayarlarını güncelle (TP/SL/leverage)."""
+    from core.database import async_session
+    from models.trade import WebhookProfile
+    from sqlalchemy import select as sa_select
+    async with async_session() as session:
+        result = await session.execute(
+            sa_select(WebhookProfile).where(WebhookProfile.token == token)
+        )
+        profile = result.scalar_one_or_none()
+        if not profile:
+            raise HTTPException(404, "Profil bulunamadı")
+        if data.name is not None:
+            profile.name = data.name
+        if data.tp_pct is not None:
+            profile.tp_pct = data.tp_pct
+        if data.sl_pct is not None:
+            profile.sl_pct = data.sl_pct
+        if data.leverage is not None:
+            profile.leverage = data.leverage
+        if data.enabled is not None:
+            profile.enabled = data.enabled
         await session.commit()
         await session.refresh(profile)
         return {
@@ -353,6 +403,7 @@ async def create_webhook_profile(data: WebhookProfileData):
             "name": profile.name,
             "tp_pct": profile.tp_pct,
             "sl_pct": profile.sl_pct,
+            "leverage": profile.leverage,
             "enabled": profile.enabled,
         }
 

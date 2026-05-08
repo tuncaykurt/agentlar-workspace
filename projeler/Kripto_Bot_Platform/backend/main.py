@@ -51,6 +51,9 @@ async def _init_db():
         ("signal_logs", "outcome_price", "ALTER TABLE signal_logs ADD COLUMN outcome_price FLOAT"),
         ("signal_logs", "outcome_pnl_pct", "ALTER TABLE signal_logs ADD COLUMN outcome_pnl_pct FLOAT"),
         ("signal_logs", "outcome_at", "ALTER TABLE signal_logs ADD COLUMN outcome_at TIMESTAMPTZ"),
+        # Webhook profil ek kolonları
+        ("webhook_profiles", "username", "ALTER TABLE webhook_profiles ADD COLUMN username VARCHAR DEFAULT 'default'"),
+        ("webhook_profiles", "leverage", "ALTER TABLE webhook_profiles ADD COLUMN leverage INTEGER DEFAULT 20"),
     ]
     for table, column, sql in migrations:
         try:

@@ -146,10 +146,12 @@ class WebhookProfile(Base):
     __tablename__ = "webhook_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, nullable=False, default="default")  # kullanıcıya özel
     token = Column(String, nullable=False, unique=True, index=True)
     name = Column(String, nullable=True)                   # profil adı (opsiyonel)
     tp_pct = Column(Float, nullable=False, default=2.0)    # Take Profit %
     sl_pct = Column(Float, nullable=False, default=1.0)    # Stop Loss %
+    leverage = Column(Integer, nullable=False, default=20)  # kaldıraç
     enabled = Column(Boolean, default=True)                 # aktif mi
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
