@@ -232,21 +232,89 @@ async def start_bot(bot_id: int):
 
 @router.get("/{bot_id}/debug")
 async def debug_bot(bot_id: int):
-    """Engine'in durumunu debug et."""
-    running = bot_id in _running_bots
-    task_alive = False
-    task_exception = None
+    """Engine durumu + Redis + Exchange bağlantı testi."""
+    from core.redis_client import get_redis
+    result = {
+        "bot_id": bot_id,
+        "in_running_bots": bot_id in _running_bots,
+        "task_alive": False,
+        "task_exception": None,
+        "redis_ok": False,
+        "redis_signal": None,
+        "redis_status": None,
+        "redis_last_error": None,
+        "exchange_ok": False,
+        "exchange_ticker": None,
+        "bot_config": None,
+    }
+
+    # Task durumu
     if bot_id in _bot_tasks:
         task = _bot_tasks[bot_id]
-        task_alive = not task.done()
+        result["task_alive"] = not task.done()
         if task.done() and task.exception():
-            task_exception = str(task.exception())
-    return {
-        "bot_id": bot_id,
-        "in_running_bots": running,
-        "task_alive": task_alive,
-        "task_exception": task_exception,
-    }
+            result["task_exception"] = str(task.exception())
+
+    # Bot config
+    async with async_session() as session:
+        bot_result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot = bot_result.scalar_one_or_none()
+    if bot:
+        params = json.loads(bot.params) if bot.params else {}
+        result["bot_config"] = {
+            "name": bot.name,
+            "symbol": bot.symbol,
+            "strategy": bot.strategy,
+            "exchange": bot.exchange,
+            "paper_mode": bot.paper_mode,
+            "leverage": bot.leverage,
+            "params": params,
+        }
+
+        # Redis testi
+        try:
+            redis = get_redis()
+            await redis.ping()
+            result["redis_ok"] = True
+
+            # Signal key'inde veri var mı?
+            sym_key = f"custom_signal:{bot.symbol.replace('/', '_').replace(':', '_')}"
+            raw_sig = await redis.get(sym_key)
+            result["redis_signal"] = json.loads(raw_sig) if raw_sig else None
+
+            # Token bazlı sinyal
+            token = params.get("webhook_token") or params.get("signal_source", "")
+            if token:
+                tv_raw = await redis.get(f"tv_webhook:{token}")
+                result["redis_tv_signal"] = json.loads(tv_raw) if tv_raw else None
+
+            # Status
+            status_raw = await redis.get(f"bot:{bot_id}:status")
+            result["redis_status"] = json.loads(status_raw) if status_raw else None
+
+            # Son hata
+            err_raw = await redis.get(f"bot:{bot_id}:last_error")
+            result["redis_last_error"] = err_raw.decode() if err_raw and isinstance(err_raw, bytes) else (str(err_raw) if err_raw else None)
+
+            # Signal history count
+            hist_key = f"custom_signal_history:{bot.symbol.replace('/', '_').replace(':', '_')}"
+            hist_len = await redis.llen(hist_key)
+            result["signal_history_count"] = hist_len
+        except Exception as e:
+            result["redis_error"] = str(e)
+
+        # Exchange testi
+        try:
+            ex_client = await _get_exchange_client(bot.exchange or "bitget")
+            await ex_client.exchange.load_markets()
+            ticker = await ex_client.exchange.fetch_ticker(bot.symbol)
+            result["exchange_ok"] = True
+            result["exchange_ticker"] = float(ticker.get("last", 0))
+            await ex_client.close()
+        except Exception as e:
+            result["exchange_error"] = str(e)
+
+    return result
 
 
 @router.post("/{bot_id}/stop")

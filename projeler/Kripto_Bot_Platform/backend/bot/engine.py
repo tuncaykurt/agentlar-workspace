@@ -87,8 +87,27 @@ class BotEngine:
                 # Her ikisi de aynı Redis anahtarından (custom_signal:SEMBOL) okur.
                 # TradingView webhook geldiğinde signals.py bu anahtara yazar.
                 if strategy in ("custom_signal", "tradingview_webhook"):
-                    await self._run_custom_signal_cycle(redis, symbol)
-                    await asyncio.sleep(30)   # 30sn'de bir kontrol
+                    try:
+                        await self._run_custom_signal_cycle(redis, symbol)
+                    except Exception as cycle_err:
+                        print(f"[Bot {bot_name}] ❌ Signal cycle HATASI: {cycle_err}")
+                        import traceback
+                        traceback.print_exc()
+                        # Hata olsa bile status yaz — frontend görsün
+                        try:
+                            err_status = {
+                                "signal": None,
+                                "price": 0,
+                                "error": str(cycle_err)[:300],
+                                "risk": {"balance": self.risk.balance, "daily_pnl": self.risk.daily_pnl, "daily_pnl_pct": self.risk.daily_pnl_pct, "killed": self.risk.killed},
+                                "position": None,
+                                "ts": datetime.utcnow().isoformat(),
+                            }
+                            await redis.set(f"bot:{self.config['id']}:status", json.dumps(err_status))
+                            await redis.set(f"bot:{self.config['id']}:last_error", f"{datetime.utcnow().isoformat()} | {str(cycle_err)[:500]}", ex=3600)
+                        except Exception:
+                            pass
+                    await asyncio.sleep(30)
                     continue
 
                 # 0. Trailing stop kontrolü (aktif pozisyon varsa)

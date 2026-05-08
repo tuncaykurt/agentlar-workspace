@@ -11,6 +11,25 @@ import json
 router = APIRouter(prefix="/signals", tags=["signals"])
 
 
+@router.get("/webhook/test")
+async def webhook_test():
+    """Webhook endpoint'inin erişilebilir olduğunu doğrula + Redis testi."""
+    result = {"webhook_alive": True, "ts": datetime.utcnow().isoformat()}
+    try:
+        from core.redis_client import get_redis
+        redis = get_redis()
+        await redis.ping()
+        result["redis_ok"] = True
+
+        # Son sinyal geçmişi sayısı (ETH)
+        hist_len = await redis.llen("custom_signal_history:ETH_USDT_USDT")
+        result["eth_signal_history_count"] = hist_len
+    except Exception as e:
+        result["redis_ok"] = False
+        result["redis_error"] = str(e)
+    return result
+
+
 class CustomSignal(BaseModel):
     symbol: str
     type: str           # "buy" | "sell"
