@@ -8,28 +8,49 @@ import asyncio
 import json
 from bot.engine import BotEngine
 from exchange.bitget_client import bitget
-from exchange.mexc_client import MEXCClient
+from exchange.exchange_factory import create_exchange_client, SUPPORTED_EXCHANGES
+from core.redis_client import get_redis
 from core.database import async_session
 from models.trade import Bot, BotStatus
 from sqlalchemy import select, update, delete
 
-# Exchange client cache (lazy init)
-_exchange_clients: dict[str, object] = {}
+class _ExClient:
+    """CCXT exchange'i BotEngine interface'ine saran wrapper."""
+    def __init__(self, ex):
+        self.exchange = ex
+    async def set_leverage(self, symbol, leverage):
+        await self.exchange.set_leverage(leverage, symbol)
+    async def place_order(self, symbol, side, amount, order_type="market", price=None, tp_price=None, sl_price=None):
+        params = {}
+        if tp_price: params["takeProfitPrice"] = tp_price
+        if sl_price: params["stopLossPrice"] = sl_price
+        if order_type == "market":
+            return await self.exchange.create_market_order(symbol, side, amount, params=params)
+        return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
+    async def get_funding_rate(self, symbol):
+        t = await self.exchange.fetch_ticker(symbol)
+        return float(t.get("info", {}).get("fundingRate", 0))
+    async def get_ohlcv(self, symbol, tf="1m", limit=200):
+        return await self.exchange.fetch_ohlcv(symbol, tf, limit=limit)
+    async def close(self):
+        await self.exchange.close()
 
 
-def _get_exchange_client(exchange: str):
-    """Bot'un exchange ayarına göre doğru client döner."""
+async def _get_exchange_client(exchange: str):
+    """Redis'teki kullanıcı API key'leri ile doğru exchange client oluşturur."""
+    redis = get_redis()
+    raw = await redis.get(f"exchange_keys:default:{exchange}")
+    if raw:
+        keys = json.loads(raw)
+        ex = create_exchange_client(
+            exchange,
+            keys["api_key"], keys["secret"], keys.get("passphrase", "")
+        )
+        return _ExClient(ex)
+    # Redis'te key yoksa bitget için module singleton, diğerleri için hata
     if exchange == "bitget":
-        return bitget  # module-level singleton
-    if exchange not in _exchange_clients:
-        if exchange == "mexc":
-            _exchange_clients[exchange] = MEXCClient()
-        elif exchange == "bybit":
-            from exchange.bybit_client import BybitClient
-            _exchange_clients[exchange] = BybitClient()
-        else:
-            raise ValueError(f"Desteklenmeyen borsa: {exchange}")
-    return _exchange_clients[exchange]
+        return bitget
+    raise HTTPException(400, f"{exchange} için API key bulunamadı. Önce Borsa Ayarları'ndan key girin.")
 
 router = APIRouter(prefix="/bots", tags=["bots"])
 
@@ -183,7 +204,7 @@ async def start_bot(bot_id: int):
             "params": json.loads(bot.params) if bot.params else {},
         }
 
-        exchange_client = _get_exchange_client(bot.exchange or "bitget")
+        exchange_client = await _get_exchange_client(bot.exchange or "bitget")
         engine = BotEngine(config, exchange_client)
         _running_bots[bot_id] = engine
         task = asyncio.create_task(engine.run())

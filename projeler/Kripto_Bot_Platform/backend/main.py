@@ -156,30 +156,8 @@ async def _auto_start_bots(tasks: list):
     """DB'de status=running olan botları otomatik başlat."""
     from models.trade import Bot, BotStatus
     from bot.engine import BotEngine
-    from api.routes.bots import _running_bots, _bot_tasks
-    from exchange.exchange_factory import create_exchange_client
-    from core.redis_client import get_redis
+    from api.routes.bots import _running_bots, _bot_tasks, _get_exchange_client
     import json as _json
-
-    class _ExClient:
-        def __init__(self, ex):
-            self.exchange = ex
-        async def set_leverage(self, symbol, leverage):
-            await self.exchange.set_leverage(leverage, symbol)
-        async def place_order(self, symbol, side, amount, order_type="market", price=None, tp_price=None, sl_price=None):
-            params = {}
-            if tp_price: params["takeProfitPrice"] = tp_price
-            if sl_price: params["stopLossPrice"] = sl_price
-            if order_type == "market":
-                return await self.exchange.create_market_order(symbol, side, amount, params=params)
-            return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
-        async def fetch_positions(self, symbols=None):
-            return await self.exchange.fetch_positions(symbols)
-        async def get_funding_rate(self, symbol):
-            t = await self.exchange.fetch_ticker(symbol)
-            return float(t.get("info", {}).get("fundingRate", 0))
-        async def get_ohlcv(self, symbol, tf="1m", limit=200):
-            return await self.exchange.fetch_ohlcv(symbol, tf, limit=limit)
 
     async with async_session() as session:
         result = await session.execute(
@@ -191,20 +169,9 @@ async def _auto_start_bots(tasks: list):
         print("[Main] Otomatik başlatılacak bot yok.")
         return
 
-    redis = get_redis()
-
     for bot in running_bots:
         try:
-            raw = await redis.get(f"exchange_keys:default:{bot.exchange or 'bitget'}")
-            if raw:
-                keys = _json.loads(raw)
-                ex_client_raw = create_exchange_client(
-                    bot.exchange or "bitget",
-                    keys["api_key"], keys["secret"], keys.get("passphrase", "")
-                )
-                ex_client = _ExClient(ex_client_raw)
-            else:
-                ex_client = bitget
+            ex_client = await _get_exchange_client(bot.exchange or "bitget")
 
             config = {
                 "id": bot.id,
