@@ -227,6 +227,25 @@ async def start_bot(bot_id: int):
     return {"status": "started", "bot_id": bot_id}
 
 
+@router.get("/{bot_id}/debug")
+async def debug_bot(bot_id: int):
+    """Engine'in durumunu debug et."""
+    running = bot_id in _running_bots
+    task_alive = False
+    task_exception = None
+    if bot_id in _bot_tasks:
+        task = _bot_tasks[bot_id]
+        task_alive = not task.done()
+        if task.done() and task.exception():
+            task_exception = str(task.exception())
+    return {
+        "bot_id": bot_id,
+        "in_running_bots": running,
+        "task_alive": task_alive,
+        "task_exception": task_exception,
+    }
+
+
 @router.post("/{bot_id}/stop")
 async def stop_bot(bot_id: int):
     if bot_id not in _running_bots:
