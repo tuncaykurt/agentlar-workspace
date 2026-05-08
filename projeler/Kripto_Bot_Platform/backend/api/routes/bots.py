@@ -408,6 +408,65 @@ async def test_cycle(bot_id: int):
     return {"bot_id": bot_id, "steps": steps}
 
 
+@router.get("/{bot_id}/position")
+async def get_bot_position(bot_id: int):
+    """Borsadan canlı pozisyon ve fiyat bilgisi döndürür (engine'den bağımsız)."""
+    async with async_session() as session:
+        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot = result.scalar_one_or_none()
+    if not bot:
+        raise HTTPException(404, "Bot bulunamadı")
+
+    ex_client = None
+    try:
+        ex_client = await _get_exchange_client(bot.exchange or "bitget")
+        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=15)
+
+        # Fiyat
+        ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(bot.symbol), timeout=10)
+        cur_price = float(ticker.get("last", 0))
+
+        # Pozisyon
+        positions = await asyncio.wait_for(ex_client.exchange.fetch_positions([bot.symbol]), timeout=10)
+        open_pos = [p for p in positions if float(p.get("contracts", 0)) != 0]
+
+        pos_data = None
+        if open_pos:
+            p = open_pos[0]
+            entry = float(p.get("entryPrice", 0))
+            contracts = float(p.get("contracts", 0))
+            notional = float(p.get("notional", 0)) or (contracts * entry)
+            side = p.get("side", "long")
+            leverage = float(p.get("leverage", 1))
+            unrealized_pnl = float(p.get("unrealizedPnl", 0))
+            # PnL yüzde hesapla
+            if notional and leverage:
+                margin = notional / leverage
+                pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
+            else:
+                pnl_pct = 0
+
+            pos_data = {
+                "side": side,
+                "size": contracts,
+                "entry_price": entry,
+                "notional": notional,
+                "pnl_usdt": round(unrealized_pnl, 4),
+                "pnl_pct": round(pnl_pct, 2),
+                "leverage": leverage,
+            }
+
+        return {"price": cur_price, "position": pos_data}
+    except Exception as e:
+        raise HTTPException(500, f"Pozisyon bilgisi alınamadı: {e}")
+    finally:
+        if ex_client:
+            try:
+                await ex_client.close()
+            except Exception:
+                pass
+
+
 @router.get("/{bot_id}/restart")
 async def restart_bot(bot_id: int):
     """Botu durdur ve yeniden başlat (GET — browser'dan çağrılabilir)."""

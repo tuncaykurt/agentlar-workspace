@@ -119,6 +119,23 @@ export default function BotCard({
     }>
   } | null>(null)
 
+  const [livePos, setLivePos] = useState<{ price: number; position: Position | null } | null>(null)
+
+  // Canlı pozisyon & fiyat bilgisi (engine status yoksa bile çalışır)
+  useEffect(() => {
+    if (!running) { setLivePos(null); return }
+    let cancelled = false
+    const fetch = () => {
+      api.get(`/bots/${bot.id}/position`)
+        .then((data: any) => { if (!cancelled && data && !data.error) setLivePos(data) })
+        .catch(() => {})
+    }
+    fetch()
+    const iv = setInterval(fetch, 30_000)
+    return () => { cancelled = true; clearInterval(iv) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bot.id, running])
+
   // Sinyal performansını çek
   useEffect(() => {
     api.get(`/bots/${bot.id}/performance`)
@@ -197,6 +214,10 @@ export default function BotCard({
   const pnlPct  = status?.risk?.daily_pnl_pct ?? 0
   const pnlUsdt = status?.risk?.daily_pnl ?? 0
   const pnlColor = pnlPct >= 0 ? "text-green-400" : "text-red-400"
+
+  // Engine status veya livePos'tan pozisyon bilgisi
+  const activePos = status?.position ?? livePos?.position ?? null
+  const livePrice = status?.price ?? livePos?.price ?? null
 
   return (
     <div className={clsx(
@@ -293,58 +314,65 @@ export default function BotCard({
               ? `$${bot.initial_balance.toLocaleString()}`
               : "—"
 
-        return status ? (
+        const priceDisplay = status?.price ?? livePrice
+        const hasPnl = status?.risk != null
+
+        return (
           <div className="grid grid-cols-3 gap-2">
-            <Stat label="Fiyat" value={`$${status.price?.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`} />
-            <Stat label="Gunluk PnL" value={`${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)}$ (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%)`} className={pnlColor} />
-            <Stat label={`Bakiye${exchLabel}`} value={balanceVal} />
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            <div className="opacity-30"><Stat label="Fiyat" value="—" /></div>
-            <div className="opacity-30"><Stat label="Gunluk PnL" value="—" /></div>
+            {priceDisplay ? (
+              <Stat label="Fiyat" value={`$${priceDisplay.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`} />
+            ) : (
+              <div className="opacity-30"><Stat label="Fiyat" value="—" /></div>
+            )}
+            {hasPnl ? (
+              <Stat label="Gunluk PnL" value={`${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)}$ (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%)`} className={pnlColor} />
+            ) : activePos ? (
+              <Stat label="Pozisyon PnL" value={`${activePos.pnl_usdt >= 0 ? "+" : ""}${activePos.pnl_usdt.toFixed(2)}$`} className={activePos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400"} />
+            ) : (
+              <div className="opacity-30"><Stat label="Gunluk PnL" value="—" /></div>
+            )}
             <Stat label={`Bakiye${exchLabel}`} value={balanceVal} />
           </div>
         )
       })()}
 
       {/* Açık Pozisyon */}
-      {status?.position && (
+      {activePos && (
         <div className={clsx(
           "rounded-lg border p-2.5 space-y-1.5",
-          status.position.side === "long"
+          activePos.side === "long"
             ? "bg-green-500/5 border-green-500/20"
             : "bg-red-500/5 border-red-500/20"
         )}>
           <div className="flex items-center justify-between">
             <span className={clsx(
               "text-xs font-bold px-2 py-0.5 rounded",
-              status.position.side === "long"
+              activePos.side === "long"
                 ? "bg-green-500/15 text-green-400"
                 : "bg-red-500/15 text-red-400"
             )}>
-              {status.position.side === "long" ? "LONG" : "SHORT"} {status.position.leverage}x
+              {activePos.side === "long" ? "LONG" : "SHORT"} {activePos.leverage}x
             </span>
             <span className={clsx(
               "text-sm font-bold",
-              status.position.pnl_usdt >= 0 ? "text-green-400" : "text-red-400"
+              activePos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400"
             )}>
-              {status.position.pnl_usdt >= 0 ? "+" : ""}{status.position.pnl_usdt.toFixed(2)} USDT
+              {activePos.pnl_usdt >= 0 ? "+" : ""}{activePos.pnl_usdt.toFixed(2)} USDT
             </span>
           </div>
           <div className="grid grid-cols-3 gap-2 text-[11px]">
             <div>
               <span className="text-slate-500">Giris</span>
-              <p className="text-slate-300 font-medium">${status.position.entry_price.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
+              <p className="text-slate-300 font-medium">${activePos.entry_price.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
             </div>
             <div>
               <span className="text-slate-500">Miktar</span>
-              <p className="text-slate-300 font-medium">${status.position.notional.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
+              <p className="text-slate-300 font-medium">${activePos.notional.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
             </div>
             <div>
               <span className="text-slate-500">PnL %</span>
-              <p className={clsx("font-medium", status.position.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
-                {status.position.pnl_pct >= 0 ? "+" : ""}{status.position.pnl_pct.toFixed(2)}%
+              <p className={clsx("font-medium", activePos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                {activePos.pnl_pct >= 0 ? "+" : ""}{activePos.pnl_pct.toFixed(2)}%
               </p>
             </div>
           </div>
@@ -368,8 +396,8 @@ export default function BotCard({
         </div>
       )}
 
-      {/* Sinyal Performansı */}
-      {perf && perf.total_signals > 0 && (
+      {/* Sinyal Performansı — her zaman göster */}
+      {perf && (
         <div className="border-t border-slate-800 pt-2">
           <button
             onClick={() => setShowPerf(p => !p)}
@@ -380,16 +408,22 @@ export default function BotCard({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
               Sinyal Performansi
-              <span className={clsx(
-                "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                perf.win_rate >= 50
-                  ? "bg-green-500/20 text-green-400"
-                  : perf.win_rate > 0
-                    ? "bg-red-500/20 text-red-400"
-                    : "bg-slate-700/50 text-slate-400"
-              )}>
-                {perf.tp_hit + perf.sl_hit > 0 ? `%${perf.win_rate} basari` : `${perf.open} acik`}
-              </span>
+              {perf.total_signals > 0 ? (
+                <span className={clsx(
+                  "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                  perf.win_rate >= 50
+                    ? "bg-green-500/20 text-green-400"
+                    : perf.win_rate > 0
+                      ? "bg-red-500/20 text-red-400"
+                      : "bg-slate-700/50 text-slate-400"
+                )}>
+                  {perf.tp_hit + perf.sl_hit > 0 ? `%${perf.win_rate} basari` : `${perf.total_signals} sinyal`}
+                </span>
+              ) : (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-slate-700/50 text-slate-500">
+                  sinyal yok
+                </span>
+              )}
             </span>
             <svg
               className={clsx("w-3.5 h-3.5 transition-transform", showPerf && "rotate-180")}
@@ -401,6 +435,10 @@ export default function BotCard({
 
           {showPerf && (
             <div className="mt-2 space-y-2">
+              {perf.total_signals === 0 ? (
+                <p className="text-[10px] text-slate-500 text-center py-3">Henuz sinyal gelmedi. TradingView webhook aktif oldugunda sinyaller burada gorunecek.</p>
+              ) : (
+              <>
               {/* Özet istatistikler */}
               <div className="grid grid-cols-4 gap-1.5">
                 <div className="bg-slate-900/60 rounded-lg p-1.5 text-center border border-slate-800">
@@ -415,9 +453,9 @@ export default function BotCard({
                   <p className="text-[9px] text-red-400/70">SL</p>
                   <p className="text-xs font-bold text-red-400">{perf.sl_hit}</p>
                 </div>
-                <div className="bg-blue-500/5 rounded-lg p-1.5 text-center border border-blue-500/20">
-                  <p className="text-[9px] text-blue-400/70">Acik</p>
-                  <p className="text-xs font-bold text-blue-400">{perf.open}</p>
+                <div className="bg-yellow-500/5 rounded-lg p-1.5 text-center border border-yellow-500/20">
+                  <p className="text-[9px] text-yellow-400/70">Takipte</p>
+                  <p className="text-xs font-bold text-yellow-400">{perf.open}</p>
                 </div>
               </div>
 
@@ -456,14 +494,14 @@ export default function BotCard({
                         : s.outcome === "sl_hit"
                           ? "bg-red-500/5 border-red-500/15 text-red-400"
                           : s.outcome === "open"
-                            ? "bg-blue-500/5 border-blue-500/15 text-blue-400"
+                            ? "bg-yellow-500/5 border-yellow-500/15 text-yellow-400"
                             : "bg-slate-900/40 border-slate-800 text-slate-500"
                     )}>
                       <span className="font-medium">
                         {s.signal_type === "buy" ? "LONG" : "SHORT"} @ ${s.price?.toLocaleString("tr-TR", {maximumFractionDigits: 2})}
                       </span>
                       <span>
-                        {s.outcome === "tp_hit" ? "TP" : s.outcome === "sl_hit" ? "SL" : s.outcome === "open" ? "Acik" : "Suresi doldu"}
+                        {s.outcome === "tp_hit" ? "TP Vurdu" : s.outcome === "sl_hit" ? "SL Vurdu" : s.outcome === "open" ? "Takipte" : "Suresi doldu"}
                         {s.outcome_pnl_pct != null && ` ${s.outcome_pnl_pct >= 0 ? "+" : ""}${s.outcome_pnl_pct}%`}
                       </span>
                       <span className="text-slate-600">
@@ -472,6 +510,8 @@ export default function BotCard({
                     </div>
                   ))}
                 </div>
+              )}
+              </>
               )}
             </div>
           )}
