@@ -408,6 +408,61 @@ async def test_cycle(bot_id: int):
     return {"bot_id": bot_id, "steps": steps}
 
 
+@router.get("/{bot_id}/restart")
+async def restart_bot(bot_id: int):
+    """Botu durdur ve yeniden başlat (GET — browser'dan çağrılabilir)."""
+    # Durdur
+    if bot_id in _running_bots:
+        _running_bots[bot_id].stop()
+        _bot_tasks[bot_id].cancel()
+        del _running_bots[bot_id]
+        del _bot_tasks[bot_id]
+
+    # DB'den bot bilgisi al
+    async with async_session() as session:
+        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot = result.scalar_one_or_none()
+    if not bot:
+        raise HTTPException(404, "Bot bulunamadı")
+
+    # Yeniden başlat
+    config = {
+        "id": bot.id,
+        "name": bot.name,
+        "symbol": bot.symbol,
+        "strategy": bot.strategy,
+        "paper_mode": bot.paper_mode,
+        "leverage": bot.leverage,
+        "risk_per_trade": bot.risk_per_trade,
+        "max_daily_loss": bot.max_daily_loss,
+        "initial_balance": bot.initial_balance or 1000.0,
+        "params": json.loads(bot.params) if bot.params else {},
+    }
+
+    exchange_client = await _get_exchange_client(bot.exchange or "bitget")
+    engine = BotEngine(config, exchange_client)
+    _running_bots[bot_id] = engine
+
+    async def _safe_run(eng, bid):
+        try:
+            await eng.run()
+        except Exception as e:
+            import traceback
+            print(f"[Bot #{bid}] ENGINE ÇÖKTÜ: {e}")
+            traceback.print_exc()
+
+    task = asyncio.create_task(_safe_run(engine, bot_id))
+    _bot_tasks[bot_id] = task
+
+    async with async_session() as session:
+        await session.execute(
+            update(Bot).where(Bot.id == bot_id).values(status=BotStatus.RUNNING)
+        )
+        await session.commit()
+
+    return {"status": "restarted", "bot_id": bot_id, "name": bot.name}
+
+
 @router.post("/{bot_id}/stop")
 async def stop_bot(bot_id: int):
     if bot_id not in _running_bots:
