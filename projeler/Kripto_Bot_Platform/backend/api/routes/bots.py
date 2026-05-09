@@ -1,7 +1,7 @@
 """
 Bot Yönetimi API — PostgreSQL Persistent
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
@@ -470,21 +470,30 @@ async def test_cycle(bot_id: int):
     return {"bot_id": bot_id, "steps": steps}
 
 
+class TestOrderRequest(BaseModel):
+    exchange: str = "mexc"
+    symbol: str = "ETH/USDT:USDT"
+    side: str = "buy"
+    size_usdt: float = 10.0
+    leverage: int = 10
+    tp_pct: float = 20.0
+    sl_pct: float = 20.0
+
 @router.post("/test-order")
-async def test_order(data: dict):
+async def test_order(data: TestOrderRequest):
     """
     Gerçek test işlemi aç.
     Body: {exchange, symbol, side, size_usdt, leverage, tp_pct, sl_pct}
     Örnek: {exchange:"mexc", symbol:"ETH/USDT:USDT", side:"buy",
              size_usdt:10, leverage:10, tp_pct:20, sl_pct:20}
     """
-    exchange  = data.get("exchange", "mexc")
-    symbol    = data.get("symbol", "ETH/USDT:USDT")
-    side      = data.get("side", "buy")          # "buy" (long) | "sell" (short)
-    size_usdt = float(data.get("size_usdt", 10))  # marjin miktarı (USDT)
-    leverage  = int(data.get("leverage", 10))
-    tp_pct    = float(data.get("tp_pct", 20))
-    sl_pct    = float(data.get("sl_pct", 20))
+    exchange  = data.exchange
+    symbol    = data.symbol
+    side      = data.side        # "buy" (long) | "sell" (short)
+    size_usdt = data.size_usdt   # marjin miktarı (USDT)
+    leverage  = data.leverage
+    tp_pct    = data.tp_pct
+    sl_pct    = data.sl_pct
 
     steps = []
     ex_client = None
