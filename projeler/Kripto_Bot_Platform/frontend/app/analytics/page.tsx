@@ -26,19 +26,51 @@ const TABS = [
 type TabKey = typeof TABS[number]["key"]
 
 export default function AnalyticsPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>("blocked")
-  const [page, setPage] = useState(0)
+  const [activeTab,   setActiveTab]   = useState<TabKey>("blocked")
+  const [page,        setPage]        = useState(0)
+  const [selectedBot, setSelectedBot] = useState<number | null>(null)
+  const [togglingFilter, setTogglingFilter] = useState<string | null>(null)
   const PAGE_SIZE = 20
 
-  const { data, error, isLoading } = useSWR('/analytics/dashboard', fetcher, {
-    refreshInterval: 15000
-  })
+  const { data, error, isLoading } = useSWR('/analytics/dashboard', fetcher, { refreshInterval: 15000 })
 
   const { data: filteredData, isLoading: filteredLoading } = useSWR(
     `/analytics/filtered-signals?action=${activeTab}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`,
     fetcher,
     { refreshInterval: 20000 }
   )
+
+  // Bots listesi (filtre toggle için)
+  const { data: botsData } = useSWR('/bots', fetcher, { refreshInterval: 60000 })
+  const bots: any[] = botsData || []
+
+  // Filtre istatistikleri
+  const { data: filterStats, mutate: mutateFilterStats } = useSWR(
+    `/analytics/filter-stats${selectedBot ? `?bot_id=${selectedBot}` : ""}`,
+    fetcher,
+    { refreshInterval: 30000 }
+  )
+
+  // Seçili botun filtre ayarları
+  const { data: botFilters, mutate: mutateBotFilters } = useSWR(
+    selectedBot ? `/bots/${selectedBot}/filters` : null,
+    fetcher,
+    { refreshInterval: 30000 }
+  )
+
+  const toggleFilter = async (field: string, currentValue: boolean) => {
+    if (!selectedBot) return
+    setTogglingFilter(field)
+    try {
+      await api.patch(`/bots/${selectedBot}/filters`, { [field]: !currentValue })
+      await mutateBotFilters()
+      await mutateFilterStats()
+    } catch (e) {
+      console.error("Filtre güncelleme hatası:", e)
+    } finally {
+      setTogglingFilter(null)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -182,6 +214,186 @@ export default function AnalyticsPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* ── Filtre Performans Analizi ─────────────────────────────────────── */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              🧪 Akıllı Filtre Performansı
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Pasif analiz sinyallerinden hesaplanır.
+              <span className="text-slate-400"> Doğru engel</span> = SL olurdu (zarar önlendi) &nbsp;·&nbsp;
+              <span className="text-slate-400"> Yanlış engel</span> = TP olurdu (kâr kaçırıldı)
+            </p>
+          </div>
+
+          {/* Bot seçici */}
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-xs text-slate-500">Bot:</span>
+            <select
+              value={selectedBot ?? ""}
+              onChange={(e: { target: { value: string } }) => setSelectedBot(e.target.value ? Number(e.target.value) : null)}
+              className="text-xs bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-300 focus:outline-none focus:border-slate-500"
+            >
+              <option value="">Tüm Botlar</option>
+              {bots.map((b: any) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+            {filterStats && (
+              <span className="text-[10px] text-slate-600 whitespace-nowrap">
+                {filterStats.analyzed_with_outcome} sonuçlanan sinyal
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Baseline (filtre geçen sinyaller) */}
+        {filterStats?.baseline && (
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700">
+            <span className="text-sm">✅</span>
+            <div>
+              <span className="text-xs font-medium text-slate-300">Tüm Filtreleri Geçen Sinyaller — Baseline Win Rate: </span>
+              {filterStats.baseline.executed_win_rate != null ? (
+                <span className={`text-sm font-bold ${filterStats.baseline.executed_win_rate >= 50 ? "text-green-400" : "text-red-400"}`}>
+                  %{filterStats.baseline.executed_win_rate}
+                </span>
+              ) : (
+                <span className="text-xs text-slate-600">veri yok</span>
+              )}
+              <span className="text-[10px] text-slate-600 ml-2">({filterStats.baseline.executed_total} işlem)</span>
+            </div>
+          </div>
+        )}
+
+        {/* Filtre kartları */}
+        {!filterStats ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-slate-500"></div>
+          </div>
+        ) : filterStats.analyzed_with_outcome === 0 ? (
+          <div className="text-center py-10 text-slate-500 text-sm">
+            <div className="text-3xl mb-2">📊</div>
+            Henüz sonuçlanmış pasif analiz sinyali yok.<br/>
+            <span className="text-xs">Botu durdurulmuş modda bırakın, TradingView sinyalleri analiz edilip TP/SL takibe alınsın.</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {(filterStats.filter_stats as any[]).map((f: any) => {
+              const isEnabled = botFilters ? !!botFilters[f.field] : null
+              const toggling  = togglingFilter === f.field
+              const hasData   = f.hyp_total > 0
+              const accuracy  = f.accuracy
+
+              // Renk: doğruluk oranına göre
+              const accuracyColor = !hasData ? "text-slate-600"
+                : accuracy >= 65 ? "text-green-400"
+                : accuracy >= 45 ? "text-yellow-400"
+                : "text-red-400"
+
+              const barColor = !hasData ? "bg-slate-700"
+                : accuracy >= 65 ? "bg-green-500"
+                : accuracy >= 45 ? "bg-yellow-500"
+                : "bg-red-500"
+
+              const rec = f.recommendation
+              const recBadge = rec === "keep_on"
+                ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">✓ Açık tut</span>
+                : rec === "keep_off"
+                ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">✗ Kapat önerisi</span>
+                : <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-500 border border-slate-600">— Nötr</span>
+
+              return (
+                <div key={f.id} className={`p-4 rounded-xl border transition-colors ${
+                  isEnabled === true  ? "border-blue-500/30 bg-blue-500/5" :
+                  isEnabled === false ? "border-slate-700 bg-slate-800/30 opacity-60" :
+                  "border-slate-700 bg-slate-800/30"
+                }`}>
+                  {/* Başlık + Toggle */}
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-base">{f.icon}</span>
+                      <span className="text-sm font-medium text-slate-200">{f.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {recBadge}
+                      {selectedBot && isEnabled !== null && (
+                        <button
+                          onClick={() => toggleFilter(f.field, isEnabled)}
+                          disabled={toggling}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            isEnabled ? "bg-blue-600" : "bg-slate-600"
+                          } ${toggling ? "opacity-50" : ""}`}
+                          title={isEnabled ? "Filtreyi kapat" : "Filtreyi aç"}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                            isEnabled ? "translate-x-4.5" : "translate-x-0.5"
+                          }`} />
+                        </button>
+                      )}
+                      {!selectedBot && (
+                        <span className="text-[9px] text-slate-600">bot seç</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Doğruluk barı */}
+                  {hasData ? (
+                    <>
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="text-slate-500">Engel Doğruluğu</span>
+                        <span className={`font-bold text-sm ${accuracyColor}`}>
+                          %{accuracy ?? "—"}
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-700 rounded-full overflow-hidden mb-3">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+                          style={{ width: `${accuracy ?? 0}%` }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <div className="text-base font-bold text-white">{f.hyp_total}</div>
+                          <div className="text-[10px] text-slate-500">Toplam Engel</div>
+                        </div>
+                        <div>
+                          <div className="text-base font-bold text-green-400">{f.correct_block}</div>
+                          <div className="text-[10px] text-slate-500">Doğru (SL önlendi)</div>
+                        </div>
+                        <div>
+                          <div className="text-base font-bold text-red-400">{f.wrong_block}</div>
+                          <div className="text-[10px] text-slate-500">Yanlış (TP kaçırıldı)</div>
+                        </div>
+                      </div>
+                      {f.passed_win_rate != null && (
+                        <div className="mt-3 pt-3 border-t border-slate-700/50 text-[11px] text-slate-400">
+                          Filtre geçen sinyallerde win rate:
+                          <span className={`font-bold ml-1 ${f.passed_win_rate >= 50 ? "text-green-400" : "text-red-400"}`}>
+                            %{f.passed_win_rate}
+                          </span>
+                          <span className="text-slate-600 ml-1">({f.passed_total} sinyal)</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-xs text-slate-600 italic pt-1">
+                      Henüz analiz verisi yok
+                      {f.actual_blocks > 0 && (
+                        <span className="ml-1 not-italic text-slate-500">
+                          · {f.actual_blocks} gerçek engel kaydı
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Sinyal Detay Tablosu ──────────────────────────────────────────── */}

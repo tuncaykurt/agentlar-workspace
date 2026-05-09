@@ -3,7 +3,7 @@ from sqlalchemy import select, func, text, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from models.trade import Trade, TradeStatus, SignalLog
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 router = APIRouter(tags=["Analytics"])
 
@@ -238,4 +238,171 @@ async def get_filtered_signals(
         "limit": limit,
         "offset": offset,
         "items": items,
+    }
+
+
+# ─── Filtre Performans Analizi ─────────────────────────────────────────────────
+
+# Her filtrenin "reason" alanındaki marker'ı ve reject_reason anahtar kelimeleri
+_FILTER_DEFS = [
+    {
+        "id":              "trend_filter",
+        "name":            "Trend Filtresi (EMA200)",
+        "icon":            "📈",
+        "field":           "trend_filter_enabled",
+        # analyzed sinyallerin reason alanında aranan marker
+        "engel_markers":   ["trend[✗", "ema200[✗", "📈 trend[✗"],
+        # filtered sinyallerin reject_reason alanında aranan kelimeler
+        "reject_keywords": ["trend", "ema200"],
+    },
+    {
+        "id":              "volatility_filter",
+        "name":            "Volatilite Filtresi (ATR)",
+        "icon":            "⚡",
+        "field":           "volatility_filter_enabled",
+        "engel_markers":   ["volatilite[✗", "⚡ volatilite[✗"],
+        "reject_keywords": ["volatilite", "volatility", "atr"],
+    },
+    {
+        "id":              "news_filter",
+        "name":            "Haber Koruması",
+        "icon":            "📰",
+        "field":           "news_protection_enabled",
+        "engel_markers":   ["haber[✗", "📰 haber[✗"],
+        "reject_keywords": ["haber", "news", "blackout", "economic"],
+    },
+    {
+        "id":              "hours_filter",
+        "name":            "Yasak Saat Dilimi",
+        "icon":            "🕐",
+        "field":           "smart_hours_enabled",
+        "engel_markers":   ["saat[✗", "🕐 saat[✗"],
+        "reject_keywords": ["saat", "hour", "utc yasaklı", "akıllı saat"],
+    },
+    {
+        "id":              "self_learning",
+        "name":            "Öz-Öğrenme Filtresi",
+        "icon":            "🧠",
+        "field":           "self_learning_enabled",
+        "engel_markers":   ["öz-öğrenme[✗", "🧠 öz-öğrenme[✗"],
+        "reject_keywords": ["öz-öğrenme", "win rate", "win_rate", "self_learning", "başarı oranı"],
+    },
+]
+
+
+@router.get("/analytics/filter-stats")
+async def get_filter_stats(
+    bot_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Her akıllı filtre için performans metrikleri.
+    Kaynak: action="analyzed" olan sinyaller (pasif analiz + outcome takibi).
+      - reason alanı: hangi filtrelerin [✗ ENGEL] tetiklendiğini gösterir
+      - outcome: tp_hit / sl_hit (signal_tracker tarafından doldurulur)
+
+    Metrik tanımları:
+      correct_block : filtre blokladı + outcome=sl_hit  → zarar önlendi ✓
+      wrong_block   : filtre blokladı + outcome=tp_hit  → kâr kaçırıldı ✗
+      accuracy      : correct_block / (correct_block + wrong_block) × 100
+    """
+
+    # 1. Outcome bilgisi olan "analyzed" sinyaller
+    analyzed_q = select(SignalLog).where(
+        SignalLog.action == "analyzed",
+        SignalLog.outcome.in_(["tp_hit", "sl_hit"]),
+    )
+    if bot_id:
+        analyzed_q = analyzed_q.where(SignalLog.bot_id == bot_id)
+    analyzed = (await db.execute(analyzed_q)).scalars().all()
+
+    # 2. Gerçekte engellenmiş sinyaller (engine'den filtered/rejected)
+    filtered_q = select(SignalLog).where(
+        SignalLog.action.in_(["filtered", "rejected"]),
+    )
+    if bot_id:
+        filtered_q = filtered_q.where(SignalLog.bot_id == bot_id)
+    filtered = (await db.execute(filtered_q)).scalars().all()
+
+    # 3. Onaylanıp işleme giren sinyaller (tüm filtreleri geçti)
+    executed_q = select(SignalLog).where(
+        SignalLog.action == "executed",
+        SignalLog.outcome.in_(["tp_hit", "sl_hit"]),
+    )
+    if bot_id:
+        executed_q = executed_q.where(SignalLog.bot_id == bot_id)
+    executed = (await db.execute(executed_q)).scalars().all()
+
+    # Baseline win rate (filtreleri geçen sinyaller)
+    exec_tp   = sum(1 for s in executed if s.outcome == "tp_hit")
+    exec_sl   = sum(1 for s in executed if s.outcome == "sl_hit")
+    exec_total = exec_tp + exec_sl
+    exec_win_rate = round(exec_tp / exec_total * 100, 1) if exec_total > 0 else None
+
+    # Per-filter hesaplama
+    filter_stats: List[Dict] = []
+    for fdef in _FILTER_DEFS:
+        markers  = [m.lower() for m in fdef["engel_markers"]]
+        keywords = [k.lower() for k in fdef["reject_keywords"]]
+
+        correct_block = 0   # sl_hit + filter fired  → doğru engel
+        wrong_block   = 0   # tp_hit + filter fired  → yanlış engel (kâr kaçırıldı)
+        passed_tp     = 0   # filtre geçti + tp_hit
+        passed_sl     = 0   # filtre geçti + sl_hit
+
+        for sig in analyzed:
+            reason_lc = (sig.reason or "").lower()
+            blocked   = any(m in reason_lc for m in markers)
+            if blocked:
+                if sig.outcome == "sl_hit":
+                    correct_block += 1
+                else:
+                    wrong_block += 1
+            else:
+                if sig.outcome == "tp_hit":
+                    passed_tp += 1
+                else:
+                    passed_sl += 1
+
+        hyp_total = correct_block + wrong_block
+        accuracy  = round(correct_block / hyp_total * 100, 1) if hyp_total > 0 else None
+        passed_total = passed_tp + passed_sl
+        passed_wr = round(passed_tp / passed_total * 100, 1) if passed_total > 0 else None
+
+        # Gerçek engel sayısı (engine'den filtered sinyaller)
+        actual_blocks = sum(
+            1 for s in filtered
+            if any(k in (s.reject_reason or "").lower() for k in keywords)
+        )
+
+        filter_stats.append({
+            "id":            fdef["id"],
+            "name":          fdef["name"],
+            "icon":          fdef["icon"],
+            "field":         fdef["field"],
+            # Hipotetik (analyzed üzerinden hesaplanmış)
+            "hyp_total":        hyp_total,
+            "correct_block":    correct_block,
+            "wrong_block":      wrong_block,
+            "accuracy":         accuracy,
+            # Filtre geçen sinyallerin win rate'i
+            "passed_total":     passed_total,
+            "passed_win_rate":  passed_wr,
+            # Gerçek engine engeli
+            "actual_blocks":    actual_blocks,
+            # Öneri: filtre mi açık kalmalı?
+            "recommendation":   (
+                "keep_on"  if accuracy is not None and accuracy >= 60 else
+                "keep_off" if accuracy is not None and accuracy < 40 else
+                "neutral"
+            ),
+        })
+
+    return {
+        "filter_stats":         filter_stats,
+        "analyzed_with_outcome": len(analyzed),
+        "baseline": {
+            "executed_total":   exec_total,
+            "executed_win_rate": exec_win_rate,
+        },
     }
