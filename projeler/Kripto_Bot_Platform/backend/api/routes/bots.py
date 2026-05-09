@@ -470,6 +470,110 @@ async def test_cycle(bot_id: int):
     return {"bot_id": bot_id, "steps": steps}
 
 
+@router.post("/test-order")
+async def test_order(data: dict):
+    """
+    Gerçek test işlemi aç.
+    Body: {exchange, symbol, side, size_usdt, leverage, tp_pct, sl_pct}
+    Örnek: {exchange:"mexc", symbol:"ETH/USDT:USDT", side:"buy",
+             size_usdt:10, leverage:10, tp_pct:20, sl_pct:20}
+    """
+    exchange  = data.get("exchange", "mexc")
+    symbol    = data.get("symbol", "ETH/USDT:USDT")
+    side      = data.get("side", "buy")          # "buy" (long) | "sell" (short)
+    size_usdt = float(data.get("size_usdt", 10))  # marjin miktarı (USDT)
+    leverage  = int(data.get("leverage", 10))
+    tp_pct    = float(data.get("tp_pct", 20))
+    sl_pct    = float(data.get("sl_pct", 20))
+
+    steps = []
+    ex_client = None
+    try:
+        ex_client = await _get_exchange_client(exchange)
+        steps.append(f"✓ Exchange client: {exchange}")
+
+        # Market yükle
+        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=30)
+        steps.append(f"✓ Markets yüklendi")
+
+        # Güncel fiyat
+        ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(symbol), timeout=15)
+        price = float(ticker["last"])
+        steps.append(f"✓ Fiyat: {price} ({symbol})")
+
+        # Leverage ayarla
+        try:
+            await ex_client.set_leverage(symbol, leverage)
+            steps.append(f"✓ Leverage: {leverage}x")
+        except Exception as e:
+            steps.append(f"⚠ Leverage hatası (devam): {e}")
+
+        # Notional = size_usdt * leverage → coin miktarı
+        notional = size_usdt * leverage
+        qty_raw = notional / price
+
+        # Kontrat boyutu
+        contract_size = 1.0
+        try:
+            market = ex_client.exchange.market(symbol)
+            contract_size = float(market.get("contractSize", 1) or 1)
+            steps.append(f"✓ contractSize={contract_size}")
+        except Exception as e:
+            steps.append(f"⚠ contractSize alınamadı (1 kullanılıyor): {e}")
+
+        amount = max(1, int(qty_raw / contract_size))
+        steps.append(f"✓ Miktar: qty={qty_raw:.4f} → {amount} kontrat (notional≈${notional:.1f})")
+
+        # TP/SL fiyatları
+        if side == "buy":
+            tp_price = round(price * (1 + tp_pct / 100), 4)
+            sl_price = round(price * (1 - sl_pct / 100), 4)
+        else:
+            tp_price = round(price * (1 - tp_pct / 100), 4)
+            sl_price = round(price * (1 + sl_pct / 100), 4)
+        steps.append(f"✓ TP={tp_price} SL={sl_price} (%{tp_pct}/%{sl_pct})")
+
+        # Order aç
+        steps.append(f"→ Order açılıyor: {side.upper()} {amount} {symbol} @ market")
+        order = await ex_client.place_order(
+            symbol, side, amount, "market",
+            tp_price=tp_price, sl_price=sl_price,
+        )
+        order_id = order.get("id", "N/A")
+        order_status = order.get("status", "?")
+        steps.append(f"✅ ORDER BAŞARILI! id={order_id} status={order_status}")
+
+        return {
+            "success": True,
+            "order_id": order_id,
+            "order_status": order_status,
+            "details": {
+                "exchange": exchange, "symbol": symbol, "side": side,
+                "amount_contracts": amount, "entry_price": price,
+                "notional_usdt": notional, "margin_usdt": size_usdt,
+                "leverage": leverage, "tp_price": tp_price, "sl_price": sl_price,
+            },
+            "steps": steps,
+            "raw_order": {k: str(v) for k, v in (order or {}).items() if k in ("id","symbol","side","amount","price","status","info")},
+        }
+
+    except Exception as e:
+        import traceback
+        steps.append(f"✗ HATA: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "steps": steps,
+            "traceback": traceback.format_exc()[-800:],
+        }
+    finally:
+        if ex_client:
+            try:
+                await ex_client.close()
+            except Exception:
+                pass
+
+
 @router.get("/{bot_id}/position")
 async def get_bot_position(bot_id: int):
     """Borsadan canlı pozisyon ve fiyat bilgisi döndürür (engine'den bağımsız)."""
