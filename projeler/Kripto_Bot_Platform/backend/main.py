@@ -55,6 +55,8 @@ async def _init_db():
         ("signal_logs", "volatility_atr", "ALTER TABLE signal_logs ADD COLUMN volatility_atr FLOAT"),
         ("signal_logs", "volume_ratio", "ALTER TABLE signal_logs ADD COLUMN volume_ratio FLOAT"),
         ("signal_logs", "ema200_dist", "ALTER TABLE signal_logs ADD COLUMN ema200_dist FLOAT"),
+        # Sinyal zaman dilimi
+        ("signal_logs", "timeframe", "ALTER TABLE signal_logs ADD COLUMN timeframe VARCHAR"),
         # Webhook profil ek kolonları
         ("webhook_profiles", "username", "ALTER TABLE webhook_profiles ADD COLUMN username VARCHAR DEFAULT 'default'"),
         ("webhook_profiles", "leverage", "ALTER TABLE webhook_profiles ADD COLUMN leverage INTEGER DEFAULT 20"),

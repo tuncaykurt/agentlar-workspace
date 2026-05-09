@@ -392,12 +392,14 @@ const TV_SERVER = typeof window !== "undefined"
   : ""
 
 function TradingViewWebhookCard({
-  token, onTokenInit, direction, onDirection,
+  token, onTokenInit, direction, onDirection, signalTimeframe, onSignalTimeframe,
 }: {
   token: string
   onTokenInit: (t: string) => void
   direction: string
   onDirection: (v: string) => void
+  signalTimeframe: string
+  onSignalTimeframe: (v: string) => void
 }) {
   const [copied, setCopied] = useState<"url"|"json"|null>(null)
   const [alarmType, setAlarmType] = useState<"indicator"|"strategy">("indicator")
@@ -417,16 +419,18 @@ function TradingViewWebhookCard({
   const actionForIndicator = direction === "sell_only" ? "sell" : "buy"
 
   const jsonTemplateIndicator = `{
-  "action": "${actionForIndicator}",
-  "symbol": "{{ticker}}",
-  "price":  {{close}}
+  "action":   "${actionForIndicator}",
+  "symbol":   "{{ticker}}",
+  "price":    {{close}},
+  "interval": "{{interval}}"
 }`
 
   const jsonTemplateStrategy = `{
-  "action": "{{strategy.order.action}}",
-  "symbol": "{{ticker}}",
-  "price":  {{close}},
-  "message": "{{strategy.order.comment}}"
+  "action":   "{{strategy.order.action}}",
+  "symbol":   "{{ticker}}",
+  "price":    {{close}},
+  "interval": "{{interval}}",
+  "message":  "{{strategy.order.comment}}"
 }`
 
   const activeTemplate = alarmType === "indicator" ? jsonTemplateIndicator : jsonTemplateStrategy
@@ -534,6 +538,30 @@ function TradingViewWebhookCard({
           <li><span className="text-slate-300">Mesaj</span> alanina yukaridaki JSON sablonunu yapistir</li>
           <li>Alarmi kaydet — tetiklenince bot otomatik islem acar</li>
         </ol>
+      </div>
+
+      {/* Sinyal Periyodu */}
+      <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 space-y-2">
+        <p className="text-xs font-medium text-slate-400">Sinyal Periyodu (Zaman Dilimi)</p>
+        <div className="flex flex-wrap gap-2">
+          {["1m","3m","5m","15m","30m","1h","4h","1d"].map(tf => (
+            <button
+              key={tf}
+              type="button"
+              onClick={() => onSignalTimeframe(tf)}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-mono font-medium transition-colors ${
+                signalTimeframe === tf
+                  ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300"
+                  : "border-slate-700 text-slate-400 hover:text-white"
+              }`}
+            >
+              {tf}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-slate-500">
+          TradingView alarmının hangi grafik periyodunda tetiklendiğini belirt. Bu bilgi sinyal geçmişine kaydedilir ve analizlerde kullanılır.
+        </p>
       </div>
 
       {/* İşlem Yönü */}
@@ -1015,7 +1043,7 @@ export default function BotsPage() {
       strategy_params: useCustomSig
         ? { signal_source: sigSrc, ...Object.fromEntries(
             Object.entries(f.strategy_params).filter(([k]) =>
-              ["signal_mode","position_action","signal_tf","wait_candle_close","max_position_hours","max_trades_per_day","webhook_token"].includes(k)
+              ["signal_mode","position_action","signal_tf","wait_candle_close","max_position_hours","max_trades_per_day","webhook_token","signal_timeframe"].includes(k)
             )
           )}
         : f.strategy_params,
@@ -1445,6 +1473,8 @@ export default function BotsPage() {
                       onTokenInit={t => setParam("webhook_token", t)}
                       direction={form.strategy_params.signal_mode === "buy_only" ? "buy_only" : form.strategy_params.signal_mode === "sell_only" ? "sell_only" : "both"}
                       onDirection={v => setParam("signal_mode", v === "both" ? "normal" : v)}
+                      signalTimeframe={form.strategy_params.signal_timeframe as string || "5m"}
+                      onSignalTimeframe={v => setParam("signal_timeframe", v)}
                     />
                   )}
 

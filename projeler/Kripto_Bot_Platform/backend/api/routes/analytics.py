@@ -211,6 +211,7 @@ async def get_filtered_signals(
             "signal_type":      log.signal_type,
             "action":           log.action,
             "source":           log.source or "tradingview",
+            "timeframe":        log.timeframe,
             "price":            log.price,
             "tp_price":         log.tp_price,
             "sl_price":         log.sl_price,

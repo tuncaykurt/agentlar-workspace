@@ -228,6 +228,7 @@ export default function AnalyticsPage() {
                     <th className="text-left pb-3 pr-3 whitespace-nowrap">Zaman</th>
                     <th className="text-left pb-3 pr-3">Sembol</th>
                     <th className="text-left pb-3 pr-3">Yön</th>
+                    <th className="text-left pb-3 pr-3">Periyot</th>
                     <th className="text-left pb-3 pr-3">Durum / Sonuç</th>
                     <th className="text-right pb-3 pr-3 whitespace-nowrap">Giriş</th>
                     <th className="text-right pb-3 pr-3 whitespace-nowrap">TP Hedef</th>
@@ -292,6 +293,15 @@ export default function AnalyticsPage() {
                           }`}>
                             {item.signal_type === "buy" ? "▲ LONG" : "▼ SHORT"}
                           </span>
+                        </td>
+
+                        {/* Periyot */}
+                        <td className="py-3 pr-3">
+                          {item.timeframe ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-700/50 text-slate-300 border border-slate-600/40 whitespace-nowrap">
+                              {item.timeframe}
+                            </span>
+                          ) : <span className="text-slate-700 text-xs">—</span>}
                         </td>
 
                         {/* Durum / Sonuç */}

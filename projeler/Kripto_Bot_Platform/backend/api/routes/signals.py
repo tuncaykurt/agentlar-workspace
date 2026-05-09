@@ -139,6 +139,22 @@ _TV_SYMBOL_MAP = {
 }
 
 
+def _tv_interval_to_tf(interval: str) -> str:
+    """
+    TradingView {{interval}} değerini standart timeframe formatına çevirir.
+    TV gönderir: "1", "5", "15", "60", "240", "D", "W"
+    Çıktı: "1m", "5m", "15m", "1h", "4h", "1d", "1w"
+    """
+    mapping = {
+        "1": "1m", "3": "3m", "5": "5m", "10": "10m", "15": "15m",
+        "30": "30m", "45": "45m", "60": "1h", "120": "2h", "180": "3h",
+        "240": "4h", "360": "6h", "480": "8h", "720": "12h",
+        "D": "1d", "1D": "1d", "W": "1w", "1W": "1w", "M": "1M", "1M": "1M",
+    }
+    tv = str(interval).strip().upper()
+    return mapping.get(tv, f"{tv}m" if tv.isdigit() else tv.lower())
+
+
 def _normalize_tv_symbol(raw: str) -> str:
     """
     TradingView ticker formatını CCXT futures formatına çevirir.
@@ -275,6 +291,10 @@ async def tradingview_webhook(token: str, request: Request):
     price = float(body.get("price", body.get("close", body.get("last", 0))) or 0)
     message = str(body.get("message", body.get("comment", body.get("alert_message", ""))))
 
+    # TradingView {{interval}} → standart timeframe
+    tv_interval = str(body.get("interval", body.get("timeframe", ""))).strip()
+    timeframe = _tv_interval_to_tf(tv_interval) if tv_interval else None
+
     payload = {
         "symbol":     symbol_ccxt,    # bot engine bunu kullanır
         "symbol_raw": symbol_raw,     # orijinal TV sembolü (debug)
@@ -283,6 +303,7 @@ async def tradingview_webhook(token: str, request: Request):
         "source":     "TradingView",
         "reason":     message or f"TV Alarm — {action_raw}",
         "token":      token,
+        "timeframe":  timeframe,      # sinyal periyodu (5m, 1h, vb.)
         "ts":         datetime.utcnow().isoformat(),
     }
 
@@ -345,6 +366,15 @@ async def tradingview_webhook(token: str, request: Request):
                             tp_price = round(price * (1 - tp_pct / 100), 6)
                             sl_price = round(price * (1 + sl_pct / 100), 6)
 
+                    # Bot'un kendi signal_timeframe ayarını da dene (TV interval yoksa)
+                    import json as _json
+                    bot_params = {}
+                    try:
+                        bot_params = _json.loads(bot.params) if bot.params else {}
+                    except Exception:
+                        pass
+                    effective_tf = timeframe or bot_params.get("signal_timeframe")
+
                     log = SignalLog(
                         bot_id=bot.id,
                         symbol=symbol_ccxt or symbol_raw,
@@ -357,6 +387,7 @@ async def tradingview_webhook(token: str, request: Request):
                         sl_price=sl_price,
                         outcome="open" if (tp_price and sl_price) else None,
                         raw_payload=json.dumps(body),
+                        timeframe=effective_tf,
                     )
                     session.add(log)
                     print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' sinyali kaydedildi — TP={tp_price} SL={sl_price}")

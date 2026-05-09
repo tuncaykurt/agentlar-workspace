@@ -131,6 +131,9 @@ class SignalLog(Base):
     volume_ratio = Column(Float, nullable=True)            # Hacim artış oranı
     ema200_dist = Column(Float, nullable=True)             # EMA200'e olan uzaklık %
     
+    # Sinyal zaman dilimi (TradingView {{interval}} → 1m, 5m, 15m, 1h, 4h, 1d)
+    timeframe = Column(String, nullable=True)
+
     # Performans takibi — bot kapalıyken bile sinyal sonucu izlenir
     outcome = Column(String, nullable=True)                # tp_hit, sl_hit, open, expired
     outcome_price = Column(Float, nullable=True)           # sonuç fiyatı
