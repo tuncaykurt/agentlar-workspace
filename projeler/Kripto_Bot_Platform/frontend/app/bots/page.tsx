@@ -454,7 +454,7 @@ const TV_SERVER = typeof window !== "undefined"
   : ""
 
 function TradingViewWebhookCard({
-  token, onTokenInit, direction, onDirection, signalTimeframe, onSignalTimeframe,
+  token, onTokenInit, direction, onDirection, signalTimeframe, onSignalTimeframe, isEditing,
 }: {
   token: string
   onTokenInit: (t: string) => void
@@ -462,16 +462,21 @@ function TradingViewWebhookCard({
   onDirection: (v: string) => void
   signalTimeframe: string
   onSignalTimeframe: (v: string) => void
+  isEditing?: boolean
 }) {
   const [copied, setCopied] = useState<"url"|"json"|null>(null)
   const [alarmType, setAlarmType] = useState<"indicator"|"strategy">("indicator")
 
-  // Token yoksa otomatik oluştur
+  const generateToken = () => {
+    const t = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map(b => b.toString(16).padStart(2, "0")).join("")
+    onTokenInit(t)
+  }
+
+  // Düzenleme modunda token korunur, yeni botta token yoksa oluştur
   useEffect(() => {
-    if (!token) {
-      const t = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-        .map(b => b.toString(16).padStart(2, "0")).join("")
-      onTokenInit(t)
+    if (!token && !isEditing) {
+      generateToken()
     }
   }, [])
 
@@ -508,18 +513,39 @@ function TradingViewWebhookCard({
     <div className="mt-3 space-y-4">
       {/* Webhook URL */}
       <div className="p-4 rounded-xl border border-sky-500/20 bg-sky-500/5 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sky-400 text-base">📡</span>
-          <p className="text-xs font-semibold text-sky-400">TradingView Webhook URL</p>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sky-400 text-base">📡</span>
+            <p className="text-xs font-semibold text-sky-400">TradingView Webhook URL</p>
+          </div>
+          {isEditing && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("Token değişirse TradingView alarm URL'sini güncellemeniz gerekir. Devam?")) {
+                  generateToken()
+                }
+              }}
+              className="text-[10px] px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-colors"
+            >
+              🔄 Yeni Token
+            </button>
+          )}
         </div>
+        {isEditing && !token && (
+          <div className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+            ⚠️ Mevcut token bulunamadı. TradingView alarmınızda hangi URL kullanıldığını kontrol edin.
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <code className="flex-1 text-[11px] font-mono bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 break-all">
-            {webhookUrl}
+            {token ? webhookUrl : "— token yükleniyor —"}
           </code>
           <button
             type="button"
             onClick={() => copy(webhookUrl, "url")}
-            className="shrink-0 px-3 py-2 rounded-lg bg-sky-600/20 border border-sky-500/40 text-sky-300 text-xs hover:bg-sky-600/40 transition-colors"
+            disabled={!token}
+            className="shrink-0 px-3 py-2 rounded-lg bg-sky-600/20 border border-sky-500/40 text-sky-300 text-xs hover:bg-sky-600/40 transition-colors disabled:opacity-40"
           >
             {copied === "url" ? "✓ Kopyalandı" : "Kopyala"}
           </button>
@@ -1537,6 +1563,7 @@ export default function BotsPage() {
                       onDirection={v => setParam("signal_mode", v === "both" ? "normal" : v)}
                       signalTimeframe={form.strategy_params.signal_timeframe as string || "5m"}
                       onSignalTimeframe={v => setParam("signal_timeframe", v)}
+                      isEditing={!!editingBot}
                     />
                   )}
 

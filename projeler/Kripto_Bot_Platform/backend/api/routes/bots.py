@@ -20,13 +20,28 @@ class _ExClient:
         self.exchange = ex
     async def set_leverage(self, symbol, leverage):
         await self.exchange.set_leverage(leverage, symbol)
-    async def place_order(self, symbol, side, amount, order_type="market", price=None, tp_price=None, sl_price=None):
+    async def place_order(self, symbol, side, amount, order_type="market", price=None,
+                          tp_price=None, sl_price=None, pos_side=None):
         params = {}
         if tp_price: params["takeProfitPrice"] = tp_price
         if sl_price: params["stopLossPrice"] = sl_price
+        if pos_side: params["posSide"] = pos_side
         if order_type == "market":
             return await self.exchange.create_market_order(symbol, side, amount, params=params)
         return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
+    async def modify_position_tpsl(self, symbol, tp_price=None, sl_price=None, pos_side=None):
+        params = {}
+        if pos_side: params["posSide"] = pos_side
+        try:
+            await self.exchange.set_position_mode(True, symbol)
+        except Exception:
+            pass
+        if tp_price:
+            await self.exchange.create_order(symbol, "TAKE_PROFIT_MARKET", "sell" if pos_side != "short" else "buy",
+                                              0, None, {"stopPrice": tp_price, "closePosition": True, **params})
+        if sl_price:
+            await self.exchange.create_order(symbol, "STOP_MARKET", "sell" if pos_side != "short" else "buy",
+                                             0, None, {"stopPrice": sl_price, "closePosition": True, **params})
     async def get_funding_rate(self, symbol):
         t = await self.exchange.fetch_ticker(symbol)
         return float(t.get("info", {}).get("fundingRate", 0))
@@ -602,6 +617,7 @@ async def update_bot(bot_id: int, data: BotCreate):
                 name=data.name,
                 symbol=data.symbol,
                 strategy=strategy,
+                exchange=data.exchange,
                 paper_mode=data.paper_mode,
                 leverage=data.leverage,
                 risk_per_trade=data.risk_per_trade,
@@ -611,7 +627,7 @@ async def update_bot(bot_id: int, data: BotCreate):
             )
         )
         await session.commit()
-        print(f"[Bot Updated] ID:{bot_id} Name:{data.name} Strategy:{strategy} Params:{effective_params}")
+        print(f"[Bot Updated] ID:{bot_id} Name:{data.name} Strategy:{strategy} Exchange:{data.exchange} Params:{effective_params}")
 
     return {
         "id": bot_id,
