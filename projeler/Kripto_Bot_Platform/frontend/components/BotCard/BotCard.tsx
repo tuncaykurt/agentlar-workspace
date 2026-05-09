@@ -368,11 +368,11 @@ export default function BotCard({
               </p>
             </div>
 
-            {/* PnL */}
-            {hasPnl ? (
+            {/* PnL — günlük + pozisyon aynı anda göster */}
+            {(hasPnl || activePos) ? (
               <div className={clsx(
                 "rounded-lg p-2 border",
-                pnlUsdt >= 0
+                (hasPnl ? pnlUsdt : (activePos?.pnl_usdt ?? 0)) >= 0
                   ? "bg-green-500/5 border-green-500/20"
                   : "bg-red-500/5 border-red-500/20"
               )}>
@@ -380,34 +380,30 @@ export default function BotCard({
                   <svg className="w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <p className="text-[10px] text-slate-500">Gunluk PnL</p>
+                  <p className="text-[10px] text-slate-500">PnL</p>
                 </div>
-                <p className={clsx("text-sm font-bold tabular-nums", pnlColor)}>
-                  {pnlUsdt >= 0 ? "+" : ""}{pnlUsdt.toFixed(2)}$
-                </p>
-                <p className={clsx("text-[10px] tabular-nums", pnlColor)}>
-                  {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
-                </p>
-              </div>
-            ) : activePos ? (
-              <div className={clsx(
-                "rounded-lg p-2 border",
-                activePos.pnl_usdt >= 0
-                  ? "bg-green-500/5 border-green-500/20"
-                  : "bg-red-500/5 border-red-500/20"
-              )}>
-                <div className="flex items-center gap-1 mb-0.5">
-                  <svg className="w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  <p className="text-[10px] text-slate-500">Pozisyon PnL</p>
-                </div>
-                <p className={clsx("text-sm font-bold tabular-nums", activePos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400")}>
-                  {activePos.pnl_usdt >= 0 ? "+" : ""}{activePos.pnl_usdt.toFixed(2)}$
-                </p>
-                <p className={clsx("text-[10px] tabular-nums", activePos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
-                  {activePos.pnl_pct >= 0 ? "+" : ""}{activePos.pnl_pct.toFixed(2)}%
-                </p>
+                {hasPnl && (
+                  <div>
+                    <p className={clsx("text-[10px] text-slate-500")}>Günlük</p>
+                    <p className={clsx("text-sm font-bold tabular-nums", pnlColor)}>
+                      {pnlUsdt >= 0 ? "+" : ""}{pnlUsdt.toFixed(2)}$
+                    </p>
+                    <p className={clsx("text-[10px] tabular-nums", pnlColor)}>
+                      {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
+                    </p>
+                  </div>
+                )}
+                {activePos && (
+                  <div className={clsx(hasPnl && "mt-1 pt-1 border-t border-white/5")}>
+                    {hasPnl && <p className="text-[10px] text-slate-500">Pozisyon</p>}
+                    <p className={clsx("text-sm font-bold tabular-nums", activePos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400")}>
+                      {activePos.pnl_usdt >= 0 ? "+" : ""}{activePos.pnl_usdt.toFixed(2)}$
+                    </p>
+                    <p className={clsx("text-[10px] tabular-nums", activePos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                      {activePos.pnl_pct >= 0 ? "+" : ""}{activePos.pnl_pct.toFixed(2)}%
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="bg-slate-900/30 rounded-lg p-2 border border-slate-800 opacity-40">
@@ -415,7 +411,7 @@ export default function BotCard({
                   <svg className="w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
-                  <p className="text-[10px] text-slate-500">Gunluk PnL</p>
+                  <p className="text-[10px] text-slate-500">PnL</p>
                 </div>
                 <p className="text-sm font-bold text-white">—</p>
               </div>

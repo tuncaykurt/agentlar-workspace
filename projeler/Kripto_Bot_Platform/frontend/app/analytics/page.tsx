@@ -228,9 +228,13 @@ export default function AnalyticsPage() {
                     <th className="text-left pb-3 pr-3 whitespace-nowrap">Zaman</th>
                     <th className="text-left pb-3 pr-3">Sembol</th>
                     <th className="text-left pb-3 pr-3">Yön</th>
-                    <th className="text-left pb-3 pr-3">Durum</th>
-                    <th className="text-left pb-3 pr-3 min-w-[160px]">Neden?</th>
-                    <th className="text-left pb-3 pr-3 min-w-[300px]">Açıklama</th>
+                    <th className="text-left pb-3 pr-3">Durum / Sonuç</th>
+                    <th className="text-right pb-3 pr-3 whitespace-nowrap">Giriş</th>
+                    <th className="text-right pb-3 pr-3 whitespace-nowrap">TP Hedef</th>
+                    <th className="text-right pb-3 pr-3 whitespace-nowrap">SL Hedef</th>
+                    <th className="text-right pb-3 pr-3 whitespace-nowrap">Süre</th>
+                    <th className="text-left pb-3 pr-3 min-w-[140px]">Neden?</th>
+                    <th className="text-left pb-3 pr-3 min-w-[280px]">Filtre Analizi / Açıklama</th>
                     <th className="text-right pb-3 pr-3">RSI</th>
                     <th className="text-right pb-3 pr-3">ATR</th>
                     <th className="text-right pb-3">EMA200%</th>
@@ -238,8 +242,35 @@ export default function AnalyticsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredItems.map((item: any) => {
-                    const isBlocked  = item.action === "filtered" || item.action === "rejected"
                     const isExecuted = item.action === "executed"
+
+                    // Süre gösterimi
+                    const fmtDur = (min: number | null) => {
+                      if (min == null) return null
+                      if (min < 60) return `${min}dk`
+                      return `${Math.floor(min / 60)}s ${Math.round(min % 60)}dk`
+                    }
+
+                    // Sonuç badge
+                    const outcomeEl = (() => {
+                      if (!item.outcome || item.outcome === "open") return null
+                      if (item.outcome === "tp_hit") return (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 whitespace-nowrap">
+                          ✓ TP{item.outcome_pnl_pct != null ? ` +${item.outcome_pnl_pct}%` : ""}
+                        </span>
+                      )
+                      if (item.outcome === "sl_hit") return (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 whitespace-nowrap">
+                          ✕ SL{item.outcome_pnl_pct != null ? ` ${item.outcome_pnl_pct}%` : ""}
+                        </span>
+                      )
+                      return (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 border border-slate-700 whitespace-nowrap">
+                          {item.outcome === "expired" ? "○ Süresi Doldu" : "● Takipte"}
+                        </span>
+                      )
+                    })()
+
                     return (
                       <tr key={item.id} className="hover:bg-slate-800/30 transition-colors align-top">
                         {/* Zaman */}
@@ -248,8 +279,8 @@ export default function AnalyticsPage() {
                         </td>
 
                         {/* Sembol */}
-                        <td className="py-3 pr-3 font-mono font-bold text-white whitespace-nowrap">
-                          {item.symbol}
+                        <td className="py-3 pr-3 font-mono font-bold text-white whitespace-nowrap text-xs">
+                          {item.symbol.replace("/USDT:USDT", "USDT.P").replace("/", "")}
                         </td>
 
                         {/* Yön */}
@@ -263,17 +294,44 @@ export default function AnalyticsPage() {
                           </span>
                         </td>
 
-                        {/* Durum */}
+                        {/* Durum / Sonuç */}
                         <td className="py-3 pr-3">
-                          {isExecuted ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-green-500/10 text-green-300 border-green-500/30 whitespace-nowrap">
-                              ✅ Onaylandı
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-red-500/10 text-red-300 border-red-500/30 whitespace-nowrap">
-                              ❌ Reddedildi
-                            </span>
-                          )}
+                          <div className="flex flex-col gap-1">
+                            {isExecuted ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-green-500/10 text-green-300 border-green-500/30 whitespace-nowrap">
+                                ✅ Onaylandı
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-red-500/10 text-red-300 border-red-500/30 whitespace-nowrap">
+                                ❌ Reddedildi
+                              </span>
+                            )}
+                            {outcomeEl}
+                          </div>
+                        </td>
+
+                        {/* Giriş Fiyatı */}
+                        <td className="py-3 pr-3 text-right font-mono text-slate-300 whitespace-nowrap text-xs">
+                          {item.price != null ? `$${Number(item.price).toLocaleString("tr-TR", {maximumFractionDigits: 2})}` : <span className="text-slate-700">—</span>}
+                        </td>
+
+                        {/* TP Hedef */}
+                        <td className="py-3 pr-3 text-right font-mono whitespace-nowrap text-xs">
+                          {item.tp_price != null ? (
+                            <span className="text-green-400">${Number(item.tp_price).toLocaleString("tr-TR", {maximumFractionDigits: 2})}</span>
+                          ) : <span className="text-slate-700">—</span>}
+                        </td>
+
+                        {/* SL Hedef */}
+                        <td className="py-3 pr-3 text-right font-mono whitespace-nowrap text-xs">
+                          {item.sl_price != null ? (
+                            <span className="text-red-400">${Number(item.sl_price).toLocaleString("tr-TR", {maximumFractionDigits: 2})}</span>
+                          ) : <span className="text-slate-700">—</span>}
+                        </td>
+
+                        {/* Süre */}
+                        <td className="py-3 pr-3 text-right font-mono text-slate-400 whitespace-nowrap text-xs">
+                          {fmtDur(item.duration_minutes) ?? <span className="text-slate-700">—</span>}
                         </td>
 
                         {/* Neden — badge */}
@@ -294,18 +352,33 @@ export default function AnalyticsPage() {
                           </div>
                         </td>
 
-                        {/* Açıklama — okunabilir Türkçe metin */}
-                        <td className="py-3 pr-3 text-xs text-slate-400 leading-relaxed max-w-xs">
-                          {item.reason_description
-                            ? item.reason_description
-                            : item.reject_reason
-                              ? <span className="font-mono text-slate-600">{item.reject_reason}</span>
-                              : <span className="text-slate-700 italic">Açıklama yok</span>
-                          }
+                        {/* Filtre Analizi + Açıklama */}
+                        <td className="py-3 pr-3 text-xs leading-relaxed min-w-[280px]">
+                          {item.reason_description && (
+                            <p className="text-slate-300 mb-1">{item.reason_description}</p>
+                          )}
+                          {item.filter_analysis ? (
+                            <div className="space-y-0.5">
+                              {item.filter_analysis.split(" | ").map((line: string, i: number) => (
+                                <p key={i} className={
+                                  line.includes("ENGEL") ? "text-red-400/80" :
+                                  line.includes("✓") ? "text-green-400/60" :
+                                  line.includes("kapalı") ? "text-slate-600" :
+                                  "text-slate-500"
+                                }>
+                                  {line}
+                                </p>
+                              ))}
+                            </div>
+                          ) : item.reject_reason ? (
+                            <span className="font-mono text-slate-600 text-[10px]">{item.reject_reason}</span>
+                          ) : (
+                            <span className="text-slate-700 italic">—</span>
+                          )}
                         </td>
 
                         {/* RSI */}
-                        <td className="py-3 pr-3 text-right font-mono whitespace-nowrap">
+                        <td className="py-3 pr-3 text-right font-mono whitespace-nowrap text-xs">
                           {item.rsi_14 != null ? (
                             <span className={
                               item.rsi_14 > 70 ? "text-red-400" :
@@ -317,12 +390,12 @@ export default function AnalyticsPage() {
                         </td>
 
                         {/* ATR */}
-                        <td className="py-3 pr-3 text-right font-mono text-slate-400 whitespace-nowrap">
-                          {item.volatility_atr != null ? item.volatility_atr.toFixed(2) : <span className="text-slate-700">—</span>}
+                        <td className="py-3 pr-3 text-right font-mono text-slate-400 whitespace-nowrap text-xs">
+                          {item.volatility_atr != null ? item.volatility_atr.toFixed(4) : <span className="text-slate-700">—</span>}
                         </td>
 
                         {/* EMA200 % */}
-                        <td className="py-3 text-right font-mono whitespace-nowrap">
+                        <td className="py-3 text-right font-mono whitespace-nowrap text-xs">
                           {item.ema200_dist != null ? (
                             <span className={item.ema200_dist >= 0 ? "text-green-400" : "text-red-400"}>
                               {item.ema200_dist >= 0 ? "+" : ""}{item.ema200_dist.toFixed(2)}%

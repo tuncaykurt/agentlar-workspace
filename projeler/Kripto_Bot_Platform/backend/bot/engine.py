@@ -492,6 +492,152 @@ class BotEngine:
             traceback.print_exc()
         return None
 
+    async def _analyze_filters_full(self, signal_type: str, price: float) -> dict:
+        """
+        Tüm filtreleri HER ZAMAN analiz eder (aktif olsun olmasın).
+        Döner: {should_block, reject_reason, indicators, analysis}
+        """
+        result = {
+            "should_block": False,
+            "reject_reason": "",
+            "indicators": {"rsi_14": None, "volatility_atr": None, "volume_ratio": None, "ema200_dist": None},
+            "analysis": "",
+        }
+        lines = []
+
+        try:
+            # ── İndikatörler (her zaman çalışır) ─────────────────────────────
+            ohlcv = await self.data_fetcher.get_ohlcv(self.config["symbol"], "1h", 200)
+            ema200_val = None
+            if len(ohlcv) > 50:
+                from ai.indicators import calculate_all
+                ind = calculate_all(ohlcv)
+                rsi = ind.get("rsi")
+                atr = ind.get("atr")
+                ema200_val = ind.get("ema200")
+
+                result["indicators"]["rsi_14"] = round(float(rsi), 2) if rsi else None
+                result["indicators"]["volatility_atr"] = round(float(atr), 6) if atr else None
+                if ema200_val and ema200_val > 0:
+                    dist = round((price - ema200_val) / ema200_val * 100, 2)
+                    result["indicators"]["ema200_dist"] = dist
+                    trend_ok = not ((signal_type == "buy" and price < ema200_val) or
+                                    (signal_type == "sell" and price > ema200_val))
+                    lines.append(f"EMA200[{'+' if trend_ok else '✗'}]: fiyat={price:.2f} ema={ema200_val:.2f} dist={dist:+.2f}%")
+                if rsi:
+                    lines.append(f"RSI: {rsi:.1f}")
+                if atr:
+                    lines.append(f"ATR: {atr:.4f}")
+
+            # ── Filtre ayarları ────────────────────────────────────────────────
+            async with async_session() as session:
+                from sqlalchemy import select as _select
+                res = await session.execute(_select(BotFilter).where(BotFilter.bot_id == self.config["id"]))
+                f = res.scalar_one_or_none()
+
+            if not f:
+                lines.append("Filtre ayarları: yapılandırılmamış")
+            else:
+                # 1. Haber Koruması
+                if f.news_protection_enabled:
+                    from services.economic_calendar import is_news_blackout
+                    blackout = await is_news_blackout(minutes_buffer=f.news_blackout_minutes or 30)
+                    if blackout.get("blackout"):
+                        r = f"Haber Blackout: {blackout.get('reason','')}"
+                        lines.append(f"📰 Haber[✗ ENGEL]: {blackout.get('reason','')}")
+                        if not result["should_block"]:
+                            result["should_block"] = True
+                            result["reject_reason"] = r
+                    else:
+                        lines.append("📰 Haber[✓ serbest]")
+                else:
+                    lines.append("📰 Haber[— kapalı]")
+
+                # 2. Akıllı Saat Filtresi
+                if f.smart_hours_enabled and f.blocked_hours:
+                    import datetime as _dt
+                    try:
+                        blocked = json.loads(f.blocked_hours)
+                        cur_h = _dt.datetime.utcnow().hour
+                        if cur_h in blocked:
+                            r = f"Akıllı Saat Filtresi: {cur_h}:00 UTC yasaklı"
+                            lines.append(f"🕐 Saat[✗ ENGEL]: {cur_h}:00 UTC yasaklı")
+                            if not result["should_block"]:
+                                result["should_block"] = True
+                                result["reject_reason"] = r
+                        else:
+                            lines.append(f"🕐 Saat[✓ {cur_h}:00 UTC serbest]")
+                    except Exception:
+                        lines.append("🕐 Saat[aktif, kontrol hatası]")
+                else:
+                    lines.append("🕐 Saat[— kapalı]")
+
+                # 3. Öz-Öğrenme
+                if f.self_learning_enabled:
+                    async with async_session() as session2:
+                        from models.trade import Trade, TradeStatus
+                        from sqlalchemy import select as _sel2
+                        tr = await session2.execute(
+                            _sel2(Trade).where(
+                                Trade.bot_id == self.config["id"],
+                                Trade.status == TradeStatus.CLOSED
+                            ).order_by(Trade.id.desc()).limit(20)
+                        )
+                        recent = tr.scalars().all()
+                    if len(recent) >= 10:
+                        wins = sum(1 for t in recent if (t.pnl or 0) > 0)
+                        wr = wins / len(recent)
+                        thr = f.min_win_rate_threshold or 0.4
+                        if wr < thr:
+                            r = f"Öz-Öğrenme: Win Rate %{wr*100:.1f} < Limit %{thr*100:.1f}"
+                            lines.append(f"🧠 Öz-Öğrenme[✗ ENGEL]: {r}")
+                            if not result["should_block"]:
+                                result["should_block"] = True
+                                result["reject_reason"] = r
+                        else:
+                            lines.append(f"🧠 Öz-Öğrenme[✓ win=%{wr*100:.1f}]")
+                    else:
+                        lines.append(f"🧠 Öz-Öğrenme[✓ yeterli geçmiş yok ({len(recent)}/10)]")
+                else:
+                    lines.append("🧠 Öz-Öğrenme[— kapalı]")
+
+                # 4. Volatilite Filtresi
+                atr_v = result["indicators"]["volatility_atr"]
+                if f.volatility_filter_enabled and f.max_volatility_atr:
+                    if atr_v and atr_v > f.max_volatility_atr:
+                        r = f"Yüksek Volatilite: ATR {atr_v:.4f} > Limit {f.max_volatility_atr:.4f}"
+                        lines.append(f"⚡ Volatilite[✗ ENGEL]: {r}")
+                        if not result["should_block"]:
+                            result["should_block"] = True
+                            result["reject_reason"] = r
+                    else:
+                        lines.append(f"⚡ Volatilite[✓ ATR={atr_v or '?'}]")
+                else:
+                    lines.append("⚡ Volatilite[— kapalı]")
+
+                # 5. Trend Filtresi (EMA200)
+                if f.trend_filter_enabled and ema200_val and ema200_val > 0:
+                    trend_fail = (signal_type == "buy" and price < ema200_val) or \
+                                 (signal_type == "sell" and price > ema200_val)
+                    dist_v = result["indicators"]["ema200_dist"] or 0
+                    if trend_fail:
+                        r = f"Trend Filtresi: dist={dist_v:+.2f}% trend uyumsuz"
+                        lines.append(f"📈 Trend[✗ ENGEL]: {r}")
+                        if not result["should_block"]:
+                            result["should_block"] = True
+                            result["reject_reason"] = r
+                    else:
+                        lines.append(f"📈 Trend[✓ dist={dist_v:+.2f}%]")
+                else:
+                    lines.append("📈 Trend[— kapalı]")
+
+        except Exception as e:
+            lines.append(f"Analiz hatası: {str(e)[:100]}")
+            print(f"[Bot] Filtre analiz hatası: {e}")
+
+        result["analysis"] = " | ".join(lines)
+        return result
+
     async def _log_signal(
         self,
         signal_type: str,
@@ -504,6 +650,9 @@ class BotEngine:
         tp_price: float = None,
         sl_price: float = None,
         raw_payload: str = None,
+        rsi_14: float = None,
+        volatility_atr: float = None,
+        ema200_dist: float = None,
     ):
         """Gelen sinyali DB'ye kaydet — işleme girsin girmesin"""
         try:
@@ -521,6 +670,9 @@ class BotEngine:
                     tp_price=tp_price,
                     sl_price=sl_price,
                     raw_payload=raw_payload,
+                    rsi_14=rsi_14,
+                    volatility_atr=volatility_atr,
+                    ema200_dist=ema200_dist,
                 )
                 session.add(log)
                 await session.commit()
@@ -764,19 +916,24 @@ class BotEngine:
 
         print(f"[Bot {bot_name}] ✓ Sinyal kabul edildi: {signal_type} @ {price}")
 
-        # Sinyal geldi — logla
-        await self._log_signal(signal_type, price, source=source, reason=reason,
-            action="received", raw_payload=json.dumps(sig))
+        # Tam filtre analizi (aktif olsun olmasın tüm filtreler çalışır + indikatörler hesaplanır)
+        fa = await self._analyze_filters_full(signal_type, price)
+        ind = fa["indicators"]
+        analysis_text = fa["analysis"]
+        print(f"[Bot {bot_name}] Filtre analizi: {analysis_text}")
 
-        # Akıllı Filtre Kontrolü
-        filter_block = await self._check_smart_filters(signal_type, price)
-        if filter_block:
-            bl_reason = filter_block.get("reason", "Akıllı filtre")
-            print(f"[Bot {bot_name}] ✗ Filtre aktif — sinyal engellendi: {bl_reason}")
-            await self._log_signal(signal_type, price, source=source, reason=reason,
-                action="filtered", reject_reason=bl_reason)
+        if fa["should_block"]:
+            print(f"[Bot {bot_name}] ✗ Aktif filtre engeli: {fa['reject_reason']}")
+            await self._log_signal(signal_type, price, source=source, reason=analysis_text,
+                action="filtered", reject_reason=fa["reject_reason"],
+                rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"])
             await redis.set(last_ts_key, sig_ts, ex=600)
             return
+
+        # Sinyal geldi, filtreler geçildi — logla
+        await self._log_signal(signal_type, price, source=source, reason=analysis_text,
+            action="received", raw_payload=json.dumps(sig),
+            rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"])
 
         # Mevcut pozisyon kontrolü
         current_position = await self._get_current_position(symbol)
@@ -833,19 +990,22 @@ class BotEngine:
             }
             try:
                 await self._execute(signal_type, price, qty, stop_loss, ai_result)
-                await self._log_signal(signal_type, price, source=source, reason=reason,
-                    action="executed", confidence=75, tp_price=take_profit, sl_price=stop_loss)
+                await self._log_signal(signal_type, price, source=source, reason=analysis_text,
+                    action="executed", confidence=75, tp_price=take_profit, sl_price=stop_loss,
+                    rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"])
                 print(f"[Bot {bot_name}] ✓ İşlem başarıyla açıldı!")
             except Exception as e:
                 print(f"[Bot {bot_name}] ✗ İşlem açma hatası: {e}")
                 import traceback
                 traceback.print_exc()
-                await self._log_signal(signal_type, price, source=source, reason=reason,
-                    action="error", reject_reason=f"İşlem hatası: {str(e)[:200]}")
+                await self._log_signal(signal_type, price, source=source, reason=analysis_text,
+                    action="error", reject_reason=f"İşlem hatası: {str(e)[:200]}",
+                    rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"])
         else:
             print(f"[Bot {bot_name}] ✗ qty=0 — risk manager pozisyon boyutunu 0 hesapladı")
-            await self._log_signal(signal_type, price, source=source, reason=reason,
-                action="rejected", reject_reason="Pozisyon boyutu 0 (risk manager)")
+            await self._log_signal(signal_type, price, source=source, reason=analysis_text,
+                action="rejected", reject_reason="Pozisyon boyutu 0 (risk manager)",
+                rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"])
 
         # Status'u Redis'e yaz (frontend görebilsin)
         try:

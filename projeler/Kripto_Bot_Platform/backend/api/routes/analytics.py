@@ -192,6 +192,19 @@ async def get_filtered_signals(
     items = []
     for log in rows:
         reason_labels, reason_description = build_reason_text(log)
+
+        # Süre: sinyal oluşturulmasından outcome anına kadar
+        duration_minutes = None
+        if log.created_at and log.outcome_at:
+            try:
+                delta = log.outcome_at.replace(tzinfo=None) - log.created_at.replace(tzinfo=None)
+                duration_minutes = round(delta.total_seconds() / 60, 1)
+            except Exception:
+                pass
+
+        # Filtre analizi (reason alanından — engine her zaman yazar)
+        filter_analysis = log.reason or ""
+
         items.append({
             "id":               log.id,
             "symbol":           log.symbol,
@@ -199,6 +212,8 @@ async def get_filtered_signals(
             "action":           log.action,
             "source":           log.source or "tradingview",
             "price":            log.price,
+            "tp_price":         log.tp_price,
+            "sl_price":         log.sl_price,
             "rsi_14":           log.rsi_14,
             "volatility_atr":   log.volatility_atr,
             "volume_ratio":     log.volume_ratio,
@@ -206,6 +221,12 @@ async def get_filtered_signals(
             "reject_reason":    log.reject_reason,
             "reason_labels":    reason_labels,
             "reason_description": reason_description,
+            "filter_analysis":  filter_analysis,
+            "outcome":          log.outcome,
+            "outcome_price":    log.outcome_price,
+            "outcome_pnl_pct":  log.outcome_pnl_pct,
+            "outcome_at":       log.outcome_at.isoformat() if log.outcome_at else None,
+            "duration_minutes": duration_minutes,
             "created_at":       log.created_at.isoformat() if log.created_at else None,
         })
 

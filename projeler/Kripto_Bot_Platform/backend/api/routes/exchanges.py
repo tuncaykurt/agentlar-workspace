@@ -248,13 +248,21 @@ async def get_balance(exchange: str):
     if not raw:
         raise HTTPException(404, f"{exchange} için API key bulunamadı")
 
+    # 30 saniyelik cache — borsa API'sini her çağrıda meşgul etme
+    cache_key = f"balance_cache:{DEFAULT_USER}:{exchange}"
+    cached = await redis.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
     keys = json.loads(raw)
     try:
-        return await fetch_balance_for(
+        result = await fetch_balance_for(
             exchange,
             keys["api_key"],
             keys["secret"],
             keys.get("passphrase", ""),
         )
+        await redis.set(cache_key, json.dumps(result), ex=30)
+        return result
     except Exception as e:
         raise HTTPException(400, f"Bakiye alınamadı: {str(e)}")
