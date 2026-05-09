@@ -335,13 +335,16 @@ async def tradingview_webhook(token: str, request: Request):
         # Redis yoksa 200 dön (TradingView retry yapar aksi halde)
 
     # DB'ye sinyal logu kaydet — eşleşen botların TP/SL ayarlarıyla performans takibi
+    passive_tasks = []   # pasif botlar için arka plan analiz görevleri
+
     try:
         from core.database import async_session
-        from models.trade import SignalLog, Bot
+        from models.trade import SignalLog, Bot, BotStatus
         from sqlalchemy import select as sa_select
+        import json as _json
 
         async with async_session() as session:
-            # Bu token veya sembol'e bağlı TradingView webhook botlarını bul
+            # Bu sembol'e bağlı TradingView webhook / custom_signal botlarını bul
             result = await session.execute(
                 sa_select(Bot).where(
                     Bot.strategy.in_(["tradingview_webhook", "custom_signal"]),
@@ -352,9 +355,16 @@ async def tradingview_webhook(token: str, request: Request):
 
             if matched_bots:
                 for bot in matched_bots:
+                    # Bot parametrelerinden TP/SL oku
+                    bot_params = {}
+                    try:
+                        bot_params = _json.loads(bot.params) if bot.params else {}
+                    except Exception:
+                        pass
 
-                    tp_pct = params.get("tp_pct") or params.get("take_profit_pct") or 0
-                    sl_pct = params.get("sl_pct") or params.get("stop_loss_pct") or 0
+                    tp_pct = float(bot_params.get("tp_pct") or bot_params.get("take_profit_pct") or 0)
+                    sl_pct = float(bot_params.get("sl_pct") or bot_params.get("stop_loss_pct") or 0)
+                    effective_tf = timeframe or bot_params.get("signal_timeframe")
 
                     tp_price = None
                     sl_price = None
@@ -366,14 +376,7 @@ async def tradingview_webhook(token: str, request: Request):
                             tp_price = round(price * (1 - tp_pct / 100), 6)
                             sl_price = round(price * (1 + sl_pct / 100), 6)
 
-                    # Bot'un kendi signal_timeframe ayarını da dene (TV interval yoksa)
-                    import json as _json
-                    bot_params = {}
-                    try:
-                        bot_params = _json.loads(bot.params) if bot.params else {}
-                    except Exception:
-                        pass
-                    effective_tf = timeframe or bot_params.get("signal_timeframe")
+                    is_running = bot.status == BotStatus.RUNNING
 
                     log = SignalLog(
                         bot_id=bot.id,
@@ -382,6 +385,8 @@ async def tradingview_webhook(token: str, request: Request):
                         source="TradingView",
                         price=price,
                         reason=message or f"TV Alarm — {action_raw}",
+                        # Aktif bot → engine işler ("received" analytics'ten gizlenir)
+                        # Pasif bot → background analiz "analyzed"'a günceller
                         action="received",
                         tp_price=tp_price,
                         sl_price=sl_price,
@@ -390,7 +395,21 @@ async def tradingview_webhook(token: str, request: Request):
                         timeframe=effective_tf,
                     )
                     session.add(log)
-                    print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' sinyali kaydedildi — TP={tp_price} SL={sl_price}")
+                    await session.flush()   # log.id'yi al
+
+                    if not is_running:
+                        # Pasif bot: arka planda tam analiz yap
+                        passive_tasks.append((
+                            log.id, bot.id,
+                            bot.exchange or "mexc",
+                            symbol_ccxt or symbol_raw,
+                            sig_type, price,
+                            effective_tf or "1h",
+                            tp_pct, sl_pct,
+                        ))
+                        print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' pasif — analiz kuyruğa alındı")
+                    else:
+                        print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' aktif — engine işleyecek TP={tp_price} SL={sl_price}")
             else:
                 # Eşleşen bot yok — genel kayıt (bot_id=0)
                 log = SignalLog(
@@ -408,6 +427,14 @@ async def tradingview_webhook(token: str, request: Request):
             await session.commit()
     except Exception as e:
         print(f"[TV Webhook] Signal log DB hatası: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # Pasif bot analizlerini arka planda başlat (TradingView'e hemen 200 dön)
+    if passive_tasks:
+        from services.signal_analyzer import run_passive_analysis
+        for args in passive_tasks:
+            asyncio.create_task(run_passive_analysis(*args))
 
     return {
         "status": "ok",

@@ -17,9 +17,10 @@ const COLOR_MAP: Record<string, string> = {
 }
 
 const TABS = [
-  { key: "blocked",  label: "Reddedildi",  color: "text-red-400    border-red-500/60    bg-red-500/10"    },
-  { key: "executed", label: "Onaylandı",   color: "text-green-400  border-green-500/60  bg-green-500/10"  },
-  { key: "all",      label: "Tümü",        color: "text-slate-300  border-slate-600     bg-slate-800"     },
+  { key: "blocked",  label: "Reddedildi",   color: "text-red-400   border-red-500/60   bg-red-500/10"  },
+  { key: "executed", label: "Onaylandı",    color: "text-green-400 border-green-500/60 bg-green-500/10"},
+  { key: "analyzed", label: "Pasif Analiz", color: "text-sky-400   border-sky-500/60   bg-sky-500/10"  },
+  { key: "all",      label: "Tümü",         color: "text-slate-300 border-slate-600    bg-slate-800"   },
 ] as const
 
 type TabKey = typeof TABS[number]["key"]

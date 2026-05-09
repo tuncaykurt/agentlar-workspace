@@ -86,8 +86,10 @@ async def get_filtered_signals(
             return q.where(SignalLog.action.in_(["filtered", "rejected"]))
         elif act == "executed":
             return q.where(SignalLog.action == "executed")
-        else:  # all = blocked + executed (not raw "received")
-            return q.where(SignalLog.action.in_(["filtered", "rejected", "executed"]))
+        elif act == "analyzed":
+            return q.where(SignalLog.action == "analyzed")
+        else:  # all = blocked + executed + analyzed (not raw "received")
+            return q.where(SignalLog.action.in_(["filtered", "rejected", "executed", "analyzed"]))
 
     count_q = select(func.count(SignalLog.id))
     count_q = action_filter(count_q, action)
