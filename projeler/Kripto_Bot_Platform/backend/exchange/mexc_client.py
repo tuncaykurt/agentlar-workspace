@@ -38,8 +38,10 @@ class MEXCClient:
         # TP/SL doğrudan market emrine ekle (MEXC destekliyor)
         if tp_price:
             params["takeProfitPrice"] = tp_price
+            params["takeProfit"] = tp_price
         if sl_price:
             params["stopLossPrice"] = sl_price
+            params["stopLoss"] = sl_price
 
         if order_type == "market":
             order = await self.exchange.create_market_order(symbol, side, amount, params=params)

@@ -685,6 +685,39 @@ async def get_filters(bot_id: int):
             "blocked_hours": f.blocked_hours,
         }
 
+@router.post("/{bot_id}/filters")
+async def update_filters(bot_id: int, data: FilterUpdate):
+    from models.trade import BotFilter
+    async with async_session() as session:
+        result = await session.execute(select(BotFilter).where(BotFilter.bot_id == bot_id))
+        f = result.scalar_one_or_none()
+        
+        if not f:
+            f = BotFilter(bot_id=bot_id)
+            session.add(f)
+            
+        if data.smart_hours_enabled is not None:
+            f.smart_hours_enabled = data.smart_hours_enabled
+        if data.news_protection_enabled is not None:
+            f.news_protection_enabled = data.news_protection_enabled
+        if data.self_learning_enabled is not None:
+            f.self_learning_enabled = data.self_learning_enabled
+        if data.trend_filter_enabled is not None:
+            f.trend_filter_enabled = data.trend_filter_enabled
+        if data.volatility_filter_enabled is not None:
+            f.volatility_filter_enabled = data.volatility_filter_enabled
+        if data.news_blackout_minutes is not None:
+            f.news_blackout_minutes = data.news_blackout_minutes
+        if data.min_win_rate_threshold is not None:
+            f.min_win_rate_threshold = data.min_win_rate_threshold
+        if data.max_volatility_atr is not None:
+            f.max_volatility_atr = data.max_volatility_atr
+        if data.blocked_hours is not None:
+            f.blocked_hours = data.blocked_hours
+            
+        await session.commit()
+        return {"status": "updated"}
+
 
 @router.get("/signals/all")
 async def get_all_signal_logs(limit: int = 100, action: str = None):

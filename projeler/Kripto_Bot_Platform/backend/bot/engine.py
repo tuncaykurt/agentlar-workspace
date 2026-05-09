@@ -37,6 +37,7 @@ class BotEngine:
         self.signal_history: list = []
         # Trailing stop state: {symbol: {side, entry, highest/lowest, trail_price}}
         self._trailing: dict = {}
+        self._last_status_update = 0
 
         self.risk = RiskManager(
             balance=bot_config.get("initial_balance", 1000),
@@ -107,7 +108,7 @@ class BotEngine:
                             await redis.set(f"bot:{self.config['id']}:last_error", f"{datetime.utcnow().isoformat()} | {str(cycle_err)[:500]}", ex=3600)
                         except Exception:
                             pass
-                    await asyncio.sleep(30)
+                    await asyncio.sleep(0.5)
                     continue
 
                 # 0. Trailing stop kontrolü (aktif pozisyon varsa)
@@ -142,13 +143,13 @@ class BotEngine:
                     # Sinyal geldi — logla
                     await self._log_signal(signal, close, source=strategy, reason="Teknik sinyal", action="received")
 
-                    # Haber koruması kontrolü
-                    blackout = await self._check_news_protection()
-                    if blackout:
-                        reason = blackout.get("reason", "Haber blackout")
-                        print(f"[Bot] Haber koruması aktif — sinyal filtrelendi: {reason}")
+                    # Akıllı Filtre Kontrolü
+                    filter_block = await self._check_smart_filters(signal, close)
+                    if filter_block:
+                        reason = filter_block.get("reason", "Akıllı filtre")
+                        print(f"[Bot] Filtre aktif — sinyal engellendi: {reason}")
                         await self._log_signal(signal, close, source=strategy, action="filtered",
-                            reject_reason=f"Haber koruması: {reason}")
+                            reject_reason=reason)
                         await asyncio.sleep(300)
                         continue
 
@@ -347,8 +348,8 @@ class BotEngine:
             amount = qty
             try:
                 market = self.exchange.exchange.market(symbol)
-                contract_size = market.get("contractSize", 1) or 1
-                if contract_size < 1:
+                contract_size = float(market.get("contractSize", 1) or 1)
+                if contract_size and contract_size > 0:
                     amount = max(1, int(qty / contract_size))
                 print(f"[Bot {bot_name}] Kontrat: qty={qty} → amount={amount} (contractSize={contract_size})")
             except Exception as e:
@@ -417,8 +418,8 @@ class BotEngine:
             print(f"[Bot] Pozisyon bilgisi hatası: {e}")
         return None
 
-    async def _check_news_protection(self) -> dict | None:
-        """Haber koruması aktifse blackout kontrolü yap. Blackout varsa dict döner, yoksa None."""
+    async def _check_smart_filters(self, signal_type: str, price: float) -> dict | None:
+        """Akıllı filtreleri kontrol et. Filtreye takılırsa {reason: ...} döner, yoksa None."""
         try:
             async with async_session() as session:
                 from sqlalchemy import select
@@ -426,13 +427,69 @@ class BotEngine:
                     select(BotFilter).where(BotFilter.bot_id == self.config["id"])
                 )
                 f = result.scalar_one_or_none()
-                if f and f.news_protection_enabled:
+                if not f:
+                    return None
+                
+                # 1. Haber Koruması
+                if f.news_protection_enabled:
                     minutes = f.news_blackout_minutes or 30
+                    from services.economic_calendar import is_news_blackout
                     blackout = await is_news_blackout(minutes_buffer=minutes)
                     if blackout.get("blackout"):
-                        return blackout
+                        return {"reason": f"Haber Blackout: {blackout.get('reason')}"}
+                
+                # 2. Akıllı Saat Filtresi
+                if f.smart_hours_enabled and f.blocked_hours:
+                    import json, datetime
+                    try:
+                        blocked_hours = json.loads(f.blocked_hours)
+                        current_hour = datetime.datetime.utcnow().hour
+                        if current_hour in blocked_hours:
+                            return {"reason": f"Akıllı Saat Filtresi: {current_hour}:00 UTC yasaklı saat diliminde."}
+                    except:
+                        pass
+                        
+                # 3. Öz-Öğrenme (Self-Learning) - Geçmiş Win Rate'e göre iptal
+                if f.self_learning_enabled and f.min_win_rate_threshold:
+                    from models.trade import Trade, TradeStatus
+                    from sqlalchemy import func
+                    trades_res = await session.execute(
+                        select(Trade).where(
+                            Trade.bot_id == self.config["id"], 
+                            Trade.status == TradeStatus.CLOSED
+                        ).order_by(Trade.id.desc()).limit(20)
+                    )
+                    recent_trades = trades_res.scalars().all()
+                    if len(recent_trades) >= 10:
+                        wins = len([t for t in recent_trades if (t.pnl or 0) > 0])
+                        win_rate = wins / len(recent_trades)
+                        if win_rate < f.min_win_rate_threshold:
+                            return {"reason": f"Öz-Öğrenme Filtresi: Güncel Win Rate %{win_rate*100:.1f} < Limit %{f.min_win_rate_threshold*100:.1f}"}
+
+                # 4 & 5. Volatilite ve Trend Filtresi (Eğer aktifse, mum datasını çek ve kontrol et)
+                if f.volatility_filter_enabled or f.trend_filter_enabled:
+                    ohlcv = await self.data_fetcher.get_ohlcv(self.config["symbol"], "1h", 200)
+                    if len(ohlcv) > 50:
+                        from ai.indicators import calculate_all
+                        ind = calculate_all(ohlcv)
+                        
+                        if f.volatility_filter_enabled and f.max_volatility_atr:
+                            current_atr = ind.get("atr", 0)
+                            if current_atr > f.max_volatility_atr:
+                                return {"reason": f"Yüksek Volatilite Filtresi: ATR {current_atr:.4f} > Limit {f.max_volatility_atr:.4f}"}
+                                
+                        if f.trend_filter_enabled:
+                            ema200 = ind.get("ema200", 0)
+                            if ema200 > 0:
+                                if signal_type == "buy" and price < ema200:
+                                    return {"reason": "Trend Filtresi: Fiyat EMA200'ün altında, yükseliş trendi yok (Buy sinyali iptal)."}
+                                if signal_type == "sell" and price > ema200:
+                                    return {"reason": "Trend Filtresi: Fiyat EMA200'ün üstünde, düşüş trendi yok (Sell sinyali iptal)."}
+
         except Exception as e:
-            print(f"[Bot] Haber koruması kontrol hatası: {e}")
+            print(f"[Bot] Akıllı filtre kontrol hatası: {e}")
+            import traceback
+            traceback.print_exc()
         return None
 
     async def _log_signal(
@@ -607,38 +664,46 @@ class BotEngine:
                         sig = candidate
                         sig_key = tv_key
 
-        # Sinyal olmasa bile fiyat ve status güncelle
+        # Sinyal olmasa bile status güncelle (frontend fiyat görsün) - Her 30 saniyede bir
+        import time
+        now = time.time()
+        should_update_status = (now - getattr(self, "_last_status_update", 0)) >= 30
+
+        if not sig:
+            if should_update_status:
+                self._last_status_update = now
+                try:
+                    ticker = await asyncio.wait_for(self.exchange.exchange.fetch_ticker(symbol), timeout=15)
+                    cur_price = float(ticker["last"])
+                except Exception:
+                    cur_price = 0
+                
+                position = None
+                try:
+                    position = await self._get_position_info(symbol)
+                except Exception as e:
+                    print(f"[Bot {bot_name}] Pozisyon bilgisi alınamadı: {e}")
+                status_data = {
+                    "signal": None,
+                    "price": cur_price,
+                    "risk": {
+                        "balance": self.risk.balance,
+                        "daily_pnl": self.risk.daily_pnl,
+                        "daily_pnl_pct": self.risk.daily_pnl_pct,
+                        "killed": self.risk.killed,
+                    },
+                    "position": position,
+                    "ts": datetime.utcnow().isoformat(),
+                }
+                await redis.set(f"bot:{bot_id}:status", json.dumps(status_data))
+            return
+
+        # Sinyal varsa güncel fiyatı al
         try:
             ticker = await asyncio.wait_for(self.exchange.exchange.fetch_ticker(symbol), timeout=15)
             cur_price = float(ticker["last"])
-        except asyncio.TimeoutError:
-            print(f"[Bot {bot_name}] fetch_ticker TIMEOUT (15s)")
+        except Exception:
             cur_price = 0
-        except Exception as e:
-            print(f"[Bot {bot_name}] fetch_ticker hatası: {e}")
-            cur_price = 0
-
-        if not sig:
-            # Sinyal yok ama status güncelle (frontend fiyat görsün)
-            position = None
-            try:
-                position = await self._get_position_info(symbol)
-            except Exception as e:
-                print(f"[Bot {bot_name}] Pozisyon bilgisi alınamadı: {e}")
-            status_data = {
-                "signal": None,
-                "price": cur_price,
-                "risk": {
-                    "balance": self.risk.balance,
-                    "daily_pnl": self.risk.daily_pnl,
-                    "daily_pnl_pct": self.risk.daily_pnl_pct,
-                    "killed": self.risk.killed,
-                },
-                "position": position,
-                "ts": datetime.utcnow().isoformat(),
-            }
-            await redis.set(f"bot:{bot_id}:status", json.dumps(status_data))
-            return
 
         # Duplicate sinyal kontroli (aynı ts tekrar işleme)
         last_ts_key = f"bot:{bot_id}:last_custom_signal_ts"
@@ -674,9 +739,9 @@ class BotEngine:
         params = self.config.get("params", {})
         signal_mode = params.get("signal_mode", "normal")
         position_action = params.get("position_action", "close_and_open")
-        take_profit_pct = params.get("take_profit_pct") or params.get("tp_pct", 0)
-        stop_loss_pct = params.get("stop_loss_pct") or params.get("sl_pct", 0)
-        trailing_stop_pct = params.get("trailing_stop_pct") or params.get("trailing_sl_pct", 0)
+        take_profit_pct = float(params.get("take_profit_pct") or params.get("tp_pct", 0) or 0)
+        stop_loss_pct = float(params.get("stop_loss_pct") or params.get("sl_pct", 0) or 0)
+        trailing_stop_pct = float(params.get("trailing_stop_pct") or params.get("trailing_sl_pct", 0) or 0)
 
         print(f"[Bot {bot_name}] Params: mode={signal_mode} tp={take_profit_pct}% sl={stop_loss_pct}% action={position_action}")
 
@@ -703,13 +768,13 @@ class BotEngine:
         await self._log_signal(signal_type, price, source=source, reason=reason,
             action="received", raw_payload=json.dumps(sig))
 
-        # Haber koruması kontrolü
-        blackout = await self._check_news_protection()
-        if blackout:
-            bl_reason = blackout.get("reason", "Haber blackout")
-            print(f"[Bot {bot_name}] ✗ Haber koruması aktif — sinyal filtrelendi: {bl_reason}")
+        # Akıllı Filtre Kontrolü
+        filter_block = await self._check_smart_filters(signal_type, price)
+        if filter_block:
+            bl_reason = filter_block.get("reason", "Akıllı filtre")
+            print(f"[Bot {bot_name}] ✗ Filtre aktif — sinyal engellendi: {bl_reason}")
             await self._log_signal(signal_type, price, source=source, reason=reason,
-                action="filtered", reject_reason=f"Haber koruması: {bl_reason}")
+                action="filtered", reject_reason=bl_reason)
             await redis.set(last_ts_key, sig_ts, ex=600)
             return
 

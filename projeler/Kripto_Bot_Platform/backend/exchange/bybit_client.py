@@ -93,11 +93,19 @@ class BybitClient:
         amount: float,
         order_type: str = "market",
         price: float = None,
+        tp_price: float = None,
+        sl_price: float = None,
     ) -> dict:
+        params = {}
+        if tp_price:
+            params["takeProfit"] = tp_price
+        if sl_price:
+            params["stopLoss"] = sl_price
+
         if order_type == "market":
-            order = await self.exchange.create_market_order(symbol, side, amount)
+            order = await self.exchange.create_market_order(symbol, side, amount, params=params)
         else:
-            order = await self.exchange.create_limit_order(symbol, side, amount, price)
+            order = await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
         return order
 
     async def close_position(self, symbol: str, side: str, amount: float) -> dict:

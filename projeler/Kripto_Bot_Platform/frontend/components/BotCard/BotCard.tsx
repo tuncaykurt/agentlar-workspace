@@ -202,7 +202,7 @@ export default function BotCard({
     const newVal = !filters[key as keyof Filters]
     setFilters(prev => ({ ...prev, [key]: newVal }))
     try {
-      await api.patch(`/bots/${bot.id}/filters`, { [key]: newVal })
+      await api.post(`/bots/${bot.id}/filters`, { [key]: newVal })
     } catch {
       // Geri al
       setFilters(prev => ({ ...prev, [key]: !newVal }))
