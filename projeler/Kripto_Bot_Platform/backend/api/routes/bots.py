@@ -16,37 +16,84 @@ from sqlalchemy import select, update, delete
 
 class _ExClient:
     """CCXT exchange'i BotEngine interface'ine saran wrapper."""
-    def __init__(self, ex):
+    def __init__(self, ex, exchange_name: str = ""):
         self.exchange = ex
+        self._exchange_name = exchange_name.lower()
+
     async def set_leverage(self, symbol, leverage):
         await self.exchange.set_leverage(leverage, symbol)
+
     async def place_order(self, symbol, side, amount, order_type="market", price=None,
                           tp_price=None, sl_price=None, pos_side=None):
+        params = self._build_order_params(tp_price, sl_price, pos_side)
+        try:
+            if order_type == "market":
+                return await self.exchange.create_market_order(symbol, side, amount, params=params)
+            return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
+        except Exception as e:
+            # TP/SL params yüzünden hata aldıysak plain order ile yeniden dene
+            if (tp_price or sl_price) and "parameter" in str(e).lower() or "invalid" in str(e).lower() or "stop" in str(e).lower():
+                print(f"[ExClient] TP/SL parametreli order başarısız ({e}) — plain order ile tekrar deneniyor")
+                plain_params = {}
+                if pos_side:
+                    plain_params = self._build_order_params(None, None, pos_side)
+                if order_type == "market":
+                    return await self.exchange.create_market_order(symbol, side, amount, params=plain_params)
+                return await self.exchange.create_limit_order(symbol, side, amount, price, params=plain_params)
+            raise
+
+    def _build_order_params(self, tp_price, sl_price, pos_side) -> dict:
+        """Borsaya göre doğru order parametre formatı."""
         params = {}
-        if tp_price: params["takeProfitPrice"] = tp_price
-        if sl_price: params["stopLossPrice"] = sl_price
-        if pos_side: params["posSide"] = pos_side
-        if order_type == "market":
-            return await self.exchange.create_market_order(symbol, side, amount, params=params)
-        return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
+        # pos_side parametresi
+        if pos_side:
+            if self._exchange_name == "mexc":
+                params["positionSide"] = pos_side.upper()        # MEXC: positionSide
+            elif self._exchange_name in ("binance", "bybit"):
+                params["positionSide"] = pos_side.upper()
+            else:
+                params["posSide"] = pos_side                      # Bitget: posSide
+        # TP/SL parametreleri
+        if tp_price:
+            if self._exchange_name == "mexc":
+                params["takeProfit"] = {"stopPrice": str(tp_price)}
+            else:
+                params["takeProfitPrice"] = tp_price
+        if sl_price:
+            if self._exchange_name == "mexc":
+                params["stopLoss"] = {"stopPrice": str(sl_price)}
+            else:
+                params["stopLossPrice"] = sl_price
+        return params
+
     async def modify_position_tpsl(self, symbol, tp_price=None, sl_price=None, pos_side=None):
         params = {}
-        if pos_side: params["posSide"] = pos_side
+        if pos_side:
+            if self._exchange_name == "mexc":
+                params["positionSide"] = pos_side.upper()
+            elif self._exchange_name in ("binance", "bybit"):
+                params["positionSide"] = pos_side.upper()
+            else:
+                params["posSide"] = pos_side
         try:
             await self.exchange.set_position_mode(True, symbol)
         except Exception:
             pass
+        close_side = "sell" if pos_side != "short" else "buy"
         if tp_price:
-            await self.exchange.create_order(symbol, "TAKE_PROFIT_MARKET", "sell" if pos_side != "short" else "buy",
+            await self.exchange.create_order(symbol, "TAKE_PROFIT_MARKET", close_side,
                                               0, None, {"stopPrice": tp_price, "closePosition": True, **params})
         if sl_price:
-            await self.exchange.create_order(symbol, "STOP_MARKET", "sell" if pos_side != "short" else "buy",
+            await self.exchange.create_order(symbol, "STOP_MARKET", close_side,
                                              0, None, {"stopPrice": sl_price, "closePosition": True, **params})
+
     async def get_funding_rate(self, symbol):
         t = await self.exchange.fetch_ticker(symbol)
         return float(t.get("info", {}).get("fundingRate", 0))
+
     async def get_ohlcv(self, symbol, tf="1m", limit=200):
         return await self.exchange.fetch_ohlcv(symbol, tf, limit=limit)
+
     async def close(self):
         await self.exchange.close()
 
@@ -61,7 +108,7 @@ async def _get_exchange_client(exchange: str):
             exchange,
             keys["api_key"], keys["secret"], keys.get("passphrase", "")
         )
-        return _ExClient(ex)
+        return _ExClient(ex, exchange_name=exchange)
     # Redis'te key yoksa bitget için module singleton, diğerleri için hata
     if exchange == "bitget":
         return bitget
@@ -650,9 +697,12 @@ async def bot_status(bot_id: int):
     from core.redis_client import get_redis
     redis = get_redis()
     raw = await redis.get(f"bot:{bot_id}:status")
-    if not raw:
-        return {"status": "no_data"}
-    return json.loads(raw)
+    data = json.loads(raw) if raw else {"status": "no_data"}
+    # Son hatayı da ekle (order hatası vb.)
+    err_raw = await redis.get(f"bot:{bot_id}:last_error")
+    if err_raw:
+        data["last_error"] = err_raw.decode() if isinstance(err_raw, bytes) else str(err_raw)
+    return data
 
 
 # ─── Akıllı Filtreler ────────────────────────────────────────────────────────

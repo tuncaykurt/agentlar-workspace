@@ -375,13 +375,28 @@ class BotEngine:
             sl_price = round(stop_loss, 2) if stop_loss else None
 
             print(f"[Bot {bot_name}] İşlem açılıyor: {side} {amount} {symbol} type={order_type} TP={tp_price} SL={sl_price} pos_side={trade.get('pos_side')}")
-            order = await self.exchange.place_order(
-                symbol, side, amount, order_type,
-                price=price if order_type == "limit" else None,
-                tp_price=tp_price, sl_price=sl_price,
-                pos_side=trade.get("pos_side")
-            )
-            print(f"[Bot {bot_name}] ✓ İşlem başarılı: order_id={order.get('id', 'N/A')}")
+            try:
+                order = await self.exchange.place_order(
+                    symbol, side, amount, order_type,
+                    price=price if order_type == "limit" else None,
+                    tp_price=tp_price, sl_price=sl_price,
+                    pos_side=trade.get("pos_side")
+                )
+                print(f"[Bot {bot_name}] ✓ İşlem başarılı: order_id={order.get('id', 'N/A')}")
+            except Exception as order_err:
+                print(f"[Bot {bot_name}] ✗ Order HATASI: {order_err}")
+                # Redis'e hata yaz (frontend görsün)
+                try:
+                    from core.redis_client import get_redis
+                    _redis = get_redis()
+                    await _redis.set(
+                        f"bot:{self.config['id']}:last_error",
+                        f"{datetime.utcnow().isoformat()} | ORDER HATASI: {str(order_err)[:400]}",
+                        ex=3600
+                    )
+                except Exception:
+                    pass
+                raise
 
         self.signal_history.append(trade)
 

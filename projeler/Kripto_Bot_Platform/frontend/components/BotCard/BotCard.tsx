@@ -37,6 +37,7 @@ interface BotStatus {
   }
   position?: Position | null
   last_reject?: { reason: string; analysis?: string; ts: string } | null
+  last_error?: string | null
 }
 
 interface Filters {
@@ -497,6 +498,14 @@ export default function BotCard({
         <div className="text-xs rounded-lg px-2.5 py-1.5 border border-yellow-500/30 bg-yellow-500/5 text-yellow-400/90">
           <span className="font-semibold">⚠ Sinyal Engellendi: </span>
           <span>{status.last_reject.reason}</span>
+        </div>
+      )}
+
+      {/* Order / engine hatası */}
+      {status?.last_error && (
+        <div className="text-xs rounded-lg px-2.5 py-1.5 border border-red-500/30 bg-red-500/5 text-red-400/90 break-all">
+          <span className="font-semibold">✗ Son Hata: </span>
+          <span>{status.last_error.split(" | ").slice(1).join(" | ") || status.last_error}</span>
         </div>
       )}
 
