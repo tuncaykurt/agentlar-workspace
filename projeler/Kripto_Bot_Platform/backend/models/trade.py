@@ -124,6 +124,13 @@ class SignalLog(Base):
     tp_price = Column(Float, nullable=True)
     sl_price = Column(Float, nullable=True)
     raw_payload = Column(Text, nullable=True)              # ham sinyal JSON
+    
+    # Teknik analiz göstergeleri (Sinyal geldiği andaki durum)
+    rsi_14 = Column(Float, nullable=True)                  # Sinyal anındaki 14 periyotluk RSI
+    volatility_atr = Column(Float, nullable=True)          # Sinyal anındaki ATR (Volatilite)
+    volume_ratio = Column(Float, nullable=True)            # Hacim artış oranı
+    ema200_dist = Column(Float, nullable=True)             # EMA200'e olan uzaklık %
+    
     # Performans takibi — bot kapalıyken bile sinyal sonucu izlenir
     outcome = Column(String, nullable=True)                # tp_hit, sl_hit, open, expired
     outcome_price = Column(Float, nullable=True)           # sonuç fiyatı
