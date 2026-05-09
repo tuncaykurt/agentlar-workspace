@@ -23,9 +23,9 @@ class _ExClient:
     async def set_leverage(self, symbol, leverage):
         try:
             if self._exchange_name == "mexc":
-                # MEXC: openType=2 (cross), positionType=1 (long) ve positionType=2 (short) için ayrı
-                await self.exchange.set_leverage(leverage, symbol, params={"openType": 2, "positionType": 1})
-                await self.exchange.set_leverage(leverage, symbol, params={"openType": 2, "positionType": 2})
+                # MEXC: openType=1 (isolated), positionType=1 (long) ve positionType=2 (short) için ayrı
+                await self.exchange.set_leverage(leverage, symbol, params={"openType": 1, "positionType": 1})
+                await self.exchange.set_leverage(leverage, symbol, params={"openType": 1, "positionType": 2})
             else:
                 await self.exchange.set_leverage(leverage, symbol)
         except Exception as e:
@@ -64,12 +64,12 @@ class _ExClient:
         # TP/SL parametreleri
         if tp_price:
             if self._exchange_name == "mexc":
-                params["takeProfit"] = {"stopPrice": str(tp_price)}
+                params["takeProfit"] = {"stopPrice": str(tp_price), "stopPriceType": "LAST_PRICE"}
             else:
                 params["takeProfitPrice"] = tp_price
         if sl_price:
             if self._exchange_name == "mexc":
-                params["stopLoss"] = {"stopPrice": str(sl_price)}
+                params["stopLoss"] = {"stopPrice": str(sl_price), "stopPriceType": "LAST_PRICE"}
             else:
                 params["stopLossPrice"] = sl_price
         return params
