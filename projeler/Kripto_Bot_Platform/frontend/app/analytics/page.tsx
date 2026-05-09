@@ -2,11 +2,12 @@
 
 import { useState } from "react"
 import useSWR from "swr"
+import { api } from "@/lib/api"
 
-const fetcher = (url: string) => fetch(url).then(res => res.json())
+const fetcher = (path: string) => api.get(path)
 
 export default function AnalyticsPage() {
-  const { data, error, isLoading } = useSWR('http://localhost:8000/api/analytics/dashboard', fetcher, {
+  const { data, error, isLoading } = useSWR('/analytics/dashboard', fetcher, {
     refreshInterval: 15000 // Her 15 saniyede bir güncelle
   })
 
