@@ -13,6 +13,7 @@ interface Bot {
   running: boolean
   exchange?: string
   initial_balance?: number
+  params?: Record<string, any> | null
 }
 
 interface Position {
@@ -56,6 +57,23 @@ const FILTER_DEFS = [
 // "BTC/USDT:USDT" → "BTCUSDT.P"
 function fmtSymbol(s: string) {
   return s.replace("/USDT:USDT", "USDT.P").replace("/", "")
+}
+
+function fmtDuration(start: string | null, end: string | null): string {
+  if (!start) return ""
+  const s = new Date(start).getTime()
+  const e = end ? new Date(end).getTime() : Date.now()
+  const diff = Math.round((e - s) / 60000)
+  if (diff < 1) return "<1dk"
+  if (diff < 60) return `${diff}dk`
+  const h = Math.floor(diff / 60)
+  const m = diff % 60
+  return m > 0 ? `${h}s ${m}dk` : `${h}s`
+}
+
+function fmtPrice(p: number | null | undefined): string {
+  if (p == null) return "—"
+  return `$${p.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`
 }
 
 function FilterIcon({ type }: { type: string }) {
@@ -114,7 +132,9 @@ export default function BotCard({
       tp_price: number | null
       sl_price: number | null
       outcome: string
+      outcome_price: number | null
       outcome_pnl_pct: number | null
+      outcome_at: string | null
       created_at: string | null
     }>
   } | null>(null)
@@ -231,6 +251,17 @@ export default function BotCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-semibold text-white truncate">{bot.name}</h3>
+            {(() => {
+              const sm = bot.params?.signal_mode
+              if (sm === "buy_only") return (
+                <span className="text-[10px] bg-green-500/15 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded font-bold shrink-0">LONG</span>
+              )
+              if (sm === "sell_only") return (
+                <span className="text-[10px] bg-red-500/15 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded font-bold shrink-0">SHORT</span>
+              )
+              if (sm === "normal" || sm === "both" || sm == null) return null
+              return null
+            })()}
             {bot.paper_mode && (
               <span className="text-[10px] bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded shrink-0">
                 Paper
@@ -305,7 +336,7 @@ export default function BotCard({
 
       {/* Stats */}
       {(() => {
-        const exchLabel = bot.exchange ? ` (${bot.exchange.toUpperCase()})` : ""
+        const exchLabel = bot.exchange ? bot.exchange.toUpperCase() : ""
         const balanceVal = status?.risk?.balance
           ? `$${status.risk.balance.toLocaleString("tr-TR", {maximumFractionDigits: 0})}`
           : exchBalance != null
@@ -319,19 +350,87 @@ export default function BotCard({
 
         return (
           <div className="grid grid-cols-3 gap-2">
-            {priceDisplay ? (
-              <Stat label="Fiyat" value={`$${priceDisplay.toLocaleString("tr-TR", {maximumFractionDigits: 2})}`} />
-            ) : (
-              <div className="opacity-30"><Stat label="Fiyat" value="—" /></div>
-            )}
+            {/* Fiyat */}
+            <div className={clsx(
+              "rounded-lg p-2 border",
+              priceDisplay
+                ? "bg-slate-900/80 border-slate-700/60"
+                : "bg-slate-900/30 border-slate-800 opacity-40"
+            )}>
+              <div className="flex items-center gap-1 mb-0.5">
+                <svg className="w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                <p className="text-[10px] text-slate-500">Fiyat</p>
+              </div>
+              <p className="text-sm font-bold text-white tabular-nums">
+                {priceDisplay ? `$${priceDisplay.toLocaleString("tr-TR", {maximumFractionDigits: 2})}` : "—"}
+              </p>
+            </div>
+
+            {/* PnL */}
             {hasPnl ? (
-              <Stat label="Gunluk PnL" value={`${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)}$ (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%)`} className={pnlColor} />
+              <div className={clsx(
+                "rounded-lg p-2 border",
+                pnlUsdt >= 0
+                  ? "bg-green-500/5 border-green-500/20"
+                  : "bg-red-500/5 border-red-500/20"
+              )}>
+                <div className="flex items-center gap-1 mb-0.5">
+                  <svg className="w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-[10px] text-slate-500">Gunluk PnL</p>
+                </div>
+                <p className={clsx("text-sm font-bold tabular-nums", pnlColor)}>
+                  {pnlUsdt >= 0 ? "+" : ""}{pnlUsdt.toFixed(2)}$
+                </p>
+                <p className={clsx("text-[10px] tabular-nums", pnlColor)}>
+                  {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
+                </p>
+              </div>
             ) : activePos ? (
-              <Stat label="Pozisyon PnL" value={`${activePos.pnl_usdt >= 0 ? "+" : ""}${activePos.pnl_usdt.toFixed(2)}$`} className={activePos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400"} />
+              <div className={clsx(
+                "rounded-lg p-2 border",
+                activePos.pnl_usdt >= 0
+                  ? "bg-green-500/5 border-green-500/20"
+                  : "bg-red-500/5 border-red-500/20"
+              )}>
+                <div className="flex items-center gap-1 mb-0.5">
+                  <svg className="w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <p className="text-[10px] text-slate-500">Pozisyon PnL</p>
+                </div>
+                <p className={clsx("text-sm font-bold tabular-nums", activePos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400")}>
+                  {activePos.pnl_usdt >= 0 ? "+" : ""}{activePos.pnl_usdt.toFixed(2)}$
+                </p>
+                <p className={clsx("text-[10px] tabular-nums", activePos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                  {activePos.pnl_pct >= 0 ? "+" : ""}{activePos.pnl_pct.toFixed(2)}%
+                </p>
+              </div>
             ) : (
-              <div className="opacity-30"><Stat label="Gunluk PnL" value="—" /></div>
+              <div className="bg-slate-900/30 rounded-lg p-2 border border-slate-800 opacity-40">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <svg className="w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <p className="text-[10px] text-slate-500">Gunluk PnL</p>
+                </div>
+                <p className="text-sm font-bold text-white">—</p>
+              </div>
             )}
-            <Stat label={`Bakiye${exchLabel}`} value={balanceVal} />
+
+            {/* Bakiye */}
+            <div className="bg-slate-900/80 rounded-lg p-2 border border-slate-700/60">
+              <div className="flex items-center gap-1 mb-0.5">
+                <svg className="w-2.5 h-2.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+                <p className="text-[10px] text-slate-500">Bakiye{exchLabel ? ` (${exchLabel})` : ""}</p>
+              </div>
+              <p className="text-sm font-bold text-white tabular-nums">{balanceVal}</p>
+            </div>
           </div>
         )
       })()}
@@ -485,30 +584,74 @@ export default function BotCard({
 
               {/* Son sinyaller */}
               {perf.last_signals.length > 0 && (
-                <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {perf.last_signals.map(s => (
-                    <div key={s.id} className={clsx(
-                      "flex items-center justify-between text-[10px] px-2 py-1 rounded-lg border",
-                      s.outcome === "tp_hit"
-                        ? "bg-green-500/5 border-green-500/15 text-green-400"
-                        : s.outcome === "sl_hit"
-                          ? "bg-red-500/5 border-red-500/15 text-red-400"
-                          : s.outcome === "open"
-                            ? "bg-yellow-500/5 border-yellow-500/15 text-yellow-400"
-                            : "bg-slate-900/40 border-slate-800 text-slate-500"
-                    )}>
-                      <span className="font-medium">
-                        {s.signal_type === "buy" ? "LONG" : "SHORT"} @ ${s.price?.toLocaleString("tr-TR", {maximumFractionDigits: 2})}
-                      </span>
-                      <span>
-                        {s.outcome === "tp_hit" ? "TP Vurdu" : s.outcome === "sl_hit" ? "SL Vurdu" : s.outcome === "open" ? "Takipte" : "Suresi doldu"}
-                        {s.outcome_pnl_pct != null && ` ${s.outcome_pnl_pct >= 0 ? "+" : ""}${s.outcome_pnl_pct}%`}
-                      </span>
-                      <span className="text-slate-600">
-                        {s.created_at ? new Date(s.created_at).toLocaleString("tr-TR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : ""}
-                      </span>
-                    </div>
-                  ))}
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+                  {perf.last_signals.map(s => {
+                    const isLong = s.signal_type === "buy"
+                    const outcomeColor =
+                      s.outcome === "tp_hit" ? "text-green-400"
+                      : s.outcome === "sl_hit" ? "text-red-400"
+                      : s.outcome === "open" ? "text-yellow-400"
+                      : "text-slate-500"
+                    const borderColor =
+                      s.outcome === "tp_hit" ? "border-green-500/20"
+                      : s.outcome === "sl_hit" ? "border-red-500/20"
+                      : s.outcome === "open" ? "border-yellow-500/20"
+                      : "border-slate-800"
+                    const bgColor =
+                      s.outcome === "tp_hit" ? "bg-green-500/5"
+                      : s.outcome === "sl_hit" ? "bg-red-500/5"
+                      : s.outcome === "open" ? "bg-yellow-500/5"
+                      : "bg-slate-900/40"
+                    const outcomeLabel =
+                      s.outcome === "tp_hit" ? "✓ TP Vurdu"
+                      : s.outcome === "sl_hit" ? "✕ SL Vurdu"
+                      : s.outcome === "open" ? "● Takipte"
+                      : "○ Suresi doldu"
+                    const dur = fmtDuration(s.created_at, s.outcome_at)
+                    return (
+                      <div key={s.id} className={clsx("rounded-lg border text-[10px]", bgColor, borderColor)}>
+                        {/* Satır 1: yön + giriş + TP/SL hedefleri */}
+                        <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 border-b border-white/5 flex-wrap">
+                          <span className={clsx(
+                            "font-bold px-1.5 py-0.5 rounded text-[9px]",
+                            isLong ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                          )}>
+                            {isLong ? "LONG" : "SHORT"}
+                          </span>
+                          <span className="text-slate-300 font-medium">
+                            Giris: {fmtPrice(s.price)}
+                          </span>
+                          <span className="text-slate-600">|</span>
+                          <span className="text-green-400/80">
+                            TP: {fmtPrice(s.tp_price)}
+                          </span>
+                          <span className="text-red-400/80">
+                            SL: {fmtPrice(s.sl_price)}
+                          </span>
+                        </div>
+                        {/* Satır 2: sonuç + çıkış fiyatı + süre + tarih */}
+                        <div className="flex items-center justify-between px-2 py-1 flex-wrap gap-x-2">
+                          <span className={clsx("font-semibold", outcomeColor)}>
+                            {outcomeLabel}
+                            {s.outcome_pnl_pct != null && (
+                              <span className="ml-1">
+                                {s.outcome_pnl_pct >= 0 ? "+" : ""}{s.outcome_pnl_pct}%
+                              </span>
+                            )}
+                          </span>
+                          <div className="flex items-center gap-2 text-slate-600 ml-auto">
+                            {s.outcome_price != null && s.outcome !== "open" && (
+                              <span>→ {fmtPrice(s.outcome_price)}</span>
+                            )}
+                            {dur && <span>⏱ {dur}</span>}
+                            <span>
+                              {s.created_at ? new Date(s.created_at).toLocaleString("tr-TR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : ""}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
               </>
@@ -585,11 +728,3 @@ export default function BotCard({
   )
 }
 
-function Stat({ label, value, className }: { label: string; value: string; className?: string }) {
-  return (
-    <div className="bg-slate-900/60 rounded-lg p-2 border border-slate-800">
-      <p className="text-[10px] text-slate-500">{label}</p>
-      <p className={clsx("text-sm font-semibold text-white mt-0.5", className)}>{value}</p>
-    </div>
-  )
-}
