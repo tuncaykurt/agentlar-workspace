@@ -1042,17 +1042,35 @@ class BotEngine:
             signal_type = "sell" if signal_type == "buy" else "buy"
             print(f"[Bot {bot_name}] Inverse mod — sinyal tersine çevrildi: {signal_type}")
         elif signal_mode == "buy_only" and signal_type == "sell":
-            print(f"[Bot {bot_name}] ✗ buy_only mod — sell sinyali filtrelendi")
+            reject_r = "signal_mode=buy_only → sell sinyali filtrelendi"
+            print(f"[Bot {bot_name}] ✗ {reject_r}")
             await self._log_signal(signal_type, price, source=source, reason=reason,
-                action="filtered", reject_reason="signal_mode=buy_only, sell sinyali filtrelendi",
-                timeframe=sig_timeframe)
+                action="filtered", reject_reason=reject_r, timeframe=sig_timeframe)
+            try:
+                await redis.set(f"bot:{bot_id}:status", json.dumps({
+                    "signal": signal_type, "price": cur_price or price,
+                    "last_reject": {"reason": reject_r, "ts": datetime.utcnow().isoformat()},
+                    "risk": {"balance": self.risk.balance, "daily_pnl": self.risk.daily_pnl, "daily_pnl_pct": self.risk.daily_pnl_pct, "killed": self.risk.killed},
+                    "ts": datetime.utcnow().isoformat(),
+                }))
+            except Exception:
+                pass
             await redis.set(last_ts_key, sig_ts, ex=600)
             return
         elif signal_mode == "sell_only" and signal_type == "buy":
-            print(f"[Bot {bot_name}] ✗ sell_only mod — buy sinyali filtrelendi")
+            reject_r = "signal_mode=sell_only → buy sinyali filtrelendi"
+            print(f"[Bot {bot_name}] ✗ {reject_r}")
             await self._log_signal(signal_type, price, source=source, reason=reason,
-                action="filtered", reject_reason="signal_mode=sell_only, buy sinyali filtrelendi",
-                timeframe=sig_timeframe)
+                action="filtered", reject_reason=reject_r, timeframe=sig_timeframe)
+            try:
+                await redis.set(f"bot:{bot_id}:status", json.dumps({
+                    "signal": signal_type, "price": cur_price or price,
+                    "last_reject": {"reason": reject_r, "ts": datetime.utcnow().isoformat()},
+                    "risk": {"balance": self.risk.balance, "daily_pnl": self.risk.daily_pnl, "daily_pnl_pct": self.risk.daily_pnl_pct, "killed": self.risk.killed},
+                    "ts": datetime.utcnow().isoformat(),
+                }))
+            except Exception:
+                pass
             await redis.set(last_ts_key, sig_ts, ex=600)
             return
 
@@ -1070,6 +1088,17 @@ class BotEngine:
                 action="filtered", reject_reason=fa["reject_reason"],
                 rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"],
                 timeframe=sig_timeframe)
+            # Status'a son red nedenini yaz (frontend görsün)
+            try:
+                reject_status = {
+                    "signal": signal_type, "price": cur_price or price,
+                    "last_reject": {"reason": fa["reject_reason"], "analysis": analysis_text, "ts": datetime.utcnow().isoformat()},
+                    "risk": {"balance": self.risk.balance, "daily_pnl": self.risk.daily_pnl, "daily_pnl_pct": self.risk.daily_pnl_pct, "killed": self.risk.killed},
+                    "ts": datetime.utcnow().isoformat(),
+                }
+                await redis.set(f"bot:{bot_id}:status", json.dumps(reject_status))
+            except Exception:
+                pass
             await redis.set(last_ts_key, sig_ts, ex=600)
             return
 

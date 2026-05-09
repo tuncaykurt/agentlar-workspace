@@ -147,8 +147,10 @@ class DataFetcher:
 
         candles = []
         try:
+            # Bitget 40017: endTime gelecekte kalırsa hata verir → params ile sınırla
+            fetch_params = {"endTime": str(int(time.time() * 1000))}
             candles = await self.exchange.exchange.fetch_ohlcv(
-                symbol, timeframe, since=since, limit=200
+                symbol, timeframe, since=since, limit=200, params=fetch_params
             )
         except Exception as e:
             print(f"[DataFetcher] sync CCXT hatası ({symbol} {timeframe}): {e} — V2 direct deneniyor")

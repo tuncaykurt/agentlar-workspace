@@ -36,6 +36,7 @@ interface BotStatus {
     killed: boolean
   }
   position?: Position | null
+  last_reject?: { reason: string; analysis?: string; ts: string } | null
 }
 
 interface Filters {
@@ -488,6 +489,14 @@ export default function BotCard({
             : "text-red-400 bg-red-500/10 border-red-500/20"
         )}>
           {status.signal === "buy" ? "AL sinyali tespit edildi" : "SAT sinyali tespit edildi"}
+        </div>
+      )}
+
+      {/* Son sinyal red nedeni */}
+      {status?.last_reject && (
+        <div className="text-xs rounded-lg px-2.5 py-1.5 border border-yellow-500/30 bg-yellow-500/5 text-yellow-400/90">
+          <span className="font-semibold">⚠ Sinyal Engellendi: </span>
+          <span>{status.last_reject.reason}</span>
         </div>
       )}
 
