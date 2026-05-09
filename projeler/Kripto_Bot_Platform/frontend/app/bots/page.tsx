@@ -419,18 +419,18 @@ function TradingViewWebhookCard({
   const actionForIndicator = direction === "sell_only" ? "sell" : "buy"
 
   const jsonTemplateIndicator = `{
-  "action":   "${actionForIndicator}",
-  "symbol":   "{{ticker}}",
-  "price":    {{close}},
-  "interval": "{{interval}}"
+  "action":    "${actionForIndicator}",
+  "symbol":    "{{ticker}}",
+  "price":     {{close}},
+  "timeframe": "${signalTimeframe}"
 }`
 
   const jsonTemplateStrategy = `{
-  "action":   "{{strategy.order.action}}",
-  "symbol":   "{{ticker}}",
-  "price":    {{close}},
-  "interval": "{{interval}}",
-  "message":  "{{strategy.order.comment}}"
+  "action":    "{{strategy.order.action}}",
+  "symbol":    "{{ticker}}",
+  "price":     {{close}},
+  "timeframe": "${signalTimeframe}",
+  "message":   "{{strategy.order.comment}}"
 }`
 
   const activeTemplate = alarmType === "indicator" ? jsonTemplateIndicator : jsonTemplateStrategy
@@ -520,11 +520,11 @@ function TradingViewWebhookCard({
         <pre className="text-[11px] font-mono text-emerald-300 leading-relaxed bg-black/40 rounded-lg px-3 py-2.5 overflow-x-auto">{activeTemplate}</pre>
         {alarmType === "indicator" ? (
           <p className="text-[10px] text-slate-500">
-            Bu mesaji TradingView alarm mesaji alanina yapiştir. <span className="text-amber-400">action</span> degeri bot yonune gore otomatik ayarlandi ({actionForIndicator === "buy" ? "AL — Long" : "SAT — Short"}).
+            Bu mesaji TradingView alarm mesaji alanina yapistir. <span className="text-amber-400">action</span>: {actionForIndicator === "buy" ? "AL — Long" : "SAT — Short"} &nbsp;|&nbsp; <span className="text-sky-400">timeframe</span>: {signalTimeframe} (yukarda sectigin periyot)
           </p>
         ) : (
           <p className="text-[10px] text-slate-500">
-            {"{{strategy.order.action}}"} → Pine Script strateji buy/sell degerini otomatik doldurur.
+            {"{{strategy.order.action}}"} → Pine Script strateji buy/sell degerini otomatik doldurur. <span className="text-sky-400">timeframe</span>: {signalTimeframe} sabit olarak gonderilir.
           </p>
         )}
       </div>
