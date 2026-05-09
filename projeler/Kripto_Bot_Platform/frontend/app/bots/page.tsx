@@ -168,6 +168,7 @@ const STRATEGIES: Strategy[] = [
       { key: "atr_period", label: "ATR Periyodu", type: "number", min: 1, max: 100, default: 14, description: "ATR hesaplama periyodu" },
       { key: "atr_mult_tp", label: "ATR TP Çarpanı", type: "number", min: 0.1, max: 20, step: 0.1, default: 4.0, description: "Kâr al hedefi için ATR çarpanı" },
       { key: "atr_mult_sl", label: "ATR SL Çarpanı", type: "number", min: 0.1, max: 10, step: 0.1, default: 1.5, description: "Zarar durdur için ATR çarpanı" },
+      { key: "partial_tp_mult", label: "Kısmi Kâr Al ATR Çarpanı", type: "number", min: 0.1, max: 10, step: 0.1, default: 2.0, description: "Pozisyonun yarısının kapatılacağı ATR mesafesi" },
       { key: "move_to_be_pct", label: "BE Taşıma %", type: "number", min: 0.1, max: 5, step: 0.1, default: 0.4, description: "Kâr bu orana ulaştığında SL'i giriş seviyesine taşır" },
       { key: "tighten_other_pct", label: "Diğer Taraf Sıkıştırma %", type: "number", min: 0.1, max: 5, step: 0.1, default: 0.2, description: "Bir taraf kârdayken diğer tarafın SL'ini daraltır" },
       { key: "trail_activation_pct", label: "Takip Aktivasyon %", type: "number", min: 0.1, max: 10, step: 0.1, default: 0.8, description: "Trailing stop'un devreye gireceği kâr yüzdesi" },

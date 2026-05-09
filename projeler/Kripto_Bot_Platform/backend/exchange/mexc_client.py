@@ -33,15 +33,17 @@ class MEXCClient:
         price: float = None,
         tp_price: float = None,
         sl_price: float = None,
+        pos_side: str = None,
     ) -> dict:
         params = {}
+        if pos_side:
+            params["positionSide"] = pos_side.upper()
+
         # TP/SL doğrudan market emrine ekle (MEXC destekliyor)
         if tp_price:
             params["takeProfitPrice"] = tp_price
-            params["takeProfit"] = tp_price
         if sl_price:
             params["stopLossPrice"] = sl_price
-            params["stopLoss"] = sl_price
 
         if order_type == "market":
             order = await self.exchange.create_market_order(symbol, side, amount, params=params)
@@ -49,15 +51,33 @@ class MEXCClient:
             order = await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
         return order
 
-    async def close_position(self, symbol: str, side: str, amount: float) -> dict:
+    async def modify_position_tpsl(
+        self,
+        symbol: str,
+        tp_price: float = None,
+        sl_price: float = None,
+        pos_side: str = "long",
+    ) -> dict:
+        """MEXC'de açık pozisyonun TP/SL seviyelerini günceller."""
+        return await self.exchange.modify_position_tpsl(
+            symbol,
+            take_profit_price=tp_price,
+            stop_loss_price=sl_price,
+            params={"positionSide": pos_side.upper()}
+        )
+
+    async def close_position(self, symbol: str, side: str, amount: float, pos_side: str = None) -> dict:
         close_side = "sell" if side == "buy" else "buy"
-        return await self.place_order(symbol, close_side, amount)
+        return await self.place_order(symbol, close_side, amount, pos_side=pos_side)
 
     async def set_leverage(self, symbol: str, leverage: int):
         await self.exchange.set_leverage(leverage, symbol)
 
-    async def get_positions(self) -> list:
-        positions = await self.exchange.fetch_positions()
+    async def get_positions(self, symbol: str = None) -> list:
+        params = {}
+        if symbol:
+            params["symbol"] = symbol
+        positions = await self.exchange.fetch_positions(symbols=[symbol] if symbol else None)
         return [p for p in positions if float(p.get("contracts", 0)) > 0]
 
     async def get_ohlcv(self, symbol: str, timeframe: str = "1m", limit: int = 200) -> list:

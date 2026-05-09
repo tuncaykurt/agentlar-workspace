@@ -131,8 +131,13 @@ class BitgetClient:
         price: float = None,
         tp_price: float = None,
         sl_price: float = None,
+        pos_side: str = None,  # 'long' or 'short' for hedge mode
     ) -> dict:
         params = {"tdMode": "cross"}
+        
+        if pos_side:
+            params["posSide"] = pos_side
+            
         # TP/SL doğrudan market emrine ekle
         if tp_price:
             params["takeProfitPrice"] = tp_price
@@ -145,9 +150,30 @@ class BitgetClient:
             order = await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
         return order
 
-    async def close_position(self, symbol: str, side: str, amount: float) -> dict:
+    async def modify_position_tpsl(
+        self,
+        symbol: str,
+        tp_price: float = None,
+        sl_price: float = None,
+        pos_side: str = "long",
+    ) -> dict:
+        """Açık pozisyonun TP/SL seviyelerini günceller."""
+        # Bitget hedge mode: 0=long, 1=short
+        position_idx = 0 if pos_side == "long" else 1
+        
+        return await self.exchange.modify_position_tpsl(
+            symbol,
+            take_profit_price=tp_price,
+            stop_loss_price=sl_price,
+            params={
+                "positionIdx": position_idx,
+                "tpslMode": "full"
+            }
+        )
+
+    async def close_position(self, symbol: str, side: str, amount: float, pos_side: str = None) -> dict:
         close_side = "sell" if side == "buy" else "buy"
-        return await self.place_order(symbol, close_side, amount)
+        return await self.place_order(symbol, close_side, amount, pos_side=pos_side)
 
     async def set_leverage(self, symbol: str, leverage: int):
         await self.exchange.set_leverage(leverage, symbol, params={"marginCoin": "USDT"})

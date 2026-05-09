@@ -24,6 +24,7 @@ from bot.strategies.bollinger_bounce import BollingerBounceStrategy
 from bot.strategies.ut_bot import UTBotStrategy
 from bot.strategies.supertrend import SupertrendStrategy
 from bot.strategies.bb_ema_cross import BBEMACrossStrategy
+from bot.strategies.dual_hedge import DualHedgeStrategy
 import json
 
 
@@ -37,6 +38,7 @@ class BotEngine:
         self.signal_history: list = []
         # Trailing stop state: {symbol: {side, entry, highest/lowest, trail_price}}
         self._trailing: dict = {}
+        self._hedge_state: dict = {} # {symbol: {long: {is_partial_closed}, short: {is_partial_closed}}}
         self._last_status_update = 0
 
         self.risk = RiskManager(
@@ -77,6 +79,12 @@ class BotEngine:
                 if self.risk.killed:
                     await self._alert("🔴 Kill switch aktif — günlük kayıp limitine ulaşıldı.")
                     break
+
+                # ── Dual Hedge Bot Stratejisi ─────────────────────────
+                if strategy == "dual_hedge":
+                    await self._run_dual_hedge_cycle(redis, symbol)
+                    await asyncio.sleep(60) # 1 dakikada bir kontrol (Dinamik TP/SL için)
+                    continue
 
                 # ── Grid Bot Stratejisi ───────────────────────────────
                 if strategy == "grid_bot":
@@ -330,11 +338,12 @@ class BotEngine:
             "take_profit": take_profit,
             "confidence": confidence,
             "analysis": analysis,
+            "pos_side": ai_result.get("pos_side"), # Added for hedge mode support
             "ts": datetime.utcnow().isoformat(),
         }
 
         if paper:
-            print(f"[Bot {bot_name}] 📝 PAPER trade: {side} {qty} @ {price}")
+            print(f"[Bot {bot_name}] 📝 PAPER trade: {side} {qty} @ {price} ({trade.get('pos_side')})")
             self.paper_trades.append(trade)
         else:
             symbol = self.config["symbol"]
@@ -359,11 +368,12 @@ class BotEngine:
             tp_price = round(take_profit, 2) if take_profit else None
             sl_price = round(stop_loss, 2) if stop_loss else None
 
-            print(f"[Bot {bot_name}] İşlem açılıyor: {side} {amount} {symbol} type={order_type} TP={tp_price} SL={sl_price}")
+            print(f"[Bot {bot_name}] İşlem açılıyor: {side} {amount} {symbol} type={order_type} TP={tp_price} SL={sl_price} pos_side={trade.get('pos_side')}")
             order = await self.exchange.place_order(
                 symbol, side, amount, order_type,
                 price=price if order_type == "limit" else None,
                 tp_price=tp_price, sl_price=sl_price,
+                pos_side=trade.get("pos_side")
             )
             print(f"[Bot {bot_name}] ✓ İşlem başarılı: order_id={order.get('id', 'N/A')}")
 
@@ -387,36 +397,156 @@ class BotEngine:
 
     async def _get_position_info(self, symbol: str) -> dict | None:
         """Açık pozisyon bilgisi: side, size, entry, pnl, pnl_pct"""
+        pos_list = await self._get_hedge_positions(symbol)
+        return pos_list[0] if pos_list else None
+
+    async def _get_hedge_positions(self, symbol: str) -> list:
+        """Hedge mode uyumlu pozisyon listesi döner."""
         try:
             positions = await asyncio.wait_for(
                 self.exchange.exchange.fetch_positions([symbol]), timeout=15
             )
+            found = []
             for pos in positions:
                 contracts = float(pos.get("contracts", 0))
                 if contracts == 0:
                     continue
+                
                 entry = float(pos.get("entryPrice", 0) or 0)
                 notional = float(pos.get("notional", 0) or 0)
                 unrealized_pnl = float(pos.get("unrealizedPnl", 0) or 0)
-                # info alanından da bakabiliriz
+                
                 info = pos.get("info", {})
                 if not unrealized_pnl and info:
                     unrealized_pnl = float(info.get("unrealizedPnl", 0) or 0)
                 if not notional and info:
                     notional = float(info.get("positionValue", 0) or info.get("openOrderInitialMargin", 0) or 0)
+                
                 pnl_pct = (unrealized_pnl / notional * 100) if notional else 0
-                return {
-                    "side": pos.get("side", ""),
+                
+                found.append({
+                    "side": pos.get("side", ""), # 'long' or 'short'
                     "size": contracts,
                     "entry_price": entry,
                     "notional": round(notional, 2),
                     "pnl_usdt": round(unrealized_pnl, 4),
                     "pnl_pct": round(pnl_pct, 2),
                     "leverage": int(pos.get("leverage", 0) or 0),
-                }
+                    "tp": float(pos.get("takeProfitPrice", 0) or 0),
+                    "sl": float(pos.get("stopLossPrice", 0) or 0),
+                })
+            return found
         except Exception as e:
-            print(f"[Bot] Pozisyon bilgisi hatası: {e}")
-        return None
+            print(f"[Bot] Pozisyon listesi hatası: {e}")
+            return []
+
+    async def _run_dual_hedge_cycle(self, redis, symbol: str):
+        """Dual Hedge döngüsü: Hem Long hem Short yönetimi."""
+        if not hasattr(self, "_hedge_strat"):
+            params = self.config.get("params", {})
+            self._hedge_strat = DualHedgeStrategy(params)
+
+        positions = await self._get_hedge_positions(symbol)
+        
+        # ATR her zaman lazım (dinamik TP/SL için)
+        timeframe = self.config.get("params", {}).get("timeframe", "1h")
+        ohlcv = await self.data_fetcher.get_ohlcv(symbol, timeframe, 20)
+        atr = self._calc_atr(ohlcv)
+        
+        # 1. Eğer hiç pozisyon yoksa, her iki yöne de aç
+        if len(positions) == 0:
+            print(f"[Bot] Dual Hedge başlatılıyor — {symbol}")
+            ticker = await self.exchange.exchange.fetch_ticker(symbol)
+            price = float(ticker["last"])
+            
+            entry_setup = self._hedge_strat.calculate_entry(price, atr)
+            
+            # Risk/Miktar hesabı (basitleştirilmiş: her iki yön için de aynı risk)
+            stop_loss_long = entry_setup["long"]["sl"]
+            qty = self.risk.position_size(price, stop_loss_long)
+            
+            if qty > 0:
+                # Long aç
+                await self._execute("buy", price, qty, stop_loss_long, {
+                    "confidence": 100, "take_profit": entry_setup["long"]["tp"], 
+                    "analysis": "Dual Hedge: Initial Long", "pos_side": "long"
+                })
+                # Short aç
+                await self._execute("sell", price, qty, entry_setup["short"]["sl"], {
+                    "confidence": 100, "take_profit": entry_setup["short"]["tp"], 
+                    "analysis": "Dual Hedge: Initial Short", "pos_side": "short"
+                })
+        
+        # 2. Eğer pozisyonlar varsa, dinamik TP/SL kontrolü yap
+        elif len(positions) > 0:
+            ticker = await self.exchange.exchange.fetch_ticker(symbol)
+            current_price = float(ticker["last"])
+            
+            # Stratejiye pozisyonları gönder (mevcut TP/SL'ler dahil)
+            pos_data = []
+            symbol_state = self._hedge_state.setdefault(symbol, {"long": {"is_partial_closed": False}, "short": {"is_partial_closed": False}})
+            
+            # Mevcut pozisyonları stratejiye uygun formata sok ve state'i ekle
+            active_sides = [p["side"] for p in positions]
+            # Eğer bir taraf tamamen kapandıysa state'i sıfırla
+            for side in ["long", "short"]:
+                if side not in active_sides:
+                    symbol_state[side]["is_partial_closed"] = False
+
+            for p in positions:
+                pos_data.append({
+                    "side": p["side"],
+                    "entry_price": p["entry_price"],
+                    "current_tp": p["tp"],
+                    "current_sl": p["sl"],
+                    "size": p["size"],
+                    "is_partial_closed": symbol_state[p["side"]]["is_partial_closed"]
+                })
+            
+            updates = self._hedge_strat.check_updates(current_price, pos_data, atr=atr)
+            
+            for upd in updates:
+                if upd.get("action") == "partial_close":
+                    side = upd["side"]
+                    if symbol_state[side]["is_partial_closed"]:
+                        continue
+                        
+                    pos = next((p for p in positions if p["side"] == side), None)
+                    if pos:
+                        close_qty = pos["size"] / 2
+                        print(f"[Bot] 💰 Kısmi Kâr Al (Partial Close): {symbol} {side} miktar={close_qty}")
+                        try:
+                            # Ters yönde işlem açarak pozisyonu küçült
+                            close_side = "sell" if side == "long" else "buy"
+                            await self.exchange.place_order(symbol, close_side, close_qty, "market", pos_side=side)
+                            symbol_state[side]["is_partial_closed"] = True
+                            await self._alert(f"💰 {symbol} {side.upper()} Kısmi Kâr Alındı (%50)\nFiyat: {current_price:.2f}")
+                        except Exception as e:
+                            print(f"[Bot] Kısmi kapatma hatası: {e}")
+                else:
+                    # Normal TP/SL güncelleme
+                    print(f"[Bot] Dinamik TP/SL Güncelleme: {upd['side']} -> SL: {upd.get('sl')}, TP: {upd.get('tp')}")
+                    try:
+                        await self.exchange.modify_position_tpsl(
+                            symbol, 
+                            tp_price=upd.get("tp"), 
+                            sl_price=upd.get("sl"), 
+                            pos_side=upd["side"]
+                        )
+                        if upd.get("sl"):
+                            await self._alert(f"🔄 Dinamik Stop Güncelleme: {symbol} {upd['side']}\nYeni SL: {upd.get('sl'):.2f}")
+                    except Exception as e:
+                        print(f"[Bot] TP/SL güncelleme hatası: {e}")
+
+        # Durum yaz
+        status_data = {
+            "name": self.config["name"],
+            "symbol": symbol,
+            "positions": positions,
+            "risk": self.risk.status(),
+            "ts": datetime.utcnow().isoformat(),
+        }
+        await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
 
     async def _check_smart_filters(self, signal_type: str, price: float) -> dict | None:
         """Akıllı filtreleri kontrol et. Filtreye takılırsa {reason: ...} döner, yoksa None."""

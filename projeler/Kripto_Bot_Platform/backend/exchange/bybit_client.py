@@ -95,8 +95,13 @@ class BybitClient:
         price: float = None,
         tp_price: float = None,
         sl_price: float = None,
+        pos_side: str = None,  # 'long' or 'short'
     ) -> dict:
         params = {}
+        if pos_side:
+            # Bybit: 1 for long, 2 for short
+            params["positionIdx"] = 1 if pos_side == "long" else 2
+            
         if tp_price:
             params["takeProfit"] = tp_price
         if sl_price:
@@ -108,9 +113,27 @@ class BybitClient:
             order = await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
         return order
 
-    async def close_position(self, symbol: str, side: str, amount: float) -> dict:
+    async def modify_position_tpsl(
+        self,
+        symbol: str,
+        tp_price: float = None,
+        sl_price: float = None,
+        pos_side: str = "long",
+    ) -> dict:
+        """Açık pozisyonun TP/SL seviyelerini günceller."""
+        position_idx = 1 if pos_side == "long" else 2
+        return await self.exchange.set_trading_stop(
+            symbol,
+            params={
+                "takeProfit": tp_price,
+                "stopLoss": sl_price,
+                "positionIdx": position_idx,
+            }
+        )
+
+    async def close_position(self, symbol: str, side: str, amount: float, pos_side: str = None) -> dict:
         close_side = "sell" if side == "buy" else "buy"
-        return await self.place_order(symbol, close_side, amount)
+        return await self.place_order(symbol, close_side, amount, pos_side=pos_side)
 
     async def set_leverage(self, symbol: str, leverage: int):
         await self.exchange.set_leverage(leverage, symbol)
