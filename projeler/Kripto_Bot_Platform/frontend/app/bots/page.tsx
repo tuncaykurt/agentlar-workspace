@@ -158,6 +158,29 @@ const STRATEGIES: Strategy[] = [
     ],
   },
   {
+    id: "dual_hedge",
+    name: "Dual Hedge (Çift Yönlü)",
+    category: "Volatility",
+    icon: "⚖️",
+    description: "Hem Long hem Short pozisyonu aynı anda açar. ATR bazlı dinamik TP/SL ve Trailing Stop kullanarak karı maksimize eder, zararı minimize eder.",
+    signals: ["Simültane Entry", "Dinamik TP/SL", "Volatility Breakout"],
+    params: [
+      { key: "atr_period", label: "ATR Periyodu", type: "number", min: 1, max: 100, default: 14, description: "ATR hesaplama periyodu" },
+      { key: "atr_mult_tp", label: "ATR TP Çarpanı", type: "number", min: 0.1, max: 20, step: 0.1, default: 4.0, description: "Kâr al hedefi için ATR çarpanı" },
+      { key: "atr_mult_sl", label: "ATR SL Çarpanı", type: "number", min: 0.1, max: 10, step: 0.1, default: 1.5, description: "Zarar durdur için ATR çarpanı" },
+      { key: "move_to_be_pct", label: "BE Taşıma %", type: "number", min: 0.1, max: 5, step: 0.1, default: 0.4, description: "Kâr bu orana ulaştığında SL'i giriş seviyesine taşır" },
+      { key: "tighten_other_pct", label: "Diğer Taraf Sıkıştırma %", type: "number", min: 0.1, max: 5, step: 0.1, default: 0.2, description: "Bir taraf kârdayken diğer tarafın SL'ini daraltır" },
+      { key: "trail_activation_pct", label: "Takip Aktivasyon %", type: "number", min: 0.1, max: 10, step: 0.1, default: 0.8, description: "Trailing stop'un devreye gireceği kâr yüzdesi" },
+      { key: "trail_atr_mult", label: "Takip ATR Çarpanı", type: "number", min: 0.1, max: 5, step: 0.1, default: 1.0, description: "Trailing stop mesafesi (ATR cinsinden)" },
+      { key: "timeframe", label: "Zaman Dilimi", type: "select", default: "1h", description: "ATR hesaplama zaman dilimi",
+        options: [
+          {value:"15m",label:"15 Dakika"},{value:"1h",label:"1 Saat"},
+          {value:"4h",label:"4 Saat"},{value:"1d",label:"1 Gün"},
+        ],
+      },
+    ],
+  },
+  {
     id: "bb_ema_cross",
     name: "BB-EMA Cross",
     category: "Trend",
@@ -419,18 +442,18 @@ function TradingViewWebhookCard({
   const actionForIndicator = direction === "sell_only" ? "sell" : "buy"
 
   const jsonTemplateIndicator = `{
-  "action":    "${actionForIndicator}",
-  "symbol":    "{{ticker}}",
-  "price":     {{close}},
-  "timeframe": "${signalTimeframe}"
+  "action":   "${actionForIndicator}",
+  "symbol":   "{{ticker}}",
+  "price":    {{close}},
+  "interval": "{{interval}}"
 }`
 
   const jsonTemplateStrategy = `{
-  "action":    "{{strategy.order.action}}",
-  "symbol":    "{{ticker}}",
-  "price":     {{close}},
-  "timeframe": "${signalTimeframe}",
-  "message":   "{{strategy.order.comment}}"
+  "action":   "{{strategy.order.action}}",
+  "symbol":   "{{ticker}}",
+  "price":    {{close}},
+  "interval": "{{interval}}",
+  "message":  "{{strategy.order.comment}}"
 }`
 
   const activeTemplate = alarmType === "indicator" ? jsonTemplateIndicator : jsonTemplateStrategy
@@ -520,11 +543,11 @@ function TradingViewWebhookCard({
         <pre className="text-[11px] font-mono text-emerald-300 leading-relaxed bg-black/40 rounded-lg px-3 py-2.5 overflow-x-auto">{activeTemplate}</pre>
         {alarmType === "indicator" ? (
           <p className="text-[10px] text-slate-500">
-            Bu mesaji TradingView alarm mesaji alanina yapistir. <span className="text-amber-400">action</span>: {actionForIndicator === "buy" ? "AL — Long" : "SAT — Short"} &nbsp;|&nbsp; <span className="text-sky-400">timeframe</span>: {signalTimeframe} (yukarda sectigin periyot)
+            Bu mesaji TradingView alarm mesaji alanina yapistir. <span className="text-amber-400">action</span>: {actionForIndicator === "buy" ? "AL — Long" : "SAT — Short"} &nbsp;|&nbsp; <span className="text-sky-400">{"{{interval}}"}</span> → TradingView alarmın tetiklendigi grafigin periyodunu otomatik doldurur (örn: 5m grafik → "5").
           </p>
         ) : (
           <p className="text-[10px] text-slate-500">
-            {"{{strategy.order.action}}"} → Pine Script strateji buy/sell degerini otomatik doldurur. <span className="text-sky-400">timeframe</span>: {signalTimeframe} sabit olarak gonderilir.
+            {"{{strategy.order.action}}"} → buy/sell otomatik dolar. <span className="text-sky-400">{"{{interval}}"}</span> → grafigin periyodunu otomatik doldurur.
           </p>
         )}
       </div>
