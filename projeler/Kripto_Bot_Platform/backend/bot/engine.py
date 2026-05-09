@@ -80,6 +80,12 @@ class BotEngine:
                     await self._alert("🔴 Kill switch aktif — günlük kayıp limitine ulaşıldı.")
                     break
 
+                # ── Hedge Bot Stratejisi (Çift Yönlü) ───────────────
+                if strategy == "hedge_bot":
+                    await self._run_hedge_cycle(redis, symbol)
+                    await asyncio.sleep(5)  # 5sn'de bir fiyat kontrolü
+                    continue
+
                 # ── Dual Hedge Bot Stratejisi ─────────────────────────
                 if strategy == "dual_hedge":
                     await self._run_dual_hedge_cycle(redis, symbol)
@@ -1257,6 +1263,326 @@ class BotEngine:
     def _clear_trailing(self, symbol: str):
         """Pozisyon kapatıldığında trailing state'i temizle."""
         self._trailing.pop(symbol, None)
+
+    # ─── Hedge Bot Döngüsü ────────────────────────────────────────────────────
+
+    async def _run_hedge_cycle(self, redis, symbol: str):
+        """
+        Hedge Bot döngüsü — Çift yönlü pozisyon yönetimi.
+        State machine: IDLE → OPEN_BOTH → ONE_CLOSED → COOLDOWN → IDLE
+
+        Mantık: Her iki yöne aynı anda pozisyon aç.
+        Kazanan TP'ye vurduğunda borsa otomatik kapatır.
+        Kaybeden taraf losing_side_mode'a göre yönetilir.
+        Net kâr = TP_pct - SL_pct (her döngüde sabit)
+        """
+        from bot.strategies.hedge_bot import (
+            HedgeBotParams, HedgeBotState,
+            compute_hedge_levels, check_price_levels, check_losing_side_exit,
+        )
+        from datetime import datetime as _dt, timedelta as _td
+
+        bot_id   = self.config["id"]
+        bot_name = self.config["name"]
+        paper    = self.config.get("paper_mode", True)
+
+        p = HedgeBotParams(self.config.get("params", {}))
+
+        # Redis state
+        state_key = f"bot:{bot_id}:hedge_state"
+        raw       = await redis.get(state_key)
+        sd        = json.loads(raw) if raw else {}
+
+        state        = sd.get("state",        HedgeBotState.IDLE)
+        entry_price  = sd.get("entry_price")
+        levels       = sd.get("levels")
+        active_sides = set(sd.get("active_sides", []))
+        losing_side  = sd.get("losing_side")
+        peak_price   = sd.get("peak_price")
+        cycle_count  = sd.get("cycle_count", 0)
+        cooldown_until = sd.get("cooldown_until")
+
+        # Anlık fiyat
+        try:
+            ticker = await asyncio.wait_for(
+                self.exchange.exchange.fetch_ticker(symbol), timeout=15
+            )
+            current_price = float(ticker["last"])
+        except Exception as e:
+            print(f"[HedgeBot {bot_name}] Fiyat alınamadı: {e}")
+            return
+
+        # ── COOLDOWN ───────────────────────────────────────────────────────────
+        if state == HedgeBotState.COOLDOWN:
+            if cooldown_until and _dt.utcnow().isoformat() < cooldown_until:
+                await self._write_hedge_status(redis, symbol, state, current_price, sd)
+                return
+            # Cooldown bitti → IDLE
+            state = HedgeBotState.IDLE
+            sd = {"state": state, "cycle_count": cycle_count}
+            await redis.set(state_key, json.dumps(sd))
+
+        # ── IDLE ───────────────────────────────────────────────────────────────
+        if state == HedgeBotState.IDLE:
+            if p.max_cycles > 0 and cycle_count >= p.max_cycles:
+                print(f"[HedgeBot {bot_name}] Max döngüye ulaşıldı ({cycle_count}/{p.max_cycles})")
+                await self._write_hedge_status(redis, symbol, "max_cycles_reached", current_price, sd)
+                return
+
+            # Fonlama koruması
+            if p.funding_pause_enabled:
+                try:
+                    funding = await self.exchange.get_funding_rate(symbol)
+                    if abs(funding) >= p.funding_pause_threshold / 100:
+                        print(f"[HedgeBot {bot_name}] Yüksek funding ({funding:.4f}%) — bekleniyor")
+                        await self._write_hedge_status(redis, symbol, state, current_price, sd)
+                        return
+                except Exception:
+                    pass
+
+            # Tetikleyici
+            should_open = False
+            if p.trigger_mode == "on_start":
+                should_open = True
+            elif p.trigger_mode == "on_signal":
+                sym_key = f"custom_signal:{symbol.replace('/', '_').replace(':', '_')}"
+                raw_sig = await redis.get(sym_key)
+                if raw_sig:
+                    sig_data = json.loads(raw_sig)
+                    last_ts_key = f"bot:{bot_id}:last_hedge_signal_ts"
+                    last_ts_raw = await redis.get(last_ts_key)
+                    sig_ts = sig_data.get("ts", "")
+                    last_ts_str = (last_ts_raw.decode() if isinstance(last_ts_raw, bytes) else str(last_ts_raw)) if last_ts_raw else ""
+                    if last_ts_str != sig_ts:
+                        should_open = True
+                        await redis.set(last_ts_key, sig_ts, ex=600)
+
+            if not should_open:
+                await self._write_hedge_status(redis, symbol, state, current_price, sd)
+                return
+
+            # Her iki yöne pozisyon aç
+            print(f"[HedgeBot {bot_name}] Her iki yöne pozisyon açılıyor @ {current_price}")
+            try:
+                await self.exchange.set_leverage(symbol, p.leverage)
+            except Exception as e:
+                print(f"[HedgeBot {bot_name}] Leverage hatası (devam): {e}")
+
+            new_levels = compute_hedge_levels(current_price, p)
+
+            qty_base  = self.risk.position_size(current_price, new_levels["long"]["sl"])
+            long_qty  = max(1, int(qty_base * p.long_size_ratio * 2))
+            short_qty = max(1, int(qty_base * (1 - p.long_size_ratio) * 2))
+
+            if not paper:
+                try:
+                    await self.exchange.place_order(
+                        symbol, "buy", long_qty, "market",
+                        tp_price=new_levels["long"]["tp"],
+                        sl_price=new_levels["long"]["sl"],
+                        pos_side="long",
+                    )
+                    await self.exchange.place_order(
+                        symbol, "sell", short_qty, "market",
+                        tp_price=new_levels["short"]["tp"],
+                        sl_price=new_levels["short"]["sl"],
+                        pos_side="short",
+                    )
+                except Exception as e:
+                    print(f"[HedgeBot {bot_name}] Pozisyon açma hatası: {e}")
+                    await self._alert(f"❌ Hedge Bot açma hatası: {e}")
+                    return
+            else:
+                print(f"[HedgeBot {bot_name}] PAPER Long: TP={new_levels['long']['tp']} SL={new_levels['long']['sl']}")
+                print(f"[HedgeBot {bot_name}] PAPER Short: TP={new_levels['short']['tp']} SL={new_levels['short']['sl']}")
+
+            await self._alert(
+                f"🔀 Hedge Bot Açıldı {'[PAPER] ' if paper else ''}\n"
+                f"{symbol} @ {current_price:.4f}  Kaldıraç: {p.leverage}x\n"
+                f"📗 Long  TP: {new_levels['long']['tp']}  SL: {new_levels['long']['sl']}\n"
+                f"📕 Short TP: {new_levels['short']['tp']}  SL: {new_levels['short']['sl']}\n"
+                f"Net hedef kâr: +{p.long_tp_pct - p.short_sl_pct:.1f}% / döngü"
+            )
+
+            sd = {
+                "state":        HedgeBotState.OPEN_BOTH,
+                "entry_price":  current_price,
+                "levels":       new_levels,
+                "active_sides": ["long", "short"],
+                "losing_side":  None,
+                "peak_price":   current_price,
+                "cycle_count":  cycle_count,
+            }
+            await redis.set(state_key, json.dumps(sd))
+            await self._write_hedge_status(redis, symbol, HedgeBotState.OPEN_BOTH, current_price, sd)
+            return
+
+        # ── OPEN_BOTH ──────────────────────────────────────────────────────────
+        if state == HedgeBotState.OPEN_BOTH:
+            if not levels or not entry_price:
+                await redis.delete(state_key)
+                return
+
+            hits = check_price_levels(current_price, levels, active_sides)
+
+            # Peak güncelle
+            if peak_price is None:
+                peak_price = current_price
+            if "long" in active_sides:
+                peak_price = max(peak_price, current_price)
+            if "short" in active_sides:
+                peak_price = min(peak_price, current_price)
+            sd["peak_price"] = peak_price
+
+            # Her iki SL aynı anda vuruldu (çok nadir — fiyat boşluk yaptı)
+            if hits["long"]["sl"] and hits["short"]["sl"]:
+                print(f"[HedgeBot {bot_name}] ⚠ Her iki SL vuruldu — döngü kapandı")
+                await self._alert(f"⛔ Hedge Bot: İki SL — {symbol} döngü bitti")
+                sd["state"]          = HedgeBotState.COOLDOWN
+                sd["cooldown_until"] = (_dt.utcnow() + _td(seconds=p.reopen_delay_secs)).isoformat()
+                sd["cycle_count"]    = cycle_count + 1
+                await redis.set(state_key, json.dumps(sd))
+                await self._write_hedge_status(redis, symbol, HedgeBotState.COOLDOWN, current_price, sd)
+                return
+
+            winner = loser = None
+            if hits["long"]["tp"]:
+                winner, loser = "long", "short"
+            elif hits["short"]["tp"]:
+                winner, loser = "short", "long"
+
+            if winner:
+                print(f"[HedgeBot {bot_name}] ✅ {winner.upper()} TP vurdu!")
+                if p.losing_side_mode == "close_both":
+                    if not paper:
+                        for side in list(active_sides):
+                            close_s = "sell" if side == "long" else "buy"
+                            try:
+                                positions = await self._get_hedge_positions(symbol)
+                                pos = next((pos for pos in positions if pos["side"] == side), None)
+                                if pos:
+                                    await self.exchange.place_order(symbol, close_s, pos["size"], "market", pos_side=side)
+                            except Exception as e:
+                                print(f"[HedgeBot {bot_name}] close_both kapatma hatası: {e}")
+                    sd["state"]          = HedgeBotState.COOLDOWN
+                    sd["cooldown_until"] = (_dt.utcnow() + _td(seconds=p.reopen_delay_secs)).isoformat()
+                    sd["cycle_count"]    = cycle_count + 1
+                    await redis.set(state_key, json.dumps(sd))
+                    await self._alert(f"✅ Hedge Bot close_both: {winner.upper()} TP — {symbol}")
+                else:
+                    # Kazanan exchange tarafından otomatik kapandı (TP order); kaybedeni yönet
+                    active_sides.discard(winner)
+                    sd["active_sides"] = list(active_sides)
+                    sd["losing_side"]  = loser
+                    sd["peak_price"]   = current_price
+                    sd["state"]        = HedgeBotState.ONE_CLOSED
+                    await redis.set(state_key, json.dumps(sd))
+                    net_target = p.long_tp_pct - p.short_sl_pct if winner == "long" else p.short_tp_pct - p.long_sl_pct
+                    await self._alert(
+                        f"✅ Hedge Bot: {winner.upper()} TP!\n"
+                        f"{symbol} @ {current_price:.4f}\n"
+                        f"{loser.upper()} takip: {p.losing_side_mode}\n"
+                        f"Hedef net: +{net_target:.1f}%"
+                    )
+            else:
+                # SL vuruldu — tek taraf kapandı
+                if hits["long"]["sl"] and "long" in active_sides:
+                    active_sides.discard("long")
+                    sd["active_sides"] = list(active_sides)
+                    sd["losing_side"]  = "long"
+                    sd["state"]        = HedgeBotState.ONE_CLOSED
+                    await redis.set(state_key, json.dumps(sd))
+                elif hits["short"]["sl"] and "short" in active_sides:
+                    active_sides.discard("short")
+                    sd["active_sides"] = list(active_sides)
+                    sd["losing_side"]  = "short"
+                    sd["state"]        = HedgeBotState.ONE_CLOSED
+                    await redis.set(state_key, json.dumps(sd))
+                else:
+                    await redis.set(state_key, json.dumps(sd))
+
+            await self._write_hedge_status(redis, symbol, sd.get("state", state), current_price, sd)
+            return
+
+        # ── ONE_CLOSED ─────────────────────────────────────────────────────────
+        if state == HedgeBotState.ONE_CLOSED:
+            if not losing_side or not entry_price:
+                await redis.delete(state_key)
+                return
+
+            # Peak güncelle
+            if peak_price is None:
+                peak_price = current_price
+            if losing_side == "long":
+                peak_price = max(peak_price, current_price)
+            else:
+                peak_price = min(peak_price, current_price)
+            sd["peak_price"] = peak_price
+
+            if p.losing_side_mode == "sl_only":
+                # SL zaten borsada set edildi — sadece izle
+                sl_hit = False
+                if levels:
+                    if losing_side == "long"  and current_price <= levels["long"]["sl"]:
+                        sl_hit = True
+                    if losing_side == "short" and current_price >= levels["short"]["sl"]:
+                        sl_hit = True
+                if sl_hit:
+                    sd["state"]          = HedgeBotState.COOLDOWN
+                    sd["cooldown_until"] = (_dt.utcnow() + _td(seconds=p.reopen_delay_secs)).isoformat()
+                    sd["cycle_count"]    = cycle_count + 1
+                    await redis.set(state_key, json.dumps(sd))
+                    await self._alert(f"🔴 Hedge Bot {losing_side.upper()} SL — {symbol} döngü bitti")
+                else:
+                    await redis.set(state_key, json.dumps(sd))
+            else:
+                exit_reason = check_losing_side_exit(
+                    current_price, losing_side, entry_price, p, peak_price
+                )
+                if exit_reason:
+                    print(f"[HedgeBot {bot_name}] {losing_side.upper()} çıkış: {exit_reason} @ {current_price:.4f}")
+                    if not paper:
+                        try:
+                            positions = await self._get_hedge_positions(symbol)
+                            pos = next((pos for pos in positions if pos["side"] == losing_side), None)
+                            if pos:
+                                close_s = "sell" if losing_side == "long" else "buy"
+                                await self.exchange.place_order(symbol, close_s, pos["size"], "market", pos_side=losing_side)
+                        except Exception as e:
+                            print(f"[HedgeBot {bot_name}] Kaybeden kapatma hatası: {e}")
+
+                    sd["state"]          = HedgeBotState.COOLDOWN
+                    sd["cooldown_until"] = (_dt.utcnow() + _td(seconds=p.reopen_delay_secs)).isoformat()
+                    sd["cycle_count"]    = cycle_count + 1
+                    await redis.set(state_key, json.dumps(sd))
+                    net_pnl = p.long_tp_pct - p.short_sl_pct if losing_side == "short" else p.short_tp_pct - p.long_sl_pct
+                    await self._alert(
+                        f"✅ Hedge Döngü Tamamlandı ({exit_reason})\n"
+                        f"{symbol} @ {current_price:.4f}\n"
+                        f"Tahmini net kâr: +{net_pnl:.1f}%  |  Döngü #{cycle_count + 1}"
+                    )
+                else:
+                    await redis.set(state_key, json.dumps(sd))
+
+            await self._write_hedge_status(redis, symbol, sd.get("state", state), current_price, sd)
+
+    async def _write_hedge_status(self, redis, symbol: str, state: str, price: float, sd: dict):
+        """Hedge bot anlık durumunu Redis'e yaz (frontend okur)."""
+        status_data = {
+            "name":         self.config["name"],
+            "symbol":       symbol,
+            "strategy":     "hedge_bot",
+            "hedge_state":  state,
+            "price":        price,
+            "entry_price":  sd.get("entry_price"),
+            "levels":       sd.get("levels"),
+            "active_sides": sd.get("active_sides", []),
+            "losing_side":  sd.get("losing_side"),
+            "cycle_count":  sd.get("cycle_count", 0),
+            "risk":         self.risk.status(),
+            "ts":           datetime.utcnow().isoformat(),
+        }
+        await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
 
     def stop(self):
         self.running = False
