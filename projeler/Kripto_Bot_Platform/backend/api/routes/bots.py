@@ -21,7 +21,15 @@ class _ExClient:
         self._exchange_name = exchange_name.lower()
 
     async def set_leverage(self, symbol, leverage):
-        await self.exchange.set_leverage(leverage, symbol)
+        try:
+            if self._exchange_name == "mexc":
+                # MEXC: openType=2 (cross), positionType=1 (long) ve positionType=2 (short) için ayrı
+                await self.exchange.set_leverage(leverage, symbol, params={"openType": 2, "positionType": 1})
+                await self.exchange.set_leverage(leverage, symbol, params={"openType": 2, "positionType": 2})
+            else:
+                await self.exchange.set_leverage(leverage, symbol)
+        except Exception as e:
+            print(f"[ExClient] set_leverage uyarısı ({self._exchange_name}): {e}")
 
     async def place_order(self, symbol, side, amount, order_type="market", price=None,
                           tp_price=None, sl_price=None, pos_side=None):
