@@ -74,86 +74,139 @@ async def get_dashboard_analytics(bot_id: int = None, db: AsyncSession = Depends
 @router.get("/analytics/filtered-signals")
 async def get_filtered_signals(
     bot_id: Optional[int] = None,
-    action: Optional[str] = "filtered",  # filtered | rejected | all
+    action: Optional[str] = "blocked",  # blocked(filtered+rejected) | executed | all
     limit: int = Query(50, le=200),
     offset: int = 0,
     db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
-    """Filtrelenen / reddedilen sinyallerin listesi — neden filtrelendiği açıklamasıyla"""
+    """Filtrelenen / reddedilen / onaylanan sinyallerin listesi"""
 
-    # Toplam sayı
+    def action_filter(q, act):
+        if act == "blocked":
+            return q.where(SignalLog.action.in_(["filtered", "rejected"]))
+        elif act == "executed":
+            return q.where(SignalLog.action == "executed")
+        else:  # all = blocked + executed (not raw "received")
+            return q.where(SignalLog.action.in_(["filtered", "rejected", "executed"]))
+
     count_q = select(func.count(SignalLog.id))
-    if action and action != "all":
-        if action == "filtered":
-            count_q = count_q.where(SignalLog.action.in_(["filtered", "rejected"]))
-        else:
-            count_q = count_q.where(SignalLog.action == action)
+    count_q = action_filter(count_q, action)
     if bot_id:
         count_q = count_q.where(SignalLog.bot_id == bot_id)
-
     total_count = (await db.execute(count_q)).scalar() or 0
 
-    # Liste sorgusu
     q = select(SignalLog).order_by(desc(SignalLog.created_at)).limit(limit).offset(offset)
-    if action and action != "all":
-        if action == "filtered":
-            q = q.where(SignalLog.action.in_(["filtered", "rejected"]))
-        else:
-            q = q.where(SignalLog.action == action)
+    q = action_filter(q, action)
     if bot_id:
         q = q.where(SignalLog.bot_id == bot_id)
 
     result = await db.execute(q)
     rows = result.scalars().all()
 
-    # reject_reason parse ve label üretimi
-    def build_reason_labels(log: SignalLog):
-        raw = log.reject_reason or ""
+    def build_reason_text(log: SignalLog) -> tuple[list, str]:
+        """
+        Ham reject_reason metnini insan tarafından anlaşılır Türkçe etiketlere çevirir.
+        Dönen: (badges_listesi, açıklama_metni)
+        """
+        raw = (log.reject_reason or "").strip()
+        raw_lower = raw.lower()
         labels = []
+        description = ""
 
-        reason_map = {
-            "news_protection":   {"label": "Haber Koruması",    "color": "orange", "icon": "📰"},
-            "blackout_hours":    {"label": "Yasak Saat",         "color": "purple", "icon": "🕐"},
-            "smart_hours":       {"label": "Akıllı Saat",        "color": "purple", "icon": "⏰"},
-            "trend_filter":      {"label": "Trend Uyumsuz",      "color": "blue",   "icon": "📉"},
-            "volatility":        {"label": "Yüksek Volatilite",  "color": "red",    "icon": "⚡"},
-            "low_win_rate":      {"label": "Düşük Win Rate",     "color": "red",    "icon": "📊"},
-            "rsi_extreme":       {"label": "RSI Aşırı Bölge",   "color": "yellow", "icon": "📈"},
-            "self_learning":     {"label": "Öz-Öğrenme Engeli", "color": "indigo", "icon": "🧠"},
-            "no_bot":            {"label": "Bot Bulunamadı",     "color": "gray",   "icon": "🤖"},
-            "bot_stopped":       {"label": "Bot Durdurulmuş",   "color": "gray",   "icon": "⛔"},
-            "position_open":     {"label": "Açık Pozisyon Var", "color": "yellow", "icon": "🔒"},
-            "max_daily_loss":    {"label": "Günlük Zarar Limiti","color": "red",    "icon": "🛑"},
-            "exchange_error":    {"label": "Borsa Hatası",       "color": "red",    "icon": "❌"},
-        }
+        # ── Sinyal modu uyumsuzluğu ──────────────────────────────────────────
+        if "signal_mode=buy_only" in raw_lower and "sell" in raw_lower:
+            labels.append({"label": "Mod Uyumsuzluğu", "color": "orange", "icon": "🔁"})
+            description = "Bot sadece LONG (alım) sinyali almak üzere ayarlanmış. SHORT (satış) sinyali bu bot için işleme alınmaz."
+        elif "signal_mode=sell_only" in raw_lower and "buy" in raw_lower:
+            labels.append({"label": "Mod Uyumsuzluğu", "color": "orange", "icon": "🔁"})
+            description = "Bot sadece SHORT (satış) sinyali almak üzere ayarlanmış. LONG (alım) sinyali bu bot için işleme alınmaz."
 
-        matched = False
-        for key, meta in reason_map.items():
-            if key in raw.lower():
-                labels.append(meta)
-                matched = True
+        # ── Haber / Ekonomik takvim koruması ─────────────────────────────────
+        elif any(k in raw_lower for k in ["news_protection", "haber", "news", "economic", "calendar"]):
+            labels.append({"label": "Haber Koruması", "color": "orange", "icon": "📰"})
+            description = "Önemli bir ekonomik haber (FED, CPI, NFP vb.) açıklanmadan önce veya sonra işlem yapılması riskli. Bot, haber koruma süresi boyunca yeni pozisyon açmaz."
 
-        if not matched and raw:
-            labels.append({"label": raw[:80], "color": "gray", "icon": "ℹ️"})
+        # ── Yasak saat / Akıllı saat filtresi ────────────────────────────────
+        elif any(k in raw_lower for k in ["blackout_hours", "smart_hours", "blocked_hour", "saat", "hour"]):
+            labels.append({"label": "Yasak Saat Dilimi", "color": "purple", "icon": "🕐"})
+            description = "Bu sinyal, botun işlem yapmadığı yasak saat dilimine denk geldi. Likiditenin düşük veya stresin yüksek olduğu saatlerde işlem yapılmaz."
 
-        return labels
+        # ── EMA200 trend filtresi ─────────────────────────────────────────────
+        elif any(k in raw_lower for k in ["trend_filter", "ema200", "trend", "bear", "bull"]):
+            labels.append({"label": "Trend Uyumsuzluğu", "color": "blue", "icon": "📉"})
+            d = log.ema200_dist
+            extra = f" (EMA200 uzaklığı: {d:.2f}%)" if d is not None else ""
+            direction = "LONG" if log.signal_type == "buy" else "SHORT"
+            description = f"Fiyat EMA200 trendine karşı işaret veriyor. {direction} sinyali mevcut trendle uyumlu değil{extra}."
+
+        # ── Volatilite filtresi ────────────────────────────────────────────────
+        elif any(k in raw_lower for k in ["volatility", "atr", "volatil"]):
+            labels.append({"label": "Yüksek Volatilite", "color": "red", "icon": "⚡"})
+            atr = log.volatility_atr
+            extra = f" (ATR: {atr:.4f})" if atr is not None else ""
+            description = f"Piyasadaki fiyat dalgalanması (volatilite) çok yüksek. Yüksek volatilitede stop-loss seviyeleri çok geniş olur, risk artar{extra}."
+
+        # ── RSI aşırı bölge ───────────────────────────────────────────────────
+        elif any(k in raw_lower for k in ["rsi_extreme", "rsi", "overbought", "oversold"]):
+            labels.append({"label": "RSI Aşırı Bölge", "color": "yellow", "icon": "📈"})
+            rsi = log.rsi_14
+            extra = f" (RSI: {rsi:.1f})" if rsi is not None else ""
+            description = f"RSI göstergesi aşırı alım veya aşırı satım bölgesinde. Bu seviyede açılan pozisyonlar genellikle düzeltme riski taşır{extra}."
+
+        # ── Öz-öğrenme / Win rate filtresi ────────────────────────────────────
+        elif any(k in raw_lower for k in ["self_learning", "win_rate", "low_win", "başarı"]):
+            labels.append({"label": "Düşük Başarı Oranı", "color": "indigo", "icon": "🧠"})
+            description = "Yapay zeka öz-öğrenme modülü bu sinyal tipinin geçmiş başarı oranının çok düşük olduğunu tespit etti. Kayıp riskini azaltmak için sinyal engellendi."
+
+        # ── Bot durumu ─────────────────────────────────────────────────────────
+        elif "bot_stopped" in raw_lower or "bot durdurulmuş" in raw_lower:
+            labels.append({"label": "Bot Durdurulmuş", "color": "gray", "icon": "⛔"})
+            description = "Sinyal geldiğinde bot durdurulmuş durumdaydı. Çalışmayan bot yeni pozisyon açamaz."
+
+        elif "no_bot" in raw_lower or "bot bulunam" in raw_lower:
+            labels.append({"label": "Bot Bulunamadı", "color": "gray", "icon": "🤖"})
+            description = "Bu webhook token'ına bağlı aktif bir bot bulunamadı."
+
+        # ── Açık pozisyon ─────────────────────────────────────────────────────
+        elif "position_open" in raw_lower or "açık pozisyon" in raw_lower:
+            labels.append({"label": "Açık Pozisyon Var", "color": "yellow", "icon": "🔒"})
+            description = "Bu sembolde zaten açık bir pozisyon mevcut. Bot aynı anda aynı sembolde birden fazla pozisyon açmaz."
+
+        # ── Günlük zarar limiti ───────────────────────────────────────────────
+        elif any(k in raw_lower for k in ["max_daily_loss", "günlük zarar", "daily_loss"]):
+            labels.append({"label": "Günlük Zarar Limiti", "color": "red", "icon": "🛑"})
+            description = "Botun belirlenen maksimum günlük zarar limitine ulaşıldı. Hesabı korumak için günün geri kalanında yeni işlem açılmaz."
+
+        # ── Borsa / Bağlantı hatası ───────────────────────────────────────────
+        elif any(k in raw_lower for k in ["exchange_error", "borsa hatası", "api error", "connection"]):
+            labels.append({"label": "Borsa Bağlantı Hatası", "color": "red", "icon": "❌"})
+            description = "Borsa API'sine bağlanırken bir hata oluştu. Sinyal işleme alınamadı."
+
+        # ── Bilinmeyen / Ham metin ─────────────────────────────────────────────
+        elif raw:
+            labels.append({"label": "Sistem Engeli", "color": "gray", "icon": "ℹ️"})
+            description = raw  # Ham metni göster
+
+        return labels, description
 
     items = []
     for log in rows:
+        reason_labels, reason_description = build_reason_text(log)
         items.append({
-            "id":           log.id,
-            "symbol":       log.symbol,
-            "signal_type":  log.signal_type,
-            "action":       log.action,
-            "source":       log.source or "tradingview",
-            "price":        log.price,
-            "rsi_14":       log.rsi_14,
-            "volatility_atr": log.volatility_atr,
-            "volume_ratio": log.volume_ratio,
-            "ema200_dist":  log.ema200_dist,
-            "reject_reason": log.reject_reason,
-            "reason_labels": build_reason_labels(log),
-            "created_at":   log.created_at.isoformat() if log.created_at else None,
+            "id":               log.id,
+            "symbol":           log.symbol,
+            "signal_type":      log.signal_type,
+            "action":           log.action,
+            "source":           log.source or "tradingview",
+            "price":            log.price,
+            "rsi_14":           log.rsi_14,
+            "volatility_atr":   log.volatility_atr,
+            "volume_ratio":     log.volume_ratio,
+            "ema200_dist":      log.ema200_dist,
+            "reject_reason":    log.reject_reason,
+            "reason_labels":    reason_labels,
+            "reason_description": reason_description,
+            "created_at":       log.created_at.isoformat() if log.created_at else None,
         })
 
     return {
