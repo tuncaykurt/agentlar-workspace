@@ -122,7 +122,7 @@ class BotEngine:
                             await redis.set(f"bot:{self.config['id']}:last_error", f"{datetime.utcnow().isoformat()} | {str(cycle_err)[:500]}", ex=3600)
                         except Exception:
                             pass
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.1)
                     continue
 
                 # 0. Trailing stop kontrolü (aktif pozisyon varsa)
@@ -1003,12 +1003,16 @@ class BotEngine:
                 await redis.set(f"bot:{bot_id}:status", json.dumps(status_data))
             return
 
-        # Sinyal varsa güncel fiyatı al
-        try:
-            ticker = await asyncio.wait_for(self.exchange.exchange.fetch_ticker(symbol), timeout=15)
-            cur_price = float(ticker["last"])
-        except Exception:
-            cur_price = 0
+        # Sinyal varsa fiyatı al — TV webhook'ta zaten fiyat varsa API çağrısını atla
+        sig_price = float(sig.get("price", 0) or 0)
+        if sig_price > 0:
+            cur_price = sig_price
+        else:
+            try:
+                ticker = await asyncio.wait_for(self.exchange.exchange.fetch_ticker(symbol), timeout=15)
+                cur_price = float(ticker["last"])
+            except Exception:
+                cur_price = 0
 
         # Duplicate sinyal kontroli (aynı ts tekrar işleme)
         last_ts_key = f"bot:{bot_id}:last_custom_signal_ts"

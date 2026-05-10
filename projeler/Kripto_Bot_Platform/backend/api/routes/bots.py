@@ -28,12 +28,18 @@ class _ExClient:
         return 1 if self._margin_type == "isolated" else 2
 
     async def set_leverage(self, symbol, leverage):
+        # Zaten aynı leverage set edilmişse API çağrısı yapma
+        if self._leverage_cache.get(symbol) == leverage:
+            return
         self._leverage_cache[symbol] = leverage
         try:
             if self._exchange_name == "mexc":
                 # MEXC: openType=1/2 (isolated/cross), positionType=1 (long) ve 2 (short)
-                await self.exchange.set_leverage(leverage, symbol, params={"openType": self._open_type, "positionType": 1})
-                await self.exchange.set_leverage(leverage, symbol, params={"openType": self._open_type, "positionType": 2})
+                await asyncio.gather(
+                    self.exchange.set_leverage(leverage, symbol, params={"openType": self._open_type, "positionType": 1}),
+                    self.exchange.set_leverage(leverage, symbol, params={"openType": self._open_type, "positionType": 2}),
+                    return_exceptions=True
+                )
             else:
                 await self.exchange.set_leverage(leverage, symbol)
         except Exception as e:
@@ -66,45 +72,41 @@ class _ExClient:
         print(f"[ExClient] MEXC order response: {resp}")
         order_id = str(resp.get("data", resp.get("orderId", "")))
 
-        # 2. TP trigger order (triggerType=1: fiyat >= triggerPrice olunca market'e sat)
+        # 2+3. TP ve SL planorder'ları paralel gönder
+        plan_tasks = []
         if tp_price:
-            tp_body = {
+            plan_tasks.append(self.exchange.contractPrivatePostPlanorderPlace({
                 "symbol": mexc_symbol,
                 "vol": int(amount),
                 "leverage": int(leverage),
                 "side": close_side,
                 "openType": self._open_type,
                 "triggerPrice": round(float(tp_price), 2),
-                "triggerType": 1 if is_long else 2,  # long TP: >= tp_price; short TP: <= tp_price
-                "executeCycle": 2,   # 7 gün geçerli
-                "orderType": 5,      # trigger tetiklenince market order
-                "trend": 1,          # latest price
-            }
-            try:
-                tp_resp = await self.exchange.contractPrivatePostPlanorderPlace(tp_body)
-                print(f"[ExClient] MEXC TP planorder: {tp_resp}")
-            except Exception as e:
-                print(f"[ExClient] MEXC TP planorder hatası: {e}")
-
-        # 3. SL trigger order (triggerType=2: fiyat <= triggerPrice olunca market'e sat)
+                "triggerType": 1 if is_long else 2,
+                "executeCycle": 2,
+                "orderType": 5,
+                "trend": 1,
+            }))
         if sl_price:
-            sl_body = {
+            plan_tasks.append(self.exchange.contractPrivatePostPlanorderPlace({
                 "symbol": mexc_symbol,
                 "vol": int(amount),
                 "leverage": int(leverage),
                 "side": close_side,
                 "openType": self._open_type,
                 "triggerPrice": round(float(sl_price), 2),
-                "triggerType": 2 if is_long else 1,  # long SL: <= sl_price; short SL: >= sl_price
+                "triggerType": 2 if is_long else 1,
                 "executeCycle": 2,
                 "orderType": 5,
                 "trend": 1,
-            }
-            try:
-                sl_resp = await self.exchange.contractPrivatePostPlanorderPlace(sl_body)
-                print(f"[ExClient] MEXC SL planorder: {sl_resp}")
-            except Exception as e:
-                print(f"[ExClient] MEXC SL planorder hatası: {e}")
+            }))
+        if plan_tasks:
+            results = await asyncio.gather(*plan_tasks, return_exceptions=True)
+            for i, r in enumerate(results):
+                if isinstance(r, Exception):
+                    print(f"[ExClient] MEXC planorder[{i}] hatası: {r}")
+                else:
+                    print(f"[ExClient] MEXC planorder[{i}]: {r}")
 
         return {"id": order_id, "status": "open", "info": resp}
 
