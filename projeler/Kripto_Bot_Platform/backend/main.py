@@ -70,14 +70,11 @@ async def _init_db():
     for table, column, sql in migrations:
         try:
             async with engine.begin() as conn:
-                result = await conn.execute(text(
-                    f"SELECT column_name FROM information_schema.columns WHERE table_name='{table}' AND column_name='{column}'"
-                ))
-                if not result.fetchone():
-                    await conn.execute(text(sql))
-                    print(f"[Migration] {table}.{column} kolonu eklendi.")
+                await conn.execute(text(sql))
+                print(f"[Migration] {table}.{column} kolonu eklendi.")
         except Exception as e:
-            print(f"[Migration] {table}.{column} hatası (devam ediliyor): {e}")
+            # Kolon zaten varsa veya başka bir hata olursa yoksay (SQLite Duplicate column name hatası)
+            pass
 
 
 async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):

@@ -240,6 +240,90 @@ function SignalRangeSection({ items, isLoading }: { items: any[], isLoading: boo
   )
 }
 
+// ─── AI TP/SL Öneri Kartı ────────────────────────────────────────────────────
+function AiSuggestCard({ botId }: { botId: number | null }) {
+  const url = `/analytics/suggest-tp-sl${botId ? `?bot_id=${botId}` : ''}`
+  const { data, isLoading } = useSWR(url, fetcher, { refreshInterval: 60000 })
+
+  const confidenceColor =
+    data?.confidence === 'high'   ? 'text-green-400'  :
+    data?.confidence === 'medium' ? 'text-yellow-400' : 'text-slate-400'
+
+  return (
+    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm">
+      <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+        🤖 AI TP/SL Önerisi
+        <span className="text-xs font-normal text-slate-500 ml-1">Kelly Kriteri + Beklenen Değer</span>
+      </h2>
+
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-blue-500" />
+        </div>
+      ) : !data || data.confidence === 'insufficient' ? (
+        <div className="text-center py-8 text-slate-500 text-sm">
+          <div className="text-3xl mb-2">📊</div>
+          {data?.message || 'Yeterli sinyal verisi yok (min. 5 tamamlanmış sinyal gerekli).'}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
+              <div className="text-2xl font-bold text-green-400">%{data.suggested_tp_pct}</div>
+              <div className="text-xs text-slate-400 mt-1">Optimal TP</div>
+              <div className="text-[10px] text-green-500/70 mt-0.5">
+                {data.win_probability ? `%${(data.win_probability * 100).toFixed(0)} olasılık` : ''}
+              </div>
+            </div>
+            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+              <div className="text-2xl font-bold text-red-400">%{data.suggested_sl_pct}</div>
+              <div className="text-xs text-slate-400 mt-1">Optimal SL</div>
+              <div className="text-[10px] text-red-500/70 mt-0.5">
+                {data.loss_probability ? `%${(data.loss_probability * 100).toFixed(0)} risk` : ''}
+              </div>
+            </div>
+            <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-center">
+              <div className="text-2xl font-bold text-blue-400">{data.rr_ratio ? `1:${data.rr_ratio}` : '—'}</div>
+              <div className="text-xs text-slate-400 mt-1">R/R Oranı</div>
+              <div className={`text-[10px] mt-0.5 ${confidenceColor}`}>
+                {data.confidence === 'high' ? '● Yüksek güven' : data.confidence === 'medium' ? '● Orta güven' : '● Düşük güven'}
+              </div>
+            </div>
+          </div>
+
+          {data.reasoning && (
+            <div className="bg-slate-800/40 rounded-xl p-3 space-y-1">
+              {(data.reasoning as string[]).map((line: string, i: number) => (
+                <div key={i} className="text-xs text-slate-400 flex items-start gap-2">
+                  <span className="text-slate-600 mt-0.5">›</span>
+                  <span>{line}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data.distribution && (
+            <div className="grid grid-cols-5 gap-1.5 text-center text-[10px]">
+              {[
+                { label: 'Fav P25', val: data.distribution.fav_p25, color: 'text-green-500/70' },
+                { label: 'Fav P50', val: data.distribution.fav_p50, color: 'text-green-400' },
+                { label: 'Fav P75', val: data.distribution.fav_p75, color: 'text-green-300' },
+                { label: 'Adv P25', val: data.distribution.adv_p25, color: 'text-red-400' },
+                { label: 'Adv P50', val: data.distribution.adv_p50, color: 'text-red-500/70' },
+              ].map(d => (
+                <div key={d.label} className="p-2 rounded-lg bg-slate-800/50">
+                  <div className={`font-bold ${d.color}`}>%{d.val}</div>
+                  <div className="text-slate-600 mt-0.5">{d.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AnalyticsPage() {
   const [activeTab,   setActiveTab]   = useState<TabKey>("blocked")
   const [page,        setPage]        = useState(0)
@@ -400,30 +484,84 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Signal Funnel — toplam doğru hesaplandı */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm">
+        {/* Signal Funnel */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm flex flex-col">
           <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
             <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
             Sinyal İşleme Hunisi (Funnel)
           </h2>
-          <div className="space-y-4">
+          
+          <div className="flex-1 flex flex-col justify-center space-y-6">
             {[
-              { label: "Gelen Toplam Sinyal",        val: totalSignals,  color: "bg-slate-600",                                                indent: "" },
-              { label: "Reddedilen (Akıllı Koruma)",  val: blockedCount,  color: "bg-red-500/30 border border-red-500/50",                    indent: "pl-4" },
-              { label: "Onaylanan (İşleme Alındı)",   val: executedCount, color: "bg-green-500/30 border border-green-500/50",                indent: "pl-8" },
-            ].map(row => (
-              <div key={row.label} className={`relative ${row.indent}`}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-slate-300">{row.label}</span>
-                  <span className="font-bold text-white">{row.val}</span>
-                </div>
-                <div className="h-8 w-full bg-slate-800 rounded-lg overflow-hidden relative">
-                  <div
-                    className={`absolute top-0 left-0 h-full rounded-lg transition-all duration-1000 ${row.color}`}
-                    style={{ width: `${totalSignals > 0 ? pct(row.val) : 100}%` }}
-                  ></div>
+              { 
+                label: "Gelen Toplam Sinyal", 
+                val: totalSignals, 
+                desc: "TradingView'den alınan ham sinyaller",
+                bg: "bg-gradient-to-r from-blue-600/40 to-blue-400/20", 
+                border: "border-blue-500/50",
+                text: "text-blue-200",
+                icon: "📥",
+                width: 100 
+              },
+              { 
+                label: "Reddedilen (Akıllı Koruma)", 
+                val: blockedCount, 
+                desc: "Filtreler tarafından engellendi",
+                bg: "bg-gradient-to-r from-red-600/40 to-red-400/20", 
+                border: "border-red-500/50",
+                text: "text-red-200",
+                icon: "🛡️",
+                width: totalSignals > 0 ? (blockedCount / totalSignals) * 100 : 0 
+              },
+              { 
+                label: "Onaylanan (İşleme Alındı)", 
+                val: executedCount, 
+                desc: "Piyasada aktif pozisyona dönüştü",
+                bg: "bg-gradient-to-r from-green-600/40 to-green-400/20", 
+                border: "border-green-500/50",
+                text: "text-green-200",
+                icon: "✅",
+                width: totalSignals > 0 ? (executedCount / totalSignals) * 100 : 0 
+              },
+            ].map((row, idx) => (
+              <div key={row.label} className="relative group">
+                {/* Connecting Line */}
+                {idx > 0 && (
+                  <div className="absolute -top-6 left-8 w-px h-6 bg-slate-700/50" />
+                )}
+                <div className={`relative overflow-hidden rounded-xl border ${row.border} bg-slate-800/30 p-4 transition-all hover:bg-slate-800/50`}>
+                  {/* Background Bar */}
+                  <div 
+                    className={`absolute top-0 left-0 bottom-0 ${row.bg} transition-all duration-1000 ease-out`}
+                    style={{ width: `${Math.max(row.width, 2)}%` }}
+                  />
+                  
+                  <div className="relative flex items-center justify-between z-10">
+                    <div className="flex items-center gap-4">
+                      <div className="text-2xl bg-slate-900/50 p-2 rounded-lg border border-slate-700/50 shadow-inner">
+                        {row.icon}
+                      </div>
+                      <div>
+                        <div className={`font-semibold ${row.text} text-lg drop-shadow-md`}>
+                          {row.label}
+                        </div>
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {row.desc}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-white drop-shadow-md">
+                        {row.val}
+                      </div>
+                      <div className={`text-xs font-medium ${row.text} mt-0.5`}>
+                        %{row.width.toFixed(1)}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -611,8 +749,11 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* ── Sinyal Aralığı Analizi ────────────────────────────────────────── */}
-      <SignalRangeSection items={filteredData?.items || []} isLoading={filteredLoading} />
+      {/* ── AI TP/SL Öneri + Sinyal Aralığı Analizi ─────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <AiSuggestCard botId={selectedBot} />
+        <SignalRangeSection items={filteredData?.items || []} isLoading={filteredLoading} />
+      </div>
 
       {/* ── Sinyal Detay Tablosu ──────────────────────────────────────────── */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm">

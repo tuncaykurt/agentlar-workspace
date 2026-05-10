@@ -2,7 +2,8 @@
 Sinyal Sonuç Takipçisi
 - outcome="open" olan sinyalleri periyodik kontrol eder
 - Fiyat TP'ye ulaştıysa → tp_hit, SL'ye ulaştıysa → sl_hit
-- 24 saatten eski açık sinyaller → expired
+- Fiyat aralığını gerçek zamanlı günceller (max_price_in_range, min_price_in_range)
+- 72 saatten eski açık sinyaller → expired
 """
 import asyncio
 from datetime import datetime, timedelta
@@ -32,14 +33,17 @@ async def _get_price(symbol: str) -> float | None:
         _price_cache[symbol] = (price, now)
         return price
     except Exception as e:
-        print(f"[SignalTracker] Fiyat alınamadı {symbol}: {e}")
+        print(f"[SignalTracker] Fiyat alinamadi {symbol}: {e}")
         return None
     finally:
-        await exchange.close()
+        try:
+            await exchange.close()
+        except Exception:
+            pass
 
 
 async def check_open_signals():
-    """Açık sinyalleri kontrol et, TP/SL vuruşlarını kaydet."""
+    """Açık sinyalleri kontrol et, TP/SL vuruşlarını ve fiyat aralığını kaydet."""
     async with async_session() as session:
         result = await session.execute(
             select(SignalLog).where(SignalLog.outcome == "open")
@@ -50,19 +54,20 @@ async def check_open_signals():
         return
 
     now = datetime.utcnow()
-    updates = []
+    closed_updates = []    # outcome değişecekler
+    range_updates = []     # sadece range güncellenecekler
 
     for sig in open_signals:
-        # 24 saatten eski → expired
-        if sig.created_at and (now - sig.created_at.replace(tzinfo=None)) > timedelta(hours=24):
+        # 72 saatten eski → expired
+        if sig.created_at and (now - sig.created_at.replace(tzinfo=None)) > timedelta(hours=72):
             price = await _get_price(sig.symbol)
-            pnl_pct = 0
+            pnl_pct = 0.0
             if price and sig.price:
                 if sig.signal_type == "buy":
                     pnl_pct = round((price - sig.price) / sig.price * 100, 2)
                 else:
                     pnl_pct = round((sig.price - price) / sig.price * 100, 2)
-            updates.append({
+            closed_updates.append({
                 "id": sig.id,
                 "outcome": "expired",
                 "outcome_price": price,
@@ -78,17 +83,35 @@ async def check_open_signals():
         if not price:
             continue
 
-        outcome = None
-        pnl_pct = 0
+        is_long = sig.signal_type == "buy"
 
-        if sig.signal_type == "buy":
+        # Fiyat aralığını güncelle
+        cur_max = sig.max_price_in_range or price
+        cur_min = sig.min_price_in_range or price
+        new_max = max(cur_max, price)
+        new_min = min(cur_min, price)
+
+        if is_long:
+            max_fav_pct   = round((new_max - sig.price) / sig.price * 100, 2)
+            tp_reachable  = new_max >= sig.tp_price
+            sl_was_hit_val= new_min <= sig.sl_price
+        else:
+            max_fav_pct   = round((sig.price - new_min) / sig.price * 100, 2)
+            tp_reachable  = new_min <= sig.tp_price
+            sl_was_hit_val= new_max >= sig.sl_price
+
+        # TP/SL tetiklendi mi?
+        outcome = None
+        pnl_pct = 0.0
+
+        if is_long:
             if price >= sig.tp_price:
                 outcome = "tp_hit"
                 pnl_pct = round((sig.tp_price - sig.price) / sig.price * 100, 2)
             elif price <= sig.sl_price:
                 outcome = "sl_hit"
                 pnl_pct = round((sig.sl_price - sig.price) / sig.price * 100, 2)
-        else:  # sell / short
+        else:
             if price <= sig.tp_price:
                 outcome = "tp_hit"
                 pnl_pct = round((sig.price - sig.tp_price) / sig.price * 100, 2)
@@ -96,40 +119,56 @@ async def check_open_signals():
                 outcome = "sl_hit"
                 pnl_pct = round((sig.price - sig.sl_price) / sig.price * 100, 2)
 
+        common_range = {
+            "max_price_in_range": new_max,
+            "min_price_in_range": new_min,
+            "max_favorable_pct":  max_fav_pct,
+            "tp_was_reachable":   tp_reachable,
+            "sl_was_hit":         sl_was_hit_val,
+        }
+
         if outcome:
-            updates.append({
+            closed_updates.append({
                 "id": sig.id,
                 "outcome": outcome,
                 "outcome_price": price,
                 "outcome_pnl_pct": pnl_pct,
                 "outcome_at": now,
+                **common_range,
             })
+        else:
+            range_updates.append({"id": sig.id, **common_range})
 
     # Toplu güncelleme
-    if updates:
+    if closed_updates or range_updates:
         async with async_session() as session:
-            for u in updates:
+            for u in closed_updates:
+                uid = u.pop("id")
                 await session.execute(
-                    update(SignalLog).where(SignalLog.id == u["id"]).values(
-                        outcome=u["outcome"],
-                        outcome_price=u["outcome_price"],
-                        outcome_pnl_pct=u["outcome_pnl_pct"],
-                        outcome_at=u["outcome_at"],
-                    )
+                    update(SignalLog).where(SignalLog.id == uid).values(**u)
+                )
+            for u in range_updates:
+                uid = u.pop("id")
+                await session.execute(
+                    update(SignalLog).where(SignalLog.id == uid).values(**u)
                 )
             await session.commit()
-        tp_count = sum(1 for u in updates if u["outcome"] == "tp_hit")
-        sl_count = sum(1 for u in updates if u["outcome"] == "sl_hit")
-        exp_count = sum(1 for u in updates if u["outcome"] == "expired")
-        print(f"[SignalTracker] {len(updates)} sinyal güncellendi: TP={tp_count} SL={sl_count} Expired={exp_count}")
+
+        tp_c  = sum(1 for u in closed_updates if u.get("outcome") == "tp_hit")
+        sl_c  = sum(1 for u in closed_updates if u.get("outcome") == "sl_hit")
+        exp_c = sum(1 for u in closed_updates if u.get("outcome") == "expired")
+        if closed_updates:
+            print(f"[SignalTracker] {len(closed_updates)} sinyal kapandi: TP={tp_c} SL={sl_c} Expired={exp_c}")
+        if range_updates:
+            print(f"[SignalTracker] {len(range_updates)} sinyalin fiyat araligi guncellendi")
 
 
 async def start_signal_tracker():
-    """Arka plan görevi: her 60 saniyede açık sinyalleri kontrol et."""
-    print("[SignalTracker] Sinyal sonuç takipçisi başlatıldı.")
+    """Arka plan gorevi: her 30 saniyede acik sinyalleri kontrol et."""
+    print("[SignalTracker] Sinyal sonuc takipcisi basladi (30s aralik).")
     while True:
         try:
             await check_open_signals()
         except Exception as e:
             print(f"[SignalTracker] Hata: {e}")
-        await asyncio.sleep(60)
+        await asyncio.sleep(30)
