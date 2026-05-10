@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from models.trade import Trade, TradeStatus, SignalLog
 from typing import Dict, Any, Optional, List
+import math
 
 router = APIRouter(tags=["Analytics"])
 
@@ -231,6 +232,12 @@ async def get_filtered_signals(
             "outcome_at":       log.outcome_at.isoformat() if log.outcome_at else None,
             "duration_minutes": duration_minutes,
             "created_at":       log.created_at.isoformat() if log.created_at else None,
+            # Sinyal aralığı analizi
+            "max_price_in_range":  getattr(log, "max_price_in_range", None),
+            "min_price_in_range":  getattr(log, "min_price_in_range", None),
+            "max_favorable_pct":   getattr(log, "max_favorable_pct", None),
+            "tp_was_reachable":    getattr(log, "tp_was_reachable", None),
+            "sl_was_hit":          getattr(log, "sl_was_hit", None),
         })
 
     return {
@@ -405,4 +412,189 @@ async def get_filter_stats(
             "executed_total":   exec_total,
             "executed_win_rate": exec_win_rate,
         },
+    }
+
+
+# ─── AI TP/SL Öneri Motoru ────────────────────────────────────────────────────
+
+@router.get("/analytics/suggest-tp-sl")
+async def suggest_tp_sl(
+    bot_id:         Optional[int]   = None,
+    symbol:         Optional[str]   = None,
+    signal_type:    Optional[str]   = None,   # "buy" | "sell" | None = her ikisi
+    rsi_14:         Optional[float] = None,   # anlık piyasa bağlamı (opsiyonel)
+    volatility_atr: Optional[float] = None,
+    db:             AsyncSession    = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Geçmiş sinyal aralığı analiz verilerinden (max_favorable_pct, price ranges)
+    Kelly Kriteri + Beklenen Değer optimizasyonu ile optimal TP% ve SL% hesaplar.
+
+    Eğer anlık piyasa bağlamı (rsi_14, volatility_atr) verilirse, benzer
+    koşullardaki geçmiş sinyallere ağırlık verir (koşullu öneri).
+    """
+    # 1. Tamamlanmış aralık analizi olan sinyalleri çek
+    q = select(SignalLog).where(
+        SignalLog.max_favorable_pct.isnot(None),
+        SignalLog.price.isnot(None),
+        SignalLog.min_price_in_range.isnot(None),
+        SignalLog.max_price_in_range.isnot(None),
+    )
+    if bot_id:
+        q = q.where(SignalLog.bot_id == bot_id)
+    if symbol:
+        q = q.where(SignalLog.symbol == symbol)
+    if signal_type:
+        q = q.where(SignalLog.signal_type == signal_type)
+
+    rows = (await db.execute(q)).scalars().all()
+
+    if len(rows) < 5:
+        return {
+            "sample_size": len(rows),
+            "suggested_tp_pct": None,
+            "suggested_sl_pct": None,
+            "confidence": "insufficient",
+            "message": "Yeterli geçmiş veri yok (en az 5 tamamlanmış sinyal gerekli).",
+        }
+
+    # 2. Her sinyal için favorable/adverse % hesapla
+    signals_data = []
+    for s in rows:
+        entry = s.price
+        if not entry or entry <= 0:
+            continue
+        is_long = (s.signal_type or "buy") == "buy"
+        fav_pct = s.max_favorable_pct  # zaten hesaplanmış
+
+        if is_long:
+            adv_pct = (entry - s.min_price_in_range) / entry * 100
+        else:
+            adv_pct = (s.max_price_in_range - entry) / entry * 100
+
+        if fav_pct is None or adv_pct is None or fav_pct < 0 or adv_pct < 0:
+            continue
+
+        # Koşullu ağırlık: anlık piyasa koşullarına yakın sinyaller daha önemli
+        weight = 1.0
+        if rsi_14 is not None and s.rsi_14 is not None:
+            rsi_dist = abs(rsi_14 - s.rsi_14)
+            weight *= max(0.2, 1.0 - rsi_dist / 50.0)
+        if volatility_atr is not None and s.volatility_atr is not None and s.volatility_atr > 0:
+            vol_ratio = min(volatility_atr, s.volatility_atr) / max(volatility_atr, s.volatility_atr)
+            weight *= max(0.3, vol_ratio)
+
+        signals_data.append({"fav": fav_pct, "adv": adv_pct, "w": weight})
+
+    n = len(signals_data)
+    if n < 5:
+        return {
+            "sample_size": n,
+            "suggested_tp_pct": None,
+            "suggested_sl_pct": None,
+            "confidence": "insufficient",
+            "message": "Hesaplanabilir sinyal sayısı yetersiz.",
+        }
+
+    total_weight = sum(d["w"] for d in signals_data)
+
+    # 3. Favorable dağılım — ağırlıklı yüzdelikler
+    sorted_fav = sorted(signals_data, key=lambda x: x["fav"])
+    sorted_adv = sorted(signals_data, key=lambda x: x["adv"])
+
+    def weighted_percentile(sorted_data: list, key: str, pct: float) -> float:
+        """Ağırlıklı yüzdelik hesapla (0–100 arası pct)."""
+        target = total_weight * pct / 100.0
+        cumsum = 0.0
+        for d in sorted_data:
+            cumsum += d["w"]
+            if cumsum >= target:
+                return d[key]
+        return sorted_data[-1][key]
+
+    fav_p25 = weighted_percentile(sorted_fav, "fav", 25)
+    fav_p50 = weighted_percentile(sorted_fav, "fav", 50)
+    fav_p75 = weighted_percentile(sorted_fav, "fav", 75)
+    adv_p25 = weighted_percentile(sorted_adv, "adv", 25)
+    adv_p50 = weighted_percentile(sorted_adv, "adv", 50)
+
+    # 4. Kelly Kriteri / Beklenen Değer optimizasyonu
+    #    TP adayları: 0.3% → 20% (0.1 adım)
+    #    SL adayları: 0.2% → 15% (0.1 adım)
+    #    P(win | tp) = ağırlıklı oran(fav >= tp)
+    #    P(loss | sl) = ağırlıklı oran(adv >= sl VE fav < tp)
+    #    EV = P(win)*tp - P(loss)*sl
+    #    En yüksek EV'i veren (tp, sl) çifti seçilir
+
+    best_ev   = -999.0
+    best_tp   = round(fav_p50, 1)
+    best_sl   = round(adv_p25, 1)
+    best_pwin = 0.0
+    best_ploss= 0.0
+
+    tp_range = [round(x * 0.1, 1) for x in range(3, 201)]   # 0.3 → 20.0
+    sl_range = [round(x * 0.1, 1) for x in range(2, 151)]   # 0.2 → 15.0
+
+    for tp in tp_range:
+        w_win = sum(d["w"] for d in signals_data if d["fav"] >= tp)
+        p_win = w_win / total_weight
+
+        for sl in sl_range:
+            w_loss = sum(d["w"] for d in signals_data if d["adv"] >= sl and d["fav"] < tp)
+            p_loss = w_loss / total_weight
+
+            ev = p_win * tp - p_loss * sl
+            if ev > best_ev:
+                best_ev   = ev
+                best_tp   = tp
+                best_sl   = sl
+                best_pwin = p_win
+                best_ploss= p_loss
+
+    # 5. Güven seviyesi
+    if n >= 50:
+        confidence = "high"
+    elif n >= 20:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    rr = round(best_tp / best_sl, 2) if best_sl > 0 else None
+
+    # Koşullu mod: anlık piyasa bağlamı verildi mi?
+    method = "statistical"
+    if rsi_14 is not None or volatility_atr is not None:
+        method = "context_weighted"
+
+    # 6. Açıklama metinleri
+    reasoning = [
+        f"{n} tamamlanmış sinyal analiz edildi",
+        f"Ortalama max kazanç potansiyeli: %{round(fav_p50, 2)}",
+        f"Optimal TP hedefi: %{best_tp} → %{round(best_pwin * 100, 1)} olasılıkla ulaşılır",
+        f"Optimal SL: %{best_sl} → %{round(best_ploss * 100, 1)} olasılıkla vurulur",
+        f"Beklenen değer (EV): %{round(best_ev, 3)} / işlem",
+    ]
+    if rr:
+        reasoning.append(f"R/R oranı: 1:{rr}")
+    if method == "context_weighted":
+        reasoning.append("Anlık piyasa koşullarına göre ağırlıklandırıldı")
+
+    return {
+        "sample_size":      n,
+        "suggested_tp_pct": best_tp,
+        "suggested_sl_pct": best_sl,
+        "confidence":       confidence,
+        "method":           method,
+        "win_probability":  round(best_pwin, 3),
+        "loss_probability": round(best_ploss, 3),
+        "ev_score":         round(best_ev, 4),
+        "rr_ratio":         rr,
+        "distribution": {
+            "fav_p25": round(fav_p25, 2),
+            "fav_p50": round(fav_p50, 2),
+            "fav_p75": round(fav_p75, 2),
+            "adv_p25": round(adv_p25, 2),
+            "adv_p50": round(adv_p50, 2),
+        },
+        "reasoning": reasoning,
     }

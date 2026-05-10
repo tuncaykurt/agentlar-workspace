@@ -332,6 +332,7 @@ const defaultForm = () => ({
   initial_balance: 1000,
   tp_pct: 2,              // % take profit
   sl_pct: 1,              // % stop loss
+  tp_sl_mode: "manual" as "manual" | "auto",  // manuel veya AI otomatik
   trailing_sl: false,
   order_type: "market" as "market" | "limit",
   max_positions: 1,
@@ -1005,6 +1006,162 @@ function GridBotVisualizer({
   )
 }
 
+// ─── AI TP/SL Öneri Kartı ────────────────────────────────────────────────────
+interface TpSlSuggestion {
+  sample_size: number
+  suggested_tp_pct: number | null
+  suggested_sl_pct: number | null
+  confidence: "high" | "medium" | "low" | "insufficient"
+  win_probability: number
+  loss_probability: number
+  ev_score: number
+  rr_ratio: number | null
+  distribution: { fav_p25: number; fav_p50: number; fav_p75: number; adv_p25: number; adv_p50: number }
+  reasoning: string[]
+  method: string
+  message?: string
+}
+
+function AiTpSlCard({
+  symbol, botId, onApply,
+}: {
+  symbol: string
+  botId?: number
+  onApply: (tp: number, sl: number) => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [data, setData] = useState<TpSlSuggestion | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const fetch = async () => {
+    setLoading(true)
+    setErr(null)
+    try {
+      const params = new URLSearchParams()
+      if (symbol) params.set("symbol", symbol)
+      if (botId)  params.set("bot_id", String(botId))
+      const res = await api.get(`/analytics/suggest-tp-sl?${params}`)
+      setData(res)
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Öneri alınamadı")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetch() }, [symbol, botId])
+
+  const confLabel = data?.confidence === "high" ? "Yüksek"
+    : data?.confidence === "medium" ? "Orta"
+    : data?.confidence === "low" ? "Düşük"
+    : "Yetersiz"
+
+  return (
+    <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🤖</span>
+          <p className="text-xs font-semibold text-blue-300">AI Otomatik TP/SL Analizi</p>
+          {data && (
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${
+              data.confidence === "high"   ? "border-green-500/40 bg-green-500/10 text-green-400" :
+              data.confidence === "medium" ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-400" :
+                                             "border-red-500/40 bg-red-500/10 text-red-400"
+            }`}>{confLabel} güven · {data.sample_size} sinyal</span>
+          )}
+        </div>
+        <button
+          onClick={fetch}
+          disabled={loading}
+          className="text-[10px] text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 px-2 py-1 rounded-lg transition-colors"
+        >
+          {loading ? "⟳" : "↻ Yenile"}
+        </button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <span className="animate-spin">⟳</span> Geçmiş sinyaller analiz ediliyor…
+        </div>
+      )}
+
+      {err && <p className="text-xs text-red-400">{err}</p>}
+
+      {data && !loading && data.confidence === "insufficient" && (
+        <p className="text-xs text-slate-400">⚠️ {data.message || "Yeterli geçmiş veri yok. Manuel giriş yapın."}</p>
+      )}
+
+      {data && !loading && data.suggested_tp_pct != null && (
+        <>
+          {/* Öneri değerleri */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3 text-center">
+              <p className="text-[10px] text-slate-500 mb-1">Önerilen TP</p>
+              <p className="text-xl font-bold text-green-400">+{data.suggested_tp_pct}%</p>
+              <p className="text-[10px] text-green-600 mt-0.5">
+                %{Math.round(data.win_probability * 100)} ulaşma ihtimali
+              </p>
+            </div>
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-center">
+              <p className="text-[10px] text-slate-500 mb-1">Önerilen SL</p>
+              <p className="text-xl font-bold text-red-400">-{data.suggested_sl_pct}%</p>
+              <p className="text-[10px] text-red-600 mt-0.5">
+                %{Math.round(data.loss_probability * 100)} vurulma ihtimali
+              </p>
+            </div>
+          </div>
+
+          {/* Metrikler */}
+          <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+            <div className="rounded-lg bg-slate-800/60 p-2">
+              <p className="text-slate-500">R/R Oranı</p>
+              <p className={`font-bold text-sm mt-0.5 ${(data.rr_ratio || 0) >= 2 ? "text-green-400" : "text-yellow-400"}`}>
+                1:{data.rr_ratio ?? "—"}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-800/60 p-2">
+              <p className="text-slate-500">Beklenen Değer</p>
+              <p className={`font-bold text-sm mt-0.5 ${(data.ev_score || 0) > 0 ? "text-green-400" : "text-red-400"}`}>
+                {data.ev_score > 0 ? "+" : ""}{data.ev_score?.toFixed(3)}%
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-800/60 p-2">
+              <p className="text-slate-500">Analiz Yöntemi</p>
+              <p className="font-bold text-sm mt-0.5 text-blue-400">
+                {data.method === "context_weighted" ? "Koşullu" : "İstatistiksel"}
+              </p>
+            </div>
+          </div>
+
+          {/* Dağılım mini bar */}
+          <div className="space-y-1">
+            <p className="text-[10px] text-slate-500">Favorable hareket dağılımı (%25 · %50 · %75)</p>
+            <div className="relative h-2 rounded-full bg-slate-800">
+              <div className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400"
+                style={{ width: `${Math.min(100, data.distribution.fav_p75 * 5)}%` }} />
+              <div className="absolute top-0 h-full w-0.5 bg-white/60"
+                style={{ left: `${Math.min(99, data.distribution.fav_p50 * 5)}%` }} />
+            </div>
+            <div className="flex justify-between text-[9px] text-slate-600">
+              <span>%{data.distribution.fav_p25}</span>
+              <span className="text-white/50">medyan %{data.distribution.fav_p50}</span>
+              <span>%{data.distribution.fav_p75}</span>
+            </div>
+          </div>
+
+          {/* Uygula butonu */}
+          <button
+            onClick={() => onApply(data.suggested_tp_pct!, data.suggested_sl_pct!)}
+            className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+          >
+            ✓ Bu değerleri uygula (TP %{data.suggested_tp_pct} / SL %{data.suggested_sl_pct})
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Ana Sayfa ────────────────────────────────────────────────────────────────
 export default function BotsPage() {
   const [bots,             setBots]             = useState<Bot[]>([])
@@ -1572,7 +1729,45 @@ export default function BotsPage() {
 
                   {/* ── Kar / Zarar (Grid Bot bu bölümü kendi param'larında yönetir) ── */}
                   {form.strategy !== "grid_bot" && <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/30 space-y-4">
-                    <p className="text-xs font-semibold text-slate-300">📊 Kar / Zarar Ayarları</p>
+                    {/* Başlık + Manuel / AI toggle */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-300">📊 Kar / Zarar Ayarları</p>
+                      <div className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => set("tp_sl_mode", "manual")}
+                          className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                            form.tp_sl_mode === "manual"
+                              ? "bg-slate-700 text-white"
+                              : "text-slate-500 hover:text-slate-300"
+                          }`}
+                        >
+                          ✏️ Manuel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => set("tp_sl_mode", "auto")}
+                          className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                            form.tp_sl_mode === "auto"
+                              ? "bg-blue-600 text-white"
+                              : "text-slate-500 hover:text-slate-300"
+                          }`}
+                        >
+                          🤖 AI Otomatik
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* AI öneri kartı */}
+                    {form.tp_sl_mode === "auto" && (
+                      <AiTpSlCard
+                        symbol={form.symbol}
+                        botId={editingBot?.id}
+                        onApply={(tp, sl) => { set("tp_pct", tp); set("sl_pct", sl) }}
+                      />
+                    )}
+
+                    {/* TP / SL giriş alanları — her iki modda da görünür (auto'da AI doldurur, elle de düzenlenebilir) */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <Field label="Take Profit %" description="Pozisyon kaç % kârda kapansın (0 = kapalı)">
                         <NumInput
@@ -1598,6 +1793,11 @@ export default function BotsPage() {
                         </div>
                       </Field>
                     </div>
+                    {form.tp_sl_mode === "auto" && (
+                      <p className="text-[10px] text-slate-500">
+                        💡 AI tarafından önerilen değerler yukarıda uygulandı. Dilerseniz elle düzenleyebilirsiniz.
+                      </p>
+                    )}
                     {form.sl_pct > 0 && form.tp_pct > 0 && (
                       <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs grid grid-cols-3 gap-2 text-center">
                         <div>
