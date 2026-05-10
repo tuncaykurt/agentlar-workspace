@@ -60,6 +60,12 @@ async def _init_db():
         # Webhook profil ek kolonları
         ("webhook_profiles", "username", "ALTER TABLE webhook_profiles ADD COLUMN username VARCHAR DEFAULT 'default'"),
         ("webhook_profiles", "leverage", "ALTER TABLE webhook_profiles ADD COLUMN leverage INTEGER DEFAULT 20"),
+        # Sinyal aralığı analizi kolonları
+        ("signal_logs", "max_price_in_range", "ALTER TABLE signal_logs ADD COLUMN max_price_in_range FLOAT"),
+        ("signal_logs", "min_price_in_range", "ALTER TABLE signal_logs ADD COLUMN min_price_in_range FLOAT"),
+        ("signal_logs", "max_favorable_pct", "ALTER TABLE signal_logs ADD COLUMN max_favorable_pct FLOAT"),
+        ("signal_logs", "tp_was_reachable", "ALTER TABLE signal_logs ADD COLUMN tp_was_reachable BOOLEAN"),
+        ("signal_logs", "sl_was_hit", "ALTER TABLE signal_logs ADD COLUMN sl_was_hit BOOLEAN"),
     ]
     for table, column, sql in migrations:
         try:

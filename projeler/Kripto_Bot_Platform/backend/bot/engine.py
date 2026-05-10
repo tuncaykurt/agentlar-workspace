@@ -840,8 +840,11 @@ class BotEngine:
                 )
                 session.add(log)
                 await session.commit()
+                await session.refresh(log)
+                return log.id
         except Exception as e:
             print(f"[Bot] Sinyal log hatası: {e}")
+            return None
 
     async def _get_funding(self, symbol: str) -> float:
         try:
@@ -1142,26 +1145,13 @@ class BotEngine:
         current_position = await self._get_current_position(symbol)
         print(f"[Bot {bot_name}] Mevcut pozisyon: {current_position}")
 
-        # Pozisyon yönetimi
+        # Pozisyon yönetimi — yeni sinyal her zaman önceki pozisyonu kapatır ve analiz eder
         if current_position:
+            # Önceki sinyalin aralık analizini yap ve pozisyonu kapat
+            await self._analyze_and_close_previous(redis, symbol, signal_type, price, current_position)
             if position_action == "close_only":
-                if (current_position["side"] == "long" and signal_type == "sell") or \
-                   (current_position["side"] == "short" and signal_type == "buy"):
-                    await self._close_position(symbol, current_position)
                 await redis.set(last_ts_key, sig_ts, ex=600)
                 return
-            elif position_action == "reverse":
-                await self._close_position(symbol, current_position)
-            elif position_action == "add":
-                pass
-            else:  # close_and_open
-                if (current_position["side"] == "long" and signal_type == "sell") or \
-                   (current_position["side"] == "short" and signal_type == "buy"):
-                    await self._close_position(symbol, current_position)
-                elif current_position["side"] == ("long" if signal_type == "buy" else "short"):
-                    print(f"[Bot {bot_name}] ✗ Aynı yönde pozisyon var — işlem yapılmıyor")
-                    await redis.set(last_ts_key, sig_ts, ex=600)
-                    return
 
         # TP/SL hesapla (max %99 güvenlik — negatif fiyat önleme)
         take_profit = None
@@ -1193,10 +1183,22 @@ class BotEngine:
             }
             try:
                 await self._execute(signal_type, price, qty, stop_loss, ai_result)
-                await self._log_signal(signal_type, price, source=source, reason=analysis_text,
+                log_id = await self._log_signal(signal_type, price, source=source, reason=analysis_text,
                     action="executed", confidence=75, tp_price=take_profit, sl_price=stop_loss,
                     rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"],
                     timeframe=sig_timeframe)
+                # Açık sinyal bilgisini Redis'e yaz — bir sonraki sinyal gelince analiz için kullanılır
+                import time as _time
+                open_sig_data = {
+                    "signal_log_id": log_id,
+                    "side": signal_type,           # "buy" | "sell"
+                    "entry_price": price,
+                    "tp_price": take_profit,
+                    "sl_price": stop_loss,
+                    "entry_ts": datetime.utcnow().isoformat(),
+                    "entry_ts_ms": int(_time.time() * 1000),
+                }
+                await redis.set(f"bot:{bot_id}:open_signal", json.dumps(open_sig_data), ex=86400)
                 print(f"[Bot {bot_name}] ✓ İşlem başarıyla açıldı!")
             except Exception as e:
                 print(f"[Bot {bot_name}] ✗ İşlem açma hatası: {e}")
@@ -1253,6 +1255,117 @@ class BotEngine:
         except Exception as e:
             print(f"[Bot {self.config['name']}] fetch_positions hatası: {e}")
         return None
+
+    async def _analyze_and_close_previous(self, redis, symbol: str, new_signal_type: str, new_signal_price: float, current_position: dict):
+        """
+        Yeni sinyal geldiğinde:
+        1. Önceki sinyalin OHLCV aralığını analiz et (max_high, min_low, TP/SL vuruldu mu?)
+        2. Pozisyonu kapat
+        3. SignalLog'u güncelle
+        """
+        bot_name = self.config["name"]
+        bot_id = self.config["id"]
+
+        # Önceki açık sinyal bilgisi Redis'ten al
+        open_sig_raw = await redis.get(f"bot:{bot_id}:open_signal")
+        prev_sig = json.loads(open_sig_raw) if open_sig_raw else None
+
+        # Pozisyonu kapat
+        await self._close_position(symbol, current_position)
+        await redis.delete(f"bot:{bot_id}:open_signal")
+
+        if not prev_sig:
+            print(f"[Bot {bot_name}] Önceki sinyal bilgisi yok — sadece pozisyon kapatıldı")
+            return
+
+        entry_price = float(prev_sig.get("entry_price", 0))
+        tp_price = prev_sig.get("tp_price")
+        sl_price = prev_sig.get("sl_price")
+        side = prev_sig.get("side", "buy")  # "buy"=long, "sell"=short
+        is_long = side == "buy"
+        signal_log_id = prev_sig.get("signal_log_id")
+        entry_ts_ms = int(prev_sig.get("entry_ts_ms", 0))
+
+        # OHLCV 1m mumları çek (entry'den şimdiye kadar)
+        max_high = new_signal_price
+        min_low = new_signal_price
+        try:
+            now_ms = int(__import__("time").time() * 1000)
+            candles = await asyncio.wait_for(
+                self.exchange.exchange.fetch_ohlcv(symbol, "1m", since=entry_ts_ms, limit=1000),
+                timeout=15
+            )
+            if candles:
+                highs = [c[2] for c in candles]
+                lows = [c[3] for c in candles]
+                max_high = max(highs) if highs else new_signal_price
+                min_low = min(lows) if lows else new_signal_price
+        except Exception as e:
+            print(f"[Bot {bot_name}] OHLCV aralık analizi hatası: {e}")
+
+        # TP/SL analizi
+        tp_was_reachable = False
+        sl_was_hit = False
+        if is_long:
+            if tp_price and max_high >= tp_price:
+                tp_was_reachable = True
+            if sl_price and min_low <= sl_price:
+                sl_was_hit = True
+        else:  # short
+            if tp_price and min_low <= tp_price:
+                tp_was_reachable = True
+            if sl_price and max_high >= sl_price:
+                sl_was_hit = True
+
+        # Kapanış fiyatı ve pnl
+        exit_price = new_signal_price
+        if entry_price > 0:
+            if is_long:
+                pnl_pct = (exit_price - entry_price) / entry_price * 100
+                max_favorable_pct = (max_high - entry_price) / entry_price * 100
+            else:
+                pnl_pct = (entry_price - exit_price) / entry_price * 100
+                max_favorable_pct = (entry_price - min_low) / entry_price * 100
+        else:
+            pnl_pct = 0
+            max_favorable_pct = 0
+
+        # Outcome belirleme
+        if sl_was_hit and not tp_was_reachable:
+            outcome = "sl_hit"
+        elif tp_was_reachable and not sl_was_hit:
+            outcome = "tp_hit"
+        elif tp_was_reachable and sl_was_hit:
+            outcome = "sl_hit"  # Her ikisi vurulduysa hangisi önce? SL muhtemelen daha kötü
+        else:
+            outcome = "next_signal"
+
+        print(f"[Bot {bot_name}] Aralık analizi: side={side} entry={entry_price} exit={exit_price} "
+              f"max_high={max_high:.2f} min_low={min_low:.2f} "
+              f"tp_reachable={tp_was_reachable} sl_hit={sl_was_hit} outcome={outcome} pnl={pnl_pct:.2f}%")
+
+        # SignalLog güncelle
+        if signal_log_id:
+            try:
+                async with async_session() as session:
+                    from sqlalchemy import update as _update
+                    await session.execute(
+                        _update(SignalLog).where(SignalLog.id == signal_log_id).values(
+                            outcome=outcome,
+                            outcome_price=exit_price,
+                            outcome_pnl_pct=round(pnl_pct, 4),
+                            outcome_at=datetime.utcnow(),
+                            max_price_in_range=round(max_high, 4),
+                            min_price_in_range=round(min_low, 4),
+                            max_favorable_pct=round(max_favorable_pct, 4),
+                            tp_was_reachable=tp_was_reachable,
+                            sl_was_hit=sl_was_hit,
+                        )
+                    )
+                    await session.commit()
+                    print(f"[Bot {bot_name}] SignalLog #{signal_log_id} güncellendi")
+            except Exception as e:
+                print(f"[Bot {bot_name}] SignalLog güncelleme hatası: {e}")
 
     async def _close_position(self, symbol: str, position: dict):
         """Mevcut pozisyonu kapat"""

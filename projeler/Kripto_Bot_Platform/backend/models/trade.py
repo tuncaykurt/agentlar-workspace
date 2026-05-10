@@ -135,10 +135,19 @@ class SignalLog(Base):
     timeframe = Column(String, nullable=True)
 
     # Performans takibi — bot kapalıyken bile sinyal sonucu izlenir
-    outcome = Column(String, nullable=True)                # tp_hit, sl_hit, open, expired
-    outcome_price = Column(Float, nullable=True)           # sonuç fiyatı
+    outcome = Column(String, nullable=True)                # tp_hit, sl_hit, next_signal, open, expired
+    outcome_price = Column(Float, nullable=True)           # sonuç fiyatı (kapanış)
     outcome_pnl_pct = Column(Float, nullable=True)         # kâr/zarar yüzdesi
     outcome_at = Column(DateTime(timezone=True), nullable=True)  # sonuç zamanı
+
+    # Sinyal-arası fiyat aralığı analizi (bu sinyal → bir sonraki sinyal arası)
+    max_price_in_range = Column(Float, nullable=True)      # aralıktaki en yüksek fiyat (long için favori)
+    min_price_in_range = Column(Float, nullable=True)      # aralıktaki en düşük fiyat (short için favori)
+    # max_favorable_pct: long → (max_high - entry) / entry; short → (entry - min_low) / entry
+    max_favorable_pct = Column(Float, nullable=True)       # en iyi potansiyel kazanç %
+    tp_was_reachable = Column(Boolean, nullable=True)      # TP fiyatına ulaşıldı mı (ama biz kapamadan önce)?
+    sl_was_hit = Column(Boolean, nullable=True)            # SL fiyatına ulaşıldı mı?
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
