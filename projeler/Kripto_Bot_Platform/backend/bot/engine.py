@@ -369,8 +369,8 @@ class BotEngine:
                     # MEXC: notional = margin * leverage, kontrat = notional / (fiyat * contractSize)
                     params_cfg = self.config.get("params", {})
                     risk_mode = params_cfg.get("risk_mode", "pct")
-                    risk_val = self.risk.risk_per_trade  # 0.01 = %1 veya USDT ise zaten USDT/balance
-                    margin_usdt = self.risk.current_balance * risk_val
+                    risk_val = self.risk.risk_per_trade
+                    margin_usdt = risk_val if risk_val > 1.0 else self.risk.current_balance * risk_val
                     leverage = self.risk.leverage
                     notional = margin_usdt * leverage
                     amount = max(1, int(notional / (price * contract_size)))

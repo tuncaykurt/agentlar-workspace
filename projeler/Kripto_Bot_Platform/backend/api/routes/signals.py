@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from datetime import datetime
 import json
+import asyncio
 
 router = APIRouter(prefix="/signals", tags=["signals"])
 
@@ -233,12 +234,34 @@ async def tradingview_webhook(token: str, request: Request):
 
     Webhook URL: https://SUNUCU_DOMAIN/api/signals/webhook/tv/{token}
     """
+    async def _log_rejected(reason: str, raw_payload: str, symbol_hint: str = "UNKNOWN", price_hint: float = 0):
+        try:
+            from core.database import async_session
+            from models.trade import SignalLog
+            async with async_session() as session:
+                log = SignalLog(
+                    bot_id=0,
+                    symbol=symbol_hint,
+                    signal_type="unknown",
+                    source="TradingView",
+                    price=price_hint,
+                    reason=reason,
+                    action="rejected",
+                    raw_payload=raw_payload
+                )
+                session.add(log)
+                await session.commit()
+        except Exception as e:
+            print(f"[TV Webhook] Hatalı sinyal DB'ye kaydedilemedi: {e}")
+
     try:
         body = await request.json()
+        raw_text = json.dumps(body)
     except Exception:
         # JSON parse başarısız — raw body'yi text olarak oku
         raw_text = (await request.body()).decode("utf-8", errors="replace")
-        print(f"[TV Webhook] JSON parse HATASI — raw body: {raw_text[:500]}")
+        print(f"[TV Webhook] JSON parse HATASI — raw body: {repr(raw_text[:500])}")
+        
         # Ham mesajdan aksiyon tespit etmeye çalış
         raw_lower = raw_text.lower()
         if any(w in raw_lower for w in ("long", "buy")):
@@ -246,6 +269,7 @@ async def tradingview_webhook(token: str, request: Request):
         elif any(w in raw_lower for w in ("short", "sell")):
             body = {"action": "sell", "symbol": "ETHUSDT", "price": 0, "message": raw_text[:200]}
         else:
+            await _log_rejected("Geçersiz JSON formatı ve yön tespit edilemedi", raw_text[:2000])
             return {"status": "error", "reason": "invalid JSON body", "raw": raw_text[:200]}
 
     print(f"[TV Webhook] token={token} body={body}")
@@ -261,6 +285,8 @@ async def tradingview_webhook(token: str, request: Request):
 
     # Action alanını normalize et
     action_raw = str(body.get("action", body.get("side", body.get("order_action", "")))).lower().strip()
+    symbol_raw = str(body.get("symbol", body.get("ticker", ""))).strip()
+    price = float(body.get("price", body.get("close", body.get("last", 0))) or 0)
 
     # {{strategy.order.action}} çözülmemiş template — alert adından tespit et
     if "{{" in action_raw or not action_raw:
@@ -275,6 +301,7 @@ async def tradingview_webhook(token: str, request: Request):
             print(f"[TV Webhook] Template çözülmemiş — fallback: SELL (alert_name veya body'den tespit)")
         else:
             print(f"[TV Webhook] Template çözülmemiş ve tespit edilemedi: body={body}")
+            await _log_rejected("TradingView değişkeni ({{...}}) çözülemedi ve yön bulunamadı", raw_text[:2000], symbol_raw, price)
             return {"status": "ignored", "reason": f"unresolved template, cannot detect action from body"}
 
     if action_raw in ("buy", "long", "open_long", "buy_market", "1"):
@@ -285,6 +312,7 @@ async def tradingview_webhook(token: str, request: Request):
         sig_type = "close"
     else:
         print(f"[TV Webhook] Tanınmayan action: '{action_raw}'")
+        await _log_rejected(f"Tanınmayan işlem yönü: '{action_raw}'", raw_text[:2000], symbol_raw, price)
         return {"status": "ignored", "reason": f"unrecognized action: '{action_raw}'"}
 
     # Sembol normalize et (BTCUSDT → BTC/USDT:USDT)

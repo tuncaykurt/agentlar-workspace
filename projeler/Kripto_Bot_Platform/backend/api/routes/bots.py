@@ -12,6 +12,7 @@ from exchange.bitget_client import bitget
 from exchange.exchange_factory import create_exchange_client, SUPPORTED_EXCHANGES
 from core.redis_client import get_redis
 from core.database import async_session
+from core.config import settings
 from models.trade import Bot, BotStatus
 from sqlalchemy import select, update, delete
 
@@ -215,9 +216,15 @@ async def _get_exchange_client(exchange: str, margin_type: str = "isolated"):
             keys["api_key"], keys["secret"], keys.get("passphrase", "")
         )
         return _ExClient(ex, exchange_name=exchange, margin_type=margin_type)
-    # Redis'te key yoksa bitget için module singleton, diğerleri için hata
+    # Redis'te key yoksa bitget için module singleton, diğerleri için .env fallback veya hata
     if exchange == "bitget":
         return bitget
+    if exchange == "mexc" and settings.MEXC_API_KEY:
+        ex = create_exchange_client(exchange, settings.MEXC_API_KEY, settings.MEXC_API_SECRET)
+        return _ExClient(ex, exchange_name=exchange, margin_type=margin_type)
+    if exchange == "bybit" and settings.BYBIT_API_KEY:
+        ex = create_exchange_client(exchange, settings.BYBIT_API_KEY, settings.BYBIT_API_SECRET)
+        return _ExClient(ex, exchange_name=exchange, margin_type=margin_type)
     raise HTTPException(400, f"{exchange} için API key bulunamadı. Önce Borsa Ayarları'ndan key girin.")
 
 router = APIRouter(prefix="/bots", tags=["bots"])

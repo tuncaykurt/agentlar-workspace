@@ -22,6 +22,16 @@ class RiskManager:
         self.daily_pnl = 0.0
         self.killed = False
 
+    @property
+    def balance(self) -> float:
+        return self.current_balance
+
+    @property
+    def daily_pnl_pct(self) -> float:
+        if self.initial_balance == 0:
+            return 0.0
+        return (self.daily_pnl / self.initial_balance) * 100
+
     def position_size(self, entry_price: float, stop_loss_price: float) -> float:
         """
         Risk bazlı pozisyon büyüklüğü hesapla.
@@ -31,7 +41,10 @@ class RiskManager:
         if self.killed:
             return 0.0
 
-        risk_amount = self.current_balance * self.risk_per_trade
+        if self.risk_per_trade > 1.0:
+            risk_amount = self.risk_per_trade
+        else:
+            risk_amount = self.current_balance * self.risk_per_trade
         stop_distance_pct = abs(entry_price - stop_loss_price) / entry_price
 
         if stop_distance_pct == 0:
@@ -68,7 +81,7 @@ class RiskManager:
         return {
             "balance": self.current_balance,
             "daily_pnl": self.daily_pnl,
-            "daily_pnl_pct": self.daily_pnl / self.initial_balance * 100,
+            "daily_pnl_pct": self.daily_pnl_pct,
             "killed": self.killed,
             "leverage": self.leverage,
         }
