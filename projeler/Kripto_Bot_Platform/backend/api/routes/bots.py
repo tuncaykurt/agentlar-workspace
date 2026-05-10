@@ -54,9 +54,15 @@ class _ExClient:
             "openType": 1,   # isolated
         }
         if tp_price:
-            body["takeProfitPrice"] = tp_price
+            try:
+                body["takeProfitPrice"] = float(self.exchange.price_to_precision(symbol, tp_price))
+            except Exception:
+                body["takeProfitPrice"] = round(tp_price, 2)
         if sl_price:
-            body["stopLossPrice"] = sl_price
+            try:
+                body["stopLossPrice"] = float(self.exchange.price_to_precision(symbol, sl_price))
+            except Exception:
+                body["stopLossPrice"] = round(sl_price, 2)
         print(f"[ExClient] MEXC direct order: {body}")
         resp = await self.exchange.contractPrivatePostOrderSubmit(body)
         print(f"[ExClient] MEXC direct order response: {resp}")
