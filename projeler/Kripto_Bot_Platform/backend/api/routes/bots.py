@@ -110,6 +110,30 @@ class _ExClient:
 
         return {"id": order_id, "status": "open", "info": resp}
 
+    async def close_position(self, symbol, side, amount):
+        """Mevcut pozisyonu kapat. side = mevcut pozisyon yönü (long/buy veya short/sell)."""
+        if self._exchange_name == "mexc":
+            mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
+            # long kapatmak = close long = side 2; short kapatmak = close short = side 4
+            is_long = side.lower() in ("long", "buy")
+            close_side = 2 if is_long else 4
+            body = {
+                "symbol": mexc_symbol,
+                "price": 0,
+                "vol": int(amount),
+                "leverage": int(self._leverage_cache.get(symbol, 10)),
+                "side": close_side,
+                "type": 5,
+                "openType": self._open_type,
+            }
+            print(f"[ExClient] MEXC close position: {body}")
+            resp = await self.exchange.contractPrivatePostOrderSubmit(body)
+            print(f"[ExClient] MEXC close response: {resp}")
+            return {"id": str(resp.get("data", "")), "status": "closed", "info": resp}
+        # Diğer borsalar için CCXT standart kapat
+        close_side = "sell" if side.lower() in ("long", "buy") else "buy"
+        return await self.exchange.create_market_order(symbol, close_side, amount)
+
     async def place_order(self, symbol, side, amount, order_type="market", price=None,
                           tp_price=None, sl_price=None, pos_side=None):
         if self._exchange_name == "mexc":

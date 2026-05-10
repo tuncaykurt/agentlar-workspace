@@ -359,14 +359,25 @@ class BotEngine:
             except Exception as e:
                 print(f"[Bot {bot_name}] Leverage ayar hatası (devam): {e}")
 
-            # Kontrat boyutu hesabı (MEXC swap: tam sayı kontrat)
+            # Kontrat boyutu hesabı
             amount = qty
             try:
                 market = self.exchange.exchange.market(symbol)
                 contract_size = float(market.get("contractSize", 1) or 1)
-                if contract_size and contract_size > 0:
+                exchange_name = getattr(self.exchange, '_exchange_name', '')
+                if exchange_name == "mexc" and contract_size > 0:
+                    # MEXC: notional = margin * leverage, kontrat = notional / (fiyat * contractSize)
+                    params_cfg = self.config.get("params", {})
+                    risk_mode = params_cfg.get("risk_mode", "pct")
+                    risk_val = self.risk.risk_per_trade  # 0.01 = %1 veya USDT ise zaten USDT/balance
+                    margin_usdt = self.risk.current_balance * risk_val
+                    leverage = self.risk.leverage
+                    notional = margin_usdt * leverage
+                    amount = max(1, int(notional / (price * contract_size)))
+                    print(f"[Bot {bot_name}] MEXC Kontrat: margin=${margin_usdt:.2f} × {leverage}x = ${notional:.2f} → {amount} kontrat @ ${price} (contractSize={contract_size})")
+                elif contract_size > 0:
                     amount = max(1, int(qty / contract_size))
-                print(f"[Bot {bot_name}] Kontrat: qty={qty} → amount={amount} (contractSize={contract_size})")
+                    print(f"[Bot {bot_name}] Kontrat: qty={qty} → amount={amount} (contractSize={contract_size})")
             except Exception as e:
                 print(f"[Bot {bot_name}] Kontrat hesabı hatası (devam): {e}")
 
@@ -1246,8 +1257,11 @@ class BotEngine:
     async def _close_position(self, symbol: str, position: dict):
         """Mevcut pozisyonu kapat"""
         try:
-            side = "sell" if position["side"] == "long" else "buy"
-            await self.exchange.place_order(symbol, side, position["size"], "market")
+            if hasattr(self.exchange, 'close_position'):
+                await self.exchange.close_position(symbol, position["side"], position["size"])
+            else:
+                side = "sell" if position["side"] == "long" else "buy"
+                await self.exchange.place_order(symbol, side, position["size"], "market")
             self._clear_trailing(symbol)
             print(f"[Bot {self.config['name']}] Pozisyon kapatıldı: {position['side']} @ {position['entry']}")
         except Exception as e:
