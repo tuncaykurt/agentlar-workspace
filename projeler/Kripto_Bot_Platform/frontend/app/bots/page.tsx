@@ -484,12 +484,12 @@ function TradingViewWebhookCard({
     onTokenInit(t)
   }
 
-  // Token yoksa oluştur (Düzenleme modunda token yoksa bile oluşturulmalı)
+  // Token yoksa ve yeni bot oluşturuluyorsa oluştur
   useEffect(() => {
-    if (!token) {
+    if (!token && !isEditing) {
       generateToken()
     }
-  }, [token])
+  }, [token, isEditing])
 
   const webhookUrl = `${tvServer}/api/signals/webhook/tv/${token}`
 
@@ -539,10 +539,15 @@ function TradingViewWebhookCard({
               }}
               className="text-[10px] px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-colors"
             >
-              🔄 Yeni Token
+              🔄 Yeni Token Al
             </button>
           )}
         </div>
+        {isEditing && (
+          <div className="text-[10px] text-sky-300 bg-sky-500/10 rounded-lg px-2 py-1">
+            ℹ️ Bot güncellemelerinde webhook token'ı değişmez. Eski URL'nizi kullanmaya devam edebilirsiniz.
+          </div>
+        )}
         {isEditing && !token && (
           <div className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
             ⚠️ Mevcut token bulunamadı. TradingView alarmınızda hangi URL kullanıldığını kontrol edin.
@@ -1466,6 +1471,7 @@ export default function BotsPage() {
                       <button
                         key={s.id}
                         onClick={() => {
+                          if (form.strategy === s.id) return
                           const sourceName = s.id.startsWith("custom__") ? s.name : undefined
                           set("strategy", s.id)
                           set("strategy_params", sourceName ? { source_name: sourceName } : {})
