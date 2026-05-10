@@ -1275,12 +1275,14 @@ export default function BotsPage() {
       }
     }
 
+    const isWebhook = f.strategy === "tradingview_webhook"
     const sigSrc = f.strategy_params.signal_source as string | undefined
-    const useCustomSig = sigSrc && sigSrc !== "builtin"
+    const useCustomSig = !isWebhook && sigSrc && sigSrc !== "builtin"
     return {
       name: f.name,
       symbol: f.symbol,
-      strategy: useCustomSig ? "custom_signal"
+      strategy: isWebhook ? "tradingview_webhook"
+        : useCustomSig ? "custom_signal"
         : f.strategy.startsWith("custom__") ? "custom_signal"
         : f.strategy,
       exchange: f.exchange,

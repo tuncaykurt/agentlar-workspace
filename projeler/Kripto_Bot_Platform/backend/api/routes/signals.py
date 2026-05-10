@@ -281,6 +281,8 @@ async def tradingview_webhook(token: str, request: Request):
         sig_type = "buy"
     elif action_raw in ("sell", "short", "open_short", "sell_market", "-1"):
         sig_type = "sell"
+    elif action_raw in ("close", "close_long", "close_short", "close_all", "exit"):
+        sig_type = "close"
     else:
         print(f"[TV Webhook] Tanınmayan action: '{action_raw}'")
         return {"status": "ignored", "reason": f"unrecognized action: '{action_raw}'"}

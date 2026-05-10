@@ -258,13 +258,16 @@ async def finalize_previous_signal(
                     if lows:  min_p = min(lows)
 
                 max_fav_pct = 0
+                max_adv_pct = 0
                 pnl_pct = 0
                 if sig.price and sig.price > 0:
                     if sig.signal_type == "buy":
                         max_fav_pct = round((max_p - sig.price) / sig.price * 100, 2)
+                        max_adv_pct = round((min_p - sig.price) / sig.price * 100, 2)
                         pnl_pct = round((new_signal_price - sig.price) / sig.price * 100, 2)
                     else:
                         max_fav_pct = round((sig.price - min_p) / sig.price * 100, 2)
+                        max_adv_pct = round((sig.price - max_p) / sig.price * 100, 2)
                         pnl_pct = round((sig.price - new_signal_price) / sig.price * 100, 2)
 
                 async with async_session() as session:
@@ -276,11 +279,12 @@ async def finalize_previous_signal(
                             outcome_at=now,
                             max_price_in_range=max_p,
                             min_price_in_range=min_p,
-                            max_favorable_pct=max_fav_pct
+                            max_favorable_pct=max_fav_pct,
+                            max_adverse_pct=max_adv_pct
                         )
                     )
                     await session.commit()
-                    print(f"[SignalAnalyzer] Önceki sinyal kapatıldı #{sig.id}: PnL={pnl_pct}%, MaxFavorable={max_fav_pct}%")
+                    print(f"[SignalAnalyzer] Önceki sinyal kapatıldı #{sig.id}: PnL={pnl_pct}%, MaxFav={max_fav_pct}%, MaxAdv={max_adv_pct}%")
 
         finally:
             await exchange.close()

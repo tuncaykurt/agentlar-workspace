@@ -145,6 +145,7 @@ class SignalLog(Base):
     min_price_in_range = Column(Float, nullable=True)      # aralıktaki en düşük fiyat (short için favori)
     # max_favorable_pct: long → (max_high - entry) / entry; short → (entry - min_low) / entry
     max_favorable_pct = Column(Float, nullable=True)       # en iyi potansiyel kazanç %
+    max_adverse_pct = Column(Float, nullable=True)         # en kötü potansiyel kayıp %
     tp_was_reachable = Column(Boolean, nullable=True)      # TP fiyatına ulaşıldı mı (ama biz kapamadan önce)?
     sl_was_hit = Column(Boolean, nullable=True)            # SL fiyatına ulaşıldı mı?
 

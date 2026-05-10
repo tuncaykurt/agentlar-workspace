@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 import asyncio
 import json
+import uuid
 from bot.engine import BotEngine
 from exchange.bitget_client import bitget
 from exchange.exchange_factory import create_exchange_client, SUPPORTED_EXCHANGES
@@ -296,8 +297,9 @@ async def create_bot(data: BotCreate):
             if strategy == "tradingview_webhook":
                 # webhook_token'u params'a ekle (signal_source'dan al)
                 token = effective_params.get("webhook_token") or effective_params.get("signal_source", "")
-                if token and not token.startswith("builtin") and not token.startswith("custom__"):
-                    effective_params["webhook_token"] = token
+                if not token or token.startswith("builtin") or token.startswith("custom__"):
+                    token = str(uuid.uuid4())
+                effective_params["webhook_token"] = token
                 effective_params["_strategy_display"] = "tradingview_webhook"
                 # Engine tradingview_webhook + custom_signal ikisini de yakalar
 
@@ -864,7 +866,15 @@ async def update_bot(bot_id: int, data: BotCreate):
         if not bot:
             raise HTTPException(404, "Bot bulunamadi")
 
-        effective_params = data.params or data.strategy_params or {}
+        old_params = {}
+        if bot.params:
+            try:
+                old_params = json.loads(bot.params)
+            except:
+                pass
+
+        # params (margin_type gibi bot ayarları) + strategy_params (strateji özel) merge
+        effective_params = {**old_params, **(data.strategy_params or {}), **(data.params or {})}
         if data.tp_pct is not None:
             effective_params["tp_pct"] = data.tp_pct
         if data.sl_pct is not None:
@@ -877,8 +887,9 @@ async def update_bot(bot_id: int, data: BotCreate):
         strategy = data.strategy
         if strategy == "tradingview_webhook":
             token = effective_params.get("webhook_token") or effective_params.get("signal_source", "")
-            if token and not token.startswith("builtin") and not token.startswith("custom__"):
-                effective_params["webhook_token"] = token
+            if not token or token.startswith("builtin") or token.startswith("custom__"):
+                token = str(uuid.uuid4())
+            effective_params["webhook_token"] = token
             effective_params["_strategy_display"] = "tradingview_webhook"
 
         await session.execute(

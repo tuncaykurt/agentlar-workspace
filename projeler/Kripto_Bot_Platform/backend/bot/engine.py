@@ -1047,7 +1047,7 @@ class BotEngine:
 
         print(f"[Bot {bot_name}] ▶ SİNYAL BULUNDU: type={signal_type} price={price} source={source} key={sig_key}")
 
-        if signal_type not in ("buy", "sell"):
+        if signal_type not in ("buy", "sell", "close"):
             print(f"[Bot {bot_name}] ✗ Geçersiz sinyal tipi: '{signal_type}' — atlanıyor")
             await redis.set(last_ts_key, sig_ts, ex=600)
             return
@@ -1070,6 +1070,19 @@ class BotEngine:
         trailing_stop_pct = float(params.get("trailing_stop_pct") or params.get("trailing_sl_pct", 0) or 0)
 
         print(f"[Bot {bot_name}] Params: mode={signal_mode} tp={take_profit_pct}% sl={stop_loss_pct}% action={position_action}")
+
+        # Sinyal tipi 'close' ise hemen işlem yap ve çık
+        if signal_type == "close":
+            print(f"[Bot {bot_name}] ✓ 'close' sinyali kabul edildi @ {price}")
+            current_position = await self._get_current_position(symbol)
+            if current_position:
+                await self._analyze_and_close_previous(redis, symbol, signal_type, price, current_position)
+                await self._log_signal(signal_type, price, source=source, reason="TradingView üzerinden pozisyon kapatma sinyali", action="executed", timeframe=sig_timeframe)
+            else:
+                print(f"[Bot {bot_name}] ⚠ 'close' sinyali geldi fakat açık pozisyon yok.")
+                await self._log_signal(signal_type, price, source=source, reason="TradingView kapatma sinyali", action="filtered", reject_reason="Açık pozisyon yok", timeframe=sig_timeframe)
+            await redis.set(last_ts_key, sig_ts, ex=600)
+            return
 
         # Sinyal moduna göre yönü belirle
         if signal_mode == "inverse":
@@ -1324,12 +1337,15 @@ class BotEngine:
             if is_long:
                 pnl_pct = (exit_price - entry_price) / entry_price * 100
                 max_favorable_pct = (max_high - entry_price) / entry_price * 100
+                max_adverse_pct = (min_low - entry_price) / entry_price * 100
             else:
                 pnl_pct = (entry_price - exit_price) / entry_price * 100
                 max_favorable_pct = (entry_price - min_low) / entry_price * 100
+                max_adverse_pct = (entry_price - max_high) / entry_price * 100
         else:
             pnl_pct = 0
             max_favorable_pct = 0
+            max_adverse_pct = 0
 
         # Outcome belirleme
         if sl_was_hit and not tp_was_reachable:
@@ -1359,6 +1375,7 @@ class BotEngine:
                             max_price_in_range=round(max_high, 4),
                             min_price_in_range=round(min_low, 4),
                             max_favorable_pct=round(max_favorable_pct, 4),
+                            max_adverse_pct=round(max_adverse_pct, 4),
                             tp_was_reachable=tp_was_reachable,
                             sl_was_hit=sl_was_hit,
                         )
