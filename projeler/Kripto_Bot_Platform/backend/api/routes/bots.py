@@ -886,9 +886,14 @@ async def update_bot(bot_id: int, data: BotCreate):
 
         strategy = data.strategy
         if strategy == "tradingview_webhook":
+            old_token = old_params.get("webhook_token")
             token = effective_params.get("webhook_token") or effective_params.get("signal_source", "")
-            if not token or token.startswith("builtin") or token.startswith("custom__"):
-                token = str(uuid.uuid4())
+            
+            if old_token and not token:
+                token = old_token
+            elif not token or token.startswith("builtin") or token.startswith("custom__"):
+                token = old_token if old_token else str(uuid.uuid4())
+                
             effective_params["webhook_token"] = token
             effective_params["_strategy_display"] = "tradingview_webhook"
 
