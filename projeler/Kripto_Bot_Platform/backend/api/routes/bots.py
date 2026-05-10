@@ -586,6 +586,7 @@ async def test_order(data: TestOrderRequest):
         order_id = order.get("id", "N/A")
         order_status = order.get("status", "?")
         steps.append(f"✅ ORDER BAŞARILI! id={order_id} status={order_status}")
+        steps.append(f"[debug] exchange_name={ex_client._exchange_name} order_keys={list((order or {}).keys())}")
 
         return {
             "success": True,
@@ -598,7 +599,7 @@ async def test_order(data: TestOrderRequest):
                 "leverage": leverage, "tp_price": tp_price, "sl_price": sl_price,
             },
             "steps": steps,
-            "raw_order": {k: str(v) for k, v in (order or {}).items() if k in ("id","symbol","side","amount","price","status","info")},
+            "raw_order": {k: str(v) for k, v in (order or {}).items()},
         }
 
     except Exception as e:
