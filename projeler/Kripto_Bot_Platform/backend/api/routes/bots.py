@@ -19,8 +19,10 @@ class _ExClient:
     def __init__(self, ex, exchange_name: str = ""):
         self.exchange = ex
         self._exchange_name = exchange_name.lower()
+        self._leverage_cache: dict = {}  # symbol → leverage
 
     async def set_leverage(self, symbol, leverage):
+        self._leverage_cache[symbol] = leverage
         try:
             if self._exchange_name == "mexc":
                 # MEXC: openType=1 (isolated), positionType=1 (long) ve positionType=2 (short) için ayrı
@@ -31,8 +33,43 @@ class _ExClient:
         except Exception as e:
             print(f"[ExClient] set_leverage uyarısı ({self._exchange_name}): {e}")
 
+    async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None):
+        """
+        CCXT MEXC, takeProfitPrice/stopLossPrice'ı create_order'da geçirmiyor.
+        Direkt MEXC contract API'yi çağırıyoruz: /api/v1/private/order/submit
+        side: "buy"=open long (1), "sell"=open short (3)
+        type: 5=market
+        openType: 1=isolated
+        """
+        # ETH/USDT:USDT → ETH_USDT
+        mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
+        mexc_side = 1 if side.lower() == "buy" else 3  # 1=open long, 3=open short
+        body = {
+            "symbol": mexc_symbol,
+            "price": 0,
+            "vol": amount,
+            "leverage": leverage,
+            "side": mexc_side,
+            "type": 5,       # market order
+            "openType": 1,   # isolated
+        }
+        if tp_price:
+            body["takeProfitPrice"] = tp_price
+        if sl_price:
+            body["stopLossPrice"] = sl_price
+        print(f"[ExClient] MEXC direct order: {body}")
+        resp = await self.exchange.contractPrivatePostOrderSubmit(body)
+        print(f"[ExClient] MEXC direct order response: {resp}")
+        # CCXT benzeri dict döndür
+        order_id = str(resp.get("data", resp.get("orderId", "")))
+        return {"id": order_id, "status": "open", "info": resp}
+
     async def place_order(self, symbol, side, amount, order_type="market", price=None,
                           tp_price=None, sl_price=None, pos_side=None):
+        if self._exchange_name == "mexc":
+            leverage = self._leverage_cache.get(symbol, 10)
+            return await self._mexc_place_order_direct(symbol, side, amount, leverage, tp_price, sl_price)
+
         params = self._build_order_params(tp_price, sl_price, pos_side)
         try:
             if order_type == "market":
@@ -40,7 +77,7 @@ class _ExClient:
             return await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
         except Exception as e:
             # TP/SL params yüzünden hata aldıysak plain order ile yeniden dene
-            if (tp_price or sl_price) and "parameter" in str(e).lower() or "invalid" in str(e).lower() or "stop" in str(e).lower():
+            if (tp_price or sl_price) and ("parameter" in str(e).lower() or "invalid" in str(e).lower() or "stop" in str(e).lower()):
                 print(f"[ExClient] TP/SL parametreli order başarısız ({e}) — plain order ile tekrar deneniyor")
                 plain_params = {}
                 if pos_side:
@@ -51,27 +88,17 @@ class _ExClient:
             raise
 
     def _build_order_params(self, tp_price, sl_price, pos_side) -> dict:
-        """Borsaya göre doğru order parametre formatı."""
+        """Borsaya göre doğru order parametre formatı (MEXC hariç — o direkt API kullanır)."""
         params = {}
-        # pos_side parametresi
         if pos_side:
-            if self._exchange_name == "mexc":
-                params["positionSide"] = pos_side.upper()        # MEXC: positionSide
-            elif self._exchange_name in ("binance", "bybit"):
+            if self._exchange_name in ("binance", "bybit"):
                 params["positionSide"] = pos_side.upper()
             else:
-                params["posSide"] = pos_side                      # Bitget: posSide
-        # TP/SL parametreleri
+                params["posSide"] = pos_side  # Bitget
         if tp_price:
-            if self._exchange_name == "mexc":
-                params["takeProfit"] = {"stopPrice": str(tp_price), "stopPriceType": "LAST_PRICE"}
-            else:
-                params["takeProfitPrice"] = tp_price
+            params["takeProfitPrice"] = tp_price
         if sl_price:
-            if self._exchange_name == "mexc":
-                params["stopLoss"] = {"stopPrice": str(sl_price), "stopPriceType": "LAST_PRICE"}
-            else:
-                params["stopLossPrice"] = sl_price
+            params["stopLossPrice"] = sl_price
         return params
 
     async def modify_position_tpsl(self, symbol, tp_price=None, sl_price=None, pos_side=None):
