@@ -49,17 +49,15 @@ class _ExClient:
 
     async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None):
         """
-        MEXC futures: market order aç, sonra planorder/place ile TP/SL trigger order koy.
-        CCXT MEXC create_order'da takeProfitPrice/stopLossPrice desteklenmiyor.
+        MEXC futures: market order aç. TP/SL parametrelerini doğrudan submit'te göndeririz.
         side: "buy"=open long, "sell"=open short
         """
         # ETH/USDT:USDT → ETH_USDT
         mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
         is_long = side.lower() == "buy"
         mexc_side = 1 if is_long else 3  # 1=open long, 3=open short
-        close_side = 2 if is_long else 4  # 2=close long, 4=close short
 
-        # 1. Market order aç (TP/SL olmadan)
+        # 1. Market order aç (TP/SL ile)
         order_body = {
             "symbol": mexc_symbol,
             "price": 0,
@@ -69,46 +67,19 @@ class _ExClient:
             "type": 5,                  # market order
             "openType": self._open_type, # isolated=1, cross=2
         }
+
+        if tp_price:
+            order_body["takeProfitPrice"] = round(float(tp_price), 2)
+            order_body["profitTrend"] = 1  # 1=latest price
+        if sl_price:
+            order_body["stopLossPrice"] = round(float(sl_price), 2)
+            order_body["lossTrend"] = 1    # 1=latest price
+
         print(f"[ExClient] MEXC market order ({self._margin_type}): {order_body}")
+        
         resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
         print(f"[ExClient] MEXC order response: {resp}")
         order_id = str(resp.get("data", resp.get("orderId", "")))
-
-        # 2+3. TP ve SL planorder'ları paralel gönder
-        plan_tasks = []
-        if tp_price:
-            plan_tasks.append(self.exchange.contractPrivatePostPlanorderPlace({
-                "symbol": mexc_symbol,
-                "vol": int(amount),
-                "leverage": int(leverage),
-                "side": close_side,
-                "openType": self._open_type,
-                "triggerPrice": round(float(tp_price), 2),
-                "triggerType": 1 if is_long else 2,
-                "executeCycle": 2,
-                "orderType": 5,
-                "trend": 1,
-            }))
-        if sl_price:
-            plan_tasks.append(self.exchange.contractPrivatePostPlanorderPlace({
-                "symbol": mexc_symbol,
-                "vol": int(amount),
-                "leverage": int(leverage),
-                "side": close_side,
-                "openType": self._open_type,
-                "triggerPrice": round(float(sl_price), 2),
-                "triggerType": 2 if is_long else 1,
-                "executeCycle": 2,
-                "orderType": 5,
-                "trend": 1,
-            }))
-        if plan_tasks:
-            results = await asyncio.gather(*plan_tasks, return_exceptions=True)
-            for i, r in enumerate(results):
-                if isinstance(r, Exception):
-                    print(f"[ExClient] MEXC planorder[{i}] hatası: {r}")
-                else:
-                    print(f"[ExClient] MEXC planorder[{i}]: {r}")
 
         return {"id": order_id, "status": "open", "info": resp}
 
