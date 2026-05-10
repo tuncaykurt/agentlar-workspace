@@ -428,27 +428,44 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm">
           <div className="text-slate-400 text-sm font-medium mb-1">Toplam İşlem</div>
-          <div className="text-3xl font-bold text-white">{overview.total_trades}</div>
+          <div className="text-3xl font-bold text-white">
+            {overview.total_trades > 0 ? overview.total_trades : <span className="text-slate-600">—</span>}
+          </div>
+          {overview.total_trades === 0 && <div className="text-xs text-slate-600 mt-1">Henüz işlem yok</div>}
         </div>
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent pointer-events-none"></div>
           <div className="text-slate-400 text-sm font-medium mb-1">Kazanma Oranı (Win Rate)</div>
-          <div className="text-3xl font-bold text-green-400">%{overview.win_rate}</div>
-          <div className="text-xs text-slate-500 mt-1">
-            {overview.winning_trades} Kâr / {overview.losing_trades} Zarar
-          </div>
+          {overview.total_trades > 0 ? (
+            <>
+              <div className="text-3xl font-bold text-green-400">%{overview.win_rate}</div>
+              <div className="text-xs text-slate-500 mt-1">{overview.winning_trades} Kâr / {overview.losing_trades} Zarar</div>
+            </>
+          ) : (
+            <div className="text-3xl font-bold text-slate-600">—</div>
+          )}
         </div>
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm relative overflow-hidden">
           <div className={`absolute inset-0 bg-gradient-to-br ${overview.total_pnl >= 0 ? 'from-blue-500/10' : 'from-red-500/10'} to-transparent pointer-events-none`}></div>
           <div className="text-slate-400 text-sm font-medium mb-1">Toplam PnL</div>
-          <div className={`text-3xl font-bold ${overview.total_pnl >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
-            ${overview.total_pnl}
-          </div>
+          {overview.total_trades > 0 ? (
+            <div className={`text-3xl font-bold ${overview.total_pnl >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+              ${overview.total_pnl}
+            </div>
+          ) : (
+            <div className="text-3xl font-bold text-slate-600">—</div>
+          )}
         </div>
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm">
-          <div className="text-slate-400 text-sm font-medium mb-1">Reddedilen Sinyal</div>
-          <div className="text-3xl font-bold text-red-400">{blockedCount}</div>
-          <div className="text-xs text-slate-500 mt-1">Akıllı Filtre Koruması</div>
+          <div className="text-slate-400 text-sm font-medium mb-1">Gelen Sinyal</div>
+          <div className="text-3xl font-bold text-orange-400">
+            {totalSignals > 0 ? totalSignals : <span className="text-slate-600">—</span>}
+          </div>
+          {totalSignals > 0 ? (
+            <div className="text-xs text-slate-500 mt-1">{blockedCount} reddedildi · {executedCount} onaylandı</div>
+          ) : (
+            <div className="text-xs text-slate-600 mt-1">Webhook sinyali bekleniyor</div>
+          )}
         </div>
       </div>
 
@@ -493,78 +510,76 @@ export default function AnalyticsPage() {
             Sinyal İşleme Hunisi (Funnel)
           </h2>
           
-          <div className="flex-1 flex flex-col justify-center space-y-6">
-            {[
-              { 
-                label: "Gelen Toplam Sinyal", 
-                val: totalSignals, 
-                desc: "TradingView'den alınan ham sinyaller",
-                bg: "bg-gradient-to-r from-blue-600/40 to-blue-400/20", 
-                border: "border-blue-500/50",
-                text: "text-blue-200",
-                icon: "📥",
-                width: 100 
-              },
-              { 
-                label: "Reddedilen (Akıllı Koruma)", 
-                val: blockedCount, 
-                desc: "Filtreler tarafından engellendi",
-                bg: "bg-gradient-to-r from-red-600/40 to-red-400/20", 
-                border: "border-red-500/50",
-                text: "text-red-200",
-                icon: "🛡️",
-                width: totalSignals > 0 ? (blockedCount / totalSignals) * 100 : 0 
-              },
-              { 
-                label: "Onaylanan (İşleme Alındı)", 
-                val: executedCount, 
-                desc: "Piyasada aktif pozisyona dönüştü",
-                bg: "bg-gradient-to-r from-green-600/40 to-green-400/20", 
-                border: "border-green-500/50",
-                text: "text-green-200",
-                icon: "✅",
-                width: totalSignals > 0 ? (executedCount / totalSignals) * 100 : 0 
-              },
-            ].map((row, idx) => (
-              <div key={row.label} className="relative group">
-                {/* Connecting Line */}
-                {idx > 0 && (
-                  <div className="absolute -top-6 left-8 w-px h-6 bg-slate-700/50" />
-                )}
-                <div className={`relative overflow-hidden rounded-xl border ${row.border} bg-slate-800/30 p-4 transition-all hover:bg-slate-800/50`}>
-                  {/* Background Bar */}
-                  <div 
-                    className={`absolute top-0 left-0 bottom-0 ${row.bg} transition-all duration-1000 ease-out`}
-                    style={{ width: `${Math.max(row.width, 2)}%` }}
-                  />
-                  
-                  <div className="relative flex items-center justify-between z-10">
-                    <div className="flex items-center gap-4">
-                      <div className="text-2xl bg-slate-900/50 p-2 rounded-lg border border-slate-700/50 shadow-inner">
-                        {row.icon}
-                      </div>
-                      <div>
-                        <div className={`font-semibold ${row.text} text-lg drop-shadow-md`}>
-                          {row.label}
+          <div className="flex-1 flex flex-col justify-center">
+            {totalSignals === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <div className="text-4xl mb-3">📡</div>
+                <div className="text-sm font-medium text-slate-400">Henüz sinyal gelmedi</div>
+                <div className="text-xs mt-1">TradingView webhook tetiklenince veriler burada görünecek</div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {[
+                  {
+                    label: "Gelen Toplam Sinyal",
+                    val: totalSignals,
+                    desc: "TradingView'den alınan ham sinyaller",
+                    bg: "bg-gradient-to-r from-blue-600/40 to-blue-400/20",
+                    border: "border-blue-500/50",
+                    text: "text-blue-200",
+                    icon: "📥",
+                    width: 100
+                  },
+                  {
+                    label: "Reddedilen (Akıllı Koruma)",
+                    val: blockedCount,
+                    desc: "Filtreler tarafından engellendi",
+                    bg: "bg-gradient-to-r from-red-600/40 to-red-400/20",
+                    border: "border-red-500/50",
+                    text: "text-red-200",
+                    icon: "🛡️",
+                    width: (blockedCount / totalSignals) * 100
+                  },
+                  {
+                    label: "Onaylanan (İşleme Alındı)",
+                    val: executedCount,
+                    desc: "Piyasada aktif pozisyona dönüştü",
+                    bg: "bg-gradient-to-r from-green-600/40 to-green-400/20",
+                    border: "border-green-500/50",
+                    text: "text-green-200",
+                    icon: "✅",
+                    width: (executedCount / totalSignals) * 100
+                  },
+                ].map((row, idx) => (
+                  <div key={row.label} className="relative group">
+                    {idx > 0 && (
+                      <div className="absolute -top-6 left-8 w-px h-6 bg-slate-700/50" />
+                    )}
+                    <div className={`relative overflow-hidden rounded-xl border ${row.border} bg-slate-800/30 p-4 transition-all hover:bg-slate-800/50`}>
+                      <div
+                        className={`absolute top-0 left-0 bottom-0 ${row.bg} transition-all duration-1000 ease-out`}
+                        style={{ width: `${Math.max(row.width, 2)}%` }}
+                      />
+                      <div className="relative flex items-center justify-between z-10">
+                        <div className="flex items-center gap-4">
+                          <div className="text-2xl bg-slate-900/50 p-2 rounded-lg border border-slate-700/50 shadow-inner">
+                            {row.icon}
+                          </div>
+                          <div>
+                            <div className={`font-semibold ${row.text} text-lg drop-shadow-md`}>{row.label}</div>
+                            <div className="text-xs text-slate-400 mt-0.5">{row.desc}</div>
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-400 mt-0.5">
-                          {row.desc}
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-white drop-shadow-md">{row.val}</div>
+                          <div className={`text-xs font-medium ${row.text} mt-0.5`}>%{row.width.toFixed(1)}</div>
                         </div>
-                      </div>
-                    </div>
-                    
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-white drop-shadow-md">
-                        {row.val}
-                      </div>
-                      <div className={`text-xs font-medium ${row.text} mt-0.5`}>
-                        %{row.width.toFixed(1)}
                       </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
