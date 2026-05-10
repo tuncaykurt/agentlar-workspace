@@ -25,6 +25,221 @@ const TABS = [
 
 type TabKey = typeof TABS[number]["key"]
 
+// ─── Sinyal Aralığı Analizi Bileşeni ─────────────────────────────────────────
+function PriceRangeBar({ item }: { item: any }) {
+  const entry  = item.price
+  const tp     = item.tp_price
+  const sl     = item.sl_price
+  const high   = item.max_price_in_range
+  const low    = item.min_price_in_range
+  const exit   = item.outcome_price
+  const isLong = item.signal_type === "buy"
+
+  if (!entry || !high || !low) return <span className="text-slate-700 text-xs">— veri yok</span>
+
+  // Tüm fiyatları normalize et [0..100] aralığına
+  const allPrices = [entry, tp, sl, high, low, exit].filter(Boolean) as number[]
+  const minP = Math.min(...allPrices) * 0.999
+  const maxP = Math.max(...allPrices) * 1.001
+  const range = maxP - minP
+  const pct = (p: number) => Math.max(0, Math.min(100, ((p - minP) / range) * 100))
+
+  const entryPct = pct(entry)
+  const tpPct    = tp   ? pct(tp)   : null
+  const slPct    = sl   ? pct(sl)   : null
+  const highPct  = pct(high)
+  const lowPct   = pct(low)
+  const exitPct  = exit ? pct(exit) : null
+
+  return (
+    <div className="relative w-full h-8 rounded-md overflow-hidden bg-slate-800/60 select-none" title={
+      `Giriş: $${entry.toFixed(2)} | Max: $${high.toFixed(2)} | Min: $${low.toFixed(2)}` +
+      (exit ? ` | Çıkış: $${exit.toFixed(2)}` : "")
+    }>
+      {/* TP zone — yeşil alan (entry'den tp'ye) */}
+      {tpPct !== null && (
+        <div className="absolute top-0 bottom-0 bg-green-500/15"
+          style={isLong
+            ? { left: `${entryPct}%`, width: `${tpPct - entryPct}%` }
+            : { left: `${tpPct}%`,   width: `${entryPct - tpPct}%` }
+          }
+        />
+      )}
+      {/* SL zone — kırmızı alan (entry'den sl'ye) */}
+      {slPct !== null && (
+        <div className="absolute top-0 bottom-0 bg-red-500/15"
+          style={isLong
+            ? { left: `${slPct}%`,    width: `${entryPct - slPct}%` }
+            : { left: `${entryPct}%`, width: `${slPct - entryPct}%` }
+          }
+        />
+      )}
+      {/* Fiyat aralığı çizgisi */}
+      <div className="absolute top-1/2 -translate-y-1/2 h-0.5 bg-slate-500/50 rounded"
+        style={{ left: `${lowPct}%`, width: `${highPct - lowPct}%` }}
+      />
+      {/* Max high marker */}
+      <div className="absolute top-0.5 w-0.5 h-3 bg-green-400/80 rounded-full" style={{ left: `${highPct}%` }} title={`Max: $${high.toFixed(2)}`} />
+      {/* Min low marker */}
+      <div className="absolute bottom-0.5 w-0.5 h-3 bg-red-400/80 rounded-full"  style={{ left: `${lowPct}%`  }} title={`Min: $${low.toFixed(2)}`}  />
+      {/* TP line */}
+      {tpPct !== null && <div className="absolute top-0 bottom-0 w-px bg-green-400/50" style={{ left: `${tpPct}%` }} />}
+      {/* SL line */}
+      {slPct !== null && <div className="absolute top-0 bottom-0 w-px bg-red-400/50"   style={{ left: `${slPct}%` }} />}
+      {/* Entry marker — beyaz dikey çizgi */}
+      <div className="absolute top-0 bottom-0 w-0.5 bg-white/70 rounded" style={{ left: `${entryPct}%` }} />
+      {/* Exit marker — sarı */}
+      {exitPct !== null && <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400/80 rounded" style={{ left: `${exitPct}%` }} />}
+    </div>
+  )
+}
+
+function SignalRangeSection({ items, isLoading }: { items: any[], isLoading: boolean }) {
+  // Sadece executed + outcome var olanları göster
+  const rangeItems = items.filter((it: any) =>
+    it.action === "executed" && it.max_price_in_range != null
+  )
+
+  if (isLoading) return null
+  if (rangeItems.length === 0) return null
+
+  const fmt = (v: number | null, dec = 2) =>
+    v != null ? `$${v.toLocaleString("tr-TR", { maximumFractionDigits: dec })}` : "—"
+  const fmtPct = (v: number | null) =>
+    v != null ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}%` : "—"
+
+  // Özet istatistikler
+  const tpReachable  = rangeItems.filter(i => i.tp_was_reachable).length
+  const slHit        = rangeItems.filter(i => i.sl_was_hit).length
+  const nextSignal   = rangeItems.filter(i => i.outcome === "next_signal").length
+  const avgFavorable = rangeItems.reduce((s: number, i: any) => s + (i.max_favorable_pct || 0), 0) / rangeItems.length
+
+  return (
+    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          📊 Sinyal Aralığı Analizi
+        </h2>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Her sinyal açılış → sonraki sinyal aralığındaki fiyat hareketi. Bant = giriş–TP–SL zonu · Yeşil çizgi = max yüksek · Kırmızı = min düşük · Beyaz = giriş · Sarı = çıkış
+        </p>
+      </div>
+
+      {/* Özet kartlar */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {[
+          { label: "Analiz Edilen", value: rangeItems.length, color: "text-white" },
+          { label: "TP'ye Ulaştı", value: tpReachable, color: "text-green-400", sub: `%${rangeItems.length ? Math.round(tpReachable / rangeItems.length * 100) : 0}` },
+          { label: "SL Vuruldu",   value: slHit,        color: "text-red-400",   sub: `%${rangeItems.length ? Math.round(slHit / rangeItems.length * 100) : 0}` },
+          { label: "Sinyalle Kapandı",    value: nextSignal,   color: "text-yellow-400", sub: `%${rangeItems.length ? Math.round(nextSignal / rangeItems.length * 100) : 0}` },
+          { label: "Ort. Max Potansiyel", value: `+${avgFavorable.toFixed(2)}%`, color: "text-blue-400" },
+        ].map(s => (
+          <div key={s.label} className="p-3 rounded-xl border border-slate-800 bg-slate-800/40 text-center">
+            <div className={`text-xl font-bold ${s.color}`}>{s.value}</div>
+            {s.sub && <div className="text-[10px] text-slate-500">{s.sub} oran</div>}
+            <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Sinyal tablosu */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
+              <th className="text-left pb-2 pr-3 whitespace-nowrap">Zaman</th>
+              <th className="text-left pb-2 pr-3">Yön</th>
+              <th className="text-right pb-2 pr-3 whitespace-nowrap">Giriş</th>
+              <th className="text-right pb-2 pr-3 whitespace-nowrap">TP Hedef</th>
+              <th className="text-right pb-2 pr-3 whitespace-nowrap">SL Hedef</th>
+              <th className="text-right pb-2 pr-3 whitespace-nowrap">Max Yüksek</th>
+              <th className="text-right pb-2 pr-3 whitespace-nowrap">Min Düşük</th>
+              <th className="text-right pb-2 pr-3 whitespace-nowrap">Çıkış</th>
+              <th className="text-right pb-2 pr-3 whitespace-nowrap">PnL</th>
+              <th className="text-right pb-2 pr-3 whitespace-nowrap">Max Potansiyel</th>
+              <th className="text-left pb-2 pr-3 whitespace-nowrap">Sonuç</th>
+              <th className="text-left pb-2 min-w-[180px]">Fiyat Aralığı</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/50">
+            {rangeItems.map((item: any) => {
+              const isLong = item.signal_type === "buy"
+              const outcomeColor =
+                item.outcome === "tp_hit"     ? "text-green-400 bg-green-500/10 border-green-500/20" :
+                item.outcome === "sl_hit"     ? "text-red-400 bg-red-500/10 border-red-500/20" :
+                item.outcome === "next_signal"? "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" :
+                                                "text-slate-400 bg-slate-700/30 border-slate-700"
+              const outcomeLabel =
+                item.outcome === "tp_hit"      ? "✓ TP Vurdu" :
+                item.outcome === "sl_hit"      ? "✕ SL Vurdu" :
+                item.outcome === "next_signal" ? "→ Sinyalle Kapandı" :
+                item.outcome || "Açık"
+              const d = new Date(item.created_at)
+              const timeStr = d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" }) +
+                " " + d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+
+              return (
+                <tr key={item.id} className="hover:bg-slate-800/20 transition-colors align-middle">
+                  <td className="py-2 pr-3 text-slate-500 whitespace-nowrap">{timeStr}</td>
+                  <td className="py-2 pr-3">
+                    <span className={`px-1.5 py-0.5 rounded font-semibold border whitespace-nowrap ${
+                      isLong ? "text-green-400 bg-green-500/10 border-green-500/20"
+                              : "text-red-400 bg-red-500/10 border-red-500/20"
+                    }`}>
+                      {isLong ? "▲ LONG" : "▼ SHORT"}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono text-slate-200">{fmt(item.price)}</td>
+                  <td className="py-2 pr-3 text-right font-mono text-green-400">{fmt(item.tp_price)}</td>
+                  <td className="py-2 pr-3 text-right font-mono text-red-400">{fmt(item.sl_price)}</td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    <span className={item.tp_was_reachable ? "text-green-300 font-semibold" : "text-slate-400"}>
+                      {fmt(item.max_price_in_range)}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    <span className={item.sl_was_hit ? "text-red-300 font-semibold" : "text-slate-400"}>
+                      {fmt(item.min_price_in_range)}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono text-yellow-400">{fmt(item.outcome_price)}</td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    <span className={
+                      item.outcome_pnl_pct == null ? "text-slate-600" :
+                      item.outcome_pnl_pct > 0 ? "text-green-400" : "text-red-400"
+                    }>
+                      {fmtPct(item.outcome_pnl_pct)}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono text-blue-400 font-semibold">
+                    {fmtPct(item.max_favorable_pct)}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <span className={`px-1.5 py-0.5 rounded border text-[10px] whitespace-nowrap ${outcomeColor}`}>
+                      {outcomeLabel}
+                    </span>
+                    <div className="mt-0.5 flex gap-1">
+                      {item.tp_was_reachable && <span className="text-[9px] text-green-500">TP ✓</span>}
+                      {item.sl_was_hit && <span className="text-[9px] text-red-500">SL ✕</span>}
+                    </div>
+                  </td>
+                  <td className="py-2 pr-2">
+                    <PriceRangeBar item={item} />
+                    <div className="flex justify-between mt-0.5 text-[9px] text-slate-600">
+                      <span>{fmt(item.min_price_in_range)}</span>
+                      <span>{fmt(item.max_price_in_range)}</span>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function AnalyticsPage() {
   const [activeTab,   setActiveTab]   = useState<TabKey>("blocked")
   const [page,        setPage]        = useState(0)
@@ -395,6 +610,9 @@ export default function AnalyticsPage() {
           </div>
         )}
       </div>
+
+      {/* ── Sinyal Aralığı Analizi ────────────────────────────────────────── */}
+      <SignalRangeSection items={filteredData?.items || []} isLoading={filteredLoading} />
 
       {/* ── Sinyal Detay Tablosu ──────────────────────────────────────────── */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm">
