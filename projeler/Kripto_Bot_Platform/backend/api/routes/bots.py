@@ -16,18 +16,24 @@ from sqlalchemy import select, update, delete
 
 class _ExClient:
     """CCXT exchange'i BotEngine interface'ine saran wrapper."""
-    def __init__(self, ex, exchange_name: str = ""):
+    def __init__(self, ex, exchange_name: str = "", margin_type: str = "isolated"):
         self.exchange = ex
         self._exchange_name = exchange_name.lower()
+        self._margin_type = margin_type.lower()   # "isolated" | "cross"
         self._leverage_cache: dict = {}  # symbol → leverage
+
+    @property
+    def _open_type(self) -> int:
+        """MEXC openType: 1=isolated, 2=cross"""
+        return 1 if self._margin_type == "isolated" else 2
 
     async def set_leverage(self, symbol, leverage):
         self._leverage_cache[symbol] = leverage
         try:
             if self._exchange_name == "mexc":
-                # MEXC: openType=1 (isolated), positionType=1 (long) ve positionType=2 (short) için ayrı
-                await self.exchange.set_leverage(leverage, symbol, params={"openType": 1, "positionType": 1})
-                await self.exchange.set_leverage(leverage, symbol, params={"openType": 1, "positionType": 2})
+                # MEXC: openType=1/2 (isolated/cross), positionType=1 (long) ve 2 (short)
+                await self.exchange.set_leverage(leverage, symbol, params={"openType": self._open_type, "positionType": 1})
+                await self.exchange.set_leverage(leverage, symbol, params={"openType": self._open_type, "positionType": 2})
             else:
                 await self.exchange.set_leverage(leverage, symbol)
         except Exception as e:
@@ -52,10 +58,10 @@ class _ExClient:
             "vol": int(amount),
             "leverage": int(leverage),
             "side": mexc_side,
-            "type": 5,      # market order
-            "openType": 1,  # isolated
+            "type": 5,                  # market order
+            "openType": self._open_type, # isolated=1, cross=2
         }
-        print(f"[ExClient] MEXC market order: {order_body}")
+        print(f"[ExClient] MEXC market order ({self._margin_type}): {order_body}")
         resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
         print(f"[ExClient] MEXC order response: {resp}")
         order_id = str(resp.get("data", resp.get("orderId", "")))
@@ -67,7 +73,7 @@ class _ExClient:
                 "vol": int(amount),
                 "leverage": int(leverage),
                 "side": close_side,
-                "openType": 1,
+                "openType": self._open_type,
                 "triggerPrice": round(float(tp_price), 2),
                 "triggerType": 1 if is_long else 2,  # long TP: >= tp_price; short TP: <= tp_price
                 "executeCycle": 2,   # 7 gün geçerli
@@ -87,7 +93,7 @@ class _ExClient:
                 "vol": int(amount),
                 "leverage": int(leverage),
                 "side": close_side,
-                "openType": 1,
+                "openType": self._open_type,
                 "triggerPrice": round(float(sl_price), 2),
                 "triggerType": 2 if is_long else 1,  # long SL: <= sl_price; short SL: >= sl_price
                 "executeCycle": 2,
@@ -171,7 +177,7 @@ class _ExClient:
         await self.exchange.close()
 
 
-async def _get_exchange_client(exchange: str):
+async def _get_exchange_client(exchange: str, margin_type: str = "isolated"):
     """Redis'teki kullanıcı API key'leri ile doğru exchange client oluşturur."""
     redis = get_redis()
     raw = await redis.get(f"exchange_keys:default:{exchange}")
@@ -181,7 +187,7 @@ async def _get_exchange_client(exchange: str):
             exchange,
             keys["api_key"], keys["secret"], keys.get("passphrase", "")
         )
-        return _ExClient(ex, exchange_name=exchange)
+        return _ExClient(ex, exchange_name=exchange, margin_type=margin_type)
     # Redis'te key yoksa bitget için module singleton, diğerleri için hata
     if exchange == "bitget":
         return bitget
@@ -246,7 +252,8 @@ async def list_bots():
 async def create_bot(data: BotCreate):
     try:
         async with async_session() as session:
-            effective_params = data.params or data.strategy_params or {}
+            # params (margin_type gibi bot ayarları) + strategy_params (strateji özel) merge
+            effective_params = {**(data.strategy_params or {}), **(data.params or {})}
             if data.tp_pct is not None:
                 effective_params["tp_pct"] = data.tp_pct
             if data.sl_pct is not None:
@@ -342,7 +349,8 @@ async def start_bot(bot_id: int):
             "params": json.loads(bot.params) if bot.params else {},
         }
 
-        exchange_client = await _get_exchange_client(bot.exchange or "bitget")
+        margin_type = config["params"].get("margin_type", "isolated")
+        exchange_client = await _get_exchange_client(bot.exchange or "bitget", margin_type=margin_type)
         engine = BotEngine(config, exchange_client)
         _running_bots[bot_id] = engine
 
@@ -756,7 +764,8 @@ async def restart_bot(bot_id: int):
         "params": json.loads(bot.params) if bot.params else {},
     }
 
-    exchange_client = await _get_exchange_client(bot.exchange or "bitget")
+    margin_type = config["params"].get("margin_type", "isolated")
+    exchange_client = await _get_exchange_client(bot.exchange or "bitget", margin_type=margin_type)
     engine = BotEngine(config, exchange_client)
     _running_bots[bot_id] = engine
 

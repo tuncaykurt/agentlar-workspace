@@ -325,6 +325,7 @@ const defaultForm = () => ({
   exchange: "mexc",
   paper_mode: true,
   leverage: 10,
+  margin_type: "isolated" as "isolated" | "cross",
   risk_mode: "pct" as "pct" | "usdt",   // % veya sabit USDT
   risk_per_trade: 1,      // risk_mode=pct → %, risk_mode=usdt → USDT tutarı
   max_daily_loss: 5,      // %
@@ -1128,6 +1129,7 @@ export default function BotsPage() {
       sl_pct: f.sl_pct,
       trailing_sl: f.trailing_sl,
       order_type: f.order_type,
+      params: { margin_type: f.margin_type },
       strategy_params: useCustomSig
         ? { signal_source: sigSrc, ...Object.fromEntries(
             Object.entries(f.strategy_params).filter(([k]) =>
@@ -1206,8 +1208,9 @@ export default function BotsPage() {
       sl_pct: p.sl_pct || 0,
       trailing_sl: p.trailing_sl || false,
       order_type: (p.order_type || "market") as "market" | "limit",
+      margin_type: (p.margin_type || "isolated") as "isolated" | "cross",
       strategy_params: Object.fromEntries(
-        Object.entries(p).filter(([k]) => !["tp_pct", "sl_pct", "trailing_sl", "_strategy_display", "order_type"].includes(k))
+        Object.entries(p).filter(([k]) => !["tp_pct", "sl_pct", "trailing_sl", "_strategy_display", "order_type", "margin_type"].includes(k))
       ),
     })
     setStep(0)
@@ -1798,10 +1801,25 @@ export default function BotsPage() {
                     </>
                   ) : (
                     <>
-                      {/* Kaldıraç */}
-                      <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30">
-                        <p className="text-sm font-medium text-slate-300 mb-4">Kaldıraç</p>
+                      {/* Kaldıraç & Marjin Tipi */}
+                      <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-slate-300">Kaldıraç</p>
+                          <div className="flex rounded-lg overflow-hidden border border-slate-700 text-xs">
+                            <button
+                              onClick={() => set("margin_type", "isolated" as "isolated" | "cross")}
+                              className={`px-3 py-1.5 transition-colors ${form.margin_type === "isolated" ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-400 hover:text-white"}`}
+                            >Isolated</button>
+                            <button
+                              onClick={() => set("margin_type", "cross" as "isolated" | "cross")}
+                              className={`px-3 py-1.5 transition-colors ${form.margin_type === "cross" ? "bg-orange-600 text-white" : "bg-slate-900 text-slate-400 hover:text-white"}`}
+                            >Cross</button>
+                          </div>
+                        </div>
                         <LeverageSlider value={form.leverage} onChange={v => set("leverage", v)} />
+                        {form.margin_type === "cross" && (
+                          <p className="text-[10px] text-orange-400/80">⚠ Cross marjin: tüm bakiye teminat olarak kullanılır, tasfiye riski yüksektir.</p>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -1868,7 +1886,7 @@ export default function BotsPage() {
                       { label: "Strateji",   value: selectedStrategy.name,                   icon: selectedStrategy.icon },
                       { label: "Borsa",      value: form.exchange.toUpperCase(),             icon: "🏦" },
                       { label: "Sembol",     value: fmtSymbol(form.symbol),                       icon: "🪙" },
-                      { label: "Kaldıraç",   value: `${form.leverage}x`,                   icon: "⚡" },
+                      { label: "Kaldıraç",   value: `${form.leverage}x ${form.margin_type === "isolated" ? "Isolated" : "Cross"}`, icon: "⚡" },
                       { label: "Bakiye",     value: `$${form.initial_balance.toLocaleString()}`, icon: "💵" },
                       { label: "TP / SL",    value: `${form.tp_pct}% / ${form.sl_pct}%`,   icon: "🎯" },
                       { label: "Emir Türü",  value: form.order_type === "market" ? "Market" : "Limit", icon: "📋" },
