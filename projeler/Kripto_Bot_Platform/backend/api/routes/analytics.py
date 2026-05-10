@@ -598,3 +598,21 @@ async def suggest_tp_sl(
         },
         "reasoning": reasoning,
     }
+
+
+@router.delete("/analytics/clear-signals")
+async def clear_all_signals(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Tüm sinyal kayıtlarını siler — temiz başlangıç için admin aracı.
+    Gerçek sinyaller geldikçe yeniden dolar.
+    """
+    result = await db.execute(select(func.count()).select_from(SignalLog))
+    count_before = result.scalar() or 0
+
+    await db.execute(text("DELETE FROM signal_logs"))
+    await db.commit()
+
+    return {
+        "deleted": count_before,
+        "message": f"{count_before} sinyal kaydı silindi. Tablo temizlendi.",
+    }
