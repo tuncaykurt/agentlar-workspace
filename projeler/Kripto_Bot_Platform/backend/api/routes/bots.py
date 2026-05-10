@@ -35,33 +35,71 @@ class _ExClient:
 
     async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None):
         """
-        CCXT MEXC, takeProfitPrice/stopLossPrice'ı create_order'da geçirmiyor.
-        Direkt MEXC contract API'yi çağırıyoruz: /api/v1/private/order/submit
-        side: "buy"=open long (1), "sell"=open short (3)
-        type: 5=market
-        openType: 1=isolated
+        MEXC futures: market order aç, sonra planorder/place ile TP/SL trigger order koy.
+        CCXT MEXC create_order'da takeProfitPrice/stopLossPrice desteklenmiyor.
+        side: "buy"=open long, "sell"=open short
         """
         # ETH/USDT:USDT → ETH_USDT
         mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
-        mexc_side = 1 if side.lower() == "buy" else 3  # 1=open long, 3=open short
-        body = {
+        is_long = side.lower() == "buy"
+        mexc_side = 1 if is_long else 3  # 1=open long, 3=open short
+        close_side = 2 if is_long else 4  # 2=close long, 4=close short
+
+        # 1. Market order aç (TP/SL olmadan)
+        order_body = {
             "symbol": mexc_symbol,
-            "price": entry_price if entry_price else 0,  # MEXC market order için optional ama 0 TP/SL validation'ı bozabilir
+            "price": 0,
             "vol": int(amount),
             "leverage": int(leverage),
             "side": mexc_side,
-            "type": 5,       # market order
-            "openType": 1,   # isolated
+            "type": 5,      # market order
+            "openType": 1,  # isolated
         }
-        if tp_price:
-            body["takeProfitPrice"] = round(float(tp_price), 2)
-        if sl_price:
-            body["stopLossPrice"] = round(float(sl_price), 2)
-        print(f"[ExClient] MEXC direct order: {body}")
-        resp = await self.exchange.contractPrivatePostOrderSubmit(body)
-        print(f"[ExClient] MEXC direct order response: {resp}")
-        # CCXT benzeri dict döndür
+        print(f"[ExClient] MEXC market order: {order_body}")
+        resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
+        print(f"[ExClient] MEXC order response: {resp}")
         order_id = str(resp.get("data", resp.get("orderId", "")))
+
+        # 2. TP trigger order (triggerType=1: fiyat >= triggerPrice olunca market'e sat)
+        if tp_price:
+            tp_body = {
+                "symbol": mexc_symbol,
+                "vol": int(amount),
+                "leverage": int(leverage),
+                "side": close_side,
+                "openType": 1,
+                "triggerPrice": round(float(tp_price), 2),
+                "triggerType": 1 if is_long else 2,  # long TP: >= tp_price; short TP: <= tp_price
+                "executeCycle": 2,   # 7 gün geçerli
+                "orderType": 5,      # trigger tetiklenince market order
+                "trend": 1,          # latest price
+            }
+            try:
+                tp_resp = await self.exchange.contractPrivatePostPlanorderPlace(tp_body)
+                print(f"[ExClient] MEXC TP planorder: {tp_resp}")
+            except Exception as e:
+                print(f"[ExClient] MEXC TP planorder hatası: {e}")
+
+        # 3. SL trigger order (triggerType=2: fiyat <= triggerPrice olunca market'e sat)
+        if sl_price:
+            sl_body = {
+                "symbol": mexc_symbol,
+                "vol": int(amount),
+                "leverage": int(leverage),
+                "side": close_side,
+                "openType": 1,
+                "triggerPrice": round(float(sl_price), 2),
+                "triggerType": 2 if is_long else 1,  # long SL: <= sl_price; short SL: >= sl_price
+                "executeCycle": 2,
+                "orderType": 5,
+                "trend": 1,
+            }
+            try:
+                sl_resp = await self.exchange.contractPrivatePostPlanorderPlace(sl_body)
+                print(f"[ExClient] MEXC SL planorder: {sl_resp}")
+            except Exception as e:
+                print(f"[ExClient] MEXC SL planorder hatası: {e}")
+
         return {"id": order_id, "status": "open", "info": resp}
 
     async def place_order(self, symbol, side, amount, order_type="market", price=None,
