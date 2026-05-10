@@ -33,7 +33,7 @@ class _ExClient:
         except Exception as e:
             print(f"[ExClient] set_leverage uyarısı ({self._exchange_name}): {e}")
 
-    async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None):
+    async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None):
         """
         CCXT MEXC, takeProfitPrice/stopLossPrice'ı create_order'da geçirmiyor.
         Direkt MEXC contract API'yi çağırıyoruz: /api/v1/private/order/submit
@@ -46,23 +46,17 @@ class _ExClient:
         mexc_side = 1 if side.lower() == "buy" else 3  # 1=open long, 3=open short
         body = {
             "symbol": mexc_symbol,
-            "price": 0,
-            "vol": amount,
-            "leverage": leverage,
+            "price": entry_price if entry_price else 0,  # MEXC market order için optional ama 0 TP/SL validation'ı bozabilir
+            "vol": int(amount),
+            "leverage": int(leverage),
             "side": mexc_side,
             "type": 5,       # market order
             "openType": 1,   # isolated
         }
         if tp_price:
-            try:
-                body["takeProfitPrice"] = float(self.exchange.price_to_precision(symbol, tp_price))
-            except Exception:
-                body["takeProfitPrice"] = round(tp_price, 2)
+            body["takeProfitPrice"] = round(float(tp_price), 2)
         if sl_price:
-            try:
-                body["stopLossPrice"] = float(self.exchange.price_to_precision(symbol, sl_price))
-            except Exception:
-                body["stopLossPrice"] = round(sl_price, 2)
+            body["stopLossPrice"] = round(float(sl_price), 2)
         print(f"[ExClient] MEXC direct order: {body}")
         resp = await self.exchange.contractPrivatePostOrderSubmit(body)
         print(f"[ExClient] MEXC direct order response: {resp}")
@@ -74,7 +68,7 @@ class _ExClient:
                           tp_price=None, sl_price=None, pos_side=None):
         if self._exchange_name == "mexc":
             leverage = self._leverage_cache.get(symbol, 10)
-            return await self._mexc_place_order_direct(symbol, side, amount, leverage, tp_price, sl_price)
+            return await self._mexc_place_order_direct(symbol, side, amount, leverage, tp_price, sl_price, entry_price=price)
 
         params = self._build_order_params(tp_price, sl_price, pos_side)
         try:
@@ -584,9 +578,9 @@ async def test_order(data: TestOrderRequest):
         steps.append(f"✓ TP={tp_price} SL={sl_price} (%{tp_pct}/%{sl_pct})")
 
         # Order aç
-        steps.append(f"→ Order açılıyor: {side.upper()} {amount} {symbol} @ market")
+        steps.append(f"→ Order açılıyor: {side.upper()} {amount} {symbol} @ market (entry_price={price})")
         order = await ex_client.place_order(
-            symbol, side, amount, "market",
+            symbol, side, amount, "market", price=price,
             tp_price=tp_price, sl_price=sl_price,
         )
         order_id = order.get("id", "N/A")
