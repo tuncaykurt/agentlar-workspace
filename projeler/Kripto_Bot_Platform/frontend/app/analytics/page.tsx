@@ -523,34 +523,34 @@ export default function AnalyticsPage() {
                   {
                     label: "Gelen Toplam Sinyal",
                     val: totalSignals,
-                    desc: "TradingView'den alınan ham sinyaller",
+                    desc: "TradingView'den al\u0131nan ham sinyaller",
                     bg: "bg-gradient-to-r from-blue-600/40 to-blue-400/20",
                     border: "border-blue-500/50",
                     text: "text-blue-200",
-                    icon: "📥",
+                    icon: "\uD83D\uDCE5",
                     width: 100
                   },
-                  {
-                    label: "Reddedilen (Akıllı Koruma)",
+                  blockedCount > 0 && {
+                    label: "Reddedilen (Ak\u0131ll\u0131 Koruma)",
                     val: blockedCount,
-                    desc: "Filtreler tarafından engellendi",
+                    desc: "Filtreler taraf\u0131ndan engellendi",
                     bg: "bg-gradient-to-r from-red-600/40 to-red-400/20",
                     border: "border-red-500/50",
                     text: "text-red-200",
-                    icon: "🛡️",
+                    icon: "\uD83D\uDEE1\uFE0F",
                     width: (blockedCount / totalSignals) * 100
                   },
-                  {
-                    label: "Onaylanan (İşleme Alındı)",
+                  executedCount > 0 && {
+                    label: "Onaylanan (\u0130\u015Fleme Al\u0131nd\u0131)",
                     val: executedCount,
-                    desc: "Piyasada aktif pozisyona dönüştü",
+                    desc: "Piyasada aktif pozisyona d\u00F6n\u00FC\u015Ft\u00FC",
                     bg: "bg-gradient-to-r from-green-600/40 to-green-400/20",
                     border: "border-green-500/50",
                     text: "text-green-200",
-                    icon: "✅",
+                    icon: "\u2705",
                     width: (executedCount / totalSignals) * 100
                   },
-                ].map((row, idx) => (
+                ].filter(Boolean).map((row: any, idx: number) => (
                   <div key={row.label} className="relative group">
                     {idx > 0 && (
                       <div className="absolute -top-6 left-8 w-px h-6 bg-slate-700/50" />
@@ -572,7 +572,9 @@ export default function AnalyticsPage() {
                         </div>
                         <div className="text-right">
                           <div className="text-2xl font-bold text-white drop-shadow-md">{row.val}</div>
-                          <div className={`text-xs font-medium ${row.text} mt-0.5`}>%{row.width.toFixed(1)}</div>
+                          {row.width > 0 && row.width < 100 && (
+                            <div className={`text-xs font-medium ${row.text} mt-0.5`}>%{row.width.toFixed(1)}</div>
+                          )}
                         </div>
                       </div>
                     </div>
