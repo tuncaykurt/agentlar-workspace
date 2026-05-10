@@ -336,6 +336,7 @@ async def tradingview_webhook(token: str, request: Request):
 
     # DB'ye sinyal logu kaydet — eşleşen botların TP/SL ayarlarıyla performans takibi
     passive_tasks = []   # pasif botlar için arka plan analiz görevleri
+    finalize_tasks = []  # önceki sinyalleri sonlandırma görevleri
 
     try:
         from core.database import async_session
@@ -410,6 +411,11 @@ async def tradingview_webhook(token: str, request: Request):
                         print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' pasif — analiz kuyruğa alındı")
                     else:
                         print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' aktif — engine işleyecek TP={tp_price} SL={sl_price}")
+                    
+                    # Önceki açık sinyali kapatma/analiz görevini ekle
+                    finalize_tasks.append((
+                        bot.id, symbol_ccxt or symbol_raw, token, price, bot.exchange or "mexc"
+                    ))
             else:
                 # Eşleşen bot yok — genel kayıt (bot_id=0)
                 log = SignalLog(
@@ -423,6 +429,11 @@ async def tradingview_webhook(token: str, request: Request):
                     raw_payload=json.dumps(body),
                 )
                 session.add(log)
+                
+                # Bot olmayan durum için de önceki açık sinyali kapat
+                finalize_tasks.append((
+                    0, symbol_ccxt or symbol_raw, token, price, "mexc"
+                ))
 
             await session.commit()
     except Exception as e:
@@ -431,10 +442,12 @@ async def tradingview_webhook(token: str, request: Request):
         traceback.print_exc()
 
     # Pasif bot analizlerini arka planda başlat (TradingView'e hemen 200 dön)
-    if passive_tasks:
-        from services.signal_analyzer import run_passive_analysis
+    if passive_tasks or finalize_tasks:
+        from services.signal_analyzer import run_passive_analysis, finalize_previous_signal
         for args in passive_tasks:
             asyncio.create_task(run_passive_analysis(*args))
+        for args in finalize_tasks:
+            asyncio.create_task(finalize_previous_signal(*args))
 
     return {
         "status": "ok",

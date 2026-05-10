@@ -184,3 +184,107 @@ async def run_passive_analysis(
             await exchange.close()
         except Exception:
             pass
+
+async def finalize_previous_signal(
+    bot_id: int,
+    symbol: str,
+    token: str,
+    new_signal_price: float,
+    bot_exchange: str = "mexc"
+):
+    """
+    Yeni sinyal geldiğinde, bir önceki sinyalin:
+    - Hala açıksa takibini sonlandırır (outcome='next_signal').
+    - İki sinyal arasındaki maksimum/minimum fiyat hareketini ve max_favorable_pct'yi hesaplar.
+    """
+    import ccxt.async_support as ccxt
+    from datetime import datetime
+    
+    now = datetime.utcnow()
+    
+    try:
+        async with async_session() as session:
+            # En sonki sinyali bul (yeni sinyal henüz DB'ye eklendiyse, kendisini bulmamak için id vs. kontrolü yapmalıyız. 
+            # Ya da biz bu fonksiyonu yeni sinyali kaydetmeden hemen önce/sonra çağıracağız. Eğer sonra çağırırsak, created_at < now gibi bir filtre ile de alabiliriz.
+            # En güvenlisi, outcome='open' olan en son sinyali veya genel olarak önceki sinyali bulmak.
+            # Şimdilik sadece bot_id ve sembole ait EN SON sinyali getirelim (fakat yeni sinyal eklendiyse ondan bir öncekini).
+            # Bunun yerine, outcome='open' olan TÜM önceki sinyalleri kapatmak daha mantıklı.
+            query = select(SignalLog).where(
+                SignalLog.symbol == symbol,
+                SignalLog.outcome == "open"
+            )
+            if bot_id == 0:
+                query = query.where(SignalLog.bot_id == 0, SignalLog.raw_payload.contains(token))
+            else:
+                query = query.where(SignalLog.bot_id == bot_id)
+                
+            result = await session.execute(query)
+            open_signals = result.scalars().all()
+            
+            if not open_signals:
+                return
+                
+        exchange_map = {
+            "bitget":  lambda: ccxt.bitget({"options": {"defaultType": "swap"}}),
+            "mexc":    lambda: ccxt.mexc({"options": {"defaultType": "swap"}}),
+            "binance": lambda: ccxt.binance({"options": {"defaultType": "future"}}),
+            "bybit":   lambda: ccxt.bybit({"options": {"defaultType": "swap"}}),
+        }
+        exchange = exchange_map.get(bot_exchange or "mexc", exchange_map["mexc"])()
+
+        try:
+            for sig in open_signals:
+                start_ts = int(sig.created_at.timestamp() * 1000) if sig.created_at else None
+                if not start_ts:
+                    continue
+
+                # OHLCV verisi çek (5m kullanarak limitleri aşmamaya çalışalım)
+                ohlcv = []
+                try:
+                    ohlcv = await asyncio.wait_for(
+                        exchange.fetch_ohlcv(symbol, "5m", since=start_ts, limit=1000),
+                        timeout=15
+                    )
+                except Exception as e:
+                    print(f"[SignalAnalyzer] finalize_previous_signal OHLCV hatası: {e}")
+
+                max_p = new_signal_price
+                min_p = new_signal_price
+
+                if ohlcv:
+                    highs = [candle[2] for candle in ohlcv]
+                    lows = [candle[3] for candle in ohlcv]
+                    if highs: max_p = max(highs)
+                    if lows:  min_p = min(lows)
+
+                max_fav_pct = 0
+                pnl_pct = 0
+                if sig.price and sig.price > 0:
+                    if sig.signal_type == "buy":
+                        max_fav_pct = round((max_p - sig.price) / sig.price * 100, 2)
+                        pnl_pct = round((new_signal_price - sig.price) / sig.price * 100, 2)
+                    else:
+                        max_fav_pct = round((sig.price - min_p) / sig.price * 100, 2)
+                        pnl_pct = round((sig.price - new_signal_price) / sig.price * 100, 2)
+
+                async with async_session() as session:
+                    await session.execute(
+                        update(SignalLog).where(SignalLog.id == sig.id).values(
+                            outcome="next_signal",
+                            outcome_price=new_signal_price,
+                            outcome_pnl_pct=pnl_pct,
+                            outcome_at=now,
+                            max_price_in_range=max_p,
+                            min_price_in_range=min_p,
+                            max_favorable_pct=max_fav_pct
+                        )
+                    )
+                    await session.commit()
+                    print(f"[SignalAnalyzer] Önceki sinyal kapatıldı #{sig.id}: PnL={pnl_pct}%, MaxFavorable={max_fav_pct}%")
+
+        finally:
+            await exchange.close()
+
+    except Exception as e:
+        print(f"[SignalAnalyzer] finalize_previous_signal genel hata: {e}")
+
