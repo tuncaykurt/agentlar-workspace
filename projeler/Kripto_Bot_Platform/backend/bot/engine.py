@@ -970,7 +970,8 @@ class BotEngine:
             sig_key = sym_key
 
         # 2) TradingView webhook token bazlı anahtar (sadece tradingview_webhook stratejisi)
-        if sig is None and self.config.get("strategy") == "tradingview_webhook":
+        is_tv_webhook = self.config.get("strategy") == "tradingview_webhook" or params.get("_strategy_display") == "tradingview_webhook"
+        if sig is None and is_tv_webhook:
             token = params.get("webhook_token") or params.get("signal_source", "")
             if token and not token.startswith("builtin") and not token.startswith("custom__"):
                 tv_key = f"tv_webhook:{token}"

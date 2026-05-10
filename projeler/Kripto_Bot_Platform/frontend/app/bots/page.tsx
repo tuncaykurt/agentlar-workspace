@@ -451,9 +451,6 @@ function Toggle({ checked, onChange, label }: {
 
 // ─── TradingView Webhook Kurulum Kartı ───────────────────────────────────────
 // TradingView yalnızca 80 ve 443 portlarını kabul eder — nginx port 80'de dinliyor
-const TV_SERVER = typeof window !== "undefined"
-  ? `${window.location.protocol}//${window.location.hostname}`
-  : ""
 
 function TradingViewWebhookCard({
   token, onTokenInit, direction, onDirection, signalTimeframe, onSignalTimeframe, isEditing,
@@ -468,21 +465,33 @@ function TradingViewWebhookCard({
 }) {
   const [copied, setCopied] = useState<"url"|"json"|null>(null)
   const [alarmType, setAlarmType] = useState<"indicator"|"strategy">("indicator")
+  const [tvServer, setTvServer] = useState("")
+
+  useEffect(() => {
+    setTvServer(`${window.location.protocol}//${window.location.hostname}`)
+  }, [])
 
   const generateToken = () => {
-    const t = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map(b => b.toString(16).padStart(2, "0")).join("")
+    let t = "";
+    if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+      t = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map(b => b.toString(16).padStart(2, "0")).join("")
+    } else {
+      t = Array.from({ length: 16 })
+        .map(() => Math.floor(Math.random() * 256).toString(16).padStart(2, "0"))
+        .join("")
+    }
     onTokenInit(t)
   }
 
-  // Düzenleme modunda token korunur, yeni botta token yoksa oluştur
+  // Token yoksa oluştur (Düzenleme modunda token yoksa bile oluşturulmalı)
   useEffect(() => {
-    if (!token && !isEditing) {
+    if (!token) {
       generateToken()
     }
-  }, [])
+  }, [token])
 
-  const webhookUrl = `${TV_SERVER}/api/signals/webhook/tv/${token}`
+  const webhookUrl = `${tvServer}/api/signals/webhook/tv/${token}`
 
   // Botun yönüne göre action belirleme
   const actionForIndicator = direction === "sell_only" ? "sell" : "buy"
