@@ -684,6 +684,223 @@ async def test_order(data: TestOrderRequest):
                 pass
 
 
+@router.post("/test-tpsl-methods")
+async def test_tpsl_methods(data: TestOrderRequest):
+    """
+    MEXC TP/SL yöntemlerini test eder:
+    1) Order body'de takeProfitPrice/stopLossPrice
+    2) Pozisyon açtıktan sonra changeTakeProfitStopLoss (profitTrend/lossTrend ile)
+    3) Pozisyon açtıktan sonra changeTakeProfitStopLoss (profitTrend/lossTrend olmadan)
+    4) Trigger order (stop-limit) yöntemi
+    """
+    import traceback
+    exchange  = data.exchange
+    symbol    = data.symbol
+    side      = data.side
+    size_usdt = data.size_usdt
+    leverage  = data.leverage
+    tp_pct    = data.tp_pct
+    sl_pct    = data.sl_pct
+
+    results = {}
+    ex_client = None
+    try:
+        ex_client = await _get_exchange_client(exchange, margin_type=data.margin_type)
+        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=30)
+        ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(symbol), timeout=15)
+        price = float(ticker["last"])
+        await ex_client.set_leverage(symbol, leverage)
+
+        market = ex_client.exchange.market(symbol)
+        contract_size = float(market.get("contractSize", 1) or 1)
+        notional = size_usdt * leverage
+        amount = max(1, int(notional / (price * contract_size)))
+
+        is_long = side == "buy"
+        tp_price = round(price * (1 + tp_pct / 100), 2) if is_long else round(price * (1 - tp_pct / 100), 2)
+        sl_price = round(price * (1 - sl_pct / 100), 2) if is_long else round(price * (1 + sl_pct / 100), 2)
+
+        mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
+        mexc_side = 1 if is_long else 3
+        open_type = 1 if data.margin_type == "isolated" else 2
+
+        results["setup"] = {
+            "price": price, "tp_price": tp_price, "sl_price": sl_price,
+            "amount": amount, "mexc_symbol": mexc_symbol, "side": mexc_side,
+            "open_type": open_type,
+        }
+
+        # ──────────────────────────────────────────────────────
+        # YÖNTEM 1: Order body'de TP/SL
+        # ──────────────────────────────────────────────────────
+        try:
+            body1 = {
+                "symbol": mexc_symbol, "price": 0, "vol": amount,
+                "leverage": leverage, "side": mexc_side, "type": 5,
+                "openType": open_type,
+                "takeProfitPrice": tp_price, "stopLossPrice": sl_price,
+            }
+            resp1 = await ex_client.exchange.contractPrivatePostOrderSubmit(body1)
+            order_id_1 = resp1.get("data", "")
+            results["method1_order_body"] = {"success": True, "order_id": order_id_1, "resp": str(resp1)}
+
+            # Pozisyon bilgisi — TP/SL var mı kontrol
+            await asyncio.sleep(2)
+            pos_resp = await ex_client.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+            pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
+            pos_type = 1 if is_long else 2
+            for pos in (pos_data or []):
+                if int(pos.get("positionType", 0)) == pos_type and float(pos.get("holdVol", 0)) > 0:
+                    results["method1_position"] = {
+                        "positionId": pos.get("positionId"),
+                        "holdVol": pos.get("holdVol"),
+                        "takeProfitPrice": pos.get("takeProfitPrice"),
+                        "stopLossPrice": pos.get("stopLossPrice"),
+                        "openAvgPrice": pos.get("openAvgPrice"),
+                        "all_keys": list(pos.keys()),
+                    }
+                    break
+
+            # Pozisyonu kapat (temizlik)
+            close_side = 2 if is_long else 4
+            await ex_client.exchange.contractPrivatePostOrderSubmit({
+                "symbol": mexc_symbol, "price": 0, "vol": amount,
+                "leverage": leverage, "side": close_side, "type": 5, "openType": open_type,
+            })
+            await asyncio.sleep(1)
+        except Exception as e:
+            results["method1_order_body"] = {"success": False, "error": str(e), "tb": traceback.format_exc()[-400:]}
+
+        # ──────────────────────────────────────────────────────
+        # YÖNTEM 2: Önce order (TP/SL'siz), sonra changeTakeProfitStopLoss (profitTrend/lossTrend ile)
+        # ──────────────────────────────────────────────────────
+        try:
+            body2 = {
+                "symbol": mexc_symbol, "price": 0, "vol": amount,
+                "leverage": leverage, "side": mexc_side, "type": 5, "openType": open_type,
+            }
+            resp2 = await ex_client.exchange.contractPrivatePostOrderSubmit(body2)
+            order_id_2 = resp2.get("data", "")
+            results["method2_order"] = {"success": True, "order_id": order_id_2}
+
+            await asyncio.sleep(2)
+            # PositionId al
+            pos_resp2 = await ex_client.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+            pos_data2 = pos_resp2.get("data", []) if isinstance(pos_resp2, dict) else pos_resp2
+            position_id = None
+            for pos in (pos_data2 or []):
+                if int(pos.get("positionType", 0)) == pos_type and float(pos.get("holdVol", 0)) > 0:
+                    position_id = int(pos.get("positionId", 0))
+                    break
+
+            if position_id:
+                tpsl_body2 = {
+                    "symbol": mexc_symbol,
+                    "positionId": position_id,
+                    "takeProfitPrice": tp_price,
+                    "stopLossPrice": sl_price,
+                    "profitTrend": 1 if is_long else 2,
+                    "lossTrend": 2 if is_long else 1,
+                }
+                try:
+                    tpsl_resp2 = await ex_client.exchange.contractPrivatePostPositionChangeTakeProfitStopLoss(tpsl_body2)
+                    results["method2_tpsl"] = {"success": True, "resp": str(tpsl_resp2), "body": tpsl_body2}
+                except Exception as e2:
+                    results["method2_tpsl"] = {"success": False, "error": str(e2), "body": tpsl_body2}
+
+                # Pozisyon kontrolü
+                await asyncio.sleep(1)
+                pos_resp2b = await ex_client.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+                pos_data2b = pos_resp2b.get("data", []) if isinstance(pos_resp2b, dict) else pos_resp2b
+                for pos in (pos_data2b or []):
+                    if int(pos.get("positionType", 0)) == pos_type and float(pos.get("holdVol", 0)) > 0:
+                        results["method2_position"] = {
+                            "positionId": pos.get("positionId"),
+                            "takeProfitPrice": pos.get("takeProfitPrice"),
+                            "stopLossPrice": pos.get("stopLossPrice"),
+                        }
+                        break
+            else:
+                results["method2_tpsl"] = {"success": False, "error": "positionId bulunamadı"}
+
+            # Kapat
+            await ex_client.exchange.contractPrivatePostOrderSubmit({
+                "symbol": mexc_symbol, "price": 0, "vol": amount,
+                "leverage": leverage, "side": close_side, "type": 5, "openType": open_type,
+            })
+            await asyncio.sleep(1)
+        except Exception as e:
+            results["method2_order"] = {"success": False, "error": str(e), "tb": traceback.format_exc()[-400:]}
+
+        # ──────────────────────────────────────────────────────
+        # YÖNTEM 3: changeTakeProfitStopLoss profitTrend/lossTrend OLMADAN
+        # ──────────────────────────────────────────────────────
+        try:
+            body3 = {
+                "symbol": mexc_symbol, "price": 0, "vol": amount,
+                "leverage": leverage, "side": mexc_side, "type": 5, "openType": open_type,
+            }
+            resp3 = await ex_client.exchange.contractPrivatePostOrderSubmit(body3)
+            results["method3_order"] = {"success": True, "order_id": resp3.get("data", "")}
+
+            await asyncio.sleep(2)
+            pos_resp3 = await ex_client.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+            pos_data3 = pos_resp3.get("data", []) if isinstance(pos_resp3, dict) else pos_resp3
+            position_id3 = None
+            for pos in (pos_data3 or []):
+                if int(pos.get("positionType", 0)) == pos_type and float(pos.get("holdVol", 0)) > 0:
+                    position_id3 = int(pos.get("positionId", 0))
+                    break
+
+            if position_id3:
+                tpsl_body3 = {
+                    "symbol": mexc_symbol,
+                    "positionId": position_id3,
+                    "takeProfitPrice": tp_price,
+                    "stopLossPrice": sl_price,
+                }
+                try:
+                    tpsl_resp3 = await ex_client.exchange.contractPrivatePostPositionChangeTakeProfitStopLoss(tpsl_body3)
+                    results["method3_tpsl"] = {"success": True, "resp": str(tpsl_resp3), "body": tpsl_body3}
+                except Exception as e3:
+                    results["method3_tpsl"] = {"success": False, "error": str(e3), "body": tpsl_body3}
+
+                # Pozisyon kontrolü
+                await asyncio.sleep(1)
+                pos_resp3b = await ex_client.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+                pos_data3b = pos_resp3b.get("data", []) if isinstance(pos_resp3b, dict) else pos_resp3b
+                for pos in (pos_data3b or []):
+                    if int(pos.get("positionType", 0)) == pos_type and float(pos.get("holdVol", 0)) > 0:
+                        results["method3_position"] = {
+                            "positionId": pos.get("positionId"),
+                            "takeProfitPrice": pos.get("takeProfitPrice"),
+                            "stopLossPrice": pos.get("stopLossPrice"),
+                        }
+                        break
+            else:
+                results["method3_tpsl"] = {"success": False, "error": "positionId bulunamadı"}
+
+            # Kapat
+            await ex_client.exchange.contractPrivatePostOrderSubmit({
+                "symbol": mexc_symbol, "price": 0, "vol": amount,
+                "leverage": leverage, "side": close_side, "type": 5, "openType": open_type,
+            })
+            await asyncio.sleep(1)
+        except Exception as e:
+            results["method3_order"] = {"success": False, "error": str(e), "tb": traceback.format_exc()[-400:]}
+
+        return results
+
+    except Exception as e:
+        return {"error": str(e), "traceback": traceback.format_exc()[-800:], "partial_results": results}
+    finally:
+        if ex_client:
+            try:
+                await ex_client.close()
+            except Exception:
+                pass
+
+
 @router.get("/{bot_id}/position")
 async def get_bot_position(bot_id: int):
     """Borsadan canlı pozisyon ve fiyat bilgisi döndürür (engine'den bağımsız)."""
