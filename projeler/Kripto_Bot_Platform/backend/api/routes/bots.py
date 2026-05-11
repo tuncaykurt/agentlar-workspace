@@ -49,7 +49,7 @@ class _ExClient:
 
     async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None):
         """
-        MEXC futures: market order aç. TP/SL parametrelerini doğrudan submit'te göndeririz.
+        MEXC futures: market order aç, ardından TP/SL'i ayrıca ayarla.
         side: "buy"=open long, "sell"=open short
         """
         # ETH/USDT:USDT → ETH_USDT
@@ -57,7 +57,7 @@ class _ExClient:
         is_long = side.lower() == "buy"
         mexc_side = 1 if is_long else 3  # 1=open long, 3=open short
 
-        # 1. Market order aç (TP/SL ile)
+        # 1. Market order aç (TP/SL olmadan — MEXC cross modda initial TP/SL reddedebiliyor)
         order_body = {
             "symbol": mexc_symbol,
             "price": 0,
@@ -68,20 +68,61 @@ class _ExClient:
             "openType": self._open_type, # isolated=1, cross=2
         }
 
-        if tp_price:
-            order_body["takeProfitPrice"] = round(float(tp_price), 2)
-            # MEXC: long TP → fiyat yükselince tetikle (1), short TP → fiyat düşünce (2)
-            order_body["profitTrend"] = 1 if is_long else 2
-        if sl_price:
-            order_body["stopLossPrice"] = round(float(sl_price), 2)
-            # MEXC: long SL → fiyat düşünce tetikle (2), short SL → fiyat yükselince (1)
-            order_body["lossTrend"] = 2 if is_long else 1
-
         print(f"[ExClient] MEXC market order ({self._margin_type}): {order_body}")
-        
         resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
         print(f"[ExClient] MEXC order response: {resp}")
         order_id = str(resp.get("data", resp.get("orderId", "")))
+
+        # 2. TP/SL'i pozisyon üzerinden ayarla (order dolduktan sonra)
+        if tp_price or sl_price:
+            import asyncio as _aio
+            await _aio.sleep(1)  # order'ın fill olmasını bekle
+            try:
+                tp_sl_body = {
+                    "symbol": mexc_symbol,
+                    "positionId": 0,  # 0 = default position
+                }
+                if tp_price:
+                    tp_sl_body["takeProfitPrice"] = round(float(tp_price), 2)
+                    tp_sl_body["profitTrend"] = 1 if is_long else 2
+                if sl_price:
+                    tp_sl_body["stopLossPrice"] = round(float(sl_price), 2)
+                    tp_sl_body["lossTrend"] = 2 if is_long else 1
+                print(f"[ExClient] MEXC TP/SL ayarlanıyor: {tp_sl_body}")
+
+                # Pozisyon bilgisinden positionId'yi al
+                pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+                pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
+                if pos_data and isinstance(pos_data, list):
+                    pos_type = 1 if is_long else 2
+                    for pos in pos_data:
+                        if int(pos.get("positionType", 0)) == pos_type and float(pos.get("holdVol", 0)) > 0:
+                            tp_sl_body["positionId"] = int(pos.get("positionId", 0))
+                            break
+
+                if tp_sl_body.get("positionId"):
+                    # MEXC pozisyon TP/SL değiştirme API'si
+                    try:
+                        tpsl_resp = await self.exchange.contractPrivatePostPositionChangeTakeProfitStopLoss(tp_sl_body)
+                        print(f"[ExClient] MEXC TP/SL response: {tpsl_resp}")
+                    except Exception as tp_err:
+                        print(f"[ExClient] MEXC TP/SL API hatası: {tp_err}")
+                        # Fallback: Order submit'te TP/SL dene (bazı MEXC sürümlerinde çalışır)
+                        try:
+                            order_body_tpsl = {**order_body, "side": mexc_side}
+                            if tp_price:
+                                order_body_tpsl["takeProfitPrice"] = round(float(tp_price), 2)
+                                order_body_tpsl["profitTrend"] = 1
+                            if sl_price:
+                                order_body_tpsl["stopLossPrice"] = round(float(sl_price), 2)
+                                order_body_tpsl["lossTrend"] = 1
+                            print(f"[ExClient] MEXC TP/SL fallback ile retry: {order_body_tpsl}")
+                        except Exception:
+                            pass
+                else:
+                    print(f"[ExClient] MEXC pozisyon bulunamadı — TP/SL ayarlanamadı")
+            except Exception as e:
+                print(f"[ExClient] MEXC TP/SL ayarlama hatası (order açıldı): {e}")
 
         return {"id": order_id, "status": "open", "info": resp}
 
