@@ -23,7 +23,7 @@ SEARCH = settings.AI_SEARCH_MODEL      # perplexity — internet araştırması
 DEFAULT_PROMPTS = {
     "news_analysis": {
         "model": SEARCH,
-        "description": "Haber Filtresi — Perplexity ile güncel haber + ekonomik takvim analizi",
+        "description": "Haber Filtresi — Perplexity ile kripto haber + ekonomik takvim analizi",
         "prompt_text": """Sen kripto piyasa analisti ve risk yöneticisisin.
 
 Şu an {coin} için bir {signal_type} sinyali geldi. Fiyat üzerinde etkisi olabilecek güncel gelişmeleri analiz et.
@@ -31,16 +31,19 @@ DEFAULT_PROMPTS = {
 ═══ EKONOMİK TAKVİM (Yaklaşan Olaylar) ═══
 {events_text}
 
+═══ KRİPTO HABERLER (Son Gelişmeler) ═══
+{news_text}
+
 ═══ GÖREV ═══
-1. Bu olayların {coin} fiyatı üzerindeki olası etkisini değerlendir
-2. Şu an piyasada {signal_type} pozisyon açmak uygun mu?
-3. Güncel kripto piyasa ortamını değerlendir (volatilite, trend, sentiment)
+1. Ekonomik takvim olaylarının ve kripto haberlerinin {coin} fiyatı üzerindeki olası etkisini birlikte değerlendir
+2. Haberler ve ekonomik olaylar bu {signal_type} sinyalini destekliyor mu yoksa riske mi atıyor?
+3. Şu an piyasada {signal_type} pozisyon açmak uygun mu?
 
 JSON formatında cevap ver:
 {{
   "should_block": true/false,
   "risk_level": "low/medium/high/critical",
-  "reason": "2-3 cümle Türkçe açıklama",
+  "reason": "2-3 cümle Türkçe açıklama (hem haberleri hem takvimi değerlendir)",
   "news_summary": "Güncel piyasa durumu ve haberlerin 1 cümlelik özeti",
   "confidence": 0-100
 }}""",
@@ -162,8 +165,8 @@ async def _get_prompt(key: str) -> tuple[str, str]:
 
 async def ai_news_analysis(symbol: str, signal_type: str, upcoming_events: list[dict]) -> dict:
     """
-    Haber Filtresi — AI ile ekonomik olayların kripto etkisini analiz eder.
-    Perplexity (internet erişimli) kullanır: güncel haber + takvim analizi.
+    Haber Filtresi — AI ile ekonomik takvim + kripto haberleri birlikte analiz eder.
+    Perplexity (internet erişimli) kullanır.
     """
     if not _has_api_key():
         return {
@@ -174,6 +177,7 @@ async def ai_news_analysis(symbol: str, signal_type: str, upcoming_events: list[
 
     coin = symbol.split("/")[0]  # ETH/USDT:USDT → ETH
 
+    # Ekonomik takvim olayları
     events_text = ""
     if upcoming_events:
         for ev in upcoming_events[:5]:
@@ -181,11 +185,28 @@ async def ai_news_analysis(symbol: str, signal_type: str, upcoming_events: list[
     else:
         events_text = "  Yaklaşan önemli ekonomik olay yok.\n"
 
+    # Kripto haberleri
+    news_text = ""
+    try:
+        from services.crypto_news import fetch_crypto_news
+        crypto_news = await fetch_crypto_news(currency=coin, limit=10)
+        if crypto_news:
+            for n in crypto_news[:8]:
+                sentiment = n.get("sentiment", "neutral")
+                icon = "🟢" if sentiment == "bullish" else "🔴" if sentiment == "bearish" else "⚪"
+                source = n.get("source", "")
+                news_text += f"  {icon} {n.get('title','')} ({source}) [{sentiment}]\n"
+        else:
+            news_text = "  Güncel kripto haberi bulunamadı.\n"
+    except Exception as e:
+        news_text = f"  Haber servisi hatası: {str(e)[:60]}\n"
+
     prompt_template, model = await _get_prompt("news_analysis")
     prompt = prompt_template.format(
         coin=coin,
         signal_type=signal_type.upper(),
         events_text=events_text,
+        news_text=news_text,
     )
 
     try:

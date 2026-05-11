@@ -881,7 +881,7 @@ class BotEngine:
                     # 6a. Haber AI analizi (Perplexity — internet araştırması)
                     try:
                         from services.economic_calendar import get_upcoming_events
-                        upcoming = await get_upcoming_events(hours=12, impact="high")
+                        upcoming = await get_upcoming_events(hours=24)
                     except Exception:
                         upcoming = []
                     ai_tasks.append(("news", ai_news_analysis(
