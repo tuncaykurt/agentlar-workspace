@@ -196,11 +196,10 @@ class DataFetcher:
         3 katmanlı okuma:
         1. Redis cache → varsa anında döndür
         2. PostgreSQL → DB'den oku, Redis'e yaz
-        3. Borsa API → çek (Bitget → Binance fallback), DB + Redis'e yaz
+        3. Borsa API → sayfalı çek (Bitget V2 → Binance fallback), DB + Redis'e yaz
 
         Not: Cache key limit'ten bağımsız tutulur — tek anahtar, verimli cache.
         """
-        # Limit'ten bağımsız standart cache key
         cache_key = f"ohlcv:{self.exchange_name}:{symbol}:{timeframe}"
         redis = get_redis()
 
@@ -209,7 +208,8 @@ class DataFetcher:
             cached = await redis.get(cache_key)
             if cached:
                 all_cached = json.loads(cached)
-                return all_cached[-limit:] if len(all_cached) > limit else all_cached
+                if len(all_cached) >= limit * 0.9:  # Cache yeterliyse döndür
+                    return all_cached[-limit:] if len(all_cached) > limit else all_cached
         except Exception as e:
             print(f"[DataFetcher] Redis cache okunamadı ({symbol} {timeframe}): {e}")
 
@@ -221,19 +221,8 @@ class DataFetcher:
         except Exception as e:
             print(f"[DataFetcher] DB okunamadı ({symbol} {timeframe}): {e}")
 
-        # 3. Borsa API — Bitget CCXT → Bitget V2 direct → Binance fallback
-        exchange_candles = []
-        try:
-            exchange_candles = await self.exchange.exchange.fetch_ohlcv(
-                symbol, timeframe, limit=min(limit, 200),
-            )
-            print(f"[DataFetcher] Bitget'ten {len(exchange_candles)} mum alındı: {symbol} {timeframe}")
-        except Exception as e:
-            print(f"[DataFetcher] Bitget CCXT hatası ({symbol} {timeframe}): {e} — V2 direct deneniyor")
-            exchange_candles = await self._bitget_v2_direct(symbol, timeframe, limit)
-            if not exchange_candles:
-                print(f"[DataFetcher] Bitget V2 direct başarısız — Binance fallback deneniyor")
-                exchange_candles = await self._binance_fallback(symbol, timeframe, limit)
+        # 3. Borsa API — Sayfalı çekme (Bitget V2 direct önce, sonra fallback)
+        exchange_candles = await self._fetch_paginated(symbol, timeframe, limit)
 
         if exchange_candles:
             db_rows = [
@@ -255,7 +244,7 @@ class DataFetcher:
             except Exception as e:
                 print(f"[DataFetcher] DB upsert hatası: {e}")
 
-        # DB verisi + borsa verisini birleştir
+        # DB verisi + borsa verisini birleştir (timestamp bazında merge)
         if db_ohlcv:
             ts_map = {c[0]: c for c in db_ohlcv}
             for c in exchange_candles:
@@ -267,8 +256,20 @@ class DataFetcher:
             print(f"[DataFetcher] Veri yok: {symbol} {timeframe}")
             return []
 
-        # Redis'e cache'le (tüm veri, son 500 mum) — hata olsa devam et
-        to_cache = merged[-500:] if len(merged) > 500 else merged
+        # Boşlukları temizle — ardışık mumlar arasında büyük gap varsa eski mumları at
+        tf_ms = TF_MS.get(timeframe, 3_600_000)
+        if len(merged) > 1:
+            # Sondan geriye doğru ilk büyük boşluğu bul (3x tf'den büyük gap)
+            gap_idx = 0
+            for i in range(len(merged) - 1, 0, -1):
+                if merged[i][0] - merged[i-1][0] > tf_ms * 3:
+                    gap_idx = i
+                    break
+            if gap_idx > 0:
+                merged = merged[gap_idx:]
+
+        # Redis'e cache'le — büyük limit'lere de destek ver
+        to_cache = merged[-max(limit, 1000):] if len(merged) > max(limit, 1000) else merged
         ttl = CACHE_TTL.get(timeframe, 3600)
         try:
             await redis.set(cache_key, json.dumps(to_cache), ex=ttl)
@@ -277,6 +278,50 @@ class DataFetcher:
 
         # limit kadar son mumu döndür
         return merged[-limit:] if len(merged) > limit else merged
+
+    async def _fetch_paginated(
+        self,
+        symbol: str,
+        timeframe: str,
+        limit: int,
+    ) -> list:
+        """
+        Sayfalı veri çekme: Bitget V2 (1000/sayfa) → Binance fallback (1000/sayfa).
+        Büyük limit'ler için birden fazla sayfa çeker.
+        """
+        # Bitget V2 direct (1000 mum/istek)
+        all_candles = await self._bitget_v2_direct(symbol, timeframe, min(limit, 1000))
+
+        if all_candles and limit > 1000:
+            # Daha fazla veri gerekiyorsa sayfalama yap
+            pages_needed = min((limit - 1000) // 1000 + 1, 4)  # max 5000 mum
+            for _ in range(pages_needed):
+                oldest_ts = all_candles[0][0]
+                tf_ms = TF_MS.get(timeframe, 3_600_000)
+                end_ts = oldest_ts - tf_ms
+                older = await self._bitget_v2_direct_before(symbol, timeframe, 1000, end_ts)
+                if not older:
+                    break
+                all_candles = older + all_candles
+                await asyncio.sleep(0.2)
+
+        if not all_candles:
+            # CCXT fallback (200 mum)
+            try:
+                all_candles = await self.exchange.exchange.fetch_ohlcv(
+                    symbol, timeframe, limit=min(limit, 200),
+                )
+                if all_candles:
+                    all_candles = [list(c) for c in all_candles]
+                    print(f"[DataFetcher] Bitget CCXT: {len(all_candles)} mum ({symbol} {timeframe})")
+            except Exception as e:
+                print(f"[DataFetcher] Bitget CCXT hatası ({symbol} {timeframe}): {e}")
+
+        if not all_candles:
+            # Binance fallback
+            all_candles = await self._binance_fallback(symbol, timeframe, min(limit, 1000))
+
+        return all_candles or []
 
     async def _bitget_v2_direct(
         self,
@@ -319,6 +364,46 @@ class DataFetcher:
                     print(f"[DataFetcher] Bitget V2 direct HTTP {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
             print(f"[DataFetcher] Bitget V2 direct hatası: {e}")
+        return []
+
+    async def _bitget_v2_direct_before(
+        self,
+        symbol: str,
+        timeframe: str,
+        limit: int = 1000,
+        end_ts: int = 0,
+    ) -> list:
+        """Bitget V2 API — endTime ile belirli bir zamandan önceki mumları çek."""
+        import httpx
+        inst_id = symbol.replace("/", "").replace(":USDT", "").replace(":", "")
+        tf_map = {
+            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+            "1h": "1H", "2h": "2H", "4h": "4H", "6h": "6H", "12h": "12H",
+            "1d": "1D",
+        }
+        granularity = tf_map.get(timeframe, "1H")
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.get(
+                    "https://api.bitget.com/api/v2/mix/market/candles",
+                    params={
+                        "symbol": inst_id,
+                        "productType": "USDT-FUTURES",
+                        "granularity": granularity,
+                        "limit": str(min(limit, 1000)),
+                        "endTime": str(end_ts),
+                    },
+                )
+                if resp.status_code == 200:
+                    candles_raw = resp.json().get("data", [])
+                    candles = [
+                        [int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4]), float(c[5])]
+                        for c in candles_raw if len(c) >= 6
+                    ]
+                    candles.sort(key=lambda c: c[0])
+                    return candles
+        except Exception as e:
+            print(f"[DataFetcher] Bitget V2 before hatası: {e}")
         return []
 
     async def _binance_fallback(

@@ -572,8 +572,8 @@ export default function ProChart({
 
   // ── Veri çekme ──────────────────────────────────────────────
   const tfLimits: Record<string, number> = {
-    "1m": 1000, "5m": 2000, "15m": 3000,
-    "1h": 5000, "4h": 2200, "1d": 365,
+    "1m": 500, "5m": 1000, "15m": 1000,
+    "1h": 1000, "4h": 1000, "1d": 365,
   }
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -632,22 +632,33 @@ export default function ProChart({
         const price = parseFloat(ticker?.last)
         if (ticker?.last == null || isNaN(price) || price <= 0) return
 
+        // Son tarihsel mumun zamanını referans al
+        const lastCandle = data.candles[data.candles.length - 1]
+        const lastTime = lastCandle?.time ?? 0
+
         // Mevcut mum periyodunun başlangıç zamanı
         const now = Math.floor(Date.now() / 1000)
         const candleTime = Math.floor(now / tfSec) * tfSec
 
-        if (!liveCandleRef.current || liveCandleRef.current.time !== candleTime) {
-          // Yeni mum periyodu: tarihi veriyle başlat (eğer aynı periyotsa)
-          const lastCandle = data.candles[data.candles.length - 1]
-          if (lastCandle && lastCandle.time === candleTime) {
+        // Son tarihsel mum ile canlı mum arasında boşluk varsa, son mumun üstüne yaz
+        // (boşluk = mevcut mum ile son tarihsel mum arasında 2+ periyot fark var)
+        const effectiveTime = (candleTime - lastTime > tfSec * 2 && lastTime > 0)
+          ? lastTime + tfSec  // Boşluk var, bir sonraki periyota yaz
+          : candleTime
+
+        if (!liveCandleRef.current || liveCandleRef.current.time !== effectiveTime) {
+          // Yeni mum periyodu
+          if (lastCandle && lastCandle.time === effectiveTime) {
             liveCandleRef.current = {
-              time: candleTime,
+              time: effectiveTime,
               open: lastCandle.open,
               high: Math.max(lastCandle.high, price),
               low:  Math.min(lastCandle.low,  price),
             }
           } else {
-            liveCandleRef.current = { time: candleTime, open: price, high: price, low: price }
+            // Son tarihsel mumun close'unu open olarak kullan (fiyat sürekliliği)
+            const openPrice = lastCandle ? lastCandle.close : price
+            liveCandleRef.current = { time: effectiveTime, open: openPrice, high: Math.max(openPrice, price), low: Math.min(openPrice, price) }
           }
         } else {
           liveCandleRef.current.high = Math.max(liveCandleRef.current.high, price)
@@ -655,7 +666,7 @@ export default function ProChart({
         }
 
         candleSeriesRef.current.update({
-          time:  candleTime as Time,
+          time:  effectiveTime as Time,
           open:  liveCandleRef.current.open,
           high:  liveCandleRef.current.high,
           low:   liveCandleRef.current.low,
@@ -664,7 +675,7 @@ export default function ProChart({
       } catch { /* sessizce geç */ }
     }
     poll()
-    const id = setInterval(poll, 3000)
+    const id = setInterval(poll, 2000)  // 3s → 2s daha akıcı güncelleme
     return () => clearInterval(id)
   }, [symbol, tf, data])
 
