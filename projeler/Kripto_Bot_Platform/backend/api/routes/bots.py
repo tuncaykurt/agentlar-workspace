@@ -565,6 +565,7 @@ class TestOrderRequest(BaseModel):
     leverage: int = 10
     tp_pct: float = 20.0
     sl_pct: float = 20.0
+    margin_type: str = "cross"
 
 @router.post("/test-order")
 async def test_order(data: TestOrderRequest):
@@ -585,8 +586,8 @@ async def test_order(data: TestOrderRequest):
     steps = []
     ex_client = None
     try:
-        ex_client = await _get_exchange_client(exchange)
-        steps.append(f"✓ Exchange client: {exchange}")
+        ex_client = await _get_exchange_client(exchange, margin_type=data.margin_type)
+        steps.append(f"✓ Exchange client: {exchange} (margin={data.margin_type})")
 
         # Market yükle
         await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=30)

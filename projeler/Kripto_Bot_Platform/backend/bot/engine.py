@@ -434,6 +434,12 @@ class BotEngine:
 
     async def _get_hedge_positions(self, symbol: str) -> list:
         """Hedge mode uyumlu pozisyon listesi döner."""
+        exchange_name = getattr(self.exchange, '_exchange_name', '')
+
+        # MEXC: CCXT fetch_positions V1 endpoint hatası veriyor — direkt contract API kullan
+        if exchange_name == "mexc":
+            return await self._get_mexc_positions_direct(symbol)
+
         try:
             positions = await asyncio.wait_for(
                 self.exchange.exchange.fetch_positions([symbol]), timeout=15
@@ -443,19 +449,19 @@ class BotEngine:
                 contracts = float(pos.get("contracts", 0))
                 if contracts == 0:
                     continue
-                
+
                 entry = float(pos.get("entryPrice", 0) or 0)
                 notional = float(pos.get("notional", 0) or 0)
                 unrealized_pnl = float(pos.get("unrealizedPnl", 0) or 0)
-                
+
                 info = pos.get("info", {})
                 if not unrealized_pnl and info:
                     unrealized_pnl = float(info.get("unrealizedPnl", 0) or 0)
                 if not notional and info:
                     notional = float(info.get("positionValue", 0) or info.get("openOrderInitialMargin", 0) or 0)
-                
+
                 pnl_pct = (unrealized_pnl / notional * 100) if notional else 0
-                
+
                 found.append({
                     "side": pos.get("side", ""), # 'long' or 'short'
                     "size": contracts,
@@ -470,6 +476,49 @@ class BotEngine:
             return found
         except Exception as e:
             print(f"[Bot] Pozisyon listesi hatası: {e}")
+            return []
+
+    async def _get_mexc_positions_direct(self, symbol: str) -> list:
+        """MEXC futures pozisyonlarını direkt contract API ile çeker."""
+        try:
+            mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
+            resp = await asyncio.wait_for(
+                self.exchange.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol}),
+                timeout=15
+            )
+            data = resp.get("data", []) if isinstance(resp, dict) else resp
+            if not data or not isinstance(data, list):
+                return []
+
+            found = []
+            for pos in data:
+                vol = float(pos.get("holdVol", 0) or 0)
+                if vol == 0:
+                    continue
+                pos_type = int(pos.get("positionType", 1))  # 1=long, 2=short
+                side = "long" if pos_type == 1 else "short"
+                entry = float(pos.get("openAvgPrice", 0) or 0)
+                unrealized_pnl = float(pos.get("unrealisedPnl", 0) or pos.get("unrealizedPnl", 0) or 0)
+                notional = float(pos.get("positionValue", 0) or 0)
+                if not notional and entry > 0:
+                    contract_size = float(pos.get("contractSize", 0.001) or 0.001)
+                    notional = vol * entry * contract_size
+                pnl_pct = (unrealized_pnl / notional * 100) if notional else 0
+
+                found.append({
+                    "side": side,
+                    "size": vol,
+                    "entry_price": entry,
+                    "notional": round(notional, 2),
+                    "pnl_usdt": round(unrealized_pnl, 4),
+                    "pnl_pct": round(pnl_pct, 2),
+                    "leverage": int(pos.get("leverage", 0) or 0),
+                    "tp": float(pos.get("takeProfitPrice", 0) or 0),
+                    "sl": float(pos.get("stopLossPrice", 0) or 0),
+                })
+            return found
+        except Exception as e:
+            print(f"[Bot] MEXC pozisyon hatası: {e}")
             return []
 
     async def _run_dual_hedge_cycle(self, redis, symbol: str):
@@ -1252,20 +1301,16 @@ class BotEngine:
         await redis.set(last_ts_key, sig_ts, ex=600)
 
     async def _get_current_position(self, symbol: str):
-        """Mevcut pozisyonu döndür"""
+        """Mevcut pozisyonu döndür — _get_hedge_positions kullanır (MEXC uyumlu)."""
         try:
-            positions = await asyncio.wait_for(
-                self.exchange.exchange.fetch_positions([symbol]), timeout=15
-            )
-            for pos in positions:
-                if float(pos.get("contracts", 0)) != 0:
-                    return {
-                        "side": "long" if pos["side"] == "long" else "short",
-                        "size": float(pos["contracts"]),
-                        "entry": float(pos.get("entryPrice") or 0),
-                    }
-        except asyncio.TimeoutError:
-            print(f"[Bot {self.config['name']}] fetch_positions TIMEOUT (15s)")
+            positions = await self._get_hedge_positions(symbol)
+            if positions:
+                p = positions[0]
+                return {
+                    "side": p["side"],
+                    "size": p["size"],
+                    "entry": p["entry_price"],
+                }
         except Exception as e:
             print(f"[Bot {self.config['name']}] fetch_positions hatası: {e}")
         return None

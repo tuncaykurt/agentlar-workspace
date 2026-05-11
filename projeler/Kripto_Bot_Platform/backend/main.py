@@ -195,7 +195,9 @@ async def _auto_start_bots(tasks: list):
 
     for bot in running_bots:
         try:
-            ex_client = await _get_exchange_client(bot.exchange or "bitget")
+            _params = _json.loads(bot.params) if bot.params else {}
+            _margin_type = _params.get("margin_type", "isolated")
+            ex_client = await _get_exchange_client(bot.exchange or "bitget", margin_type=_margin_type)
 
             config = {
                 "id": bot.id,

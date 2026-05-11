@@ -447,7 +447,12 @@ async def tradingview_webhook(token: str, request: Request):
                         bot.id, symbol_ccxt or symbol_raw, token, price, bot.exchange or "mexc"
                     ))
             else:
-                # Eşleşen bot yok — genel kayıt (bot_id=0)
+                # Eşleşen bot yok — genel kayıt (bot_id=0) + pasif analiz
+                tp_pct_default = 2.0
+                sl_pct_default = 1.0
+                tp_price_def = round(price * (1 + tp_pct_default / 100), 6) if sig_type == "buy" else round(price * (1 - tp_pct_default / 100), 6) if price > 0 else None
+                sl_price_def = round(price * (1 - sl_pct_default / 100), 6) if sig_type == "buy" else round(price * (1 + sl_pct_default / 100), 6) if price > 0 else None
+
                 log = SignalLog(
                     bot_id=0,
                     symbol=symbol_ccxt or symbol_raw,
@@ -456,10 +461,25 @@ async def tradingview_webhook(token: str, request: Request):
                     price=price,
                     reason=message or f"TV Alarm — {action_raw}",
                     action="received",
+                    tp_price=tp_price_def,
+                    sl_price=sl_price_def,
+                    outcome="open" if (tp_price_def and sl_price_def) else None,
                     raw_payload=json.dumps(body),
+                    timeframe=timeframe,
                 )
                 session.add(log)
-                
+                await session.flush()
+
+                # Bot olmasa da pasif analiz yap (analytics'te görünsün)
+                passive_tasks.append((
+                    log.id, 0, "mexc",
+                    symbol_ccxt or symbol_raw,
+                    sig_type, price,
+                    timeframe or "5m",
+                    tp_pct_default, sl_pct_default,
+                ))
+                print(f"[TV Webhook] Bot eşleşmedi — pasif analiz kuyruğa alındı (bot_id=0)")
+
                 # Bot olmayan durum için de önceki açık sinyali kapat
                 finalize_tasks.append((
                     0, symbol_ccxt or symbol_raw, token, price, "mexc"
