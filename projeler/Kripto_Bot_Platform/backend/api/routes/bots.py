@@ -780,106 +780,111 @@ async def test_tpsl_methods(data: TestOrderRequest):
 @router.post("/test-order")
 async def test_order(data: TestOrderRequest):
     """
-    Gerçek test işlemi aç.
+    Hızlı test işlemi — load_markets() olmadan direkt MEXC API.
     Body: {exchange, symbol, side, size_usdt, leverage, tp_pct, sl_pct}
-    Örnek: {exchange:"mexc", symbol:"ETH/USDT:USDT", side:"buy",
-             size_usdt:10, leverage:10, tp_pct:20, sl_pct:20}
     """
-    exchange  = data.exchange
-    symbol    = data.symbol
-    side      = data.side        # "buy" (long) | "sell" (short)
-    size_usdt = data.size_usdt   # marjin miktarı (USDT)
-    leverage  = data.leverage
-    tp_pct    = data.tp_pct
-    sl_pct    = data.sl_pct
-
+    import ccxt.async_support as ccxt_async
+    from core.config import settings
     steps = []
-    ex_client = None
+    exchange_obj = None
     try:
-        ex_client = await _get_exchange_client(exchange, margin_type=data.margin_type)
-        steps.append(f"✓ Exchange client: {exchange} (margin={data.margin_type})")
+        # Direkt CCXT instance (load_markets yok — hız için)
+        exchange_obj = ccxt_async.mexc({
+            "apiKey": settings.MEXC_API_KEY,
+            "secret": settings.MEXC_API_SECRET,
+            "options": {"defaultType": "swap"},
+        })
 
-        # Market yükle
-        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=30)
-        steps.append(f"✓ Markets yüklendi")
+        # Ticker ile fiyat al (load_markets gerektirmez)
+        ms = data.symbol.split("/")[0] + "_" + data.symbol.split("/")[1].split(":")[0]  # ETH_USDT
+        is_long = data.side == "buy"
+        mx_side = 1 if is_long else 3
+        ot = 1 if data.margin_type == "isolated" else 2
 
-        # Güncel fiyat
-        ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(symbol), timeout=15)
-        price = float(ticker["last"])
-        steps.append(f"✓ Fiyat: {price} ({symbol})")
+        # Fiyat — MEXC contract ticker
+        ticker_resp = await exchange_obj.contractPublicGetTickerSymbol({"symbol": ms})
+        price = float(ticker_resp.get("data", {}).get("lastPrice", 0))
+        steps.append(f"Fiyat: {price}")
 
-        # Leverage ayarla
+        # Kontrat miktarı (ETH contractSize=0.01)
+        cs_map = {"ETH_USDT": 0.01, "BTC_USDT": 0.0001, "SOL_USDT": 1, "DOGE_USDT": 100}
+        cs = cs_map.get(ms, 0.01)
+        notional = data.size_usdt * data.leverage
+        amount = max(1, int(notional / (price * cs)))
+        steps.append(f"Kontrat: {amount} (cs={cs}, notional=${notional:.1f})")
+
+        # Leverage
         try:
-            await ex_client.set_leverage(symbol, leverage)
-            steps.append(f"✓ Leverage: {leverage}x")
+            await asyncio.gather(
+                exchange_obj.contractPrivatePostPositionChangeLeverage(
+                    {"symbol": ms, "leverage": data.leverage, "openType": ot, "positionType": 1}),
+                exchange_obj.contractPrivatePostPositionChangeLeverage(
+                    {"symbol": ms, "leverage": data.leverage, "openType": ot, "positionType": 2}),
+                return_exceptions=True
+            )
+            steps.append(f"Leverage: {data.leverage}x")
         except Exception as e:
-            steps.append(f"⚠ Leverage hatası (devam): {e}")
+            steps.append(f"Leverage uyarı: {e}")
 
-        # Notional = size_usdt * leverage → coin miktarı
-        notional = size_usdt * leverage
-        qty_raw = notional / price
-
-        # Kontrat boyutu
-        contract_size = 1.0
-        try:
-            market = ex_client.exchange.market(symbol)
-            contract_size = float(market.get("contractSize", 1) or 1)
-            steps.append(f"✓ contractSize={contract_size}")
-        except Exception as e:
-            steps.append(f"⚠ contractSize alınamadı (1 kullanılıyor): {e}")
-
-        amount = max(1, int(qty_raw / contract_size))
-        steps.append(f"✓ Miktar: qty={qty_raw:.4f} → {amount} kontrat (notional≈${notional:.1f})")
-
-        # TP/SL fiyatları (0 ise gönderme)
+        # TP/SL fiyatları
         tp_price = None
         sl_price = None
-        if tp_pct > 0:
-            tp_price = round(price * (1 + tp_pct / 100), 2) if side == "buy" else round(price * (1 - tp_pct / 100), 2)
-        if sl_pct > 0:
-            sl_price = round(price * (1 - sl_pct / 100), 2) if side == "buy" else round(price * (1 + sl_pct / 100), 2)
-        steps.append(f"✓ TP={tp_price} SL={sl_price} (%{tp_pct}/%{sl_pct})")
+        if data.tp_pct > 0:
+            tp_price = round(price * (1 - data.tp_pct/100), 2) if not is_long else round(price * (1 + data.tp_pct/100), 2)
+        if data.sl_pct > 0:
+            sl_price = round(price * (1 + data.sl_pct/100), 2) if not is_long else round(price * (1 - data.sl_pct/100), 2)
+        steps.append(f"TP={tp_price} SL={sl_price}")
 
-        # Order aç
-        steps.append(f"→ Order açılıyor: {side.upper()} {amount} {symbol} @ market (entry_price={price})")
-        order = await ex_client.place_order(
-            symbol, side, amount, "market", price=price,
-            tp_price=tp_price, sl_price=sl_price,
-        )
-        order_id = order.get("id", "N/A")
-        order_status = order.get("status", "?")
-        steps.append(f"✅ ORDER BAŞARILI! id={order_id} status={order_status}")
-        steps.append(f"[debug] exchange_name={ex_client._exchange_name} order_keys={list((order or {}).keys())}")
-
-        return {
-            "success": True,
-            "order_id": order_id,
-            "order_status": order_status,
-            "details": {
-                "exchange": exchange, "symbol": symbol, "side": side,
-                "amount_contracts": amount, "entry_price": price,
-                "notional_usdt": notional, "margin_usdt": size_usdt,
-                "leverage": leverage, "tp_price": tp_price, "sl_price": sl_price,
-            },
-            "steps": steps,
-            "raw_order": {k: str(v) for k, v in (order or {}).items()},
+        # 1) Market order aç
+        order_body = {
+            "symbol": ms, "price": 0, "vol": amount,
+            "leverage": data.leverage, "side": mx_side, "type": 5, "openType": ot
         }
+        resp = await exchange_obj.contractPrivatePostOrderSubmit(order_body)
+        order_id = str(resp.get("data", ""))
+        steps.append(f"Order OK: id={order_id}")
+
+        # 2) TP/SL — stoporder/place
+        if tp_price or sl_price:
+            await asyncio.sleep(1)
+            target_type = 1 if is_long else 2
+            pos_resp = await exchange_obj.contractPrivateGetPositionOpenPositions({"symbol": ms})
+            pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
+            pos_id = None
+            for p in (pos_data or []):
+                if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
+                    pos_id = int(p.get("positionId", 0))
+                    break
+            steps.append(f"Position: id={pos_id} type={target_type}")
+
+            if pos_id:
+                stop_body = {
+                    "positionId": pos_id, "vol": amount,
+                    "profitTrend": 1, "lossTrend": 1,
+                    "stopLossType": 0, "takeProfitType": 0,
+                    "stopLossOrderPrice": 0, "takeProfitOrderPrice": 0,
+                }
+                if tp_price:
+                    stop_body["takeProfitPrice"] = tp_price
+                if sl_price:
+                    stop_body["stopLossPrice"] = sl_price
+                stop_resp = await exchange_obj.contractPrivatePostStoporderPlace(stop_body)
+                steps.append(f"StopOrder OK: {stop_resp}")
+            else:
+                steps.append("HATA: positionId bulunamadı!")
+
+        return {"success": True, "order_id": order_id, "steps": steps,
+                "details": {"price": price, "amount": amount, "tp": tp_price, "sl": sl_price}}
 
     except Exception as e:
         import traceback
-        steps.append(f"✗ HATA: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "steps": steps,
-            "traceback": traceback.format_exc()[-800:],
-        }
+        steps.append(f"HATA: {e}")
+        return {"success": False, "error": str(e), "steps": steps,
+                "traceback": traceback.format_exc()[-800:]}
     finally:
-        if ex_client:
-            try:
-                await ex_client.close()
-            except Exception:
-                pass
+        if exchange_obj:
+            try: await exchange_obj.close()
+            except Exception: pass
 
 
 @router.get("/{bot_id}/position")
