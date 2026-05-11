@@ -70,10 +70,12 @@ class _ExClient:
 
         if tp_price:
             order_body["takeProfitPrice"] = round(float(tp_price), 2)
-            order_body["profitTrend"] = 1  # 1=latest price
+            # MEXC: long TP → fiyat yükselince tetikle (1), short TP → fiyat düşünce (2)
+            order_body["profitTrend"] = 1 if is_long else 2
         if sl_price:
             order_body["stopLossPrice"] = round(float(sl_price), 2)
-            order_body["lossTrend"] = 1    # 1=latest price
+            # MEXC: long SL → fiyat düşünce tetikle (2), short SL → fiyat yükselince (1)
+            order_body["lossTrend"] = 2 if is_long else 1
 
         print(f"[ExClient] MEXC market order ({self._margin_type}): {order_body}")
         
