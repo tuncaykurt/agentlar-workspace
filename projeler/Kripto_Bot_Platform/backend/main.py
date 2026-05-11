@@ -66,6 +66,7 @@ async def _init_db():
         ("signal_logs", "max_favorable_pct", "ALTER TABLE signal_logs ADD COLUMN max_favorable_pct FLOAT"),
         ("signal_logs", "tp_was_reachable", "ALTER TABLE signal_logs ADD COLUMN tp_was_reachable BOOLEAN"),
         ("signal_logs", "sl_was_hit", "ALTER TABLE signal_logs ADD COLUMN sl_was_hit BOOLEAN"),
+        ("signal_logs", "max_adverse_pct", "ALTER TABLE signal_logs ADD COLUMN max_adverse_pct FLOAT"),
     ]
     for table, column, sql in migrations:
         try:
