@@ -133,6 +133,12 @@ JSON cevap ver:
 }
 
 
+def _has_api_key() -> bool:
+    """OpenRouter API key tanımlı mı kontrol et."""
+    key = (settings.OPENROUTER_API_KEY or "").strip()
+    return bool(key)
+
+
 async def _get_prompt(key: str) -> tuple[str, str]:
     """
     DB'den prompt al, yoksa DEFAULT_PROMPTS'tan fallback.
@@ -159,6 +165,13 @@ async def ai_news_analysis(symbol: str, signal_type: str, upcoming_events: list[
     Haber Filtresi — AI ile ekonomik olayların kripto etkisini analiz eder.
     Perplexity (internet erişimli) kullanır: güncel haber + takvim analizi.
     """
+    if not _has_api_key():
+        return {
+            "should_block": False, "risk_level": "unknown",
+            "reason": "OPENROUTER_API_KEY tanımlı değil — AI haber analizi devre dışı",
+            "news_summary": "", "confidence": 0,
+        }
+
     coin = symbol.split("/")[0]  # ETH/USDT:USDT → ETH
 
     events_text = ""
@@ -208,6 +221,13 @@ async def ai_self_learning_analysis(
     Öz-Öğrenme Filtresi — Geçmiş sinyallerden pattern çıkarır.
     DeepSeek (hızlı) kullanır.
     """
+    if not _has_api_key():
+        return {
+            "should_block": False, "confidence": 0,
+            "reason": "OPENROUTER_API_KEY tanımlı değil — AI öz-öğrenme devre dışı",
+            "patterns": {}, "suggestion": "",
+        }
+
     if len(past_signals) < 5:
         return {
             "should_block": False,
@@ -354,6 +374,14 @@ async def ai_trend_volatility_analysis(
     Trend + Volatilite birleşik AI analizi.
     DeepSeek (hızlı) kullanır.
     """
+    if not _has_api_key():
+        return {
+            "should_block": False, "trend_direction": "unknown",
+            "trend_strength": "unknown", "volatility_level": "unknown",
+            "trend_aligned": True, "confidence": 0,
+            "reason": "OPENROUTER_API_KEY tanımlı değil — AI trend analizi devre dışı",
+        }
+
     candle_text = ""
     if recent_candles and len(recent_candles) >= 5:
         for i, c in enumerate(recent_candles[-10:]):

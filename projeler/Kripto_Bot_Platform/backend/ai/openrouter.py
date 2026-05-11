@@ -16,8 +16,12 @@ DEEP_MODEL = settings.AI_DEEP_MODEL
 async def _call(model: str, prompt: str, max_tokens: int = 600) -> dict:
     import re
 
+    api_key = (settings.OPENROUTER_API_KEY or "").strip()
+    if not api_key:
+        raise Exception("OPENROUTER_API_KEY tanımlı değil")
+
     headers = {
-        "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": "https://kriptobot.app",
         "X-Title": "KriptoBot Trading Platform",
         "Content-Type": "application/json",
