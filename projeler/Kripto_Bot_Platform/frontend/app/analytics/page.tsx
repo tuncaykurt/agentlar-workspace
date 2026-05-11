@@ -142,99 +142,89 @@ function SignalRangeSection({ items, isLoading }: { items: any[], isLoading: boo
         ))}
       </div>
 
-      {/* Sinyal tablosu */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
-              <th className="text-left pb-2 pr-3 whitespace-nowrap">Zaman</th>
-              <th className="text-left pb-2 pr-3">Yön</th>
-              <th className="text-right pb-2 pr-3 whitespace-nowrap">Giriş</th>
-              <th className="text-right pb-2 pr-3 whitespace-nowrap">TP Hedef</th>
-              <th className="text-right pb-2 pr-3 whitespace-nowrap">SL Hedef</th>
-              <th className="text-right pb-2 pr-3 whitespace-nowrap">Max Yüksek</th>
-              <th className="text-right pb-2 pr-3 whitespace-nowrap">Min Düşük</th>
-              <th className="text-right pb-2 pr-3 whitespace-nowrap">Çıkış</th>
-              <th className="text-right pb-2 pr-3 whitespace-nowrap">PnL</th>
-              <th className="text-right pb-2 pr-3 whitespace-nowrap">Max Potansiyel</th>
-              <th className="text-left pb-2 pr-3 whitespace-nowrap">Sonuç</th>
-              <th className="text-left pb-2 min-w-[180px]">Fiyat Aralığı</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800/50">
-            {rangeItems.map((item: any) => {
-              const isLong = item.signal_type === "buy"
-              const outcomeColor =
-                item.outcome === "tp_hit"     ? "text-green-400 bg-green-500/10 border-green-500/20" :
-                item.outcome === "sl_hit"     ? "text-red-400 bg-red-500/10 border-red-500/20" :
-                item.outcome === "next_signal"? "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" :
-                                                "text-slate-400 bg-slate-700/30 border-slate-700"
-              const outcomeLabel =
-                item.outcome === "tp_hit"      ? "✓ TP Vurdu" :
-                item.outcome === "sl_hit"      ? "✕ SL Vurdu" :
-                item.outcome === "next_signal" ? "→ Sinyalle Kapandı" :
-                item.outcome || "Açık"
-              const d = new Date(item.created_at)
-              const timeStr = d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" }) +
-                " " + d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+      {/* Sinyal kartları */}
+      <div className="space-y-3">
+        {rangeItems.map((item: any) => {
+          const isLong = item.signal_type === "buy"
+          const outcomeColor =
+            item.outcome === "tp_hit"     ? "text-green-400 bg-green-500/10 border-green-500/20" :
+            item.outcome === "sl_hit"     ? "text-red-400 bg-red-500/10 border-red-500/20" :
+            item.outcome === "next_signal"? "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" :
+                                            "text-slate-400 bg-slate-700/30 border-slate-700"
+          const outcomeLabel =
+            item.outcome === "tp_hit"      ? "TP Vurdu" :
+            item.outcome === "sl_hit"      ? "SL Vurdu" :
+            item.outcome === "next_signal" ? "Sinyalle Kapandı" :
+            item.outcome || "Açık"
+          const d = new Date(item.created_at)
+          const timeStr = d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" }) +
+            " " + d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
 
-              return (
-                <tr key={item.id} className="hover:bg-slate-800/20 transition-colors align-middle">
-                  <td className="py-2 pr-3 text-slate-500 whitespace-nowrap">{timeStr}</td>
-                  <td className="py-2 pr-3">
-                    <span className={`px-1.5 py-0.5 rounded font-semibold border whitespace-nowrap ${
-                      isLong ? "text-green-400 bg-green-500/10 border-green-500/20"
-                              : "text-red-400 bg-red-500/10 border-red-500/20"
-                    }`}>
-                      {isLong ? "▲ LONG" : "▼ SHORT"}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-3 text-right font-mono text-slate-200">{fmt(item.price)}</td>
-                  <td className="py-2 pr-3 text-right font-mono text-green-400">{fmt(item.tp_price)}</td>
-                  <td className="py-2 pr-3 text-right font-mono text-red-400">{fmt(item.sl_price)}</td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    <span className={item.tp_was_reachable ? "text-green-300 font-semibold" : "text-slate-400"}>
-                      {fmt(item.max_price_in_range)}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    <span className={item.sl_was_hit ? "text-red-300 font-semibold" : "text-slate-400"}>
-                      {fmt(item.min_price_in_range)}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-3 text-right font-mono text-yellow-400">{fmt(item.outcome_price)}</td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    <span className={
-                      item.outcome_pnl_pct == null ? "text-slate-600" :
-                      item.outcome_pnl_pct > 0 ? "text-green-400" : "text-red-400"
-                    }>
-                      {fmtPct(item.outcome_pnl_pct)}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-3 text-right font-mono text-blue-400 font-semibold">
-                    {fmtPct(item.max_favorable_pct)}
-                  </td>
-                  <td className="py-2 pr-3">
-                    <span className={`px-1.5 py-0.5 rounded border text-[10px] whitespace-nowrap ${outcomeColor}`}>
-                      {outcomeLabel}
-                    </span>
-                    <div className="mt-0.5 flex gap-1">
-                      {item.tp_was_reachable && <span className="text-[9px] text-green-500">TP ✓</span>}
-                      {item.sl_was_hit && <span className="text-[9px] text-red-500">SL ✕</span>}
-                    </div>
-                  </td>
-                  <td className="py-2 pr-2">
-                    <PriceRangeBar item={item} />
-                    <div className="flex justify-between mt-0.5 text-[9px] text-slate-600">
-                      <span>{fmt(item.min_price_in_range)}</span>
-                      <span>{fmt(item.max_price_in_range)}</span>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+          return (
+            <div key={item.id} className="p-4 rounded-xl border border-slate-800 bg-slate-800/30 space-y-3">
+              {/* Başlık satırı */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded font-semibold text-xs border ${
+                    isLong ? "text-green-400 bg-green-500/10 border-green-500/20"
+                            : "text-red-400 bg-red-500/10 border-red-500/20"
+                  }`}>
+                    {isLong ? "▲ LONG" : "▼ SHORT"}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded border text-[10px] ${outcomeColor}`}>
+                    {outcomeLabel}
+                  </span>
+                  {item.tp_was_reachable && <span className="text-[10px] text-green-500">TP ✓</span>}
+                  {item.sl_was_hit && <span className="text-[10px] text-red-500">SL ✕</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`font-mono text-sm font-bold ${
+                    item.outcome_pnl_pct == null ? "text-slate-600" :
+                    item.outcome_pnl_pct > 0 ? "text-green-400" : "text-red-400"
+                  }`}>
+                    {fmtPct(item.outcome_pnl_pct)}
+                  </span>
+                  <span className="text-[10px] text-slate-500">{timeStr}</span>
+                </div>
+              </div>
+
+              {/* Fiyat grid */}
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
+                <div>
+                  <div className="text-[10px] text-slate-500 uppercase">Giriş</div>
+                  <div className="font-mono text-slate-200">{fmt(item.price)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 uppercase">TP</div>
+                  <div className="font-mono text-green-400">{fmt(item.tp_price)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 uppercase">SL</div>
+                  <div className="font-mono text-red-400">{fmt(item.sl_price)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 uppercase">Max</div>
+                  <div className={`font-mono ${item.tp_was_reachable ? "text-green-300 font-semibold" : "text-slate-400"}`}>
+                    {fmt(item.max_price_in_range)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 uppercase">Min</div>
+                  <div className={`font-mono ${item.sl_was_hit ? "text-red-300 font-semibold" : "text-slate-400"}`}>
+                    {fmt(item.min_price_in_range)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 uppercase">Çıkış</div>
+                  <div className="font-mono text-yellow-400">{fmt(item.outcome_price)}</div>
+                </div>
+              </div>
+
+              {/* Fiyat aralığı bar */}
+              <PriceRangeBar item={item} />
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -303,19 +293,22 @@ function AiSuggestCard({ botId }: { botId: number | null }) {
           )}
 
           {data.distribution && (
-            <div className="grid grid-cols-5 gap-1.5 text-center text-[10px]">
-              {[
-                { label: 'Fav P25', val: data.distribution.fav_p25, color: 'text-green-500/70' },
-                { label: 'Fav P50', val: data.distribution.fav_p50, color: 'text-green-400' },
-                { label: 'Fav P75', val: data.distribution.fav_p75, color: 'text-green-300' },
-                { label: 'Adv P25', val: data.distribution.adv_p25, color: 'text-red-400' },
-                { label: 'Adv P50', val: data.distribution.adv_p50, color: 'text-red-500/70' },
-              ].map(d => (
-                <div key={d.label} className="p-2 rounded-lg bg-slate-800/50">
-                  <div className={`font-bold ${d.color}`}>%{d.val}</div>
-                  <div className="text-slate-600 mt-0.5">{d.label}</div>
-                </div>
-              ))}
+            <div className="space-y-2">
+              <div className="text-[10px] text-slate-600 uppercase tracking-wider">Fiyat Hareket Dağılımı (Percentile)</div>
+              <div className="grid grid-cols-5 gap-1.5 text-center text-[10px]">
+                {[
+                  { label: 'Lehte %25', val: data.distribution.fav_p25, color: 'text-green-500/70', desc: 'Düşük' },
+                  { label: 'Lehte %50', val: data.distribution.fav_p50, color: 'text-green-400', desc: 'Medyan' },
+                  { label: 'Lehte %75', val: data.distribution.fav_p75, color: 'text-green-300', desc: 'Yüksek' },
+                  { label: 'Aleyhte %25', val: data.distribution.adv_p25, color: 'text-red-400', desc: 'Düşük' },
+                  { label: 'Aleyhte %50', val: data.distribution.adv_p50, color: 'text-red-500/70', desc: 'Medyan' },
+                ].map(d => (
+                  <div key={d.label} className="p-2 rounded-lg bg-slate-800/50">
+                    <div className={`font-bold ${d.color}`}>%{d.val}</div>
+                    <div className="text-slate-500 mt-0.5">{d.label}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
