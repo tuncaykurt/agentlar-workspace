@@ -867,6 +867,128 @@ class BotEngine:
                     sim = "kalırdı" if trend_would_block else "geçerdi"
                     lines.append(f"📈 Trend[— kapalı, {sim}]")
 
+                # ── 6. AI AKILLI ANALİZ (tüm filtreler sonrası) ──────────────
+                # AI analiz her zaman çalışır — hem aktif filtre kararlarını destekler
+                # hem de kapalı filtreler için "geçerdi/kalırdı" simülasyonu yapar
+                try:
+                    from ai.smart_filter import (
+                        ai_news_analysis, ai_self_learning_analysis,
+                        ai_trend_volatility_analysis,
+                    )
+
+                    ai_tasks = []
+
+                    # 6a. Haber AI analizi (Perplexity — internet araştırması)
+                    try:
+                        from services.economic_calendar import get_upcoming_events
+                        upcoming = await get_upcoming_events(hours=12, impact="high")
+                    except Exception:
+                        upcoming = []
+                    ai_tasks.append(("news", ai_news_analysis(
+                        self.config["symbol"], signal_type, upcoming)))
+
+                    # 6b. Öz-Öğrenme AI analizi (geçmiş sinyal pattern'ları)
+                    past_signals = []
+                    try:
+                        from models.trade import SignalLog as _SL
+                        async with async_session() as _sess:
+                            _q = await _sess.execute(
+                                _select(_SL).where(
+                                    _SL.bot_id == self.config["id"],
+                                    _SL.action.in_(["executed", "analyzed"]),
+                                ).order_by(_SL.created_at.desc()).limit(30)
+                            )
+                            _rows = _q.scalars().all()
+                            past_signals = [{
+                                "action": r.action, "signal_type": r.signal_type,
+                                "price": r.price, "tp_price": r.tp_price, "sl_price": r.sl_price,
+                                "outcome": r.outcome, "rsi_14": r.rsi_14,
+                                "volatility_atr": r.volatility_atr, "ema200_dist": r.ema200_dist,
+                                "created_at": r.created_at.isoformat() if r.created_at else "",
+                                "max_price_in_range": r.max_price_in_range,
+                                "min_price_in_range": r.min_price_in_range,
+                            } for r in _rows]
+                    except Exception:
+                        pass
+
+                    import datetime as _dt
+                    cur_h = _dt.datetime.utcnow().hour
+                    ai_tasks.append(("learning", ai_self_learning_analysis(
+                        self.config["symbol"], signal_type, price,
+                        result["indicators"]["rsi_14"],
+                        result["indicators"]["volatility_atr"],
+                        result["indicators"]["ema200_dist"],
+                        past_signals, cur_h)))
+
+                    # 6c. Trend + Volatilite AI analizi
+                    ohlcv_data = None
+                    try:
+                        ohlcv_data = await self.data_fetcher.get_ohlcv(self.config["symbol"], timeframe, 20)
+                    except Exception:
+                        pass
+                    ai_tasks.append(("trend", ai_trend_volatility_analysis(
+                        self.config["symbol"], signal_type, price,
+                        result["indicators"]["rsi_14"],
+                        result["indicators"]["volatility_atr"],
+                        ema200_val,
+                        result["indicators"]["ema200_dist"],
+                        ohlcv_data)))
+
+                    # Tüm AI analizlerini paralel çalıştır
+                    import asyncio as _aio
+                    ai_results = {}
+                    raw = await _aio.gather(*[t[1] for t in ai_tasks], return_exceptions=True)
+                    for i, (name, _) in enumerate(ai_tasks):
+                        if isinstance(raw[i], Exception):
+                            ai_results[name] = {"error": str(raw[i])[:100]}
+                        else:
+                            ai_results[name] = raw[i]
+
+                    # AI sonuçlarını loglara ekle
+                    news_ai = ai_results.get("news", {})
+                    if news_ai.get("reason"):
+                        risk = news_ai.get("risk_level", "?")
+                        icon = "🔴" if risk == "critical" else "🟡" if risk == "high" else "🟢"
+                        block_txt = "ENGEL" if news_ai.get("should_block") else "geçti"
+                        lines.append(f"🤖 AI Haber[{icon} {block_txt}]: {news_ai['reason'][:150]}")
+                        if news_ai.get("news_summary"):
+                            lines.append(f"   📡 {news_ai['news_summary'][:120]}")
+
+                    learn_ai = ai_results.get("learning", {})
+                    if learn_ai.get("reason"):
+                        block_txt = "ENGEL" if learn_ai.get("should_block") else "geçti"
+                        lines.append(f"🤖 AI Öz-Öğrenme[{block_txt}]: {learn_ai['reason'][:200]}")
+                        if learn_ai.get("suggestion"):
+                            lines.append(f"   💡 {learn_ai['suggestion'][:120]}")
+
+                    trend_ai = ai_results.get("trend", {})
+                    if trend_ai.get("reason"):
+                        block_txt = "ENGEL" if trend_ai.get("should_block") else "geçti"
+                        td = trend_ai.get("trend_direction", "?")
+                        ts = trend_ai.get("trend_strength", "?")
+                        vl = trend_ai.get("volatility_level", "?")
+                        lines.append(f"🤖 AI Trend[{block_txt}]: {td}/{ts} vol={vl} — {trend_ai['reason'][:150]}")
+
+                    # AI bloklama: aktif filtreler AI'ın kararını kullanır
+                    # Haber filtresi aktifse AI'ın haber kararını uygula
+                    if f.news_protection_enabled and news_ai.get("should_block") and not result["should_block"]:
+                        result["should_block"] = True
+                        result["reject_reason"] = f"AI Haber Analizi: {news_ai.get('reason', 'risk yüksek')[:150]}"
+
+                    # Öz-öğrenme filtresi aktifse AI'ın pattern kararını uygula
+                    if f.self_learning_enabled and learn_ai.get("should_block") and not result["should_block"]:
+                        result["should_block"] = True
+                        result["reject_reason"] = f"AI Öz-Öğrenme: {learn_ai.get('reason', 'pattern uyumsuz')[:150]}"
+
+                    # Trend filtresi aktifse AI'ın trend kararını uygula
+                    if f.trend_filter_enabled and trend_ai.get("should_block") and not result["should_block"]:
+                        result["should_block"] = True
+                        result["reject_reason"] = f"AI Trend: {trend_ai.get('reason', 'trend uyumsuz')[:150]}"
+
+                except Exception as ai_err:
+                    lines.append(f"🤖 AI Analiz hatası: {str(ai_err)[:100]}")
+                    print(f"[Bot] AI filtre hatası: {ai_err}")
+
         except Exception as e:
             lines.append(f"Analiz hatası: {str(e)[:100]}")
             print(f"[Bot] Filtre analiz hatası: {e}")

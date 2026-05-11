@@ -970,8 +970,11 @@ export default function AnalyticsPage() {
                             <div className="space-y-0.5">
                               {item.filter_analysis.split(" | ").map((line: string, i: number) => (
                                 <p key={i} className={
+                                  line.startsWith("🤖") && line.includes("ENGEL") ? "text-red-400 font-medium bg-red-500/5 px-1 rounded" :
+                                  line.startsWith("🤖") ? "text-purple-400/90 bg-purple-500/5 px-1 rounded" :
+                                  line.startsWith("   ") ? "text-slate-400/70 pl-3 text-[10px]" :
                                   line.includes("ENGEL") ? "text-red-400/80" :
-                                  line.includes("✓") ? "text-green-400/60" :
+                                  line.includes("✓") || line.includes("geçti") ? "text-green-400/60" :
                                   line.includes("kapalı") ? "text-slate-600" :
                                   "text-slate-500"
                                 }>
