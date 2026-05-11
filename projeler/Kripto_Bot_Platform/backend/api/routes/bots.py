@@ -578,20 +578,21 @@ class TestOrderRequest(BaseModel):
     tp_pct: float = 20.0
     sl_pct: float = 20.0
     margin_type: str = "cross"
+    method: Optional[int] = None  # 1-5 arası, None=hepsi
 
 
 @router.post("/tpsl-test")
 async def test_tpsl_methods(data: TestOrderRequest):
-    """5 farklı MEXC TP/SL yöntemini test eder — düşük kaldıraçla stabil pozisyon."""
+    """Tek tek MEXC TP/SL yöntemi test eder. method=1..5, None=sadece m1."""
     import traceback as _tb
     results = {}
     ex_client = None
+    m = data.method or 1
     try:
         ex_client = await _get_exchange_client(data.exchange, margin_type=data.margin_type)
         await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=30)
         ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(data.symbol), timeout=15)
         price = float(ticker["last"])
-        # Test için düşük kaldıraç kullan ki pozisyon likide olmasın
         test_lev = min(data.leverage, 20)
         await ex_client.set_leverage(data.symbol, test_lev)
 
@@ -599,16 +600,15 @@ async def test_tpsl_methods(data: TestOrderRequest):
         cs = float(market.get("contractSize", 1) or 1)
         amount = max(1, int(data.size_usdt * test_lev / (price * cs)))
         is_long = data.side == "buy"
-        # Geniş TP/SL — %2 TP, %1 SL (test için)
-        tp_price = round(price * (1 + 2/100), 2) if is_long else round(price * (1 - 2/100), 2)
-        sl_price = round(price * (1 - 1/100), 2) if is_long else round(price * (1 + 1/100), 2)
+        tp_price = round(price * (1 + data.tp_pct/100), 2) if is_long else round(price * (1 - data.tp_pct/100), 2)
+        sl_price = round(price * (1 - data.sl_pct/100), 2) if is_long else round(price * (1 + data.sl_pct/100), 2)
         ms = data.symbol.split("/")[0] + "_" + data.symbol.split("/")[1].split(":")[0]
         mx_side = 1 if is_long else 3
         ot = 1 if data.margin_type == "isolated" else 2
         close_s = 2 if is_long else 4
         pt = 1 if is_long else 2
         results["setup"] = {"price": price, "tp": tp_price, "sl": sl_price, "amount": amount,
-                            "test_leverage": test_lev, "requested_tp_pct": data.tp_pct, "requested_sl_pct": data.sl_pct}
+                            "test_leverage": test_lev, "method": m}
 
         async def open_pos():
             r = await ex_client.exchange.contractPrivatePostOrderSubmit({
@@ -618,9 +618,21 @@ async def test_tpsl_methods(data: TestOrderRequest):
 
         async def safe_close():
             try:
-                await ex_client.exchange.contractPrivatePostOrderSubmit({
-                    "symbol": ms, "price": 0, "vol": amount, "leverage": test_lev,
-                    "side": close_s, "type": 5, "openType": ot})
+                # Tüm açık pozisyonları kapat
+                resp = await ex_client.exchange.contractPrivateGetPositionOpenPositions({"symbol": ms})
+                data_ = resp.get("data", []) if isinstance(resp, dict) else resp
+                for p in (data_ or []):
+                    vol = float(p.get("holdVol", 0))
+                    if vol > 0:
+                        cs2 = 2 if int(p.get("positionType", 0)) == 1 else 4
+                        await ex_client.exchange.contractPrivatePostOrderSubmit({
+                            "symbol": ms, "price": 0, "vol": int(vol),
+                            "leverage": test_lev, "side": cs2, "type": 5, "openType": ot})
+            except Exception:
+                pass
+            # Tüm plan emirlerini iptal et
+            try:
+                await ex_client.exchange.contractPrivatePostPlanorderCancelAll({"symbol": ms})
             except Exception:
                 pass
 
@@ -639,104 +651,73 @@ async def test_tpsl_methods(data: TestOrderRequest):
                         "holdVol": p.get("holdVol"), "state": p.get("state")}
             return {"error": "no_position_found"}
 
-        # ── YÖNTEM 1: Market order body'de TP/SL ──
-        try:
+        # Önce mevcut pozisyonları temizle
+        await safe_close()
+        await asyncio.sleep(1)
+
+        if m == 1:
+            # Market order body'de TP/SL
             oid = await ex_client.exchange.contractPrivatePostOrderSubmit({
                 "symbol": ms, "price": 0, "vol": amount, "leverage": test_lev,
                 "side": mx_side, "type": 5, "openType": ot,
                 "takeProfitPrice": tp_price, "stopLossPrice": sl_price})
             await asyncio.sleep(2)
-            tpsl = await check_tpsl()
-            results["m1_order_body"] = {"order": True, "orderId": str(oid.get("data", "")), "tpsl_on_position": tpsl}
-            await safe_close(); await asyncio.sleep(1)
-        except Exception as e:
-            results["m1_order_body"] = {"order": False, "error": str(e)}
-            await safe_close(); await asyncio.sleep(1)
+            results["result"] = {"method": "order_body_tpsl", "order": True,
+                "orderId": str(oid.get("data", "")), "tpsl": await check_tpsl()}
 
-        # ── YÖNTEM 2: Market order + stoporder/change_price (orderId ile) ──
-        try:
+        elif m == 2:
+            # Market order + stoporder/change_price
             oid2 = await open_pos(); await asyncio.sleep(2)
-            results["m2_step1_order"] = {"orderId": oid2, "pos_check": await check_tpsl()}
-            if oid2:
-                body2 = {"orderId": int(oid2),
-                    "stopLossPrice": sl_price, "takeProfitPrice": tp_price}
-                try:
-                    r2 = await ex_client.exchange.contractPrivatePostStoporderChangePrice(body2)
-                    await asyncio.sleep(1)
-                    results["m2_stoporder_change_price"] = {"api_ok": True, "resp": str(r2), "tpsl": await check_tpsl()}
-                except Exception as e2:
-                    results["m2_stoporder_change_price"] = {"api_ok": False, "error": str(e2), "body": body2}
-            await safe_close(); await asyncio.sleep(1)
-        except Exception as e:
-            results["m2_stoporder_change_price"] = {"error": str(e), "tb": _tb.format_exc()[-300:]}
-            await safe_close(); await asyncio.sleep(1)
+            results["step1"] = {"orderId": oid2, "pos": await check_tpsl()}
+            body2 = {"orderId": int(oid2), "stopLossPrice": sl_price, "takeProfitPrice": tp_price}
+            r2 = await ex_client.exchange.contractPrivatePostStoporderChangePrice(body2)
+            await asyncio.sleep(1)
+            results["result"] = {"method": "stoporder_change_price", "resp": str(r2), "tpsl": await check_tpsl()}
 
-        # ── YÖNTEM 3: CCXT create_order with stopLoss/takeProfit params ──
-        try:
+        elif m == 3:
+            # CCXT create_order with params
             oid3 = await ex_client.exchange.create_order(
                 data.symbol, "market", "buy" if is_long else "sell", amount,
                 params={"stopLossPrice": sl_price, "takeProfitPrice": tp_price,
                         "leverage": test_lev, "marginMode": data.margin_type})
             await asyncio.sleep(2)
-            results["m3_ccxt_create_order"] = {"order": True, "id": str(oid3.get("id", "")), "tpsl": await check_tpsl()}
-            await safe_close(); await asyncio.sleep(1)
-        except Exception as e:
-            results["m3_ccxt_create_order"] = {"order": False, "error": str(e)}
-            await safe_close(); await asyncio.sleep(1)
+            results["result"] = {"method": "ccxt_create_order", "id": str(oid3.get("id", "")), "tpsl": await check_tpsl()}
 
-        # ── YÖNTEM 4: Market order + plan/trigger orders (ayrı TP ve SL) ──
-        try:
+        elif m == 4:
+            # Market order + plan/trigger orders
             await open_pos(); await asyncio.sleep(2)
-            pos_check = await check_tpsl()
-            results["m4_step1_order"] = {"pos": pos_check}
-            tp_trigger = 1 if is_long else 2  # 1=>=, 2=<=
+            results["step1"] = {"pos": await check_tpsl()}
+            tp_trigger = 1 if is_long else 2
             sl_trigger = 2 if is_long else 1
-            tp_body = {"symbol": ms, "price": 0, "vol": amount,
-                "side": close_s, "openType": ot, "leverage": test_lev,
+            tp_r = await ex_client.exchange.contractPrivatePostPlanorderPlace({
+                "symbol": ms, "price": 0, "vol": amount, "side": close_s,
+                "openType": ot, "leverage": test_lev,
                 "triggerPrice": tp_price, "triggerType": tp_trigger,
-                "executeCycle": 2, "orderType": 5, "trend": 1}
-            sl_body = {"symbol": ms, "price": 0, "vol": amount,
-                "side": close_s, "openType": ot, "leverage": test_lev,
+                "executeCycle": 2, "orderType": 5, "trend": 1})
+            sl_r = await ex_client.exchange.contractPrivatePostPlanorderPlace({
+                "symbol": ms, "price": 0, "vol": amount, "side": close_s,
+                "openType": ot, "leverage": test_lev,
                 "triggerPrice": sl_price, "triggerType": sl_trigger,
-                "executeCycle": 2, "orderType": 5, "trend": 1}
-            try:
-                tp_r = await ex_client.exchange.contractPrivatePostPlanorderPlace(tp_body)
-                results["m4_tp_planorder"] = {"ok": True, "resp": str(tp_r)}
-            except Exception as etp:
-                results["m4_tp_planorder"] = {"ok": False, "error": str(etp)}
-            try:
-                sl_r = await ex_client.exchange.contractPrivatePostPlanorderPlace(sl_body)
-                results["m4_sl_planorder"] = {"ok": True, "resp": str(sl_r)}
-            except Exception as esl:
-                results["m4_sl_planorder"] = {"ok": False, "error": str(esl)}
-            # Stop order listesini kontrol et
-            try:
-                stop_list = await ex_client.exchange.contractPrivateGetPlanorderListOrders(
-                    {"symbol": ms, "is_finished": 0, "page_num": 1, "page_size": 10})
-                results["m4_active_triggers"] = str(stop_list)[:500]
-            except Exception as esl2:
-                results["m4_active_triggers"] = {"error": str(esl2)}
-            try:
-                await ex_client.exchange.contractPrivatePostPlanorderCancelAll({"symbol": ms})
-            except Exception:
-                pass
-            await safe_close(); await asyncio.sleep(1)
-        except Exception as e:
-            results["m4_planorder_trigger"] = {"error": str(e), "tb": _tb.format_exc()[-300:]}
-            await safe_close(); await asyncio.sleep(1)
+                "executeCycle": 2, "orderType": 5, "trend": 1})
+            await asyncio.sleep(1)
+            results["result"] = {"method": "planorder_trigger", "tp": str(tp_r), "sl": str(sl_r), "tpsl": await check_tpsl()}
 
-        # ── YÖNTEM 5: Market order + string TP/SL prices in body ──
-        try:
+        elif m == 5:
+            # Market order + string price values
             oid5 = await ex_client.exchange.contractPrivatePostOrderSubmit({
                 "symbol": ms, "price": "0", "vol": amount, "leverage": test_lev,
                 "side": mx_side, "type": 5, "openType": ot,
                 "takeProfitPrice": str(tp_price), "stopLossPrice": str(sl_price)})
             await asyncio.sleep(2)
-            results["m5_string_tpsl"] = {"order": True, "orderId": str(oid5.get("data", "")), "tpsl": await check_tpsl()}
-            await safe_close(); await asyncio.sleep(1)
-        except Exception as e:
-            results["m5_string_tpsl"] = {"order": False, "error": str(e)}
-            await safe_close(); await asyncio.sleep(1)
+            results["result"] = {"method": "string_tpsl", "orderId": str(oid5.get("data", "")), "tpsl": await check_tpsl()}
+
+        elif m == 0:
+            # Sadece temizlik — tüm pozisyonları kapat
+            results["result"] = {"method": "cleanup", "done": True}
+
+        # Pozisyonu kapat
+        if m != 0:
+            await safe_close()
 
         return results
     except Exception as e:
