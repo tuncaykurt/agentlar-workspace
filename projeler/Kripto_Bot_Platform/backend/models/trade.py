@@ -201,6 +201,17 @@ class OHLCV(Base):
     )
 
 
+class AiPrompt(Base):
+    """AI filtre promptları — admin panelinden düzenlenebilir"""
+    __tablename__ = "ai_prompts"
+
+    key = Column(String, primary_key=True)              # news_analysis, self_learning, trend_volatility
+    prompt_text = Column(Text, nullable=False)
+    model = Column(String, nullable=True)               # deepseek/deepseek-chat, perplexity/sonar-pro
+    description = Column(String, nullable=True)          # Türkçe açıklama
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class Liquidation(Base):
     """
     Gerçek zamanlı likidasyon emirleri.

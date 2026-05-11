@@ -5,14 +5,153 @@ OpenRouter üzerinden AI modelleri kullanarak sinyalleri analiz eder.
 Modeller:
 - DeepSeek Chat: Hızlı analiz, pattern recognition (ucuz, hızlı)
 - Perplexity Sonar Pro: İnternet araştırması, güncel haber analizi (online)
+
+Promptlar DB'den okunur (ai_prompts tablosu). Yoksa DEFAULT_PROMPTS kullanılır.
 """
 import json
 from datetime import datetime, timedelta
 from ai.openrouter import _call
 from core.config import settings
+from core.database import async_session
 
 FAST = settings.AI_FAST_MODEL          # deepseek — hızlı, ucuz
 SEARCH = settings.AI_SEARCH_MODEL      # perplexity — internet araştırması
+
+# ─── Varsayılan Promptlar ─────────────────────────────────────────────────────
+# DB'de kayıt yoksa bu kullanılır. Admin panelinden düzenlenince DB'deki geçerli olur.
+
+DEFAULT_PROMPTS = {
+    "news_analysis": {
+        "model": SEARCH,
+        "description": "Haber Filtresi — Perplexity ile güncel haber + ekonomik takvim analizi",
+        "prompt_text": """Sen kripto piyasa analisti ve risk yöneticisisin.
+
+Şu an {coin} için bir {signal_type} sinyali geldi. Fiyat üzerinde etkisi olabilecek güncel gelişmeleri analiz et.
+
+═══ EKONOMİK TAKVİM (Yaklaşan Olaylar) ═══
+{events_text}
+
+═══ GÖREV ═══
+1. Bu olayların {coin} fiyatı üzerindeki olası etkisini değerlendir
+2. Şu an piyasada {signal_type} pozisyon açmak uygun mu?
+3. Güncel kripto piyasa ortamını değerlendir (volatilite, trend, sentiment)
+
+JSON formatında cevap ver:
+{{
+  "should_block": true/false,
+  "risk_level": "low/medium/high/critical",
+  "reason": "2-3 cümle Türkçe açıklama",
+  "news_summary": "Güncel piyasa durumu ve haberlerin 1 cümlelik özeti",
+  "confidence": 0-100
+}}""",
+    },
+    "self_learning": {
+        "model": FAST,
+        "description": "Öz-Öğrenme Filtresi — DeepSeek ile geçmiş sinyal pattern analizi",
+        "prompt_text": """Sen kripto trading veri analistisin. Geçmiş sinyal verilerini analiz ederek mevcut sinyal hakkında karar ver.
+
+═══ MEVCUT SİNYAL ═══
+Sembol: {symbol} | Yön: {signal_type} | Fiyat: {price}
+RSI: {rsi} | ATR: {atr} | EMA200 Mesafe: {ema200_dist}%
+Şu anki saat: {current_hour_utc}:00 UTC
+
+═══ GENEL PERFORMANS ({total_signals} sinyal) ═══
+Genel Win Rate: %{overall_wr} ({total_tp}W/{total_sl}L)
+
+═══ SAAT BAZLI BAŞARI ═══
+{hour_text}
+
+═══ RSI BAZLI BAŞARI ═══
+{rsi_text}
+
+═══ YÖN BAZLI BAŞARI ═══
+{dir_text}
+
+═══ SON 15 SİNYAL (trend analizi) ═══
+{recent_text}
+
+═══ FİYAT ARALIĞI ANALİZİ (sinyal sonrası hareket) ═══
+{range_text}
+
+═══ ANALİZ GÖREVİ ═══
+Yukarıdaki verilere dayanarak:
+1. Bu saat diliminde ({current_hour_utc}:00) {signal_type} sinyalleri tarihsel olarak başarılı mı?
+2. Mevcut RSI ({rsi}) seviyesinde geçmiş başarı oranı nasıl?
+3. Son sinyallerde bir kayıp/kazanç serisi (streak) var mı? Trend ne yönde?
+4. Fiyat hareketlerinin aralığı (spread) bu sinyal türü için tipik mi?
+5. Bu koşullarda sinyal işleme alınmalı mı?
+
+JSON formatında cevap ver:
+{{
+  "should_block": true/false,
+  "confidence": 0-100,
+  "reason": "3-4 cümle Türkçe detaylı analiz (hangi pattern'ları gördüğünü açıkla)",
+  "patterns": {{
+    "hour_favorable": true/false,
+    "rsi_favorable": true/false,
+    "direction_favorable": true/false,
+    "recent_trend": "winning/losing/mixed",
+    "risk_level": "low/medium/high"
+  }},
+  "suggestion": "Kısa öneri (ör: 'Bu saat diliminde sell sinyalleri %30 başarılı, dikkatli ol')"
+}}""",
+    },
+    "trend_volatility": {
+        "model": FAST,
+        "description": "Trend + Volatilite Filtresi — DeepSeek ile teknik analiz",
+        "prompt_text": """Sen teknik analiz uzmanısın. Trend ve volatilite durumunu değerlendir.
+
+═══ SİNYAL ═══
+{symbol} | {signal_type} | Fiyat: {price}
+
+═══ İNDİKATÖRLER ═══
+RSI(14): {rsi}
+ATR: {atr}
+EMA200: {ema200_val} (mesafe: {ema200_dist}%)
+Fiyat {ema200_position} EMA200
+
+═══ SON 10 MUM ═══
+{candle_text}
+
+═══ ANALİZ ═══
+1. Trend yönü ve gücü nedir?
+2. Volatilite mevcut sinyal için uygun mu (çok yüksek = tehlikeli, çok düşük = yetersiz hareket)?
+3. {signal_type} sinyali trend ile uyumlu mu?
+4. RSI aşırı bölgelerde mi?
+
+JSON cevap ver:
+{{
+  "should_block": true/false,
+  "trend_direction": "bullish/bearish/sideways",
+  "trend_strength": "strong/moderate/weak",
+  "volatility_level": "low/normal/high/extreme",
+  "trend_aligned": true/false,
+  "reason": "2-3 cümle Türkçe açıklama",
+  "confidence": 0-100
+}}""",
+    },
+}
+
+
+async def _get_prompt(key: str) -> tuple[str, str]:
+    """
+    DB'den prompt al, yoksa DEFAULT_PROMPTS'tan fallback.
+    Returns: (prompt_text, model)
+    """
+    default = DEFAULT_PROMPTS[key]
+    try:
+        from models.trade import AiPrompt
+        from sqlalchemy import select
+        async with async_session() as session:
+            row = await session.execute(
+                select(AiPrompt).where(AiPrompt.key == key)
+            )
+            prompt = row.scalar_one_or_none()
+            if prompt:
+                return prompt.prompt_text, prompt.model or default["model"]
+    except Exception:
+        pass
+    return default["prompt_text"], default["model"]
 
 
 async def ai_news_analysis(symbol: str, signal_type: str, upcoming_events: list[dict]) -> dict:
@@ -29,29 +168,15 @@ async def ai_news_analysis(symbol: str, signal_type: str, upcoming_events: list[
     else:
         events_text = "  Yaklaşan önemli ekonomik olay yok.\n"
 
-    prompt = f"""Sen kripto piyasa analisti ve risk yöneticisisin.
-
-Şu an {coin} için bir {signal_type.upper()} sinyali geldi. Fiyat üzerinde etkisi olabilecek güncel gelişmeleri analiz et.
-
-═══ EKONOMİK TAKVİM (Yaklaşan Olaylar) ═══
-{events_text}
-
-═══ GÖREV ═══
-1. Bu olayların {coin} fiyatı üzerindeki olası etkisini değerlendir
-2. Şu an piyasada {signal_type.upper()} pozisyon açmak uygun mu?
-3. Güncel kripto piyasa ortamını değerlendir (volatilite, trend, sentiment)
-
-JSON formatında cevap ver:
-{{
-  "should_block": true/false,
-  "risk_level": "low/medium/high/critical",
-  "reason": "2-3 cümle Türkçe açıklama",
-  "news_summary": "Güncel piyasa durumu ve haberlerin 1 cümlelik özeti",
-  "confidence": 0-100
-}}"""
+    prompt_template, model = await _get_prompt("news_analysis")
+    prompt = prompt_template.format(
+        coin=coin,
+        signal_type=signal_type.upper(),
+        events_text=events_text,
+    )
 
     try:
-        result = await _call(SEARCH, prompt, max_tokens=400)
+        result = await _call(model, prompt, max_tokens=400)
         return {
             "should_block": result.get("should_block", False),
             "risk_level": result.get("risk_level", "medium"),
@@ -82,11 +207,6 @@ async def ai_self_learning_analysis(
     """
     Öz-Öğrenme Filtresi — Geçmiş sinyallerden pattern çıkarır.
     DeepSeek (hızlı) kullanır.
-
-    past_signals: Son 100 sinyalin listesi:
-    [{action, signal_type, price, tp_price, sl_price, outcome, rsi_14,
-      volatility_atr, ema200_dist, created_at, duration_minutes,
-      max_price_in_range, min_price_in_range}]
     """
     if len(past_signals) < 5:
         return {
@@ -181,56 +301,28 @@ async def ai_self_learning_analysis(
     total_sl = len([s for s in past_signals if s.get("outcome") == "sl_hit"])
     overall_wr = round(total_tp / total_signals * 100) if total_signals > 0 else 0
 
-    prompt = f"""Sen kripto trading veri analistisin. Geçmiş sinyal verilerini analiz ederek mevcut sinyal hakkında karar ver.
-
-═══ MEVCUT SİNYAL ═══
-Sembol: {symbol} | Yön: {signal_type.upper()} | Fiyat: ${price:,.2f}
-RSI: {rsi or '?'} | ATR: {atr or '?'} | EMA200 Mesafe: {ema200_dist or '?'}%
-Şu anki saat: {current_hour_utc:02d}:00 UTC
-
-═══ GENEL PERFORMANS ({total_signals} sinyal) ═══
-Genel Win Rate: %{overall_wr} ({total_tp}W/{total_sl}L)
-
-═══ SAAT BAZLI BAŞARI ═══
-{hour_text or '  Yeterli veri yok'}
-
-═══ RSI BAZLI BAŞARI ═══
-{rsi_text or '  Yeterli veri yok'}
-
-═══ YÖN BAZLI BAŞARI ═══
-{dir_text or '  Yeterli veri yok'}
-
-═══ SON 15 SİNYAL (trend analizi) ═══
-{recent_text or '  Yeterli veri yok'}
-
-═══ FİYAT ARALIĞI ANALİZİ (sinyal sonrası hareket) ═══
-{range_text or '  Yeterli veri yok'}
-
-═══ ANALİZ GÖREVİ ═══
-Yukarıdaki verilere dayanarak:
-1. Bu saat diliminde ({current_hour_utc:02d}:00) {signal_type.upper()} sinyalleri tarihsel olarak başarılı mı?
-2. Mevcut RSI ({rsi or '?'}) seviyesinde geçmiş başarı oranı nasıl?
-3. Son sinyallerde bir kayıp/kazanç serisi (streak) var mı? Trend ne yönde?
-4. Fiyat hareketlerinin aralığı (spread) bu sinyal türü için tipik mi?
-5. Bu koşullarda sinyal işleme alınmalı mı?
-
-JSON formatında cevap ver:
-{{
-  "should_block": true/false,
-  "confidence": 0-100,
-  "reason": "3-4 cümle Türkçe detaylı analiz (hangi pattern'ları gördüğünü açıkla)",
-  "patterns": {{
-    "hour_favorable": true/false,
-    "rsi_favorable": true/false,
-    "direction_favorable": true/false,
-    "recent_trend": "winning/losing/mixed",
-    "risk_level": "low/medium/high"
-  }},
-  "suggestion": "Kısa öneri (ör: 'Bu saat diliminde sell sinyalleri %30 başarılı, dikkatli ol')"
-}}"""
+    prompt_template, model = await _get_prompt("self_learning")
+    prompt = prompt_template.format(
+        symbol=symbol,
+        signal_type=signal_type.upper(),
+        price=f"${price:,.2f}",
+        rsi=rsi or '?',
+        atr=atr or '?',
+        ema200_dist=ema200_dist or '?',
+        current_hour_utc=f"{current_hour_utc:02d}",
+        total_signals=total_signals,
+        overall_wr=overall_wr,
+        total_tp=total_tp,
+        total_sl=total_sl,
+        hour_text=hour_text or '  Yeterli veri yok',
+        rsi_text=rsi_text or '  Yeterli veri yok',
+        dir_text=dir_text or '  Yeterli veri yok',
+        recent_text=recent_text or '  Yeterli veri yok',
+        range_text=range_text or '  Yeterli veri yok',
+    )
 
     try:
-        result = await _call(FAST, prompt, max_tokens=600)
+        result = await _call(model, prompt, max_tokens=600)
         return {
             "should_block": result.get("should_block", False),
             "confidence": result.get("confidence", 50),
@@ -269,39 +361,23 @@ async def ai_trend_volatility_analysis(
             direction = "▲" if c[4] > c[1] else "▼"
             candle_text += f"  {direction} O:{c[1]:.0f} H:{c[2]:.0f} L:{c[3]:.0f} C:{c[4]:.0f} V:{c[5]:.0f} (body: %{body_pct})\n"
 
-    prompt = f"""Sen teknik analiz uzmanısın. Trend ve volatilite durumunu değerlendir.
+    ema200_position = 'ÜSTÜNDE' if ema200_val and price > ema200_val else 'ALTINDA'
 
-═══ SİNYAL ═══
-{symbol} | {signal_type.upper()} | Fiyat: ${price:,.2f}
-
-═══ İNDİKATÖRLER ═══
-RSI(14): {rsi or '?'}
-ATR: {atr or '?'}
-EMA200: {ema200_val or '?'} (mesafe: {ema200_dist or '?'}%)
-Fiyat {'ÜSTÜNDE' if ema200_val and price > ema200_val else 'ALTINDA'} EMA200
-
-═══ SON 10 MUM ═══
-{candle_text or '  Mum verisi yok'}
-
-═══ ANALİZ ═══
-1. Trend yönü ve gücü nedir?
-2. Volatilite mevcut sinyal için uygun mu (çok yüksek = tehlikeli, çok düşük = yetersiz hareket)?
-3. {signal_type.upper()} sinyali trend ile uyumlu mu?
-4. RSI aşırı bölgelerde mi?
-
-JSON cevap ver:
-{{
-  "should_block": true/false,
-  "trend_direction": "bullish/bearish/sideways",
-  "trend_strength": "strong/moderate/weak",
-  "volatility_level": "low/normal/high/extreme",
-  "trend_aligned": true/false,
-  "reason": "2-3 cümle Türkçe açıklama",
-  "confidence": 0-100
-}}"""
+    prompt_template, model = await _get_prompt("trend_volatility")
+    prompt = prompt_template.format(
+        symbol=symbol,
+        signal_type=signal_type.upper(),
+        price=f"${price:,.2f}",
+        rsi=rsi or '?',
+        atr=atr or '?',
+        ema200_val=ema200_val or '?',
+        ema200_dist=ema200_dist or '?',
+        ema200_position=ema200_position,
+        candle_text=candle_text or '  Mum verisi yok',
+    )
 
     try:
-        result = await _call(FAST, prompt, max_tokens=400)
+        result = await _call(model, prompt, max_tokens=400)
         return {
             "should_block": result.get("should_block", False),
             "trend_direction": result.get("trend_direction", "sideways"),

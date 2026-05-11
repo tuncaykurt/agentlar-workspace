@@ -46,6 +46,13 @@ export const api = {
       body: JSON.stringify(body),
     }).then(handleResponse),
 
+  put: (path: string, body: unknown) =>
+    fetch(`${API_BASE}${path}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(handleResponse),
+
   delete: (path: string) =>
     fetch(`${API_BASE}${path}`, { method: "DELETE" }).then(handleResponse),
 }

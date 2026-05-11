@@ -324,6 +324,223 @@ function AiSuggestCard({ botId }: { botId: number | null }) {
   )
 }
 
+// ─── AI Prompt Yönetim Paneli ────────────────────────────────────────────────
+function AiPromptEditor() {
+  const [open, setOpen] = useState(false)
+  const { data: prompts, mutate, isLoading } = useSWR(
+    open ? '/analytics/ai-prompts' : null,
+    fetcher
+  )
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [editText, setEditText] = useState("")
+  const [editModel, setEditModel] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState<string | null>(null)
+
+  const startEdit = (p: any) => {
+    setEditingKey(p.key)
+    setEditText(p.prompt_text)
+    setEditModel(p.model || "")
+  }
+
+  const cancelEdit = () => {
+    setEditingKey(null)
+    setEditText("")
+    setEditModel("")
+  }
+
+  const savePrompt = async () => {
+    if (!editingKey) return
+    setSaving(true)
+    try {
+      await api.put(`/analytics/ai-prompts/${editingKey}`, {
+        prompt_text: editText,
+        model: editModel || null,
+      })
+      await mutate()
+      setEditingKey(null)
+    } catch (e: any) {
+      alert("Kaydetme hatası: " + (e?.message || "Bilinmeyen hata"))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const resetPrompt = async (key: string) => {
+    if (!confirm("Bu promptu varsayılana sıfırlamak istediğinize emin misiniz?")) return
+    setResetting(key)
+    try {
+      await api.delete(`/analytics/ai-prompts/${key}`)
+      await mutate()
+      if (editingKey === key) cancelEdit()
+    } catch (e: any) {
+      alert("Sıfırlama hatası: " + (e?.message || "Bilinmeyen hata"))
+    } finally {
+      setResetting(null)
+    }
+  }
+
+  const LABEL_MAP: Record<string, { icon: string; name: string }> = {
+    news_analysis:    { icon: "📰", name: "Haber Filtresi" },
+    self_learning:    { icon: "🧠", name: "Öz-Öğrenme Filtresi" },
+    trend_volatility: { icon: "📈", name: "Trend + Volatilite Filtresi" },
+  }
+
+  return (
+    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl backdrop-blur-sm overflow-hidden">
+      {/* Başlık — tıklanınca aç/kapa */}
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-6 hover:bg-slate-800/30 transition-colors text-left"
+      >
+        <div>
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <span>🤖</span> AI Prompt Yönetimi
+            <span className="text-xs font-normal text-slate-500 ml-1">Sistem promptlarını görüntüle ve düzenle</span>
+          </h2>
+        </div>
+        <svg
+          className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {/* İçerik */}
+      {open && (
+        <div className="px-6 pb-6 space-y-4">
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-blue-500" />
+            </div>
+          ) : !prompts || prompts.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 text-sm">Prompt bulunamadı.</div>
+          ) : (
+            prompts.map((p: any) => {
+              const label = LABEL_MAP[p.key] || { icon: "⚙️", name: p.key }
+              const isEditing = editingKey === p.key
+
+              return (
+                <div key={p.key} className={`rounded-xl border transition-colors ${
+                  isEditing ? "border-blue-500/40 bg-blue-500/5" : "border-slate-700 bg-slate-800/30"
+                }`}>
+                  {/* Prompt başlık satırı */}
+                  <div className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{label.icon}</span>
+                      <div>
+                        <span className="text-sm font-medium text-slate-200">{label.name}</span>
+                        <span className="text-[10px] text-slate-600 ml-2 font-mono">{p.key}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Model badge */}
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-400 border border-slate-600 font-mono">
+                        {p.model}
+                      </span>
+                      {/* Custom badge */}
+                      {p.is_custom && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                          Özel
+                        </span>
+                      )}
+                      {p.updated_at && (
+                        <span className="text-[10px] text-slate-600">
+                          {new Date(p.updated_at).toLocaleDateString("tr-TR")}
+                        </span>
+                      )}
+                      {/* Butonlar */}
+                      {!isEditing ? (
+                        <button
+                          onClick={() => startEdit(p)}
+                          className="text-xs px-3 py-1 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600 transition-colors"
+                        >
+                          Düzenle
+                        </button>
+                      ) : (
+                        <button
+                          onClick={cancelEdit}
+                          className="text-xs px-3 py-1 rounded-lg bg-slate-700 text-slate-400 hover:bg-slate-600 border border-slate-600 transition-colors"
+                        >
+                          İptal
+                        </button>
+                      )}
+                      {p.is_custom && !isEditing && (
+                        <button
+                          onClick={() => resetPrompt(p.key)}
+                          disabled={resetting === p.key}
+                          className="text-xs px-3 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors disabled:opacity-50"
+                        >
+                          {resetting === p.key ? "..." : "Sıfırla"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Prompt içeriği — düzenleme modu veya okuma modu */}
+                  {isEditing ? (
+                    <div className="px-4 pb-4 space-y-3">
+                      <div>
+                        <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">Model</label>
+                        <input
+                          type="text"
+                          value={editModel}
+                          onChange={e => setEditModel(e.target.value)}
+                          placeholder="deepseek/deepseek-chat"
+                          className="w-full text-xs bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-300 font-mono focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                          Prompt Metni
+                          <span className="text-slate-600 ml-2 normal-case">
+                            (Değişkenler: {"{"}coin{"}"}, {"{"}signal_type{"}"}, {"{"}price{"}"} vb. — küme parantez içinde)
+                          </span>
+                        </label>
+                        <textarea
+                          value={editText}
+                          onChange={e => setEditText(e.target.value)}
+                          rows={18}
+                          className="w-full text-xs bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-slate-300 font-mono focus:outline-none focus:border-blue-500 leading-relaxed resize-y"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={cancelEdit}
+                          className="text-xs px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 border border-slate-600 transition-colors"
+                        >
+                          İptal
+                        </button>
+                        <button
+                          onClick={savePrompt}
+                          disabled={saving || !editText.trim()}
+                          className="text-xs px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-500 border border-blue-500 transition-colors disabled:opacity-50"
+                        >
+                          {saving ? "Kaydediliyor..." : "Kaydet"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="px-4 pb-4">
+                      <pre className="text-[11px] text-slate-400 font-mono bg-slate-900/60 rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto leading-relaxed whitespace-pre-wrap">
+                        {p.prompt_text}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+          <p className="text-[10px] text-slate-600 text-center pt-2">
+            Promptlarda {"{"}değişken{"}"} formatını kullanın. JSON çıktı şablonundaki küme parantezleri {"{"}{"{"} ve {"}"}{"}"}  şeklinde escape edilmelidir.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AnalyticsPage() {
   const [activeTab,   setActiveTab]   = useState<TabKey>("all")
   const [page,        setPage]        = useState(0)
@@ -403,13 +620,6 @@ export default function AnalyticsPage() {
   const totalPages = Math.ceil(filteredTotal / PAGE_SIZE)
 
   const pct = (val: number) => totalSignals > 0 ? (val / totalSignals) * 100 : 0
-
-  const formatTime = (iso: string | null) => {
-    if (!iso) return "—"
-    const d = new Date(iso)
-    return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" }) +
-      " " + d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
-  }
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -772,6 +982,9 @@ export default function AnalyticsPage() {
         <SignalRangeSection items={filteredData?.items || []} isLoading={filteredLoading} />
       </div>
 
+      {/* ── AI Prompt Yönetimi ───────────────────────────────────────────── */}
+      <AiPromptEditor />
+
       {/* ── Sinyal Detay Tablosu ──────────────────────────────────────────── */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -810,215 +1023,118 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider">
-                    <th className="text-left pb-3 pr-3 whitespace-nowrap">Zaman</th>
-                    <th className="text-left pb-3 pr-3">Sembol</th>
-                    <th className="text-left pb-3 pr-3">Yön</th>
-                    <th className="text-left pb-3 pr-3">Periyot</th>
-                    <th className="text-left pb-3 pr-3">Durum / Sonuç</th>
-                    <th className="text-right pb-3 pr-3 whitespace-nowrap">Giriş</th>
-                    <th className="text-right pb-3 pr-3 whitespace-nowrap">TP Hedef</th>
-                    <th className="text-right pb-3 pr-3 whitespace-nowrap">SL Hedef</th>
-                    <th className="text-right pb-3 pr-3 whitespace-nowrap">Süre</th>
-                    <th className="text-left pb-3 pr-3 min-w-[140px]">Neden?</th>
-                    <th className="text-left pb-3 pr-3 min-w-[280px]">Filtre Analizi / Açıklama</th>
-                    <th className="text-right pb-3 pr-3">RSI</th>
-                    <th className="text-right pb-3 pr-3">ATR</th>
-                    <th className="text-right pb-3">EMA200%</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {filteredItems.map((item: any) => {
-                    // Süre gösterimi
-                    const fmtDur = (min: number | null) => {
-                      if (min == null) return null
-                      if (min < 60) return `${min}dk`
-                      return `${Math.floor(min / 60)}s ${Math.round(min % 60)}dk`
-                    }
+            <div className="space-y-3">
+              {filteredItems.map((item: any) => {
+                const isLong = item.signal_type === "buy"
+                const fmtPrice = (v: number | null) => v != null ? `$${Number(v).toLocaleString("tr-TR", {maximumFractionDigits: 2})}` : "—"
+                const fmtDur = (min: number | null) => {
+                  if (min == null) return null
+                  if (min < 60) return `${min}dk`
+                  return `${Math.floor(min / 60)}s ${Math.round(min % 60)}dk`
+                }
+                const d = new Date(item.created_at)
+                const timeStr = d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" }) +
+                  " " + d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
 
-                    // Sonuç badge
-                    const outcomeEl = (() => {
-                      if (!item.outcome || item.outcome === "open") return null
-                      if (item.outcome === "tp_hit") return (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 whitespace-nowrap">
-                          ✓ TP{item.outcome_pnl_pct != null ? ` +${item.outcome_pnl_pct}%` : ""}
+                // Durum badge
+                const statusBadge = item.action === "executed"
+                  ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-green-500/10 text-green-300 border-green-500/30">✅ Onaylandı</span>
+                  : item.action === "filtered"
+                  ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-red-500/10 text-red-300 border-red-500/30">❌ Filtrelendi</span>
+                  : item.action === "analyzed"
+                  ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-blue-500/10 text-blue-300 border-blue-500/30">📊 Pasif Analiz</span>
+                  : item.action === "error"
+                  ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-orange-500/10 text-orange-300 border-orange-500/30">⚠️ Hata</span>
+                  : <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-red-500/10 text-red-300 border-red-500/30">❌ Reddedildi</span>
+
+                // Outcome badge
+                const outcomeBadge = !item.outcome || item.outcome === "open" ? null
+                  : item.outcome === "tp_hit"
+                  ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/20 text-green-400 border border-green-500/30">✓ TP{item.outcome_pnl_pct != null ? ` +${item.outcome_pnl_pct}%` : ""}</span>
+                  : item.outcome === "sl_hit"
+                  ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/30">✕ SL{item.outcome_pnl_pct != null ? ` ${item.outcome_pnl_pct}%` : ""}</span>
+                  : <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-700/50 text-slate-400 border border-slate-700">{item.outcome === "expired" ? "○ Süresi Doldu" : "● Takipte"}</span>
+
+                return (
+                  <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-800/20 hover:bg-slate-800/40 transition-colors p-4">
+                    {/* Satır 1: Sembol, Yön, Durum, Fiyatlar */}
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="font-mono font-bold text-white text-sm">
+                        {item.symbol.replace("/USDT:USDT", "USDT.P").replace("/", "")}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+                        isLong ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-red-500/10 text-red-400 border-red-500/30"
+                      }`}>
+                        {isLong ? "▲ LONG" : "▼ SHORT"}
+                      </span>
+                      {item.timeframe && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-700/50 text-slate-300 border border-slate-600/40">
+                          {item.timeframe}
                         </span>
-                      )
-                      if (item.outcome === "sl_hit") return (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 whitespace-nowrap">
-                          ✕ SL{item.outcome_pnl_pct != null ? ` ${item.outcome_pnl_pct}%` : ""}
-                        </span>
-                      )
-                      return (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 border border-slate-700 whitespace-nowrap">
-                          {item.outcome === "expired" ? "○ Süresi Doldu" : "● Takipte"}
-                        </span>
-                      )
-                    })()
+                      )}
+                      {statusBadge}
+                      {outcomeBadge}
+                      <span className="ml-auto text-[11px] text-slate-500">{timeStr}</span>
+                      {fmtDur(item.duration_minutes) && (
+                        <span className="text-[10px] text-slate-600 font-mono">{fmtDur(item.duration_minutes)}</span>
+                      )}
+                    </div>
 
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-800/30 transition-colors align-top">
-                        {/* Zaman */}
-                        <td className="py-3 pr-3 text-slate-500 whitespace-nowrap text-xs">
-                          {formatTime(item.created_at)}
-                        </td>
+                    {/* Satır 2: Fiyatlar + Göstergeler */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-mono mb-2">
+                      <span className="text-slate-400">Giriş: <span className="text-slate-200">{fmtPrice(item.price)}</span></span>
+                      <span className="text-slate-400">TP: <span className="text-green-400">{fmtPrice(item.tp_price)}</span></span>
+                      <span className="text-slate-400">SL: <span className="text-red-400">{fmtPrice(item.sl_price)}</span></span>
+                      {item.rsi_14 != null && (
+                        <span className="text-slate-400">RSI: <span className={item.rsi_14 > 70 ? "text-red-400" : item.rsi_14 < 30 ? "text-green-400" : "text-slate-300"}>{item.rsi_14.toFixed(1)}</span></span>
+                      )}
+                      {item.volatility_atr != null && (
+                        <span className="text-slate-400">ATR: <span className="text-slate-300">{item.volatility_atr.toFixed(4)}</span></span>
+                      )}
+                      {item.ema200_dist != null && (
+                        <span className="text-slate-400">EMA200: <span className={item.ema200_dist >= 0 ? "text-green-400" : "text-red-400"}>{item.ema200_dist >= 0 ? "+" : ""}{item.ema200_dist.toFixed(2)}%</span></span>
+                      )}
+                    </div>
 
-                        {/* Sembol */}
-                        <td className="py-3 pr-3 font-mono font-bold text-white whitespace-nowrap text-xs">
-                          {item.symbol.replace("/USDT:USDT", "USDT.P").replace("/", "")}
-                        </td>
-
-                        {/* Yön */}
-                        <td className="py-3 pr-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border whitespace-nowrap ${
-                            item.signal_type === "buy"
-                              ? "bg-green-500/10 text-green-400 border-green-500/30"
-                              : "bg-red-500/10 text-red-400 border-red-500/30"
-                          }`}>
-                            {item.signal_type === "buy" ? "▲ LONG" : "▼ SHORT"}
-                          </span>
-                        </td>
-
-                        {/* Periyot */}
-                        <td className="py-3 pr-3">
-                          {item.timeframe ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-700/50 text-slate-300 border border-slate-600/40 whitespace-nowrap">
-                              {item.timeframe}
-                            </span>
-                          ) : <span className="text-slate-700 text-xs">—</span>}
-                        </td>
-
-                        {/* Durum / Sonuç */}
-                        <td className="py-3 pr-3">
-                          <div className="flex flex-col gap-1">
-                            {item.action === "executed" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-green-500/10 text-green-300 border-green-500/30 whitespace-nowrap">
-                                ✅ Onaylandı
+                    {/* Satır 3: Neden badge + Filtre Analizi */}
+                    {(item.reason_labels?.length > 0 || item.filter_analysis || item.reason_description || item.reject_reason) && (
+                      <div className="pt-2 border-t border-slate-800/60">
+                        {item.reason_labels?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-1.5">
+                            {item.reason_labels.map((lbl: any, i: number) => (
+                              <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] border font-medium ${COLOR_MAP[lbl.color] || COLOR_MAP.gray}`}>
+                                {lbl.icon} {lbl.label}
                               </span>
-                            ) : item.action === "filtered" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-red-500/10 text-red-300 border-red-500/30 whitespace-nowrap">
-                                ❌ Filtrelendi
-                              </span>
-                            ) : item.action === "analyzed" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-blue-500/10 text-blue-300 border-blue-500/30 whitespace-nowrap">
-                                📊 Pasif Analiz
-                              </span>
-                            ) : item.action === "error" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-orange-500/10 text-orange-300 border-orange-500/30 whitespace-nowrap">
-                                ⚠️ Hata
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-red-500/10 text-red-300 border-red-500/30 whitespace-nowrap">
-                                ❌ Reddedildi
-                              </span>
-                            )}
-                            {outcomeEl}
+                            ))}
                           </div>
-                        </td>
-
-                        {/* Giriş Fiyatı */}
-                        <td className="py-3 pr-3 text-right font-mono text-slate-300 whitespace-nowrap text-xs">
-                          {item.price != null ? `$${Number(item.price).toLocaleString("tr-TR", {maximumFractionDigits: 2})}` : <span className="text-slate-700">—</span>}
-                        </td>
-
-                        {/* TP Hedef */}
-                        <td className="py-3 pr-3 text-right font-mono whitespace-nowrap text-xs">
-                          {item.tp_price != null ? (
-                            <span className="text-green-400">${Number(item.tp_price).toLocaleString("tr-TR", {maximumFractionDigits: 2})}</span>
-                          ) : <span className="text-slate-700">—</span>}
-                        </td>
-
-                        {/* SL Hedef */}
-                        <td className="py-3 pr-3 text-right font-mono whitespace-nowrap text-xs">
-                          {item.sl_price != null ? (
-                            <span className="text-red-400">${Number(item.sl_price).toLocaleString("tr-TR", {maximumFractionDigits: 2})}</span>
-                          ) : <span className="text-slate-700">—</span>}
-                        </td>
-
-                        {/* Süre */}
-                        <td className="py-3 pr-3 text-right font-mono text-slate-400 whitespace-nowrap text-xs">
-                          {fmtDur(item.duration_minutes) ?? <span className="text-slate-700">—</span>}
-                        </td>
-
-                        {/* Neden — badge */}
-                        <td className="py-3 pr-3">
-                          <div className="flex flex-wrap gap-1">
-                            {item.reason_labels && item.reason_labels.length > 0 ? (
-                              item.reason_labels.map((lbl: any, i: number) => (
-                                <span
-                                  key={i}
-                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border font-medium whitespace-nowrap ${COLOR_MAP[lbl.color] || COLOR_MAP.gray}`}
-                                >
-                                  {lbl.icon} {lbl.label}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-slate-600 italic text-xs">—</span>
-                            )}
+                        )}
+                        {item.reason_description && (
+                          <p className="text-[11px] text-slate-300 mb-1">{item.reason_description}</p>
+                        )}
+                        {item.filter_analysis ? (
+                          <div className="space-y-0.5">
+                            {item.filter_analysis.split(" | ").map((line: string, i: number) => (
+                              <p key={i} className={`text-[11px] ${
+                                line.startsWith("🤖") && line.includes("ENGEL") ? "text-red-400 font-medium bg-red-500/5 px-1 rounded" :
+                                line.startsWith("🤖") ? "text-purple-400/90 bg-purple-500/5 px-1 rounded" :
+                                line.startsWith("   ") ? "text-slate-400/70 pl-3 text-[10px]" :
+                                line.includes("ENGEL") ? "text-red-400/80" :
+                                line.includes("✓") || line.includes("geçti") ? "text-green-400/60" :
+                                line.includes("kapalı") ? "text-slate-600" :
+                                "text-slate-500"
+                              }`}>
+                                {line}
+                              </p>
+                            ))}
                           </div>
-                        </td>
-
-                        {/* Filtre Analizi + Açıklama */}
-                        <td className="py-3 pr-3 text-xs leading-relaxed min-w-[280px]">
-                          {item.reason_description && (
-                            <p className="text-slate-300 mb-1">{item.reason_description}</p>
-                          )}
-                          {item.filter_analysis ? (
-                            <div className="space-y-0.5">
-                              {item.filter_analysis.split(" | ").map((line: string, i: number) => (
-                                <p key={i} className={
-                                  line.startsWith("🤖") && line.includes("ENGEL") ? "text-red-400 font-medium bg-red-500/5 px-1 rounded" :
-                                  line.startsWith("🤖") ? "text-purple-400/90 bg-purple-500/5 px-1 rounded" :
-                                  line.startsWith("   ") ? "text-slate-400/70 pl-3 text-[10px]" :
-                                  line.includes("ENGEL") ? "text-red-400/80" :
-                                  line.includes("✓") || line.includes("geçti") ? "text-green-400/60" :
-                                  line.includes("kapalı") ? "text-slate-600" :
-                                  "text-slate-500"
-                                }>
-                                  {line}
-                                </p>
-                              ))}
-                            </div>
-                          ) : item.reject_reason ? (
-                            <span className="font-mono text-slate-600 text-[10px]">{item.reject_reason}</span>
-                          ) : (
-                            <span className="text-slate-700 italic">—</span>
-                          )}
-                        </td>
-
-                        {/* RSI */}
-                        <td className="py-3 pr-3 text-right font-mono whitespace-nowrap text-xs">
-                          {item.rsi_14 != null ? (
-                            <span className={
-                              item.rsi_14 > 70 ? "text-red-400" :
-                              item.rsi_14 < 30 ? "text-green-400" : "text-slate-300"
-                            }>
-                              {item.rsi_14.toFixed(1)}
-                            </span>
-                          ) : <span className="text-slate-700">—</span>}
-                        </td>
-
-                        {/* ATR */}
-                        <td className="py-3 pr-3 text-right font-mono text-slate-400 whitespace-nowrap text-xs">
-                          {item.volatility_atr != null ? item.volatility_atr.toFixed(4) : <span className="text-slate-700">—</span>}
-                        </td>
-
-                        {/* EMA200 % */}
-                        <td className="py-3 text-right font-mono whitespace-nowrap text-xs">
-                          {item.ema200_dist != null ? (
-                            <span className={item.ema200_dist >= 0 ? "text-green-400" : "text-red-400"}>
-                              {item.ema200_dist >= 0 ? "+" : ""}{item.ema200_dist.toFixed(2)}%
-                            </span>
-                          ) : <span className="text-slate-700">—</span>}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                        ) : item.reject_reason ? (
+                          <span className="font-mono text-slate-600 text-[10px]">{item.reject_reason}</span>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
             {/* Pagination */}

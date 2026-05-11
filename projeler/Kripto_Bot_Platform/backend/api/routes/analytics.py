@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select, func, text, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
-from models.trade import Trade, TradeStatus, SignalLog
+from models.trade import Trade, TradeStatus, SignalLog, AiPrompt
 from typing import Dict, Any, Optional, List
 import math
 
@@ -602,6 +603,88 @@ async def suggest_tp_sl(
         },
         "reasoning": reasoning,
     }
+
+
+# ─── AI Prompt Yönetimi ───────────────────────────────────────────────────────
+
+class AiPromptUpdate(BaseModel):
+    prompt_text: str
+    model: Optional[str] = None
+
+
+@router.get("/analytics/ai-prompts")
+async def get_ai_prompts(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
+    """Tüm AI promptlarını getir. DB'de kayıt yoksa varsayılanları döndür."""
+    from ai.smart_filter import DEFAULT_PROMPTS
+
+    result = await db.execute(select(AiPrompt))
+    db_prompts = {p.key: p for p in result.scalars().all()}
+
+    prompts = []
+    for key, default in DEFAULT_PROMPTS.items():
+        db_row = db_prompts.get(key)
+        prompts.append({
+            "key": key,
+            "prompt_text": db_row.prompt_text if db_row else default["prompt_text"],
+            "model": db_row.model if db_row else default["model"],
+            "description": default["description"],
+            "is_custom": db_row is not None,
+            "updated_at": db_row.updated_at.isoformat() if db_row and db_row.updated_at else None,
+        })
+
+    return prompts
+
+
+@router.put("/analytics/ai-prompts/{key}")
+async def update_ai_prompt(
+    key: str,
+    body: AiPromptUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """AI promptunu güncelle veya oluştur."""
+    from ai.smart_filter import DEFAULT_PROMPTS
+
+    if key not in DEFAULT_PROMPTS:
+        raise HTTPException(status_code=404, detail=f"Bilinmeyen prompt anahtarı: {key}")
+
+    result = await db.execute(select(AiPrompt).where(AiPrompt.key == key))
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        existing.prompt_text = body.prompt_text
+        if body.model:
+            existing.model = body.model
+    else:
+        new_prompt = AiPrompt(
+            key=key,
+            prompt_text=body.prompt_text,
+            model=body.model or DEFAULT_PROMPTS[key]["model"],
+            description=DEFAULT_PROMPTS[key]["description"],
+        )
+        db.add(new_prompt)
+
+    await db.commit()
+    return {"ok": True, "key": key, "message": "Prompt güncellendi."}
+
+
+@router.delete("/analytics/ai-prompts/{key}")
+async def reset_ai_prompt(
+    key: str,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """AI promptunu varsayılana sıfırla (DB kaydını sil)."""
+    from ai.smart_filter import DEFAULT_PROMPTS
+
+    if key not in DEFAULT_PROMPTS:
+        raise HTTPException(status_code=404, detail=f"Bilinmeyen prompt anahtarı: {key}")
+
+    result = await db.execute(select(AiPrompt).where(AiPrompt.key == key))
+    existing = result.scalar_one_or_none()
+    if existing:
+        await db.delete(existing)
+        await db.commit()
+
+    return {"ok": True, "key": key, "message": "Prompt varsayılana sıfırlandı."}
 
 
 @router.delete("/analytics/clear-signals")
