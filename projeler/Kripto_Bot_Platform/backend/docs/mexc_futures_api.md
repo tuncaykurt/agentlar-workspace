@@ -88,8 +88,36 @@ Source: https://mexcdevelop.github.io/apidocs/contract_v1_en/
 | contractPrivateGetPositionOpenPositions | GET /api/v1/private/position/open_positions |
 | contractPrivateGetStoporderListOrders | GET /api/v1/private/stoporder/list/orders |
 
-## Notes
-- MEXC Futures API order endpoints were "temporarily closed" since 2022-07-25 but continue to work via CCXT
-- Order body `stopLossPrice`/`takeProfitPrice` may silently be ignored or return error 5003 on market orders
-- `changeTakeProfitStopLoss` is NOT an official endpoint — it's a CCXT-generated method that may not exist
-- The reliable approach is: place order first, then use `stoporder/change_price` with the returned orderId
+## TP/SL Doğru Yöntem (Test Edildi: 2026-05-11)
+
+**ÇALIŞAN TEK YÖNTEM: `planorder/place` (trigger orders)**
+
+Akış:
+1. Market order aç: `contractPrivatePostOrderSubmit` (TP/SL OLMADAN)
+2. TP trigger emri: `contractPrivatePostPlanorderPlace`
+   - side=close_side (long→2, short→4)
+   - triggerPrice=tp_price
+   - triggerType=1 (>=) for long, 2 (<=) for short
+   - executeCycle=2 (7 gün), orderType=5 (market), trend=1 (latest price)
+3. SL trigger emri: `contractPrivatePostPlanorderPlace`
+   - side=close_side (long→2, short→4)
+   - triggerPrice=sl_price
+   - triggerType=2 (<=) for long, 1 (>=) for short
+   - executeCycle=2 (7 gün), orderType=5 (market), trend=1 (latest price)
+
+### Test Sonuçları (5 yöntem denendi)
+| Yöntem | Sonuç |
+|--------|-------|
+| order body takeProfitPrice/stopLossPrice | Error 5003: "The price of stop-limit order error" |
+| stoporder/change_price (orderId ile) | Error 2009: "Position is nonexistent or closed" |
+| CCXT create_order params | Order açılır ama TP/SL null |
+| **planorder/place (trigger orders)** | **BAŞARILI — TP ve SL ikisi de set edildi** |
+| String TP/SL values | Error 5003 |
+
+### Önemli Notlar
+- MEXC Futures API order endpoints "temporarily closed" since 2022-07-25 ama CCXT üzerinden çalışır
+- Order body'deki `stopLossPrice`/`takeProfitPrice` error 5003 verir (market order'da çalışmaz)
+- `changeTakeProfitStopLoss` resmi endpoint DEĞİL — CCXT'nin generate ettiği bir method
+- `stoporder/change_price` sadece AÇIK (unfilled) limit order'lar için çalışır, filled market order için 2009 verir
+- CCXT `create_order` params'da TP/SL gönderilse bile MEXC API tarafından sessizce yok sayılır
+- **Tek güvenilir yöntem: önce order aç, sonra ayrı planorder/place ile TP ve SL trigger emirleri oluştur**

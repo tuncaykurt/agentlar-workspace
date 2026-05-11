@@ -39,16 +39,42 @@ class MEXCClient:
         if pos_side:
             params["positionSide"] = pos_side.upper()
 
-        # TP/SL doğrudan market emrine ekle (MEXC destekliyor)
-        if tp_price:
-            params["takeProfitPrice"] = tp_price
-        if sl_price:
-            params["stopLossPrice"] = sl_price
-
         if order_type == "market":
             order = await self.exchange.create_market_order(symbol, side, amount, params=params)
         else:
             order = await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
+
+        # TP/SL: planorder/place ile ayrı trigger emirleri oluştur
+        # (MEXC order body'sindeki takeProfitPrice/stopLossPrice çalışmıyor — error 5003)
+        if tp_price or sl_price:
+            mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
+            is_long = side.lower() == "buy"
+            close_side = 2 if is_long else 4
+            open_type = 2  # cross default
+            leverage = 10  # fallback
+
+            if tp_price:
+                try:
+                    await self.exchange.contractPrivatePostPlanorderPlace({
+                        "symbol": mexc_symbol, "price": 0, "vol": int(amount),
+                        "side": close_side, "openType": open_type, "leverage": leverage,
+                        "triggerPrice": round(float(tp_price), 2),
+                        "triggerType": 1 if is_long else 2,
+                        "executeCycle": 2, "orderType": 5, "trend": 1})
+                except Exception as e:
+                    print(f"[MEXCClient] TP planorder error: {e}")
+
+            if sl_price:
+                try:
+                    await self.exchange.contractPrivatePostPlanorderPlace({
+                        "symbol": mexc_symbol, "price": 0, "vol": int(amount),
+                        "side": close_side, "openType": open_type, "leverage": leverage,
+                        "triggerPrice": round(float(sl_price), 2),
+                        "triggerType": 2 if is_long else 1,
+                        "executeCycle": 2, "orderType": 5, "trend": 1})
+                except Exception as e:
+                    print(f"[MEXCClient] SL planorder error: {e}")
+
         return order
 
     async def modify_position_tpsl(

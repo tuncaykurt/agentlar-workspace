@@ -49,14 +49,15 @@ class _ExClient:
 
     async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None):
         """
-        MEXC futures: market order aç — TP/SL doğrudan order body'sinde gönderilir.
-        MEXC TP/SL'i reddederse, TP/SL'siz tekrar dener (order mutlaka açılır).
+        MEXC futures: market order aç, ardından TP/SL için ayrı planorder (trigger) emirleri oluştur.
+        MEXC order body'sindeki takeProfitPrice/stopLossPrice çalışmıyor (error 5003).
+        Doğru yöntem: planorder/place ile ayrı trigger emirleri.
         side: "buy"=open long, "sell"=open short
         """
-        # ETH/USDT:USDT → ETH_USDT
         mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
         is_long = side.lower() == "buy"
         mexc_side = 1 if is_long else 3  # 1=open long, 3=open short
+        close_side = 2 if is_long else 4  # 2=close long, 4=close short
 
         order_body = {
             "symbol": mexc_symbol,
@@ -68,31 +69,44 @@ class _ExClient:
             "openType": self._open_type, # isolated=1, cross=2
         }
 
-        # TP/SL doğrudan order submit'e eklenir (MEXC resmi API: takeProfitPrice, stopLossPrice)
-        has_tpsl = False
-        if tp_price:
-            order_body["takeProfitPrice"] = round(float(tp_price), 2)
-            has_tpsl = True
-        if sl_price:
-            order_body["stopLossPrice"] = round(float(sl_price), 2)
-            has_tpsl = True
-
         print(f"[ExClient] MEXC market order ({self._margin_type}): {order_body}")
-        try:
-            resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
-            print(f"[ExClient] MEXC order response: {resp}")
-        except Exception as e:
-            if has_tpsl:
-                # TP/SL yüzünden reddedilmiş olabilir — TP/SL'siz tekrar dene
-                print(f"[ExClient] MEXC order TP/SL ile BAŞARISIZ ({e}) — TP/SL'siz tekrar deneniyor")
-                order_body.pop("takeProfitPrice", None)
-                order_body.pop("stopLossPrice", None)
-                resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
-                print(f"[ExClient] MEXC order (TP/SL'siz) response: {resp}")
-            else:
-                raise
-
+        resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
+        print(f"[ExClient] MEXC order response: {resp}")
         order_id = str(resp.get("data", resp.get("orderId", "")))
+
+        # TP/SL: planorder/place ile ayrı trigger emirleri oluştur
+        if tp_price:
+            tp_body = {
+                "symbol": mexc_symbol, "price": 0, "vol": int(amount),
+                "side": close_side, "openType": self._open_type, "leverage": int(leverage),
+                "triggerPrice": round(float(tp_price), 2),
+                "triggerType": 1 if is_long else 2,  # long: >= tp, short: <= tp
+                "executeCycle": 2,  # 7 gün geçerli
+                "orderType": 5,    # market order
+                "trend": 1,        # latest price
+            }
+            try:
+                tp_resp = await self.exchange.contractPrivatePostPlanorderPlace(tp_body)
+                print(f"[ExClient] MEXC TP planorder OK: {tp_resp}")
+            except Exception as e:
+                print(f"[ExClient] MEXC TP planorder HATA: {e}")
+
+        if sl_price:
+            sl_body = {
+                "symbol": mexc_symbol, "price": 0, "vol": int(amount),
+                "side": close_side, "openType": self._open_type, "leverage": int(leverage),
+                "triggerPrice": round(float(sl_price), 2),
+                "triggerType": 2 if is_long else 1,  # long: <= sl, short: >= sl
+                "executeCycle": 2,  # 7 gün geçerli
+                "orderType": 5,    # market order
+                "trend": 1,        # latest price
+            }
+            try:
+                sl_resp = await self.exchange.contractPrivatePostPlanorderPlace(sl_body)
+                print(f"[ExClient] MEXC SL planorder OK: {sl_resp}")
+            except Exception as e:
+                print(f"[ExClient] MEXC SL planorder HATA: {e}")
+
         return {"id": order_id, "status": "open", "info": resp}
 
     async def close_position(self, symbol, side, amount):
