@@ -83,15 +83,15 @@ async def ai_self_learning_analysis(
     Öz-Öğrenme Filtresi — Geçmiş sinyallerden pattern çıkarır.
     DeepSeek (hızlı) kullanır.
 
-    past_signals: Son 30 sinyalin listesi:
+    past_signals: Son 100 sinyalin listesi:
     [{action, signal_type, price, tp_price, sl_price, outcome, rsi_14,
       volatility_atr, ema200_dist, created_at, duration_minutes,
       max_price_in_range, min_price_in_range}]
     """
-    if len(past_signals) < 3:
+    if len(past_signals) < 5:
         return {
             "should_block": False,
-            "reason": "Yeterli geçmiş sinyal yok (min 3)",
+            "reason": "Yeterli geçmiş sinyal yok (min 5)",
             "patterns": {},
             "confidence": 0,
         }
@@ -158,10 +158,10 @@ async def ai_self_learning_analysis(
             wr = round(st["tp"] / total * 100)
             dir_text += f"  {d.upper()} → {st['tp']}W/{st['sl']}L (WR: %{wr})\n"
 
-    # Son 5 sinyalin trend analizi
-    recent_5 = [s for s in past_signals if s.get("outcome") in ("tp_hit", "sl_hit")][-5:]
+    # Son 15 sinyalin trend analizi
+    recent_15 = [s for s in past_signals if s.get("outcome") in ("tp_hit", "sl_hit")][-15:]
     recent_text = ""
-    for s in recent_5:
+    for s in recent_15:
         recent_text += f"  {s.get('signal_type','?').upper()} @ ${s.get('price',0):.2f} | RSI:{s.get('rsi_14','?')} | Sonuç:{s.get('outcome','?')} | Max:{s.get('max_price_in_range','?')} Min:{s.get('min_price_in_range','?')}\n"
 
     # Fiyat aralığı analizi (max/min spread)
@@ -200,7 +200,7 @@ Genel Win Rate: %{overall_wr} ({total_tp}W/{total_sl}L)
 ═══ YÖN BAZLI BAŞARI ═══
 {dir_text or '  Yeterli veri yok'}
 
-═══ SON 5 SİNYAL (trend analizi) ═══
+═══ SON 15 SİNYAL (trend analizi) ═══
 {recent_text or '  Yeterli veri yok'}
 
 ═══ FİYAT ARALIĞI ANALİZİ (sinyal sonrası hareket) ═══

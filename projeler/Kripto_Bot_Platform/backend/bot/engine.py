@@ -896,7 +896,7 @@ class BotEngine:
                                 _select(_SL).where(
                                     _SL.bot_id == self.config["id"],
                                     _SL.action.in_(["executed", "analyzed"]),
-                                ).order_by(_SL.created_at.desc()).limit(30)
+                                ).order_by(_SL.created_at.desc()).limit(100)
                             )
                             _rows = _q.scalars().all()
                             past_signals = [{
