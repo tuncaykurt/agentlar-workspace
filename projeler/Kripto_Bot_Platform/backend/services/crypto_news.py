@@ -123,7 +123,7 @@ async def _fetch_rss_fallback(limit: int) -> list[dict]:
     ]
     results = []
 
-    async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=5, follow_redirects=True) as client:
         for feed_url in feeds:
             try:
                 resp = await client.get(feed_url)
