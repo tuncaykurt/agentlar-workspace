@@ -50,6 +50,7 @@ class _ExClient:
     async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None):
         """
         MEXC futures: market order aç — TP/SL doğrudan order body'sinde gönderilir.
+        MEXC TP/SL'i reddederse, TP/SL'siz tekrar dener (order mutlaka açılır).
         side: "buy"=open long, "sell"=open short
         """
         # ETH/USDT:USDT → ETH_USDT
@@ -68,16 +69,30 @@ class _ExClient:
         }
 
         # TP/SL doğrudan order submit'e eklenir (MEXC resmi API: takeProfitPrice, stopLossPrice)
+        has_tpsl = False
         if tp_price:
             order_body["takeProfitPrice"] = round(float(tp_price), 2)
+            has_tpsl = True
         if sl_price:
             order_body["stopLossPrice"] = round(float(sl_price), 2)
+            has_tpsl = True
 
         print(f"[ExClient] MEXC market order ({self._margin_type}): {order_body}")
-        resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
-        print(f"[ExClient] MEXC order response: {resp}")
-        order_id = str(resp.get("data", resp.get("orderId", "")))
+        try:
+            resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
+            print(f"[ExClient] MEXC order response: {resp}")
+        except Exception as e:
+            if has_tpsl:
+                # TP/SL yüzünden reddedilmiş olabilir — TP/SL'siz tekrar dene
+                print(f"[ExClient] MEXC order TP/SL ile BAŞARISIZ ({e}) — TP/SL'siz tekrar deneniyor")
+                order_body.pop("takeProfitPrice", None)
+                order_body.pop("stopLossPrice", None)
+                resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
+                print(f"[ExClient] MEXC order (TP/SL'siz) response: {resp}")
+            else:
+                raise
 
+        order_id = str(resp.get("data", resp.get("orderId", "")))
         return {"id": order_id, "status": "open", "info": resp}
 
     async def close_position(self, symbol, side, amount):
