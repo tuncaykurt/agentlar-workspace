@@ -802,8 +802,14 @@ async def test_order(data: TestOrderRequest):
         ot = 1 if data.margin_type == "isolated" else 2
 
         # Fiyat — MEXC contract ticker
-        ticker_resp = await exchange_obj.contractPublicGetTickerSymbol({"symbol": ms})
+        ticker_resp = await exchange_obj.contractPublicGetTicker({"symbol": ms})
         price = float(ticker_resp.get("data", {}).get("lastPrice", 0))
+        if not price:
+            # fallback: data listesinden bul
+            for t in (ticker_resp.get("data", []) if isinstance(ticker_resp.get("data"), list) else []):
+                if t.get("symbol") == ms:
+                    price = float(t.get("lastPrice", 0))
+                    break
         steps.append(f"Fiyat: {price}")
 
         # Kontrat miktarı (ETH contractSize=0.01)
