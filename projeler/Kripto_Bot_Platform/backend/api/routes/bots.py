@@ -49,15 +49,14 @@ class _ExClient:
 
     async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None):
         """
-        MEXC futures: market order aç, ardından TP/SL için ayrı planorder (trigger) emirleri oluştur.
-        MEXC order body'sindeki takeProfitPrice/stopLossPrice çalışmıyor (error 5003).
-        Doğru yöntem: planorder/place ile ayrı trigger emirleri.
+        MEXC futures: market order aç, ardından TP/SL için stoporder/place ile pozisyon bazlı hedefler koy.
+        planorder/place sadece giriş emirleri için çalışır (side 1,3).
+        stoporder/place ise mevcut pozisyona TP/SL bağlar (positionId gerekir).
         side: "buy"=open long, "sell"=open short
         """
         mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
         is_long = side.lower() == "buy"
         mexc_side = 1 if is_long else 3  # 1=open long, 3=open short
-        close_side = 2 if is_long else 4  # 2=close long, 4=close short
 
         order_body = {
             "symbol": mexc_symbol,
@@ -74,38 +73,48 @@ class _ExClient:
         print(f"[ExClient] MEXC order response: {resp}")
         order_id = str(resp.get("data", resp.get("orderId", "")))
 
-        # TP/SL: planorder/place ile ayrı trigger emirleri oluştur
-        if tp_price:
-            tp_body = {
-                "symbol": mexc_symbol, "price": 0, "vol": int(amount),
-                "side": close_side, "openType": self._open_type, "leverage": int(leverage),
-                "triggerPrice": round(float(tp_price), 2),
-                "triggerType": 1 if is_long else 2,  # long: >= tp, short: <= tp
-                "executeCycle": 2,  # 7 gün geçerli
-                "orderType": 5,    # market order
-                "trend": 1,        # latest price
-            }
-            try:
-                tp_resp = await self.exchange.contractPrivatePostPlanorderPlace(tp_body)
-                print(f"[ExClient] MEXC TP planorder OK: {tp_resp}")
-            except Exception as e:
-                print(f"[ExClient] MEXC TP planorder HATA: {e}")
+        # TP/SL: stoporder/place ile pozisyon bazlı TP/SL koy
+        if tp_price or sl_price:
+            await asyncio.sleep(1)  # pozisyonun oluşmasını bekle
 
-        if sl_price:
-            sl_body = {
-                "symbol": mexc_symbol, "price": 0, "vol": int(amount),
-                "side": close_side, "openType": self._open_type, "leverage": int(leverage),
-                "triggerPrice": round(float(sl_price), 2),
-                "triggerType": 2 if is_long else 1,  # long: <= sl, short: >= sl
-                "executeCycle": 2,  # 7 gün geçerli
-                "orderType": 5,    # market order
-                "trend": 1,        # latest price
-            }
+            # positionId'yi al
+            pos_id = None
             try:
-                sl_resp = await self.exchange.contractPrivatePostPlanorderPlace(sl_body)
-                print(f"[ExClient] MEXC SL planorder OK: {sl_resp}")
+                pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+                pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
+                # positionType: 1=long, 2=short
+                target_type = 1 if is_long else 2
+                for p in (pos_data or []):
+                    if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
+                        pos_id = int(p.get("positionId", 0))
+                        print(f"[ExClient] MEXC position found: id={pos_id} holdVol={p.get('holdVol')} type={target_type}")
+                        break
             except Exception as e:
-                print(f"[ExClient] MEXC SL planorder HATA: {e}")
+                print(f"[ExClient] MEXC position query HATA: {e}")
+
+            if pos_id:
+                stop_body = {
+                    "positionId": pos_id,
+                    "vol": int(amount),
+                    "profitTrend": 1,       # 1=latest price
+                    "lossTrend": 1,         # 1=latest price
+                    "stopLossType": 0,      # 0=market
+                    "takeProfitType": 0,    # 0=market
+                    "stopLossOrderPrice": 0,
+                    "takeProfitOrderPrice": 0,
+                }
+                if tp_price:
+                    stop_body["takeProfitPrice"] = round(float(tp_price), 2)
+                if sl_price:
+                    stop_body["stopLossPrice"] = round(float(sl_price), 2)
+
+                try:
+                    stop_resp = await self.exchange.contractPrivatePostStoporderPlace(stop_body)
+                    print(f"[ExClient] MEXC stoporder/place OK: {stop_resp}")
+                except Exception as e:
+                    print(f"[ExClient] MEXC stoporder/place HATA: {e}")
+            else:
+                print(f"[ExClient] MEXC TP/SL ATLANAMADI: positionId bulunamadı!")
 
         return {"id": order_id, "status": "open", "info": resp}
 
@@ -724,6 +733,32 @@ async def test_tpsl_methods(data: TestOrderRequest):
                 "takeProfitPrice": str(tp_price), "stopLossPrice": str(sl_price)})
             await asyncio.sleep(2)
             results["result"] = {"method": "string_tpsl", "orderId": str(oid5.get("data", "")), "tpsl": await check_tpsl()}
+
+        elif m == 6:
+            # Market order + stoporder/place (pozisyon bazlı TP/SL — DOĞRU YÖNTEM)
+            await open_pos(); await asyncio.sleep(2)
+            results["step1"] = {"pos": await check_tpsl()}
+            # positionId al
+            pid, pos_info = await get_pos_id()
+            results["step2"] = {"positionId": pid, "pos_info": str(pos_info)[:200] if pos_info else None}
+            if pid:
+                stop_body = {
+                    "positionId": pid,
+                    "vol": amount,
+                    "takeProfitPrice": tp_price,
+                    "stopLossPrice": sl_price,
+                    "profitTrend": 1,
+                    "lossTrend": 1,
+                    "stopLossType": 0,
+                    "takeProfitType": 0,
+                    "stopLossOrderPrice": 0,
+                    "takeProfitOrderPrice": 0,
+                }
+                stop_r = await ex_client.exchange.contractPrivatePostStoporderPlace(stop_body)
+                await asyncio.sleep(1)
+                results["result"] = {"method": "stoporder_place", "resp": str(stop_r), "tpsl": await check_tpsl()}
+            else:
+                results["result"] = {"method": "stoporder_place", "error": "positionId bulunamadı"}
 
         elif m == 0:
             # Sadece temizlik — tüm pozisyonları kapat

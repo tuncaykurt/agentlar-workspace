@@ -44,36 +44,47 @@ class MEXCClient:
         else:
             order = await self.exchange.create_limit_order(symbol, side, amount, price, params=params)
 
-        # TP/SL: planorder/place ile ayrı trigger emirleri oluştur
-        # (MEXC order body'sindeki takeProfitPrice/stopLossPrice çalışmıyor — error 5003)
+        # TP/SL: stoporder/place ile pozisyon bazlı TP/SL koy
+        # (planorder/place sadece giriş emirleri için çalışır, stoporder/place pozisyona bağlar)
         if tp_price or sl_price:
+            import asyncio
             mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
             is_long = side.lower() == "buy"
-            close_side = 2 if is_long else 4
-            open_type = 2  # cross default
-            leverage = 10  # fallback
+            await asyncio.sleep(1)
 
-            if tp_price:
-                try:
-                    await self.exchange.contractPrivatePostPlanorderPlace({
-                        "symbol": mexc_symbol, "price": 0, "vol": int(amount),
-                        "side": close_side, "openType": open_type, "leverage": leverage,
-                        "triggerPrice": round(float(tp_price), 2),
-                        "triggerType": 1 if is_long else 2,
-                        "executeCycle": 2, "orderType": 5, "trend": 1})
-                except Exception as e:
-                    print(f"[MEXCClient] TP planorder error: {e}")
+            pos_id = None
+            try:
+                pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+                pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
+                target_type = 1 if is_long else 2
+                for p in (pos_data or []):
+                    if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
+                        pos_id = int(p.get("positionId", 0))
+                        break
+            except Exception as e:
+                print(f"[MEXCClient] position query error: {e}")
 
-            if sl_price:
+            if pos_id:
+                stop_body = {
+                    "positionId": pos_id,
+                    "vol": int(amount),
+                    "profitTrend": 1,
+                    "lossTrend": 1,
+                    "stopLossType": 0,
+                    "takeProfitType": 0,
+                    "stopLossOrderPrice": 0,
+                    "takeProfitOrderPrice": 0,
+                }
+                if tp_price:
+                    stop_body["takeProfitPrice"] = round(float(tp_price), 2)
+                if sl_price:
+                    stop_body["stopLossPrice"] = round(float(sl_price), 2)
                 try:
-                    await self.exchange.contractPrivatePostPlanorderPlace({
-                        "symbol": mexc_symbol, "price": 0, "vol": int(amount),
-                        "side": close_side, "openType": open_type, "leverage": leverage,
-                        "triggerPrice": round(float(sl_price), 2),
-                        "triggerType": 2 if is_long else 1,
-                        "executeCycle": 2, "orderType": 5, "trend": 1})
+                    await self.exchange.contractPrivatePostStoporderPlace(stop_body)
                 except Exception as e:
-                    print(f"[MEXCClient] SL planorder error: {e}")
+                    print(f"[MEXCClient] stoporder/place error: {e}")
+            else:
+                print(f"[MEXCClient] TP/SL skipped: positionId not found")
 
         return order
 

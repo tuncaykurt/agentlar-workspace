@@ -82,42 +82,44 @@ Source: https://mexcdevelop.github.io/apidocs/contract_v1_en/
 | CCXT Method | API Endpoint |
 |-------------|-------------|
 | contractPrivatePostOrderSubmit | POST /api/v1/private/order/submit |
-| contractPrivatePostPlanorderPlace | POST /api/v1/private/planorder/place |
+| contractPrivatePostPlanorderPlace | POST /api/v1/private/planorder/place (sadece giriş emirleri!) |
+| contractPrivatePostStoporderPlace | POST /api/v1/private/stoporder/place (pozisyon TP/SL) |
 | contractPrivatePostStoporderChangePrice | POST /api/v1/private/stoporder/change_price |
 | contractPrivatePostStoporderChangePlanPrice | POST /api/v1/private/stoporder/change_plan_price |
 | contractPrivateGetPositionOpenPositions | GET /api/v1/private/position/open_positions |
 | contractPrivateGetStoporderListOrders | GET /api/v1/private/stoporder/list/orders |
 
-## TP/SL Doğru Yöntem (Test Edildi: 2026-05-11)
+## TP/SL Doğru Yöntem (Güncellendi: 2026-05-11)
 
-**ÇALIŞAN TEK YÖNTEM: `planorder/place` (trigger orders)**
+**ÇALIŞAN YÖNTEM: `stoporder/place` (pozisyon bazlı TP/SL)**
 
-Akış:
+`planorder/place` sadece giriş emirleri için çalışır (side 1,3). Pozisyon TP/SL için `stoporder/place` kullanılmalı.
+
+### Doğru Akış:
 1. Market order aç: `contractPrivatePostOrderSubmit` (TP/SL OLMADAN)
-2. TP trigger emri: `contractPrivatePostPlanorderPlace`
-   - side=close_side (long→2, short→4)
-   - triggerPrice=tp_price
-   - triggerType=1 (>=) for long, 2 (<=) for short
-   - executeCycle=2 (7 gün), orderType=5 (market), trend=1 (latest price)
-3. SL trigger emri: `contractPrivatePostPlanorderPlace`
-   - side=close_side (long→2, short→4)
-   - triggerPrice=sl_price
-   - triggerType=2 (<=) for long, 1 (>=) for short
-   - executeCycle=2 (7 gün), orderType=5 (market), trend=1 (latest price)
+2. 1 sn bekle (pozisyon oluşsun)
+3. Pozisyon ID al: `contractPrivateGetPositionOpenPositions`
+   - positionType: 1=long, 2=short
+4. TP/SL koy: `contractPrivatePostStoporderPlace`
+   - positionId (zorunlu)
+   - vol = kontrat miktarı
+   - takeProfitPrice, stopLossPrice
+   - profitTrend=1, lossTrend=1 (latest price)
+   - stopLossType=0, takeProfitType=0 (market)
+   - stopLossOrderPrice=0, takeProfitOrderPrice=0
 
-### Test Sonuçları (5 yöntem denendi)
+### Test Sonuçları (6 yöntem denendi)
 | Yöntem | Sonuç |
 |--------|-------|
 | order body takeProfitPrice/stopLossPrice | Error 5003: "The price of stop-limit order error" |
 | stoporder/change_price (orderId ile) | Error 2009: "Position is nonexistent or closed" |
 | CCXT create_order params | Order açılır ama TP/SL null |
-| **planorder/place (trigger orders)** | **BAŞARILI — TP ve SL ikisi de set edildi** |
+| planorder/place (trigger orders) | Emir oluşur ama tetiklenmez (sadece giriş emirleri destekler) |
 | String TP/SL values | Error 5003 |
+| **stoporder/place (positionId ile)** | **DOĞRU YÖNTEM — pozisyona bağlı TP/SL** |
 
 ### Önemli Notlar
-- MEXC Futures API order endpoints "temporarily closed" since 2022-07-25 ama CCXT üzerinden çalışır
-- Order body'deki `stopLossPrice`/`takeProfitPrice` error 5003 verir (market order'da çalışmaz)
-- `changeTakeProfitStopLoss` resmi endpoint DEĞİL — CCXT'nin generate ettiği bir method
-- `stoporder/change_price` sadece AÇIK (unfilled) limit order'lar için çalışır, filled market order için 2009 verir
-- CCXT `create_order` params'da TP/SL gönderilse bile MEXC API tarafından sessizce yok sayılır
-- **Tek güvenilir yöntem: önce order aç, sonra ayrı planorder/place ile TP ve SL trigger emirleri oluştur**
+- `planorder/place` sadece side=1 (open long) ve side=3 (open short) destekler — KAPATMA EMRİ OLUŞTURAMAZ
+- `stoporder/place` pozisyon bazlı çalışır, positionId gerektirir
+- `stoporder/change_price` sadece AÇIK (unfilled) limit order'lar için çalışır
+- CCXT method: `contractPrivatePostStoporderPlace`
