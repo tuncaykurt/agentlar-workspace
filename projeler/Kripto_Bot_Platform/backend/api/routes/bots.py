@@ -621,13 +621,13 @@ async def test_order(data: TestOrderRequest):
         amount = max(1, int(qty_raw / contract_size))
         steps.append(f"✓ Miktar: qty={qty_raw:.4f} → {amount} kontrat (notional≈${notional:.1f})")
 
-        # TP/SL fiyatları
-        if side == "buy":
-            tp_price = round(price * (1 + tp_pct / 100), 4)
-            sl_price = round(price * (1 - sl_pct / 100), 4)
-        else:
-            tp_price = round(price * (1 - tp_pct / 100), 4)
-            sl_price = round(price * (1 + sl_pct / 100), 4)
+        # TP/SL fiyatları (0 ise gönderme)
+        tp_price = None
+        sl_price = None
+        if tp_pct > 0:
+            tp_price = round(price * (1 + tp_pct / 100), 2) if side == "buy" else round(price * (1 - tp_pct / 100), 2)
+        if sl_pct > 0:
+            sl_price = round(price * (1 - sl_pct / 100), 2) if side == "buy" else round(price * (1 + sl_pct / 100), 2)
         steps.append(f"✓ TP={tp_price} SL={sl_price} (%{tp_pct}/%{sl_pct})")
 
         # Order aç
