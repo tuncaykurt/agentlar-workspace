@@ -601,7 +601,7 @@ async def test_tpsl_methods(data: TestOrderRequest):
     import traceback as _tb
     results = {}
     ex_client = None
-    m = data.method or 1
+    m = data.method if data.method is not None else 1
     try:
         ex_client = await _get_exchange_client(data.exchange, margin_type=data.margin_type)
         await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=30)
