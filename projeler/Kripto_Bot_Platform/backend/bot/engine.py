@@ -1319,39 +1319,54 @@ class BotEngine:
 
         print(f"[Bot {bot_name}] ✓ Sinyal kabul edildi: {signal_type} @ {price}")
 
-        # Tam filtre analizi (aktif olsun olmasın tüm filtreler çalışır + indikatörler hesaplanır)
-        fa = await self._analyze_filters_full(signal_type, price, timeframe=sig_timeframe)
-        ind = fa["indicators"]
-        analysis_text = fa["analysis"]
-        print(f"[Bot {bot_name}] Filtre analizi: {analysis_text}")
+        # Aktif engelleme filtresi var mı kontrol et (hızlı — sadece DB oku)
+        has_active_blocking_filter = False
+        try:
+            async with async_session() as _fsess:
+                from sqlalchemy import select as _fsel
+                _fres = await _fsess.execute(_fsel(BotFilter).where(BotFilter.bot_id == self.config["id"]))
+                _filt = _fres.scalar_one_or_none()
+                if _filt and any([
+                    _filt.news_protection_enabled,
+                    _filt.smart_hours_enabled and _filt.blocked_hours,
+                    _filt.self_learning_enabled,
+                    _filt.volatility_filter_enabled and _filt.max_volatility_atr,
+                    _filt.trend_filter_enabled,
+                ]):
+                    has_active_blocking_filter = True
+        except Exception:
+            pass
 
-        if fa["should_block"]:
-            print(f"[Bot {bot_name}] ✗ Aktif filtre engeli: {fa['reject_reason']}")
-            await self._log_signal(signal_type, price, source=source, reason=analysis_text,
-                action="filtered", reject_reason=fa["reject_reason"],
-                rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"],
-                timeframe=sig_timeframe)
-            # Status'a son red nedenini yaz (frontend görsün)
-            try:
-                reject_status = {
-                    "signal": signal_type, "price": cur_price or price,
-                    "last_reject": {"reason": fa["reject_reason"], "analysis": analysis_text, "ts": datetime.utcnow().isoformat()},
-                    "risk": {"balance": self.risk.balance, "daily_pnl": self.risk.daily_pnl, "daily_pnl_pct": self.risk.daily_pnl_pct, "killed": self.risk.killed},
-                    "ts": datetime.utcnow().isoformat(),
-                }
-                await redis.set(f"bot:{bot_id}:status", json.dumps(reject_status))
-            except Exception:
-                pass
-            await redis.set(last_ts_key, sig_ts, ex=600)
-            return
+        # Aktif engelleme filtresi varsa ÖNCE filtrele, yoksa HIZLI emri gönder
+        if has_active_blocking_filter:
+            fa = await self._analyze_filters_full(signal_type, price, timeframe=sig_timeframe)
+            if fa["should_block"]:
+                ind = fa["indicators"]
+                analysis_text = fa["analysis"]
+                print(f"[Bot {bot_name}] ✗ Aktif filtre engeli: {fa['reject_reason']}")
+                await self._log_signal(signal_type, price, source=source, reason=analysis_text,
+                    action="filtered", reject_reason=fa["reject_reason"],
+                    rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"],
+                    timeframe=sig_timeframe)
+                try:
+                    await redis.set(f"bot:{bot_id}:status", json.dumps({
+                        "signal": signal_type, "price": cur_price or price,
+                        "last_reject": {"reason": fa["reject_reason"], "analysis": analysis_text, "ts": datetime.utcnow().isoformat()},
+                        "risk": {"balance": self.risk.balance, "daily_pnl": self.risk.daily_pnl, "daily_pnl_pct": self.risk.daily_pnl_pct, "killed": self.risk.killed},
+                        "ts": datetime.utcnow().isoformat(),
+                    }))
+                except Exception:
+                    pass
+                await redis.set(last_ts_key, sig_ts, ex=600)
+                return
 
+        # ── HIZLI YOL: Emri hemen gönder, AI analizini sonra yap ──────────
         # Mevcut pozisyon kontrolü
         current_position = await self._get_current_position(symbol)
         print(f"[Bot {bot_name}] Mevcut pozisyon: {current_position}")
 
-        # Pozisyon yönetimi — yeni sinyal her zaman önceki pozisyonu kapatır ve analiz eder
+        # Pozisyon yönetimi — yeni sinyal her zaman önceki pozisyonu kapatır
         if current_position:
-            # Önceki sinyalin aralık analizini yap ve pozisyonu kapat
             await self._analyze_and_close_previous(redis, symbol, signal_type, price, current_position)
             if position_action == "close_only":
                 await redis.set(last_ts_key, sig_ts, ex=600)
@@ -1377,6 +1392,8 @@ class BotEngine:
         qty = self.risk.position_size(price, stop_loss)
         print(f"[Bot {bot_name}] Hesaplama: TP={take_profit} SL={stop_loss} qty={qty} (balance={self.risk.balance}, risk_per_trade={self.risk.risk_per_trade})")
 
+        # Emri HEMEN gönder (AI beklenmez)
+        order_ok = False
         if qty > 0:
             ai_result = {
                 "approved": True,
@@ -1387,31 +1404,40 @@ class BotEngine:
             }
             try:
                 await self._execute(signal_type, price, qty, stop_loss, ai_result)
-                log_id = await self._log_signal(signal_type, price, source=source, reason=analysis_text,
-                    action="executed", confidence=75, tp_price=take_profit, sl_price=stop_loss,
-                    rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"],
-                    timeframe=sig_timeframe)
-                # Açık sinyal bilgisini Redis'e yaz — bir sonraki sinyal gelince analiz için kullanılır
-                import time as _time
-                open_sig_data = {
-                    "signal_log_id": log_id,
-                    "side": signal_type,           # "buy" | "sell"
-                    "entry_price": price,
-                    "tp_price": take_profit,
-                    "sl_price": stop_loss,
-                    "entry_ts": datetime.utcnow().isoformat(),
-                    "entry_ts_ms": int(_time.time() * 1000),
-                }
-                await redis.set(f"bot:{bot_id}:open_signal", json.dumps(open_sig_data), ex=86400)
+                order_ok = True
                 print(f"[Bot {bot_name}] ✓ İşlem başarıyla açıldı!")
             except Exception as e:
                 print(f"[Bot {bot_name}] ✗ İşlem açma hatası: {e}")
                 import traceback
                 traceback.print_exc()
-                await self._log_signal(signal_type, price, source=source, reason=analysis_text,
-                    action="error", reject_reason=f"İşlem hatası: {str(e)[:200]}",
-                    rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"],
-                    timeframe=sig_timeframe)
+
+        # ── AI analizi arka planda (emir zaten gönderildi) ────────────────
+        fa = await self._analyze_filters_full(signal_type, price, timeframe=sig_timeframe)
+        ind = fa["indicators"]
+        analysis_text = fa["analysis"]
+        print(f"[Bot {bot_name}] Filtre analizi (post-trade): {analysis_text}")
+
+        if order_ok:
+            log_id = await self._log_signal(signal_type, price, source=source, reason=analysis_text,
+                action="executed", confidence=75, tp_price=take_profit, sl_price=stop_loss,
+                rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"],
+                timeframe=sig_timeframe)
+            import time as _time
+            open_sig_data = {
+                "signal_log_id": log_id,
+                "side": signal_type,
+                "entry_price": price,
+                "tp_price": take_profit,
+                "sl_price": stop_loss,
+                "entry_ts": datetime.utcnow().isoformat(),
+                "entry_ts_ms": int(_time.time() * 1000),
+            }
+            await redis.set(f"bot:{bot_id}:open_signal", json.dumps(open_sig_data), ex=86400)
+        elif qty > 0:
+            await self._log_signal(signal_type, price, source=source, reason=analysis_text,
+                action="error", reject_reason=f"İşlem hatası",
+                rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"],
+                timeframe=sig_timeframe)
         else:
             print(f"[Bot {bot_name}] ✗ qty=0 — risk manager pozisyon boyutunu 0 hesapladı")
             await self._log_signal(signal_type, price, source=source, reason=analysis_text,
