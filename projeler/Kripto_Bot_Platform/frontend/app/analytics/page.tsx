@@ -327,9 +327,10 @@ function AiSuggestCard({ botId }: { botId: number | null }) {
 // ─── AI Prompt Yönetim Paneli ────────────────────────────────────────────────
 function AiPromptEditor() {
   const [open, setOpen] = useState(false)
-  const { data: prompts, mutate, isLoading } = useSWR(
+  const { data: prompts, mutate, isLoading, error: promptsError } = useSWR(
     open ? '/analytics/ai-prompts' : null,
-    fetcher
+    fetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false }
   )
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editText, setEditText] = useState("")
@@ -414,6 +415,8 @@ function AiPromptEditor() {
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-blue-500" />
             </div>
+          ) : promptsError ? (
+            <div className="text-center py-8 text-red-400 text-sm">API hatası: {promptsError?.message || "Bağlantı kurulamadı"}</div>
           ) : !prompts || prompts.length === 0 ? (
             <div className="text-center py-8 text-slate-500 text-sm">Prompt bulunamadı.</div>
           ) : (

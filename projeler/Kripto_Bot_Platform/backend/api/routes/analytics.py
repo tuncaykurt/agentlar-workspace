@@ -617,8 +617,13 @@ async def get_ai_prompts(db: AsyncSession = Depends(get_db)) -> List[Dict[str, A
     """Tüm AI promptlarını getir. DB'de kayıt yoksa varsayılanları döndür."""
     from ai.smart_filter import DEFAULT_PROMPTS
 
-    result = await db.execute(select(AiPrompt))
-    db_prompts = {p.key: p for p in result.scalars().all()}
+    db_prompts = {}
+    try:
+        result = await db.execute(select(AiPrompt))
+        db_prompts = {p.key: p for p in result.scalars().all()}
+    except Exception:
+        # Tablo henüz oluşmamış olabilir — varsayılanları döndür
+        pass
 
     prompts = []
     for key, default in DEFAULT_PROMPTS.items():
