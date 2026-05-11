@@ -750,41 +750,53 @@ class BotEngine:
                 lines.append("Filtre ayarları: yapılandırılmamış")
             else:
                 # 1. Haber Koruması
-                if f.news_protection_enabled:
+                news_would_block = False
+                try:
                     from services.economic_calendar import is_news_blackout
                     blackout = await is_news_blackout(minutes_buffer=f.news_blackout_minutes or 30)
-                    if blackout.get("blackout"):
+                    news_would_block = blackout.get("blackout", False)
+                except Exception:
+                    pass
+                if f.news_protection_enabled:
+                    if news_would_block:
                         r = f"Haber Blackout: {blackout.get('reason','')}"
                         lines.append(f"📰 Haber[✗ ENGEL]: {blackout.get('reason','')}")
                         if not result["should_block"]:
                             result["should_block"] = True
                             result["reject_reason"] = r
                     else:
-                        lines.append("📰 Haber[✓ serbest]")
+                        lines.append("📰 Haber[✓ geçti]")
                 else:
-                    lines.append("📰 Haber[— kapalı]")
+                    sim = "kalırdı" if news_would_block else "geçerdi"
+                    lines.append(f"📰 Haber[— kapalı, {sim}]")
 
                 # 2. Akıllı Saat Filtresi
-                if f.smart_hours_enabled and f.blocked_hours:
-                    import datetime as _dt
-                    try:
+                import datetime as _dt
+                cur_h = _dt.datetime.utcnow().hour
+                hours_would_block = False
+                try:
+                    if f.blocked_hours:
                         blocked = json.loads(f.blocked_hours)
-                        cur_h = _dt.datetime.utcnow().hour
-                        if cur_h in blocked:
-                            r = f"Akıllı Saat Filtresi: {cur_h}:00 UTC yasaklı"
-                            lines.append(f"🕐 Saat[✗ ENGEL]: {cur_h}:00 UTC yasaklı")
-                            if not result["should_block"]:
-                                result["should_block"] = True
-                                result["reject_reason"] = r
-                        else:
-                            lines.append(f"🕐 Saat[✓ {cur_h}:00 UTC serbest]")
-                    except Exception:
-                        lines.append("🕐 Saat[aktif, kontrol hatası]")
+                        hours_would_block = cur_h in blocked
+                except Exception:
+                    pass
+                if f.smart_hours_enabled and f.blocked_hours:
+                    if hours_would_block:
+                        r = f"Akıllı Saat Filtresi: {cur_h}:00 UTC yasaklı"
+                        lines.append(f"🕐 Saat[✗ ENGEL]: {cur_h}:00 UTC yasaklı")
+                        if not result["should_block"]:
+                            result["should_block"] = True
+                            result["reject_reason"] = r
+                    else:
+                        lines.append(f"🕐 Saat[✓ geçti — {cur_h}:00 UTC]")
                 else:
-                    lines.append("🕐 Saat[— kapalı]")
+                    sim = "kalırdı" if hours_would_block else "geçerdi"
+                    lines.append(f"🕐 Saat[— kapalı, {sim}]")
 
                 # 3. Öz-Öğrenme
-                if f.self_learning_enabled:
+                sl_would_block = False
+                sl_info = ""
+                try:
                     async with async_session() as session2:
                         from models.trade import Trade, TradeStatus
                         from sqlalchemy import select as _sel2
@@ -799,48 +811,61 @@ class BotEngine:
                         wins = sum(1 for t in recent if (t.pnl or 0) > 0)
                         wr = wins / len(recent)
                         thr = f.min_win_rate_threshold or 0.4
-                        if wr < thr:
-                            r = f"Öz-Öğrenme: Win Rate %{wr*100:.1f} < Limit %{thr*100:.1f}"
-                            lines.append(f"🧠 Öz-Öğrenme[✗ ENGEL]: {r}")
-                            if not result["should_block"]:
-                                result["should_block"] = True
-                                result["reject_reason"] = r
-                        else:
-                            lines.append(f"🧠 Öz-Öğrenme[✓ win=%{wr*100:.1f}]")
+                        sl_would_block = wr < thr
+                        sl_info = f"win=%{wr*100:.1f}"
                     else:
-                        lines.append(f"🧠 Öz-Öğrenme[✓ yeterli geçmiş yok ({len(recent)}/10)]")
+                        sl_info = f"yeterli geçmiş yok ({len(recent)}/10)"
+                except Exception:
+                    pass
+                if f.self_learning_enabled:
+                    if sl_would_block:
+                        r = f"Öz-Öğrenme: Win Rate %{wr*100:.1f} < Limit %{thr*100:.1f}"
+                        lines.append(f"🧠 Öz-Öğrenme[✗ ENGEL]: {r}")
+                        if not result["should_block"]:
+                            result["should_block"] = True
+                            result["reject_reason"] = r
+                    else:
+                        lines.append(f"🧠 Öz-Öğrenme[✓ geçti — {sl_info}]")
                 else:
-                    lines.append("🧠 Öz-Öğrenme[— kapalı]")
+                    sim = "kalırdı" if sl_would_block else "geçerdi"
+                    lines.append(f"🧠 Öz-Öğrenme[— kapalı, {sim}]")
 
                 # 4. Volatilite Filtresi
                 atr_v = result["indicators"]["volatility_atr"]
+                vol_would_block = False
+                if atr_v and f.max_volatility_atr and atr_v > f.max_volatility_atr:
+                    vol_would_block = True
                 if f.volatility_filter_enabled and f.max_volatility_atr:
-                    if atr_v and atr_v > f.max_volatility_atr:
+                    if vol_would_block:
                         r = f"Yüksek Volatilite: ATR {atr_v:.4f} > Limit {f.max_volatility_atr:.4f}"
                         lines.append(f"⚡ Volatilite[✗ ENGEL]: {r}")
                         if not result["should_block"]:
                             result["should_block"] = True
                             result["reject_reason"] = r
                     else:
-                        lines.append(f"⚡ Volatilite[✓ ATR={atr_v or '?'}]")
+                        lines.append(f"⚡ Volatilite[✓ geçti — ATR={atr_v or '?'}]")
                 else:
-                    lines.append("⚡ Volatilite[— kapalı]")
+                    sim = "kalırdı" if vol_would_block else "geçerdi"
+                    lines.append(f"⚡ Volatilite[— kapalı, {sim}]")
 
                 # 5. Trend Filtresi (EMA200)
+                trend_would_block = False
+                dist_v = result["indicators"]["ema200_dist"] or 0
+                if ema200_val and ema200_val > 0:
+                    trend_would_block = (signal_type == "buy" and price < ema200_val) or \
+                                        (signal_type == "sell" and price > ema200_val)
                 if f.trend_filter_enabled and ema200_val and ema200_val > 0:
-                    trend_fail = (signal_type == "buy" and price < ema200_val) or \
-                                 (signal_type == "sell" and price > ema200_val)
-                    dist_v = result["indicators"]["ema200_dist"] or 0
-                    if trend_fail:
+                    if trend_would_block:
                         r = f"Trend Filtresi: dist={dist_v:+.2f}% trend uyumsuz"
                         lines.append(f"📈 Trend[✗ ENGEL]: {r}")
                         if not result["should_block"]:
                             result["should_block"] = True
                             result["reject_reason"] = r
                     else:
-                        lines.append(f"📈 Trend[✓ dist={dist_v:+.2f}%]")
+                        lines.append(f"📈 Trend[✓ geçti — dist={dist_v:+.2f}%]")
                 else:
-                    lines.append("📈 Trend[— kapalı]")
+                    sim = "kalırdı" if trend_would_block else "geçerdi"
+                    lines.append(f"📈 Trend[— kapalı, {sim}]")
 
         except Exception as e:
             lines.append(f"Analiz hatası: {str(e)[:100]}")
@@ -1197,12 +1222,6 @@ class BotEngine:
                 pass
             await redis.set(last_ts_key, sig_ts, ex=600)
             return
-
-        # Sinyal geldi, filtreler geçildi — logla
-        await self._log_signal(signal_type, price, source=source, reason=analysis_text,
-            action="received", raw_payload=json.dumps(sig),
-            rsi_14=ind["rsi_14"], volatility_atr=ind["volatility_atr"], ema200_dist=ind["ema200_dist"],
-            timeframe=sig_timeframe)
 
         # Mevcut pozisyon kontrolü
         current_position = await self._get_current_position(symbol)

@@ -117,6 +117,7 @@ export default function BotCard({
     volatility_filter_enabled: false,
   })
   const [showFilters, setShowFilters] = useState(false)
+  const [filterStats, setFilterStats] = useState<Record<string, any>>({})
   const [showPerf, setShowPerf] = useState(false)
   const [perf, setPerf] = useState<{
     total_signals: number
@@ -209,6 +210,23 @@ export default function BotCard({
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bot.id])
+
+  // Filtre istatistiklerini çek (panel açıldığında)
+  useEffect(() => {
+    if (!showFilters) return
+    api.get(`/analytics/filter-stats?bot_id=${bot.id}`)
+      .then((data: any) => {
+        if (data?.filter_stats) {
+          const map: Record<string, any> = {}
+          for (const fs of data.filter_stats) {
+            map[fs.field] = fs
+          }
+          setFilterStats(map)
+        }
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showFilters, bot.id])
 
   const toggle = async () => {
     setLoading(true)
@@ -705,34 +723,51 @@ export default function BotCard({
           <div className="mt-2 space-y-1">
             {FILTER_DEFS.map(f => {
               const enabled = filters[f.key as keyof Filters]
+              const stat = filterStats[f.key]
               return (
-                <button
-                  key={f.key}
-                  onClick={() => toggleFilter(f.key)}
-                  className={clsx(
-                    "flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs transition-all",
-                    enabled
-                      ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                      : "bg-slate-900/40 text-slate-500 border border-slate-800 hover:text-slate-300 hover:border-slate-700"
-                  )}
-                >
-                  {/* Mini toggle */}
-                  <div
+                <div key={f.key} className="space-y-0.5">
+                  <button
+                    onClick={() => toggleFilter(f.key)}
                     className={clsx(
-                      "relative w-7 h-4 rounded-full transition-colors shrink-0",
-                      enabled ? "bg-blue-500" : "bg-slate-700"
+                      "flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs transition-all",
+                      enabled
+                        ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                        : "bg-slate-900/40 text-slate-500 border border-slate-800 hover:text-slate-300 hover:border-slate-700"
                     )}
                   >
+                    {/* Mini toggle */}
                     <div
                       className={clsx(
-                        "absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform",
-                        enabled ? "translate-x-3.5" : "translate-x-0.5"
+                        "relative w-7 h-4 rounded-full transition-colors shrink-0",
+                        enabled ? "bg-blue-500" : "bg-slate-700"
                       )}
-                    />
-                  </div>
-                  <FilterIcon type={f.icon} />
-                  <span className="truncate">{f.label}</span>
-                </button>
+                    >
+                      <div
+                        className={clsx(
+                          "absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform",
+                          enabled ? "translate-x-3.5" : "translate-x-0.5"
+                        )}
+                      />
+                    </div>
+                    <FilterIcon type={f.icon} />
+                    <span className="truncate">{f.label}</span>
+                  </button>
+                  {/* Filtre performans istatistikleri */}
+                  {stat && stat.hyp_total > 0 && (
+                    <div className="flex items-center gap-2 px-2.5 ml-9 text-[10px]">
+                      <span className="text-green-400">{stat.correct_block} doğru engel</span>
+                      <span className="text-red-400">{stat.wrong_block} yanlış engel</span>
+                      {stat.accuracy != null && (
+                        <span className={clsx(
+                          "font-bold",
+                          stat.accuracy >= 60 ? "text-green-400" : stat.accuracy < 40 ? "text-red-400" : "text-yellow-400"
+                        )}>
+                          %{stat.accuracy}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>

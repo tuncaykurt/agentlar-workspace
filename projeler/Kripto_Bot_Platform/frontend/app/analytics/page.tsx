@@ -832,8 +832,6 @@ export default function AnalyticsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredItems.map((item: any) => {
-                    const isExecuted = item.action === "executed"
-
                     // Süre gösterimi
                     const fmtDur = (min: number | null) => {
                       if (min == null) return null
@@ -896,9 +894,21 @@ export default function AnalyticsPage() {
                         {/* Durum / Sonuç */}
                         <td className="py-3 pr-3">
                           <div className="flex flex-col gap-1">
-                            {isExecuted ? (
+                            {item.action === "executed" ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-green-500/10 text-green-300 border-green-500/30 whitespace-nowrap">
                                 ✅ Onaylandı
+                              </span>
+                            ) : item.action === "filtered" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-red-500/10 text-red-300 border-red-500/30 whitespace-nowrap">
+                                ❌ Filtrelendi
+                              </span>
+                            ) : item.action === "analyzed" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-blue-500/10 text-blue-300 border-blue-500/30 whitespace-nowrap">
+                                📊 Pasif Analiz
+                              </span>
+                            ) : item.action === "error" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-orange-500/10 text-orange-300 border-orange-500/30 whitespace-nowrap">
+                                ⚠️ Hata
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-red-500/10 text-red-300 border-red-500/30 whitespace-nowrap">
