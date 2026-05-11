@@ -46,17 +46,21 @@ async def get_dashboard_analytics(bot_id: int = None, db: AsyncSession = Depends
         })
         
     # Signals outcome (Intelligent filter data)
+    # "received" ara durumdur (her sinyal received + executed/filtered/rejected/analyzed üretir)
+    # Gerçek sinyal sayısı için sadece nihai durumları say
     signals_query = select(
-        SignalLog.action, 
+        SignalLog.action,
         func.count(SignalLog.id).label('count')
+    ).where(
+        SignalLog.action.in_(["executed", "filtered", "rejected", "analyzed", "error"])
     ).group_by(SignalLog.action)
-    
+
     if bot_id:
         signals_query = signals_query.where(SignalLog.bot_id == bot_id)
-        
+
     sig_result = await db.execute(signals_query)
     signal_counts = sig_result.all()
-    
+
     signals_data = {row.action: row.count for row in signal_counts}
     
     return {

@@ -325,7 +325,7 @@ function AiSuggestCard({ botId }: { botId: number | null }) {
 }
 
 export default function AnalyticsPage() {
-  const [activeTab,   setActiveTab]   = useState<TabKey>("blocked")
+  const [activeTab,   setActiveTab]   = useState<TabKey>("all")
   const [page,        setPage]        = useState(0)
   const [selectedBot, setSelectedBot] = useState<number | null>(null)
   const [togglingFilter, setTogglingFilter] = useState<string | null>(null)
