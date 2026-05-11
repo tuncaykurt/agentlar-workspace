@@ -684,7 +684,7 @@ async def test_order(data: TestOrderRequest):
                 pass
 
 
-@router.post("/test-order/tpsl-methods")
+@router.post("/tpsl-test")
 async def test_tpsl_methods(data: TestOrderRequest):
     """
     MEXC TP/SL yöntemlerini test eder:
