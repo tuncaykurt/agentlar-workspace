@@ -49,7 +49,7 @@ class _ExClient:
 
     async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None):
         """
-        MEXC futures: market order aç, ardından TP/SL'i ayrıca ayarla.
+        MEXC futures: market order aç — TP/SL doğrudan order body'sinde gönderilir.
         side: "buy"=open long, "sell"=open short
         """
         # ETH/USDT:USDT → ETH_USDT
@@ -57,7 +57,6 @@ class _ExClient:
         is_long = side.lower() == "buy"
         mexc_side = 1 if is_long else 3  # 1=open long, 3=open short
 
-        # 1. Market order aç (TP/SL olmadan — MEXC cross modda initial TP/SL reddedebiliyor)
         order_body = {
             "symbol": mexc_symbol,
             "price": 0,
@@ -68,54 +67,16 @@ class _ExClient:
             "openType": self._open_type, # isolated=1, cross=2
         }
 
+        # TP/SL doğrudan order submit'e eklenir (MEXC resmi API: takeProfitPrice, stopLossPrice)
+        if tp_price:
+            order_body["takeProfitPrice"] = round(float(tp_price), 2)
+        if sl_price:
+            order_body["stopLossPrice"] = round(float(sl_price), 2)
+
         print(f"[ExClient] MEXC market order ({self._margin_type}): {order_body}")
         resp = await self.exchange.contractPrivatePostOrderSubmit(order_body)
         print(f"[ExClient] MEXC order response: {resp}")
         order_id = str(resp.get("data", resp.get("orderId", "")))
-
-        # 2. TP/SL'i pozisyon üzerinden ayarla (order dolduktan sonra)
-        if tp_price or sl_price:
-            import asyncio as _aio
-
-            # Pozisyon ID'sini bulmak için retry mekanizması (order fill gecikmesi)
-            position_id = None
-            pos_type = 1 if is_long else 2
-            for attempt in range(4):  # 2s + 3s + 4s + 5s = max 14s bekleme
-                await _aio.sleep(2 + attempt)
-                try:
-                    pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
-                    pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
-                    if pos_data and isinstance(pos_data, list):
-                        for pos in pos_data:
-                            if int(pos.get("positionType", 0)) == pos_type and float(pos.get("holdVol", 0)) > 0:
-                                position_id = int(pos.get("positionId", 0))
-                                break
-                    if position_id:
-                        print(f"[ExClient] MEXC pozisyon bulundu (attempt {attempt+1}): positionId={position_id}")
-                        break
-                    print(f"[ExClient] MEXC pozisyon henüz yok (attempt {attempt+1}/{4}), tekrar deneniyor...")
-                except Exception as pe:
-                    print(f"[ExClient] MEXC pozisyon sorgulama hatası (attempt {attempt+1}): {pe}")
-
-            if position_id:
-                tp_sl_body = {
-                    "symbol": mexc_symbol,
-                    "positionId": position_id,
-                }
-                if tp_price:
-                    tp_sl_body["takeProfitPrice"] = round(float(tp_price), 2)
-                    tp_sl_body["profitTrend"] = 1 if is_long else 2
-                if sl_price:
-                    tp_sl_body["stopLossPrice"] = round(float(sl_price), 2)
-                    tp_sl_body["lossTrend"] = 2 if is_long else 1
-                print(f"[ExClient] MEXC TP/SL ayarlanıyor: {tp_sl_body}")
-                try:
-                    tpsl_resp = await self.exchange.contractPrivatePostPositionChangeTakeProfitStopLoss(tp_sl_body)
-                    print(f"[ExClient] MEXC TP/SL response: {tpsl_resp}")
-                except Exception as tp_err:
-                    print(f"[ExClient] MEXC TP/SL API hatası: {tp_err}")
-            else:
-                print(f"[ExClient] MEXC pozisyon 4 denemede bulunamadı — TP/SL ayarlanamadı (symbol={mexc_symbol}, side={'long' if is_long else 'short'})")
 
         return {"id": order_id, "status": "open", "info": resp}
 
