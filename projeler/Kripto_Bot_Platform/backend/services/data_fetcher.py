@@ -286,24 +286,11 @@ class DataFetcher:
         limit: int,
     ) -> list:
         """
-        Sayfalı veri çekme: Bitget V2 (1000/sayfa) → Binance fallback (1000/sayfa).
-        Büyük limit'ler için birden fazla sayfa çeker.
+        Tek sayfa veri çekme: Bitget V2 (max 1000) → CCXT (200) → Binance (1000).
+        Sayfalama yapmaz — hızlı döner, timeout olmaz.
         """
-        # Bitget V2 direct (1000 mum/istek)
+        # Bitget V2 direct (tek istek, max 1000 mum)
         all_candles = await self._bitget_v2_direct(symbol, timeframe, min(limit, 1000))
-
-        if all_candles and limit > 1000:
-            # Daha fazla veri gerekiyorsa sayfalama yap
-            pages_needed = min((limit - 1000) // 1000 + 1, 4)  # max 5000 mum
-            for _ in range(pages_needed):
-                oldest_ts = all_candles[0][0]
-                tf_ms = TF_MS.get(timeframe, 3_600_000)
-                end_ts = oldest_ts - tf_ms
-                older = await self._bitget_v2_direct_before(symbol, timeframe, 1000, end_ts)
-                if not older:
-                    break
-                all_candles = older + all_candles
-                await asyncio.sleep(0.2)
 
         if not all_candles:
             # CCXT fallback (200 mum)
