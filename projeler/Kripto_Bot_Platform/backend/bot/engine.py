@@ -1813,9 +1813,17 @@ class BotEngine:
 
             new_levels = compute_hedge_levels(current_price, p)
 
-            qty_base  = self.risk.position_size(current_price, new_levels["long"]["sl"])
-            long_qty  = max(1, int(qty_base * p.long_size_ratio * 2))
-            short_qty = max(1, int(qty_base * (1 - p.long_size_ratio) * 2))
+            # İşlem miktarı hesapla (mode'a göre)
+            if p.position_size_mode == "fixed_usdt":
+                total_usdt = p.position_size_usdt
+            elif p.position_size_mode == "percentage" and p.position_size_pct < 100:
+                total_usdt = self.risk.current_balance * (p.position_size_pct / 100)
+            else:
+                total_usdt = self.risk.current_balance  # %100 = tüm bakiye
+
+            total_qty = (total_usdt * p.leverage) / current_price
+            long_qty  = max(1, int(total_qty * p.long_size_ratio))
+            short_qty = max(1, int(total_qty * (1 - p.long_size_ratio)))
 
             if not paper:
                 try:
