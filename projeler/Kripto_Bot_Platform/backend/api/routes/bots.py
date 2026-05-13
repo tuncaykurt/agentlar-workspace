@@ -318,6 +318,15 @@ async def create_bot(data: BotCreate):
                 effective_params["_strategy_display"] = "tradingview_webhook"
                 # Engine tradingview_webhook + custom_signal ikisini de yakalar
 
+            # Hedge bot on_signal modunda webhook_token oluştur
+            if strategy in ("hedge_bot", "dual_hedge"):
+                trigger = effective_params.get("trigger_mode", "on_start")
+                if trigger == "on_signal":
+                    token = effective_params.get("webhook_token", "")
+                    if not token:
+                        token = str(uuid.uuid4())
+                    effective_params["webhook_token"] = token
+
             bot = Bot(
                 name=data.name,
                 symbol=data.symbol,
@@ -1158,9 +1167,19 @@ async def update_bot(bot_id: int, data: BotCreate):
                 token = effective_params.get("webhook_token") or effective_params.get("signal_source", "")
                 if not token or token.startswith("builtin") or token.startswith("custom__"):
                     token = str(uuid.uuid4())
-                
+
             effective_params["webhook_token"] = token
             effective_params["_strategy_display"] = "tradingview_webhook"
+
+        # Hedge bot on_signal modunda webhook_token koru/oluştur
+        if strategy in ("hedge_bot", "dual_hedge"):
+            trigger = effective_params.get("trigger_mode", "on_start")
+            if trigger == "on_signal":
+                old_token = old_params.get("webhook_token")
+                if old_token:
+                    effective_params["webhook_token"] = old_token
+                elif not effective_params.get("webhook_token"):
+                    effective_params["webhook_token"] = str(uuid.uuid4())
 
         await session.execute(
             update(Bot).where(Bot.id == bot_id).values(

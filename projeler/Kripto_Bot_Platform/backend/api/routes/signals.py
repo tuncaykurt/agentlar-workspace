@@ -375,14 +375,27 @@ async def tradingview_webhook(token: str, request: Request):
         import json as _json
 
         async with async_session() as session:
-            # Bu sembol'e bağlı TradingView webhook / custom_signal botlarını bul
+            # Bu sembol'e bağlı TradingView webhook / custom_signal / hedge botlarını bul
             result = await session.execute(
                 sa_select(Bot).where(
-                    Bot.strategy.in_(["tradingview_webhook", "custom_signal", "freqtrade"]),
+                    Bot.strategy.in_(["tradingview_webhook", "custom_signal", "freqtrade", "hedge_bot", "dual_hedge"]),
                     Bot.symbol == symbol_ccxt,
                 )
             )
             matched_bots = result.scalars().all()
+
+            # Hedge botları sadece on_signal modundaysa dahil et
+            filtered_bots = []
+            for b in matched_bots:
+                if b.strategy in ("hedge_bot", "dual_hedge"):
+                    try:
+                        bp = _json.loads(b.params) if b.params else {}
+                    except Exception:
+                        bp = {}
+                    if bp.get("trigger_mode") != "on_signal":
+                        continue
+                filtered_bots.append(b)
+            matched_bots = filtered_bots
 
             if matched_bots:
                 for bot in matched_bots:

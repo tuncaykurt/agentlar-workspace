@@ -1760,7 +1760,7 @@ export default function BotsPage() {
                   )}
 
                   {/* TradingView Webhook — kurulum kartı */}
-                  {form.strategy === "tradingview_webhook" && (
+                  {(form.strategy === "tradingview_webhook" || ((form.strategy === "hedge_bot" || form.strategy === "dual_hedge") && form.strategy_params.trigger_mode === "on_signal")) && (
                     <TradingViewWebhookCard
                       token={form.strategy_params.webhook_token as string || ""}
                       onTokenInit={t => setParam("webhook_token", t)}
