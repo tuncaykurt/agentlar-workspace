@@ -117,6 +117,7 @@ export default function BotCard({
     volatility_filter_enabled: false,
   })
   const [showFilters, setShowFilters] = useState(false)
+  const [showTrades, setShowTrades] = useState(false)
   const [filterStats, setFilterStats] = useState<Record<string, any>>({})
   const [showPerf, setShowPerf] = useState(false)
   const [perf, setPerf] = useState<{
@@ -128,6 +129,31 @@ export default function BotCard({
     win_rate: number
     avg_pnl_pct: number
     total_pnl_pct: number
+    trades?: {
+      total: number
+      open: number
+      closed: number
+      winning: number
+      losing: number
+      win_rate: number
+      total_pnl: number
+      total_pnl_pct: number
+    }
+    trade_history?: Array<{
+      id: number
+      side: string
+      entry_price: number
+      exit_price: number | null
+      quantity: number
+      pnl: number | null
+      pnl_pct: number | null
+      status: string
+      exit_reason: string | null
+      leverage: number | null
+      duration_min: number | null
+      opened_at: string | null
+      closed_at: string | null
+    }>
     last_signals: Array<{
       id: number
       signal_type: string
@@ -687,6 +713,162 @@ export default function BotCard({
                 </div>
               )}
               </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Hedge Trade Gecmisi */}
+      {perf && perf.trades && perf.trades.total > 0 && (
+        <div className="border-t border-slate-800 pt-2">
+          <button
+            onClick={() => setShowTrades(p => !p)}
+            className="flex items-center justify-between w-full text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Trade Gecmisi
+              <span className={clsx(
+                "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                perf.trades.total_pnl >= 0
+                  ? "bg-green-500/20 text-green-400"
+                  : "bg-red-500/20 text-red-400"
+              )}>
+                {perf.trades.closed > 0
+                  ? `${perf.trades.total_pnl >= 0 ? "+" : ""}$${perf.trades.total_pnl.toFixed(2)}`
+                  : `${perf.trades.open} acik`}
+              </span>
+            </span>
+            <svg
+              className={clsx("w-3.5 h-3.5 transition-transform", showTrades && "rotate-180")}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showTrades && (
+            <div className="mt-2 space-y-2">
+              {/* Ozet kutuları */}
+              <div className="grid grid-cols-4 gap-1.5">
+                <div className="bg-slate-900/60 rounded-lg p-1.5 text-center border border-slate-800">
+                  <p className="text-[9px] text-slate-500">Toplam</p>
+                  <p className="text-xs font-bold text-white">{perf.trades.total}</p>
+                </div>
+                <div className="bg-green-500/5 rounded-lg p-1.5 text-center border border-green-500/20">
+                  <p className="text-[9px] text-green-400/70">Kazanan</p>
+                  <p className="text-xs font-bold text-green-400">{perf.trades.winning}</p>
+                </div>
+                <div className="bg-red-500/5 rounded-lg p-1.5 text-center border border-red-500/20">
+                  <p className="text-[9px] text-red-400/70">Kaybeden</p>
+                  <p className="text-xs font-bold text-red-400">{perf.trades.losing}</p>
+                </div>
+                <div className="bg-blue-500/5 rounded-lg p-1.5 text-center border border-blue-500/20">
+                  <p className="text-[9px] text-blue-400/70">Basari</p>
+                  <p className="text-xs font-bold text-blue-400">%{perf.trades.win_rate}</p>
+                </div>
+              </div>
+
+              {/* PnL ozet */}
+              {perf.trades.closed > 0 && (
+                <div className="flex items-center justify-between bg-slate-900/60 rounded-lg p-2 border border-slate-800">
+                  <div>
+                    <p className="text-[9px] text-slate-500">Toplam PnL</p>
+                    <p className={clsx("text-sm font-bold", perf.trades.total_pnl >= 0 ? "text-green-400" : "text-red-400")}>
+                      {perf.trades.total_pnl >= 0 ? "+" : ""}${perf.trades.total_pnl.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] text-slate-500">PnL %</p>
+                    <p className={clsx("text-sm font-bold", perf.trades.total_pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                      {perf.trades.total_pnl_pct >= 0 ? "+" : ""}{perf.trades.total_pnl_pct.toFixed(2)}%
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] text-slate-500">Acik</p>
+                    <p className="text-sm font-bold text-yellow-400">{perf.trades.open}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Trade listesi */}
+              {perf.trade_history && perf.trade_history.length > 0 && (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
+                  {perf.trade_history.map(t => {
+                    const isLong = t.side === "long"
+                    const isClosed = t.status === "CLOSED"
+                    const pnlPositive = (t.pnl ?? 0) >= 0
+                    const borderColor = !isClosed
+                      ? "border-yellow-500/20"
+                      : pnlPositive ? "border-green-500/20" : "border-red-500/20"
+                    const bgColor = !isClosed
+                      ? "bg-yellow-500/5"
+                      : pnlPositive ? "bg-green-500/5" : "bg-red-500/5"
+                    const exitLabel: Record<string, string> = {
+                      tp: "TP Vurdu",
+                      exchange_sl: "SL Vurdu",
+                      close_both: "Kapandi",
+                      breakeven: "Basabasina",
+                      trailing: "Trailing",
+                    }
+                    return (
+                      <div key={t.id} className={clsx("rounded-lg border text-[10px]", bgColor, borderColor)}>
+                        <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 border-b border-white/5 flex-wrap">
+                          <span className={clsx(
+                            "font-bold px-1.5 py-0.5 rounded text-[9px]",
+                            isLong ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                          )}>
+                            {isLong ? "LONG" : "SHORT"}
+                          </span>
+                          <span className="text-slate-300 font-medium">
+                            Giris: {fmtPrice(t.entry_price)}
+                          </span>
+                          {isClosed && t.exit_price && (
+                            <>
+                              <span className="text-slate-600">→</span>
+                              <span className="text-slate-300">
+                                Cikis: {fmtPrice(t.exit_price)}
+                              </span>
+                            </>
+                          )}
+                          {t.leverage && (
+                            <span className="text-slate-600 text-[9px]">{t.leverage}x</span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between px-2 py-1 flex-wrap gap-x-2">
+                          {isClosed ? (
+                            <span className={clsx("font-semibold", pnlPositive ? "text-green-400" : "text-red-400")}>
+                              {t.exit_reason ? (exitLabel[t.exit_reason] ?? t.exit_reason) : "Kapandi"}
+                              {t.pnl != null && (
+                                <span className="ml-1">
+                                  {t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}
+                                  {t.pnl_pct != null && (
+                                    <span className="ml-0.5 text-slate-500">
+                                      ({t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%)
+                                    </span>
+                                  )}
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="font-semibold text-yellow-400">● Acik</span>
+                          )}
+                          <div className="flex items-center gap-2 text-slate-600 ml-auto">
+                            {t.duration_min != null && t.duration_min > 0 && (
+                              <span>⏱ {t.duration_min < 60 ? `${t.duration_min}dk` : `${Math.floor(t.duration_min / 60)}s ${t.duration_min % 60}dk`}</span>
+                            )}
+                            <span>
+                              {t.opened_at ? new Date(t.opened_at).toLocaleString("tr-TR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : ""}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
             </div>
           )}
