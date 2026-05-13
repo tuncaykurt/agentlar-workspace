@@ -7,7 +7,7 @@ from sqlalchemy import select, text
 from core.config import settings
 from core.database import async_session
 from core.database import engine, Base
-from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest, calendar, analytics
+from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest, calendar, analytics, freqtrade
 from api.websocket import market_ws, bot_status_ws
 from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
@@ -266,6 +266,7 @@ for _prefix in ["/api", "/api/api"]:
     app.include_router(backtest.router, prefix=_prefix)
     app.include_router(calendar.router, prefix=_prefix)
     app.include_router(analytics.router, prefix=_prefix)
+    app.include_router(freqtrade.router, prefix=_prefix)
 
 
 # WebSocket routes

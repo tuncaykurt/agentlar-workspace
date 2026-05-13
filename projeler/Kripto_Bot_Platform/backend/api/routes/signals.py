@@ -378,7 +378,7 @@ async def tradingview_webhook(token: str, request: Request):
             # Bu sembol'e bağlı TradingView webhook / custom_signal botlarını bul
             result = await session.execute(
                 sa_select(Bot).where(
-                    Bot.strategy.in_(["tradingview_webhook", "custom_signal"]),
+                    Bot.strategy.in_(["tradingview_webhook", "custom_signal", "freqtrade"]),
                     Bot.symbol == symbol_ccxt,
                 )
             )
@@ -441,6 +441,16 @@ async def tradingview_webhook(token: str, request: Request):
                         print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' pasif — analiz kuyruğa alındı")
                     else:
                         print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' aktif — engine işleyecek TP={tp_price} SL={sl_price}")
+                        
+                        # Freqtrade forwarding
+                        if bot.strategy == "freqtrade":
+                            try:
+                                from services.freqtrade_service import freqtrade_service
+                                # Arka planda çalıştır ki webhook cevabı gecikmesin
+                                asyncio.create_task(freqtrade_service.force_entry(symbol_ccxt, sig_type))
+                                print(f"[TV Webhook] Sinyal Freqtrade'e iletildi: {symbol_ccxt} {sig_type}")
+                            except Exception as fe:
+                                print(f"[TV Webhook] Freqtrade iletim hatası: {fe}")
                     
                     # Önceki açık sinyali kapatma/analiz görevini ekle
                     finalize_tasks.append((
