@@ -1550,8 +1550,8 @@ export default function BotsPage() {
                         {selectedStrategy.icon} {selectedStrategy.name} — Strateji Parametreleri
                       </span>
 
-                      {/* ── Sinyal Kaynağı Seçici — Grid Bot ve TradingView Webhook için gösterilmez ── */}
-                      {form.strategy !== "grid_bot" && form.strategy !== "tradingview_webhook" && <div className="space-y-3">
+                      {/* ── Sinyal Kaynağı Seçici — Grid Bot, TradingView Webhook ve Hedge Bot için gösterilmez ── */}
+                      {form.strategy !== "grid_bot" && form.strategy !== "tradingview_webhook" && form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && <div className="space-y-3">
                         <p className="text-xs text-slate-400 font-medium">Sinyal Kaynağı Seç</p>
 
                         {/* Dahili algoritma kartı */}
@@ -1712,8 +1712,8 @@ export default function BotsPage() {
                         </div>
                       )}
 
-                      {/* Dahili algoritma parametreleri — yalnızca builtin seçiliyken */}
-                      {(!form.strategy_params.signal_source || form.strategy_params.signal_source === "builtin") && selectedStrategy.params.length > 0 && (
+                      {/* Dahili algoritma parametreleri — yalnızca builtin seçiliyken (hedge bot daima gösterir) */}
+                      {(form.strategy === "hedge_bot" || form.strategy === "dual_hedge" || !form.strategy_params.signal_source || form.strategy_params.signal_source === "builtin") && selectedStrategy.params.length > 0 && (
                         <div className="space-y-4">
                           {/* Sinyal mantığı açıklama kartı */}
                           <StrategySignalCard strategyId={form.strategy} getParam={getParam} />
