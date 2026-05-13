@@ -1390,9 +1390,20 @@ export default function BotsPage() {
       trailing_sl: p.trailing_sl || false,
       order_type: (p.order_type || "market") as "market" | "limit",
       margin_type: (p.margin_type || "isolated") as "isolated" | "cross",
-      strategy_params: Object.fromEntries(
-        Object.entries(p).filter(([k]) => !["tp_pct", "sl_pct", "trailing_sl", "_strategy_display", "order_type", "margin_type"].includes(k))
-      ),
+      strategy_params: (() => {
+        // Strateji default'larını doldur, sonra kayıtlı değerleri üzerine yaz
+        const stratDef = STRATEGIES.find(st => st.id === (p._strategy_display || bot.strategy))
+        const defaults: Record<string, any> = {}
+        if (stratDef) {
+          for (const param of stratDef.params) {
+            defaults[param.key] = param.default
+          }
+        }
+        const saved = Object.fromEntries(
+          Object.entries(p).filter(([k]) => !["tp_pct", "sl_pct", "trailing_sl", "_strategy_display", "order_type", "margin_type"].includes(k))
+        )
+        return { ...defaults, ...saved }
+      })(),
     })
     setStep(0)
   }
@@ -1761,8 +1772,8 @@ export default function BotsPage() {
                     />
                   )}
 
-                  {/* ── Kar / Zarar (Grid Bot bu bölümü kendi param'larında yönetir) ── */}
-                  {form.strategy !== "grid_bot" && <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/30 space-y-4">
+                  {/* ── Kar / Zarar (Grid/Hedge Bot kendi param'larında yönetir) ── */}
+                  {form.strategy !== "grid_bot" && form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/30 space-y-4">
                     {/* Başlık + Manuel / AI toggle */}
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-semibold text-slate-300">📊 Kar / Zarar Ayarları</p>
