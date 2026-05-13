@@ -171,7 +171,15 @@ const STRATEGIES: Strategy[] = [
           { value: "on_signal", label: "Sinyal gelince aç (TV Webhook)" },
         ],
       },
-      { key: "leverage",       label: "Kaldıraç (x)",           type: "number",  min: 1,   max: 125, step: 1,   default: 20,   description: "İşlem kaldıracı — yüksek kaldıraç TP/SL mesafesini küçültür" },
+      { key: "leverage",       label: "Kaldıraç (x)",           type: "number",  min: 1,   max: 500, step: 1,   default: 20,   description: "İşlem kaldıracı — yüksek kaldıraç TP/SL mesafesini küçültür" },
+      { key: "position_size_mode", label: "İşlem Miktarı Modu", type: "select", default: "percentage", description: "Bakiyenin ne kadarıyla işlem açılsın",
+        options: [
+          { value: "percentage", label: "Bakiyenin %'si" },
+          { value: "fixed_usdt", label: "Sabit USDT miktarı" },
+        ],
+      },
+      { key: "position_size_pct",  label: "Bakiye Yüzdesi %",    type: "number",  min: 1,   max: 100, step: 1,   default: 100,  description: "Bakiyenin yüzde kaçıyla işlem aç (100 = tamamı)" },
+      { key: "position_size_usdt", label: "Sabit Miktar (USDT)", type: "number",  min: 1,   max: 100000, step: 1, default: 100,  description: "Her döngüde kullanılacak sabit USDT miktarı" },
       { key: "long_size_ratio", label: "Long Büyüklük Oranı",   type: "number",  min: 0.1, max: 0.9, step: 0.05, default: 0.5, description: "0.5 = eşit büyüklük, 0.6 = long daha büyük" },
       { key: "long_tp_pct",    label: "Long TP %",               type: "number",  min: 0.1, max: 100, step: 0.5, default: 30,   description: "Long pozisyonu kapat (giriş fiyatından % yükseliş)" },
       { key: "long_sl_pct",    label: "Long SL %",               type: "number",  min: 0.1, max: 100, step: 0.5, default: 20,   description: "Long stop-loss (giriş fiyatından % düşüş)" },
@@ -1474,7 +1482,16 @@ export default function BotsPage() {
                           if (form.strategy === s.id) return
                           const sourceName = s.id.startsWith("custom__") ? s.name : undefined
                           set("strategy", s.id)
-                          set("strategy_params", sourceName ? { source_name: sourceName } : {})
+                          // Strateji parametrelerinin default değerlerini doldur
+                          const defaults: Record<string, number | string | boolean> = {}
+                          if (sourceName) defaults.source_name = sourceName
+                          const stratDef = STRATEGIES.find(st => st.id === s.id)
+                          if (stratDef) {
+                            for (const p of stratDef.params) {
+                              defaults[p.key] = p.default
+                            }
+                          }
+                          set("strategy_params", defaults)
                         }}
                         className={`text-left p-4 rounded-xl border transition-all ${
                           form.strategy === s.id

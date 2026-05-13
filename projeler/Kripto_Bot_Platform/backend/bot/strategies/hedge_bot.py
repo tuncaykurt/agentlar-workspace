@@ -27,13 +27,16 @@ class HedgeBotParams:
 
     def __init__(self, params: dict):
         # ── Tetikleyici ─────────────────────────────────────────────────────
-        self.trigger_mode    = params.get("trigger_mode", "on_signal")
+        self.trigger_mode    = params.get("trigger_mode", "on_start")
         # on_signal: TV webhook / custom sinyal gelince
         # on_start:  bot başlayınca hemen aç
         # scheduled: belirli intervalda aç
 
         # ── Kaldıraç & Büyüklük ─────────────────────────────────────────────
         self.leverage           = int(params.get("leverage", 20))
+        self.position_size_mode = params.get("position_size_mode", "percentage")
+        self.position_size_pct  = float(params.get("position_size_pct", 100))
+        self.position_size_usdt = float(params.get("position_size_usdt", 100))
         self.long_size_ratio    = float(params.get("long_size_ratio", 0.5))
         # 0.5 = eşit büyüklük; 0.6 = long daha büyük
 
