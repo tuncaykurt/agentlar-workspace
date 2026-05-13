@@ -16,7 +16,7 @@ from ai.market_context import collect_full_context
 from services.data_fetcher import DataFetcher
 from core.redis_client import get_redis
 from core.database import async_session
-from models.trade import SignalLog, BotFilter
+from models.trade import SignalLog, BotFilter, Trade, TradeStatus
 from services.economic_calendar import is_news_blackout
 from bot.strategies.rsi_oversold import RSIOversoldStrategy
 from bot.strategies.macd_signal import MACDSignalStrategy
@@ -1831,8 +1831,14 @@ class BotEngine:
 
             notional = total_usdt * p.leverage
             total_contracts = notional / (current_price * contract_size)
-            long_qty  = max(1, int(total_contracts * p.long_size_ratio))
-            short_qty = max(1, int(total_contracts * (1 - p.long_size_ratio)))
+            # Eşit bölme: her iki tarafı aynı tutara zorla (hedge mantığı gereği)
+            if p.long_size_ratio == 0.5:
+                half = max(1, round(total_contracts / 2))
+                long_qty = half
+                short_qty = half
+            else:
+                long_qty  = max(1, round(total_contracts * p.long_size_ratio))
+                short_qty = max(1, round(total_contracts * (1 - p.long_size_ratio)))
             print(f"[HedgeBot {bot_name}] Miktar: {total_usdt}$ × {p.leverage}x = {notional}$ notional → Long:{long_qty} Short:{short_qty} kontrat (contractSize={contract_size})")
 
             if not paper:
@@ -1872,6 +1878,19 @@ class BotEngine:
                 print(f"[HedgeBot {bot_name}] PAPER Long: TP={new_levels['long']['tp']} SL={new_levels['long']['sl']}")
                 print(f"[HedgeBot {bot_name}] PAPER Short: TP={new_levels['short']['tp']} SL={new_levels['short']['sl']}")
 
+            # Trade kayıtlarını DB'ye yaz
+            long_ok_flag = not paper and long_ok if not paper else True
+            short_ok_flag = not paper and short_ok if not paper else True
+            trade_ids = {}
+            if long_ok_flag:
+                tid = await self._open_hedge_trade("long", current_price, long_qty, p.leverage)
+                if tid:
+                    trade_ids["long"] = tid
+            if short_ok_flag:
+                tid = await self._open_hedge_trade("short", current_price, short_qty, p.leverage)
+                if tid:
+                    trade_ids["short"] = tid
+
             await self._alert(
                 f"🔀 Hedge Bot Açıldı {'[PAPER] ' if paper else ''}\n"
                 f"{symbol} @ {current_price:.4f}  Kaldıraç: {p.leverage}x\n"
@@ -1887,6 +1906,7 @@ class BotEngine:
                 "active_sides": ["long", "short"],
                 "losing_side":  None,
                 "peak_price":   current_price,
+                "trade_ids":    trade_ids,
                 "cycle_count":  cycle_count,
             }
             await redis.set(state_key, json.dumps(sd))
@@ -1909,7 +1929,9 @@ class BotEngine:
                 remaining = active_sides & real_sides
 
                 if len(real_sides) == 0:
-                    # İki taraf da kapanmış
+                    # İki taraf da kapanmış — trade'leri kapat
+                    for cs in list(active_sides):
+                        await self._close_hedge_trade(bot_id, cs, current_price, "exchange_tp_sl")
                     print(f"[HedgeBot {bot_name}] Her iki pozisyon kapanmış — döngü bitti")
                     sd["state"]          = HedgeBotState.COOLDOWN
                     sd["cooldown_until"] = (_dt.utcnow() + _td(seconds=p.reopen_delay_secs)).isoformat()
@@ -1922,6 +1944,7 @@ class BotEngine:
                 if len(closed_sides) == 1:
                     closed = closed_sides.pop()
                     remaining_side = remaining.pop() if remaining else None
+                    await self._close_hedge_trade(bot_id, closed, current_price, "exchange_tp_sl")
                     print(f"[HedgeBot {bot_name}] {closed.upper()} borsa tarafından kapatıldı (TP/SL)")
                     active_sides = {remaining_side} if remaining_side else set()
                     sd["active_sides"] = list(active_sides)
@@ -1979,6 +2002,9 @@ class BotEngine:
                                 await asyncio.gather(*close_tasks, return_exceptions=True)
                         except Exception as e:
                             print(f"[HedgeBot {bot_name}] close_both kapatma hatası: {e}")
+                    # Trade kayıtlarını kapat
+                    await self._close_hedge_trade(bot_id, winner, current_price, "tp")
+                    await self._close_hedge_trade(bot_id, loser, current_price, "close_both")
                     sd["state"]          = HedgeBotState.COOLDOWN
                     sd["cooldown_until"] = (_dt.utcnow() + _td(seconds=p.reopen_delay_secs)).isoformat()
                     sd["cycle_count"]    = cycle_count + 1
@@ -1986,6 +2012,7 @@ class BotEngine:
                     await self._alert(f"✅ Hedge Bot close_both: {winner.upper()} TP — {symbol}")
                 else:
                     # Kazanan exchange tarafından otomatik kapandı (TP order); kaybedeni yönet
+                    await self._close_hedge_trade(bot_id, winner, current_price, "tp")
                     active_sides.discard(winner)
                     sd["active_sides"] = list(active_sides)
                     sd["losing_side"]  = loser
@@ -2031,6 +2058,7 @@ class BotEngine:
 
             # Kaybeden taraf borsada kapanmışsa (SL tetiklendi) → COOLDOWN
             if losing_side not in real_sides:
+                await self._close_hedge_trade(bot_id, losing_side, current_price, "exchange_sl")
                 print(f"[HedgeBot {bot_name}] {losing_side.upper()} borsa tarafından kapatıldı (SL/TP)")
                 sd["state"]          = HedgeBotState.COOLDOWN
                 sd["cooldown_until"] = (_dt.utcnow() + _td(seconds=p.reopen_delay_secs)).isoformat()
@@ -2079,6 +2107,7 @@ class BotEngine:
                                 await self.exchange.close_position(symbol, losing_side, pos["size"])
                         except Exception as e:
                             print(f"[HedgeBot {bot_name}] Kaybeden kapatma hatası: {e}")
+                    await self._close_hedge_trade(bot_id, losing_side, current_price, exit_reason)
 
                     sd["state"]          = HedgeBotState.COOLDOWN
                     sd["cooldown_until"] = (_dt.utcnow() + _td(seconds=p.reopen_delay_secs)).isoformat()
@@ -2179,6 +2208,71 @@ class BotEngine:
             "ts":           datetime.utcnow().isoformat(),
         }
         await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
+
+    async def _open_hedge_trade(self, side: str, entry_price: float, quantity: float, leverage: int) -> int | None:
+        """Hedge pozisyonu açıldığında Trade kaydı oluştur. Trade ID döner."""
+        try:
+            async with async_session() as session:
+                trade = Trade(
+                    bot_id=self.config["id"],
+                    symbol=self.config["symbol"],
+                    side=side,
+                    entry_price=entry_price,
+                    quantity=quantity,
+                    status=TradeStatus.OPEN,
+                    paper=self.config.get("paper_mode", True),
+                    exchange=self.config.get("exchange", "mexc"),
+                    leverage_used=leverage,
+                )
+                session.add(trade)
+                await session.commit()
+                await session.refresh(trade)
+                print(f"[HedgeBot {self.config['name']}] Trade kaydedildi: #{trade.id} {side} {quantity}@{entry_price}")
+                return trade.id
+        except Exception as e:
+            print(f"[HedgeBot {self.config['name']}] Trade kayıt hatası: {e}")
+            return None
+
+    async def _close_hedge_trade(self, bot_id: int, side: str, exit_price: float, exit_reason: str):
+        """Hedge pozisyonu kapandığında Trade kaydını güncelle."""
+        try:
+            async with async_session() as session:
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(Trade).where(
+                        Trade.bot_id == bot_id,
+                        Trade.side == side,
+                        Trade.status == TradeStatus.OPEN,
+                    ).order_by(Trade.opened_at.desc()).limit(1)
+                )
+                trade = result.scalar_one_or_none()
+                if not trade:
+                    print(f"[HedgeBot {self.config['name']}] Kapanacak açık trade bulunamadı: {side}")
+                    return
+
+                trade.exit_price = exit_price
+                trade.status = TradeStatus.CLOSED
+                trade.closed_at = datetime.utcnow()
+                trade.exit_reason = exit_reason
+
+                # PnL hesapla
+                if side == "long":
+                    trade.pnl_pct = round((exit_price - trade.entry_price) / trade.entry_price * 100, 4)
+                else:
+                    trade.pnl_pct = round((trade.entry_price - exit_price) / trade.entry_price * 100, 4)
+
+                leverage = trade.leverage_used or 1
+                trade.pnl = round(trade.pnl_pct * leverage * trade.quantity * trade.entry_price / 100, 4)
+
+                # Süre hesapla
+                if trade.opened_at:
+                    delta = datetime.utcnow() - trade.opened_at.replace(tzinfo=None)
+                    trade.duration_minutes = int(delta.total_seconds() / 60)
+
+                await session.commit()
+                print(f"[HedgeBot {self.config['name']}] Trade kapatıldı: #{trade.id} {side} → {exit_reason} PnL={trade.pnl_pct:.2f}% ${trade.pnl:.4f}")
+        except Exception as e:
+            print(f"[HedgeBot {self.config['name']}] Trade kapanış kayıt hatası: {e}")
 
     def stop(self):
         self.running = False
