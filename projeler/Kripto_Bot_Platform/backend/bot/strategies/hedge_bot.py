@@ -34,11 +34,6 @@ class HedgeBotParams:
 
         # ── Kaldıraç & Büyüklük ─────────────────────────────────────────────
         self.leverage           = int(params.get("leverage", 20))
-        self.position_size_mode = params.get("position_size_mode", "percentage")
-        # percentage: bakiyenin yüzdesiyle işlem aç
-        # fixed_usdt: sabit USDT miktarıyla işlem aç
-        self.position_size_pct  = float(params.get("position_size_pct", 100))
-        self.position_size_usdt = float(params.get("position_size_usdt", 100))
         self.long_size_ratio    = float(params.get("long_size_ratio", 0.5))
         # 0.5 = eşit büyüklük; 0.6 = long daha büyük
 
