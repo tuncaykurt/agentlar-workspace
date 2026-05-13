@@ -1826,21 +1826,31 @@ class BotEngine:
             short_qty = max(1, int(total_qty * (1 - p.long_size_ratio)))
 
             if not paper:
-                # 1) Her iki market order'ı AYNI ANDA aç (fiyat kaymasını önle)
+                # Long + Short + TP/SL hepsi AYNI ANDA (her place_order kendi içinde market order + TP/SL halleder)
                 results = await asyncio.gather(
-                    self.exchange.place_order(symbol, "buy", long_qty, "market", pos_side="long"),
-                    self.exchange.place_order(symbol, "sell", short_qty, "market", pos_side="short"),
+                    self.exchange.place_order(
+                        symbol, "buy", long_qty, "market",
+                        tp_price=new_levels["long"]["tp"],
+                        sl_price=new_levels["long"]["sl"],
+                        pos_side="long",
+                    ),
+                    self.exchange.place_order(
+                        symbol, "sell", short_qty, "market",
+                        tp_price=new_levels["short"]["tp"],
+                        sl_price=new_levels["short"]["sl"],
+                        pos_side="short",
+                    ),
                     return_exceptions=True,
                 )
                 long_ok  = not isinstance(results[0], Exception)
                 short_ok = not isinstance(results[1], Exception)
 
                 if long_ok:
-                    print(f"[HedgeBot {bot_name}] ✓ Long açıldı: {long_qty} kontrat")
+                    print(f"[HedgeBot {bot_name}] ✓ Long açıldı + TP/SL: {long_qty} kontrat")
                 else:
                     print(f"[HedgeBot {bot_name}] ✗ Long hatası: {results[0]}")
                 if short_ok:
-                    print(f"[HedgeBot {bot_name}] ✓ Short açıldı: {short_qty} kontrat")
+                    print(f"[HedgeBot {bot_name}] ✓ Short açıldı + TP/SL: {short_qty} kontrat")
                 else:
                     print(f"[HedgeBot {bot_name}] ✗ Short hatası: {results[1]}")
 
@@ -1848,13 +1858,6 @@ class BotEngine:
                     print(f"[HedgeBot {bot_name}] Her iki yön de açılamadı — döngü iptal")
                     await self._alert(f"❌ Hedge Bot: Long ve Short açılamadı")
                     return
-
-                # 2) Pozisyonlar oluşsun diye kısa bekle, sonra TP/SL'leri AYNI ANDA ekle
-                await asyncio.sleep(1.5)
-                try:
-                    await self._set_hedge_tp_sl(symbol, new_levels, long_ok, short_ok, long_qty, short_qty)
-                except Exception as e:
-                    print(f"[HedgeBot {bot_name}] TP/SL ekleme hatası (pozisyonlar açık): {e}")
             else:
                 print(f"[HedgeBot {bot_name}] PAPER Long: TP={new_levels['long']['tp']} SL={new_levels['long']['sl']}")
                 print(f"[HedgeBot {bot_name}] PAPER Short: TP={new_levels['short']['tp']} SL={new_levels['short']['sl']}")

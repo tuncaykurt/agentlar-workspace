@@ -75,22 +75,24 @@ class _ExClient:
 
         # TP/SL: stoporder/place ile pozisyon bazlı TP/SL koy
         if tp_price or sl_price:
-            await asyncio.sleep(1)  # pozisyonun oluşmasını bekle
-
-            # positionId'yi al
+            target_type = 1 if is_long else 2
             pos_id = None
-            try:
-                pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
-                pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
-                # positionType: 1=long, 2=short
-                target_type = 1 if is_long else 2
-                for p in (pos_data or []):
-                    if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
-                        pos_id = int(p.get("positionId", 0))
-                        print(f"[ExClient] MEXC position found: id={pos_id} holdVol={p.get('holdVol')} type={target_type}")
-                        break
-            except Exception as e:
-                print(f"[ExClient] MEXC position query HATA: {e}")
+
+            # Hızlı retry: 0.3s, 0.7s, 1.5s (toplam max ~2.5s)
+            for attempt, wait in enumerate([0.3, 0.7, 1.5], 1):
+                await asyncio.sleep(wait)
+                try:
+                    pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+                    pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
+                    for p in (pos_data or []):
+                        if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
+                            pos_id = int(p.get("positionId", 0))
+                            break
+                except Exception as e:
+                    print(f"[ExClient] MEXC position query HATA (attempt {attempt}): {e}")
+                if pos_id:
+                    print(f"[ExClient] MEXC position found: id={pos_id} type={target_type} (attempt {attempt})")
+                    break
 
             if pos_id:
                 stop_body = {
