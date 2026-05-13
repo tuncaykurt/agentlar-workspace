@@ -50,19 +50,26 @@ class MEXCClient:
             import asyncio
             mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
             is_long = side.lower() == "buy"
-            await asyncio.sleep(1)
 
+            # Pozisyon ID'yi retry ile bul (MEXC bazen gecikmeli yansıtır)
             pos_id = None
-            try:
-                pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
-                pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
-                target_type = 1 if is_long else 2
-                for p in (pos_data or []):
-                    if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
-                        pos_id = int(p.get("positionId", 0))
-                        break
-            except Exception as e:
-                print(f"[MEXCClient] position query error: {e}")
+            target_type = 1 if is_long else 2
+            for attempt in range(1, 4):  # 3 deneme: 1.5s, 3s, 5s bekleme
+                await asyncio.sleep(1.0 + attempt * 0.5)
+                try:
+                    pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
+                    pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
+                    for p in (pos_data or []):
+                        if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
+                            pos_id = int(p.get("positionId", 0))
+                            break
+                except Exception as e:
+                    print(f"[MEXCClient] position query error (attempt {attempt}/3): {e}")
+
+                if pos_id:
+                    print(f"[MEXCClient] ✓ Position ID bulundu: {pos_id} (attempt {attempt}/3)")
+                    break
+                print(f"[MEXCClient] ⚠ Position ID bulunamadı (attempt {attempt}/3), tekrar deneniyor...")
 
             if pos_id:
                 stop_body = {
@@ -80,11 +87,15 @@ class MEXCClient:
                 if sl_price:
                     stop_body["stopLossPrice"] = round(float(sl_price), 2)
                 try:
-                    await self.exchange.contractPrivatePostStoporderPlace(stop_body)
+                    result = await self.exchange.contractPrivatePostStoporderPlace(stop_body)
+                    print(f"[MEXCClient] ✓ TP/SL başarıyla konuldu: TP={tp_price} SL={sl_price} result={result}")
                 except Exception as e:
-                    print(f"[MEXCClient] stoporder/place error: {e}")
+                    print(f"[MEXCClient] ✗ KRITIK: stoporder/place HATASI: {e} — body={stop_body}")
+                    raise RuntimeError(f"TP/SL konulamadı (pozisyon korumasız!): {e}")
             else:
-                print(f"[MEXCClient] TP/SL skipped: positionId not found")
+                msg = f"TP/SL BAŞARISIZ: 3 denemede positionId bulunamadı ({mexc_symbol}, {'long' if is_long else 'short'})"
+                print(f"[MEXCClient] ✗ KRITIK: {msg}")
+                raise RuntimeError(msg)
 
         return order
 

@@ -394,6 +394,31 @@ class BotEngine:
                     pos_side=trade.get("pos_side")
                 )
                 print(f"[Bot {bot_name}] ✓ İşlem başarılı: order_id={order.get('id', 'N/A')}")
+            except RuntimeError as tpsl_err:
+                # TP/SL konulamadı — pozisyon korumasız, acil kapat
+                err_msg = str(tpsl_err)
+                if "TP/SL" in err_msg:
+                    print(f"[Bot {bot_name}] ✗ TP/SL HATASI — pozisyon acil kapatılıyor: {tpsl_err}")
+                    try:
+                        close_side = "sell" if side == "buy" else "buy"
+                        await self.exchange.exchange.create_market_order(symbol, close_side, amount, params={"positionSide": trade.get("pos_side", "").upper()} if trade.get("pos_side") else {})
+                        print(f"[Bot {bot_name}] ✓ Korumasız pozisyon kapatıldı (TP/SL konulamadığı için)")
+                    except Exception as close_err:
+                        print(f"[Bot {bot_name}] ✗ KRİTİK: Korumasız pozisyon KAPATILAMADI: {close_err}")
+                    # Redis'e hata yaz
+                    try:
+                        from core.redis_client import get_redis
+                        _redis = get_redis()
+                        await _redis.set(
+                            f"bot:{self.config['id']}:last_error",
+                            f"{datetime.utcnow().isoformat()} | TP/SL HATASI — pozisyon kapatıldı: {err_msg[:300]}",
+                            ex=3600
+                        )
+                    except Exception:
+                        pass
+                    raise
+                else:
+                    raise
             except Exception as order_err:
                 print(f"[Bot {bot_name}] ✗ Order HATASI: {order_err}")
                 # Redis'e hata yaz (frontend görsün)
@@ -1225,7 +1250,8 @@ class BotEngine:
             except Exception:
                 cur_price = 0
 
-        # Duplicate sinyal kontroli (aynı ts tekrar işleme)
+        # Duplicate sinyal kontroli — iki katmanlı koruma
+        # 1) Aynı ts'li sinyal tekrar işlenmez (orijinal kontrol)
         last_ts_key = f"bot:{bot_id}:last_custom_signal_ts"
         last_ts = await redis.get(last_ts_key)
         sig_ts = sig.get("ts", "")
@@ -1233,6 +1259,18 @@ class BotEngine:
             last_ts_str = last_ts.decode() if isinstance(last_ts, bytes) else str(last_ts)
             if last_ts_str == sig_ts:
                 return  # Bu sinyal daha önce işlendi
+
+        # 2) Aynı yönde cooldown: TradingView çift webhook gönderirse engelle
+        #    (Her webhook farklı ts üretir, bu yüzden ts kontrolü yetmez)
+        sig_direction = sig.get("type", "")  # buy / sell / close
+        cooldown_key = f"bot:{bot_id}:signal_cooldown:{sig_direction}"
+        cooldown_active = await redis.get(cooldown_key)
+        if cooldown_active:
+            print(f"[Bot {bot_name}] ⚠ Cooldown aktif — aynı yönde ({sig_direction}) sinyal {30}sn içinde zaten işlendi, atlanıyor")
+            await redis.set(last_ts_key, sig_ts, ex=600)
+            return
+        # Cooldown'ı şimdi set et — sinyal işlensin veya işlenmesin 30sn boyunca aynı yönde tekrar engelle
+        await redis.set(cooldown_key, "1", ex=30)
 
         signal_type = sig.get("type")   # "buy" | "sell"
         price       = sig.get("price", 0)
