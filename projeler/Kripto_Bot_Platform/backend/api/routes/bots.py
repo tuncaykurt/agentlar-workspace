@@ -917,38 +917,74 @@ async def get_bot_position(bot_id: int):
         except Exception as e:
             print(f"[Position API] fetch_ticker hatası: {e}")
 
-        # Pozisyon
+        # Pozisyon — MEXC için direkt contract API kullan (CCXT fetch_positions eksik veri döner)
         pos_data = None
+        exchange_name = (bot.exchange or "bitget").lower()
         try:
-            positions = await asyncio.wait_for(ex_client.exchange.fetch_positions([bot.symbol]), timeout=10)
-            open_pos = [p for p in positions if float(p.get("contracts", 0) or 0) != 0]
+            if exchange_name == "mexc":
+                # MEXC direkt contract API — engine ile aynı yöntem
+                mexc_symbol = bot.symbol.split("/")[0] + "_" + bot.symbol.split("/")[1].split(":")[0]
+                resp = await asyncio.wait_for(
+                    ex_client.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol}),
+                    timeout=15
+                )
+                data = resp.get("data", []) if isinstance(resp, dict) else resp
+                if data and isinstance(data, list):
+                    for pos in data:
+                        vol = float(pos.get("holdVol", 0) or 0)
+                        if vol == 0:
+                            continue
+                        pos_type = int(pos.get("positionType", 1))  # 1=long, 2=short
+                        side = "long" if pos_type == 1 else "short"
+                        entry = float(pos.get("openAvgPrice", 0) or 0)
+                        unrealized_pnl = float(pos.get("unrealisedPnl", 0) or pos.get("unrealizedPnl", 0) or 0)
+                        notional = float(pos.get("positionValue", 0) or 0)
+                        leverage = int(pos.get("leverage", 1) or 1)
+                        if not notional and entry > 0:
+                            contract_size = float(pos.get("contractSize", 0.001) or 0.001)
+                            notional = vol * entry * contract_size
+                        # PnL yüzde: margin bazlı (leverage dahil)
+                        margin = notional / leverage if leverage else notional
+                        pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
 
-            if open_pos:
-                p = open_pos[0]
-                entry = float(p.get("entryPrice", 0) or 0)
-                contracts = float(p.get("contracts", 0) or 0)
-                notional = float(p.get("notional", 0) or 0) or (contracts * entry)
-                side = p.get("side", "long")
-                leverage = float(p.get("leverage", 1) or 1)
-                unrealized_pnl = float(p.get("unrealizedPnl", 0) or 0)
-                # PnL yüzde hesapla
-                if notional and leverage:
-                    margin = notional / leverage
+                        pos_data = {
+                            "side": side,
+                            "size": vol,
+                            "entry_price": entry,
+                            "notional": round(notional, 2),
+                            "pnl_usdt": round(unrealized_pnl, 4),
+                            "pnl_pct": round(pnl_pct, 2),
+                            "leverage": leverage,
+                        }
+                        break  # İlk açık pozisyonu al
+            else:
+                # Diğer borsalar: standart CCXT
+                positions = await asyncio.wait_for(ex_client.exchange.fetch_positions([bot.symbol]), timeout=10)
+                open_pos = [p for p in positions if float(p.get("contracts", 0) or 0) != 0]
+
+                if open_pos:
+                    p = open_pos[0]
+                    entry = float(p.get("entryPrice", 0) or 0)
+                    contracts = float(p.get("contracts", 0) or 0)
+                    notional = float(p.get("notional", 0) or 0) or (contracts * entry)
+                    side = p.get("side", "long")
+                    leverage = float(p.get("leverage", 1) or 1)
+                    unrealized_pnl = float(p.get("unrealizedPnl", 0) or 0)
+                    # PnL yüzde: margin bazlı
+                    margin = notional / leverage if leverage else notional
                     pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
-                else:
-                    pnl_pct = 0
 
-                pos_data = {
-                    "side": side,
-                    "size": contracts,
-                    "entry_price": entry,
-                    "notional": notional,
-                    "pnl_usdt": round(unrealized_pnl, 4),
-                    "pnl_pct": round(pnl_pct, 2),
-                    "leverage": leverage,
-                }
+                    pos_data = {
+                        "side": side,
+                        "size": contracts,
+                        "entry_price": entry,
+                        "notional": round(notional, 2),
+                        "pnl_usdt": round(unrealized_pnl, 4),
+                        "pnl_pct": round(pnl_pct, 2),
+                        "leverage": leverage,
+                    }
         except Exception as e:
-            print(f"[Position API] fetch_positions hatası: {e}")
+            print(f"[Position API] fetch_positions hatası ({exchange_name}): {e}")
 
         return {"price": cur_price, "position": pos_data}
     except Exception as e:
@@ -1288,32 +1324,47 @@ async def get_signal_logs(bot_id: int, limit: int = 50, action: str = None):
 
 @router.get("/{bot_id}/performance")
 async def bot_performance(bot_id: int):
-    """Bot'un sinyal performansı — TP/SL vuruş oranı, kâr/zarar özeti."""
-    from models.trade import SignalLog
+    """Bot'un trade + sinyal performansı — TP/SL vuruş oranı, kâr/zarar özeti."""
+    from models.trade import SignalLog, Trade, TradeStatus
     async with async_session() as session:
-        result = await session.execute(
+        # Sinyal performansı
+        sig_result = await session.execute(
             select(SignalLog).where(
                 SignalLog.bot_id == bot_id,
                 SignalLog.outcome.isnot(None),
             ).order_by(SignalLog.created_at.desc())
         )
-        signals = result.scalars().all()
+        signals = sig_result.scalars().all()
 
+        # Trade geçmişi
+        trade_result = await session.execute(
+            select(Trade).where(Trade.bot_id == bot_id).order_by(Trade.opened_at.desc())
+        )
+        trades = trade_result.scalars().all()
+
+    # Sinyal istatistikleri
     total = len(signals)
     tp_hits = sum(1 for s in signals if s.outcome == "tp_hit")
     sl_hits = sum(1 for s in signals if s.outcome == "sl_hit")
     still_open = sum(1 for s in signals if s.outcome == "open")
     expired = sum(1 for s in signals if s.outcome == "expired")
-
     pnl_list = [s.outcome_pnl_pct for s in signals if s.outcome_pnl_pct is not None]
     avg_pnl = sum(pnl_list) / len(pnl_list) if pnl_list else 0
     total_pnl = sum(pnl_list)
-
     closed = tp_hits + sl_hits
     win_rate = (tp_hits / closed * 100) if closed > 0 else 0
 
+    # Trade istatistikleri
+    closed_trades = [t for t in trades if t.status == TradeStatus.CLOSED]
+    open_trades = [t for t in trades if t.status == TradeStatus.OPEN]
+    winning_trades = [t for t in closed_trades if (t.pnl or 0) > 0]
+    trade_win_rate = (len(winning_trades) / len(closed_trades) * 100) if closed_trades else 0
+    trade_total_pnl = sum(t.pnl or 0 for t in closed_trades)
+    trade_total_pnl_pct = sum(t.pnl_pct or 0 for t in closed_trades)
+
     return {
         "bot_id": bot_id,
+        # Sinyal performansı
         "total_signals": total,
         "open": still_open,
         "tp_hit": tp_hits,
@@ -1322,6 +1373,35 @@ async def bot_performance(bot_id: int):
         "win_rate": round(win_rate, 1),
         "avg_pnl_pct": round(avg_pnl, 2),
         "total_pnl_pct": round(total_pnl, 2),
+        # Trade performansı
+        "trades": {
+            "total": len(trades),
+            "open": len(open_trades),
+            "closed": len(closed_trades),
+            "winning": len(winning_trades),
+            "losing": len(closed_trades) - len(winning_trades),
+            "win_rate": round(trade_win_rate, 1),
+            "total_pnl": round(trade_total_pnl, 4),
+            "total_pnl_pct": round(trade_total_pnl_pct, 2),
+        },
+        "trade_history": [
+            {
+                "id": t.id,
+                "side": t.side,
+                "entry_price": t.entry_price,
+                "exit_price": t.exit_price,
+                "quantity": t.quantity,
+                "pnl": t.pnl,
+                "pnl_pct": t.pnl_pct,
+                "status": t.status.value if t.status else "unknown",
+                "exit_reason": t.exit_reason,
+                "leverage": t.leverage_used,
+                "duration_min": t.duration_minutes,
+                "opened_at": t.opened_at.isoformat() if t.opened_at else None,
+                "closed_at": t.closed_at.isoformat() if t.closed_at else None,
+            }
+            for t in trades[:50]
+        ],
         "last_signals": [
             {
                 "id": s.id,

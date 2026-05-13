@@ -28,6 +28,19 @@ from bot.strategies.dual_hedge import DualHedgeStrategy
 import json
 
 
+def _smart_truncate(text: str, max_len: int = 300) -> str:
+    """Metni kelime sınırında keser, yarıda bırakmaz."""
+    if not text or len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    # Son boşluktan kes
+    last_space = truncated.rfind(" ")
+    if last_space > max_len * 0.6:
+        truncated = truncated[:last_space]
+    return truncated.rstrip(".,;: ") + "…"
+
+
+
 class BotEngine:
     def __init__(self, bot_config: dict, exchange_client):
         self.config = bot_config
@@ -975,16 +988,16 @@ class BotEngine:
                         risk = news_ai.get("risk_level", "?")
                         icon = "🔴" if risk == "critical" else "🟡" if risk == "high" else "🟢"
                         block_txt = "ENGEL" if news_ai.get("should_block") else "geçti"
-                        lines.append(f"🤖 AI Haber[{icon} {block_txt}]: {news_ai['reason'][:150]}")
+                        lines.append(f"🤖 AI Haber[{icon} {block_txt}]: {_smart_truncate(news_ai['reason'], 350)}")
                         if news_ai.get("news_summary"):
-                            lines.append(f"   📡 {news_ai['news_summary'][:120]}")
+                            lines.append(f"   📡 {_smart_truncate(news_ai['news_summary'], 250)}")
 
                     learn_ai = ai_results.get("learning", {})
                     if learn_ai.get("reason"):
                         block_txt = "ENGEL" if learn_ai.get("should_block") else "geçti"
-                        lines.append(f"🤖 AI Öz-Öğrenme[{block_txt}]: {learn_ai['reason'][:200]}")
+                        lines.append(f"🤖 AI Öz-Öğrenme[{block_txt}]: {_smart_truncate(learn_ai['reason'], 400)}")
                         if learn_ai.get("suggestion"):
-                            lines.append(f"   💡 {learn_ai['suggestion'][:120]}")
+                            lines.append(f"   💡 {_smart_truncate(learn_ai['suggestion'], 250)}")
 
                     trend_ai = ai_results.get("trend", {})
                     if trend_ai.get("reason"):
@@ -992,23 +1005,23 @@ class BotEngine:
                         td = trend_ai.get("trend_direction", "?")
                         ts = trend_ai.get("trend_strength", "?")
                         vl = trend_ai.get("volatility_level", "?")
-                        lines.append(f"🤖 AI Trend[{block_txt}]: {td}/{ts} vol={vl} — {trend_ai['reason'][:150]}")
+                        lines.append(f"🤖 AI Trend[{block_txt}]: {td}/{ts} vol={vl} — {_smart_truncate(trend_ai['reason'], 350)}")
 
                     # AI bloklama: aktif filtreler AI'ın kararını kullanır
                     # Haber filtresi aktifse AI'ın haber kararını uygula
                     if f.news_protection_enabled and news_ai.get("should_block") and not result["should_block"]:
                         result["should_block"] = True
-                        result["reject_reason"] = f"AI Haber Analizi: {news_ai.get('reason', 'risk yüksek')[:150]}"
+                        result["reject_reason"] = f"AI Haber Analizi: {_smart_truncate(news_ai.get('reason', 'risk yüksek'), 300)}"
 
                     # Öz-öğrenme filtresi aktifse AI'ın pattern kararını uygula
                     if f.self_learning_enabled and learn_ai.get("should_block") and not result["should_block"]:
                         result["should_block"] = True
-                        result["reject_reason"] = f"AI Öz-Öğrenme: {learn_ai.get('reason', 'pattern uyumsuz')[:150]}"
+                        result["reject_reason"] = f"AI Öz-Öğrenme: {_smart_truncate(learn_ai.get('reason', 'pattern uyumsuz'), 300)}"
 
                     # Trend filtresi aktifse AI'ın trend kararını uygula
                     if f.trend_filter_enabled and trend_ai.get("should_block") and not result["should_block"]:
                         result["should_block"] = True
-                        result["reject_reason"] = f"AI Trend: {trend_ai.get('reason', 'trend uyumsuz')[:150]}"
+                        result["reject_reason"] = f"AI Trend: {_smart_truncate(trend_ai.get('reason', 'trend uyumsuz'), 300)}"
 
                 except Exception as ai_err:
                     lines.append(f"🤖 AI Analiz hatası: {str(ai_err)[:100]}")

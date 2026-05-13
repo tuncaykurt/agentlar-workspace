@@ -101,22 +101,50 @@ async def check_open_signals():
             sl_was_hit_val= new_max >= sig.sl_price
 
         # TP/SL tetiklendi mi?
+        # Hem anlık fiyatı hem de şimdiye kadarki min/max aralığını kontrol et
+        # (30s aralıkta fiyat TP/SL'yi geçip geri dönebilir)
         outcome = None
         pnl_pct = 0.0
 
         if is_long:
-            if price >= sig.tp_price:
-                outcome = "tp_hit"
-                pnl_pct = round((sig.tp_price - sig.price) / sig.price * 100, 2)
-            elif price <= sig.sl_price:
+            sl_touched = new_min <= sig.sl_price
+            tp_touched = new_max >= sig.tp_price
+            if sl_touched and tp_touched:
+                # İkisi de vurulduysa, mevcut fiyata göre karar ver
+                if price <= sig.sl_price:
+                    outcome = "sl_hit"
+                elif price >= sig.tp_price:
+                    outcome = "tp_hit"
+                else:
+                    # Fiyat ortada — SL önce vurulmuş olma ihtimali daha yüksek (min daha düşük)
+                    outcome = "sl_hit"
+            elif sl_touched:
                 outcome = "sl_hit"
+            elif tp_touched:
+                outcome = "tp_hit"
+
+            if outcome == "tp_hit":
+                pnl_pct = round((sig.tp_price - sig.price) / sig.price * 100, 2)
+            elif outcome == "sl_hit":
                 pnl_pct = round((sig.sl_price - sig.price) / sig.price * 100, 2)
         else:
-            if price <= sig.tp_price:
-                outcome = "tp_hit"
-                pnl_pct = round((sig.price - sig.tp_price) / sig.price * 100, 2)
-            elif price >= sig.sl_price:
+            sl_touched = new_max >= sig.sl_price
+            tp_touched = new_min <= sig.tp_price
+            if sl_touched and tp_touched:
+                if price >= sig.sl_price:
+                    outcome = "sl_hit"
+                elif price <= sig.tp_price:
+                    outcome = "tp_hit"
+                else:
+                    outcome = "sl_hit"
+            elif sl_touched:
                 outcome = "sl_hit"
+            elif tp_touched:
+                outcome = "tp_hit"
+
+            if outcome == "tp_hit":
+                pnl_pct = round((sig.price - sig.tp_price) / sig.price * 100, 2)
+            elif outcome == "sl_hit":
                 pnl_pct = round((sig.price - sig.sl_price) / sig.price * 100, 2)
 
         common_range = {

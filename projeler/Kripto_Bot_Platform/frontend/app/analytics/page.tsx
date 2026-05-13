@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import useSWR from "swr"
-import { api } from "@/lib/api"
+import { api, createBotWS } from "@/lib/api"
 
 const fetcher = (path: string) => api.get(path)
 
@@ -95,9 +95,9 @@ function PriceRangeBar({ item }: { item: any }) {
 }
 
 function SignalRangeSection({ items, isLoading }: { items: any[], isLoading: boolean }) {
-  // Sadece executed + outcome var olanları göster
+  // Executed ve analyzed sinyallerden range analizi olanları göster
   const rangeItems = items.filter((it: any) =>
-    it.action === "executed" && it.max_price_in_range != null
+    (it.action === "executed" || it.action === "analyzed") && it.max_price_in_range != null
   )
 
   if (isLoading) return null
@@ -226,6 +226,235 @@ function SignalRangeSection({ items, isLoading }: { items: any[], isLoading: boo
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ─── Canlı Pozisyon Grafiği ──────────────────────────────────────────────────
+interface PriceTick { price: number; ts: number }
+
+function LivePositionChart({ botId }: { botId: number | null }) {
+  const [ticks, setTicks] = useState<PriceTick[]>([])
+  const [position, setPosition] = useState<any>(null)
+  const [curPrice, setCurPrice] = useState(0)
+  const wsRef = useRef<WebSocket | null>(null)
+  const maxTicks = 120 // ~10 dakika (5s aralık)
+
+  useEffect(() => {
+    if (!botId) return
+    setTicks([])
+    setPosition(null)
+
+    const ws = createBotWS(botId, (data: any) => {
+      const price = data?.price
+      if (price && price > 0) {
+        const tick = { price, ts: Date.now() }
+        setCurPrice(price)
+        setTicks(prev => {
+          const next = [...prev, tick]
+          return next.length > maxTicks ? next.slice(-maxTicks) : next
+        })
+      }
+      if (data?.position) {
+        setPosition(data.position)
+      } else {
+        setPosition(null)
+      }
+    })
+    wsRef.current = ws
+
+    return () => {
+      ws.close()
+      wsRef.current = null
+    }
+  }, [botId])
+
+  if (!botId) return null
+  if (!position) {
+    return (
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm col-span-full">
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-2">
+          📈 Canlı Pozisyon
+        </h2>
+        <div className="text-center py-8 text-slate-500 text-sm">
+          <div className="text-3xl mb-2">📡</div>
+          Aktif pozisyon yok — sinyal geldiğinde canlı grafik burada görünecek
+        </div>
+      </div>
+    )
+  }
+
+  const isLong = position.side === "long"
+  const entry  = position.entry_price || 0
+  const tp     = position.tp || 0
+  const sl     = position.sl || 0
+  const pnl    = position.pnl_usdt || 0
+  const pnlPct = position.pnl_pct || 0
+  const lev    = position.leverage || 1
+
+  // SVG chart boyutları
+  const W = 600, H = 160, padX = 0, padY = 16
+
+  // Fiyat aralığını hesapla
+  const allPrices = [entry, ...ticks.map(t => t.price)]
+  if (tp > 0) allPrices.push(tp)
+  if (sl > 0) allPrices.push(sl)
+  const minP = Math.min(...allPrices) * 0.9998
+  const maxP = Math.max(...allPrices) * 1.0002
+  const priceRange = maxP - minP || 1
+
+  const yScale = (p: number) => padY + (1 - (p - minP) / priceRange) * (H - padY * 2)
+  const xScale = (i: number, total: number) => padX + (i / Math.max(total - 1, 1)) * (W - padX * 2)
+
+  // Fiyat çizgisi path
+  const linePath = ticks.length > 1
+    ? ticks.map((t, i) => `${i === 0 ? "M" : "L"}${xScale(i, ticks.length).toFixed(1)},${yScale(t.price).toFixed(1)}`).join(" ")
+    : ""
+
+  // Gradient area path (çizgi altı)
+  const areaPath = linePath && ticks.length > 1
+    ? linePath +
+      ` L${xScale(ticks.length - 1, ticks.length).toFixed(1)},${H - padY}` +
+      ` L${xScale(0, ticks.length).toFixed(1)},${H - padY} Z`
+    : ""
+
+  const entryY = yScale(entry)
+  const tpY    = tp > 0 ? yScale(tp) : null
+  const slY    = sl > 0 ? yScale(sl) : null
+  const curY   = curPrice > 0 ? yScale(curPrice) : null
+
+  const fmt = (v: number) => v >= 1000 ? v.toLocaleString("tr-TR", { maximumFractionDigits: 2 }) : v.toFixed(4)
+  const elapsed = ticks.length > 1 ? Math.round((ticks[ticks.length - 1].ts - ticks[0].ts) / 60000) : 0
+
+  return (
+    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm col-span-full">
+      {/* Başlık satırı */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          📈 Canlı Pozisyon
+          <span className={`text-xs font-normal px-2 py-0.5 rounded border ${
+            isLong ? "text-green-400 bg-green-500/10 border-green-500/20" : "text-red-400 bg-red-500/10 border-red-500/20"
+          }`}>
+            {isLong ? "▲ LONG" : "▼ SHORT"} {lev}x
+          </span>
+          <span className="text-xs font-normal text-slate-500">
+            {ticks.length} tick · {elapsed}dk
+          </span>
+        </h2>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="text-[10px] text-slate-500 uppercase">Anlık Fiyat</div>
+            <div className="font-mono text-sm text-white font-bold">${fmt(curPrice)}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] text-slate-500 uppercase">PnL</div>
+            <div className={`font-mono text-sm font-bold ${pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+              {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)} USDT
+              <span className="text-[10px] ml-1">({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Fiyat bilgi satırı */}
+      <div className="grid grid-cols-3 gap-3 mb-3 text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-white/70" />
+          <span className="text-slate-500">Giriş:</span>
+          <span className="font-mono text-slate-200">${fmt(entry)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-400" />
+          <span className="text-slate-500">TP:</span>
+          <span className="font-mono text-green-400">{tp > 0 ? `$${fmt(tp)}` : "—"}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-red-400" />
+          <span className="text-slate-500">SL:</span>
+          <span className="font-mono text-red-400">{sl > 0 ? `$${fmt(sl)}` : "—"}</span>
+        </div>
+      </div>
+
+      {/* SVG Grafik */}
+      <div className="rounded-xl bg-slate-800/40 border border-slate-700/50 overflow-hidden">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 180 }} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={pnl >= 0 ? "#22c55e" : "#ef4444"} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={pnl >= 0 ? "#22c55e" : "#ef4444"} stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+
+          {/* TP zone — yeşil bant */}
+          {tpY !== null && (
+            <rect x={0} y={Math.min(entryY, tpY)} width={W} height={Math.abs(tpY - entryY)}
+              fill="#22c55e" opacity={0.06} />
+          )}
+          {/* SL zone — kırmızı bant */}
+          {slY !== null && (
+            <rect x={0} y={Math.min(entryY, slY)} width={W} height={Math.abs(slY - entryY)}
+              fill="#ef4444" opacity={0.06} />
+          )}
+
+          {/* Entry çizgisi */}
+          <line x1={0} y1={entryY} x2={W} y2={entryY}
+            stroke="#94a3b8" strokeWidth={0.8} strokeDasharray="6 4" opacity={0.5} />
+          {/* TP çizgisi */}
+          {tpY !== null && (
+            <line x1={0} y1={tpY} x2={W} y2={tpY}
+              stroke="#22c55e" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.6} />
+          )}
+          {/* SL çizgisi */}
+          {slY !== null && (
+            <line x1={0} y1={slY} x2={W} y2={slY}
+              stroke="#ef4444" strokeWidth={0.8} strokeDasharray="4 3" opacity={0.6} />
+          )}
+
+          {/* Gradient area */}
+          {areaPath && <path d={areaPath} fill="url(#priceGrad)" />}
+
+          {/* Fiyat çizgisi */}
+          {linePath && (
+            <path d={linePath} fill="none"
+              stroke={pnl >= 0 ? "#22c55e" : "#ef4444"} strokeWidth={1.5}
+              strokeLinejoin="round" strokeLinecap="round" />
+          )}
+
+          {/* Mevcut fiyat noktası */}
+          {curY !== null && ticks.length > 0 && (
+            <>
+              <circle cx={xScale(ticks.length - 1, ticks.length)} cy={curY} r={3}
+                fill={pnl >= 0 ? "#22c55e" : "#ef4444"} />
+              <circle cx={xScale(ticks.length - 1, ticks.length)} cy={curY} r={6}
+                fill={pnl >= 0 ? "#22c55e" : "#ef4444"} opacity={0.2}>
+                <animate attributeName="r" values="4;8;4" dur="2s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.3;0.1;0.3" dur="2s" repeatCount="indefinite" />
+              </circle>
+            </>
+          )}
+
+          {/* Etiketler — sağ kenar */}
+          <text x={W - 4} y={entryY - 4} textAnchor="end" fill="#94a3b8" fontSize={9} fontFamily="monospace">
+            Giriş ${fmt(entry)}
+          </text>
+          {tpY !== null && (
+            <text x={W - 4} y={tpY - 4} textAnchor="end" fill="#22c55e" fontSize={9} fontFamily="monospace">
+              TP ${fmt(tp)}
+            </text>
+          )}
+          {slY !== null && (
+            <text x={W - 4} y={slY + 12} textAnchor="end" fill="#ef4444" fontSize={9} fontFamily="monospace">
+              SL ${fmt(sl)}
+            </text>
+          )}
+        </svg>
+      </div>
+
+      {ticks.length < 3 && (
+        <div className="text-center text-[10px] text-slate-600 mt-2 animate-pulse">
+          Veri toplanıyor... (her 5 saniyede güncellenir)
+        </div>
+      )}
     </div>
   )
 }
@@ -592,16 +821,6 @@ export default function AnalyticsPage() {
     )
   }
 
-  if (error) {
-    return (
-      <div className="p-4 md:p-8">
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl">
-          Analiz verileri yüklenirken bir hata oluştu.
-        </div>
-      </div>
-    )
-  }
-
   const overview  = data?.overview || { total_trades: 0, win_rate: 0, total_pnl: 0, winning_trades: 0, losing_trades: 0 }
   const sessions  = data?.session_performance || []
   const rawStats  = data?.signal_stats || {}
@@ -629,6 +848,13 @@ export default function AnalyticsPage() {
           Botların genel performansı, seans analizi ve akıllı filtre metrikleri
         </p>
       </div>
+
+      {error && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 p-3 rounded-xl text-sm flex items-center gap-2">
+          <span>⚠</span>
+          <span>Bazı analiz verileri yüklenemedi — sayfa kısmi verilerle gösteriliyor. Sayfayı yenileyerek tekrar deneyin.</span>
+        </div>
+      )}
 
       {/* Overview Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -972,6 +1198,9 @@ export default function AnalyticsPage() {
         )}
       </div>
 
+      {/* ── Canlı Pozisyon Grafiği ─────────────────────────────────────── */}
+      <LivePositionChart botId={selectedBot} />
+
       {/* ── AI TP/SL Öneri + Sinyal Aralığı Analizi ─────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AiSuggestCard botId={selectedBot} />
@@ -1043,13 +1272,19 @@ export default function AnalyticsPage() {
                   ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-orange-500/10 text-orange-300 border-orange-500/30">⚠️ Hata</span>
                   : <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-red-500/10 text-red-300 border-red-500/30">❌ Reddedildi</span>
 
-                // Outcome badge
-                const outcomeBadge = !item.outcome || item.outcome === "open" ? null
+                // Outcome badge — tüm sinyallerde göster (open dahil)
+                const outcomeBadge = !item.outcome ? null
                   : item.outcome === "tp_hit"
                   ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/20 text-green-400 border border-green-500/30">✓ TP{item.outcome_pnl_pct != null ? ` +${item.outcome_pnl_pct}%` : ""}</span>
                   : item.outcome === "sl_hit"
                   ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/30">✕ SL{item.outcome_pnl_pct != null ? ` ${item.outcome_pnl_pct}%` : ""}</span>
-                  : <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-700/50 text-slate-400 border border-slate-700">{item.outcome === "expired" ? "○ Süresi Doldu" : "● Takipte"}</span>
+                  : item.outcome === "next_signal"
+                  ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">↻ Sinyalle Kapandı{item.outcome_pnl_pct != null ? ` ${item.outcome_pnl_pct >= 0 ? "+" : ""}${item.outcome_pnl_pct}%` : ""}</span>
+                  : item.outcome === "expired"
+                  ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-700/50 text-slate-400 border border-slate-700">○ Süresi Doldu{item.outcome_pnl_pct != null ? ` ${item.outcome_pnl_pct >= 0 ? "+" : ""}${item.outcome_pnl_pct}%` : ""}</span>
+                  : item.outcome === "open"
+                  ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/15 text-blue-400 border border-blue-500/25 animate-pulse">● Takipte</span>
+                  : null
 
                 return (
                   <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-800/20 hover:bg-slate-800/40 transition-colors p-4">
@@ -1109,19 +1344,43 @@ export default function AnalyticsPage() {
                         )}
                         {item.filter_analysis ? (
                           <div className="space-y-0.5">
-                            {item.filter_analysis.split(" | ").map((line: string, i: number) => (
-                              <p key={i} className={`text-[11px] ${
+                            {item.filter_analysis.split(" | ").map((line: string, i: number) => {
+                              // "kapalı, geçerdi" veya "kapalı, kalırdı" olan satırlarda sonucu vurgula
+                              const isKapaliLine = line.includes("kapalı")
+                              const wouldPass = isKapaliLine && line.includes("geçerdi")
+                              const wouldBlock = isKapaliLine && line.includes("kalırdı")
+
+                              const cls =
                                 line.startsWith("🤖") && line.includes("ENGEL") ? "text-red-400 font-medium bg-red-500/5 px-1 rounded" :
                                 line.startsWith("🤖") ? "text-purple-400/90 bg-purple-500/5 px-1 rounded" :
                                 line.startsWith("   ") ? "text-slate-400/70 pl-3 text-[10px]" :
                                 line.includes("ENGEL") ? "text-red-400/80" :
                                 line.includes("✓") || line.includes("geçti") ? "text-green-400/60" :
-                                line.includes("kapalı") ? "text-slate-600" :
+                                wouldPass ? "text-slate-400" :
+                                wouldBlock ? "text-yellow-500/70" :
+                                isKapaliLine ? "text-slate-500" :
                                 "text-slate-500"
-                              }`}>
-                                {line}
-                              </p>
-                            ))}
+
+                              if (isKapaliLine && (wouldPass || wouldBlock)) {
+                                // "📰 Haber[— kapalı, geçerdi]" → renkli gösterim
+                                const parts = line.split(", ")
+                                return (
+                                  <p key={i} className="text-[11px] text-slate-500">
+                                    {parts[0] + ", "}
+                                    <span className={wouldPass ? "text-green-400/70 font-medium" : "text-yellow-400/80 font-medium"}>
+                                      {wouldPass ? "✓ geçerdi" : "✗ kalırdı"}
+                                    </span>
+                                    {parts.length > 2 ? "]" : ""}
+                                  </p>
+                                )
+                              }
+
+                              return (
+                                <p key={i} className={`text-[11px] ${cls}`}>
+                                  {line}
+                                </p>
+                              )
+                            })}
                           </div>
                         ) : item.reject_reason ? (
                           <span className="font-mono text-slate-600 text-[10px]">{item.reject_reason}</span>
