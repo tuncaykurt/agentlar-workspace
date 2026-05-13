@@ -168,7 +168,13 @@ export default function BotCard({
     }>
   } | null>(null)
 
-  const [livePos, setLivePos] = useState<{ price: number; position: Position | null } | null>(null)
+  const [livePos, setLivePos] = useState<{
+    price: number; position: Position | null;
+    is_hedge?: boolean; long_position?: Position | null; short_position?: Position | null;
+    net_pnl_usdt?: number; net_pnl_pct?: number; positions?: Position[];
+  } | null>(null)
+
+  const isHedge = bot.strategy === "hedge_bot" || bot.strategy === "dual_hedge"
 
   // Canlı pozisyon & fiyat bilgisi (engine status yoksa bile çalışır)
   useEffect(() => {
@@ -180,7 +186,7 @@ export default function BotCard({
         .catch(() => {})
     }
     fetch()
-    const iv = setInterval(fetch, 30_000)
+    const iv = setInterval(fetch, isHedge ? 10_000 : 30_000) // Hedge: 10s, normal: 30s
     return () => { cancelled = true; clearInterval(iv) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bot.id, running])
@@ -285,6 +291,17 @@ export default function BotCard({
   const activePos = status?.position ?? livePos?.position ?? null
   const livePrice = status?.price ?? livePos?.price ?? null
 
+  // Hedge bot verileri: WS status veya REST position'dan
+  const statusAny = status as any
+  const hedgeLongPos: Position | null = statusAny?.long_position ?? (livePos as any)?.long_position ?? null
+  const hedgeShortPos: Position | null = statusAny?.short_position ?? (livePos as any)?.short_position ?? null
+  const hedgeNetPnlUsdt: number = statusAny?.net_pnl_usdt ?? (livePos as any)?.net_pnl_usdt ?? 0
+  const hedgeNetPnlPct: number = statusAny?.net_pnl_pct ?? (livePos as any)?.net_pnl_pct ?? 0
+  const hedgeState: string | null = statusAny?.hedge_state ?? null
+  const hedgeActiveSides: string[] = statusAny?.active_sides ?? []
+  const hedgeLevels: any = statusAny?.levels ?? null
+  const hedgeCycleCount: number = statusAny?.cycle_count ?? 0
+
   return (
     <div className={clsx(
       "rounded-xl border p-4 space-y-3 transition-all duration-300",
@@ -380,7 +397,7 @@ export default function BotCard({
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats + Pozisyon */}
       {(() => {
         const exchLabel = bot.exchange ? bot.exchange.toUpperCase() : ""
         const balanceVal = status?.risk?.balance
@@ -394,7 +411,160 @@ export default function BotCard({
         const priceDisplay = status?.price ?? livePrice
         const hasPnl = status?.risk != null
 
+        // ── HEDGE BOT LAYOUT ──────────────────────────────────────────────
+        if (isHedge) {
+          const hasPositions = hedgeLongPos || hedgeShortPos
+          const stateLabel: Record<string, { text: string; color: string }> = {
+            idle:               { text: "Bekleniyor",     color: "text-slate-400 bg-slate-700/50 border-slate-600" },
+            open_both:          { text: "Cift Yon Acik",  color: "text-blue-400 bg-blue-500/10 border-blue-500/30" },
+            one_closed:         { text: "Tek Taraf Acik", color: "text-yellow-400 bg-yellow-500/10 border-yellow-500/30" },
+            cooldown:           { text: "Bekleme",        color: "text-purple-400 bg-purple-500/10 border-purple-500/30" },
+            max_cycles_reached: { text: "Dongu Bitti",    color: "text-slate-400 bg-slate-700/50 border-slate-600" },
+          }
+          const stBadge = hedgeState ? stateLabel[hedgeState] || stateLabel.idle : null
+
+          return (
+            <>
+              {/* Üst satır: Fiyat + Net PnL + Bakiye */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className={clsx("rounded-lg p-2 border", priceDisplay ? "bg-slate-900/80 border-slate-700/60" : "bg-slate-900/30 border-slate-800 opacity-40")}>
+                  <p className="text-[10px] text-slate-500 mb-0.5">Fiyat</p>
+                  <p className="text-sm font-bold text-white tabular-nums">
+                    {priceDisplay ? `$${priceDisplay.toLocaleString("tr-TR", {maximumFractionDigits: 2})}` : "—"}
+                  </p>
+                </div>
+                <div className={clsx(
+                  "rounded-lg p-2 border",
+                  hasPositions
+                    ? hedgeNetPnlUsdt >= 0 ? "bg-green-500/10 border-green-500/30" : "bg-red-500/10 border-red-500/30"
+                    : "bg-slate-900/30 border-slate-800 opacity-40"
+                )}>
+                  <p className="text-[10px] text-slate-500 mb-0.5">Net PnL</p>
+                  {hasPositions ? (
+                    <>
+                      <p className={clsx("text-sm font-bold tabular-nums", hedgeNetPnlUsdt >= 0 ? "text-green-400" : "text-red-400")}>
+                        {hedgeNetPnlUsdt >= 0 ? "+" : ""}{hedgeNetPnlUsdt.toFixed(2)}$
+                      </p>
+                      <p className={clsx("text-[10px] tabular-nums", hedgeNetPnlPct >= 0 ? "text-green-400" : "text-red-400")}>
+                        {hedgeNetPnlPct >= 0 ? "+" : ""}{hedgeNetPnlPct.toFixed(2)}%
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-bold text-white">—</p>
+                  )}
+                </div>
+                <div className="bg-slate-900/80 rounded-lg p-2 border border-slate-700/60">
+                  <p className="text-[10px] text-slate-500 mb-0.5">Bakiye{exchLabel ? ` (${exchLabel})` : ""}</p>
+                  <p className="text-sm font-bold text-white tabular-nums">{balanceVal}</p>
+                </div>
+              </div>
+
+              {/* Hedge State Badge + Döngü */}
+              {stBadge && (
+                <div className="flex items-center gap-2">
+                  <span className={clsx("text-[10px] font-medium px-2 py-0.5 rounded border", stBadge.color)}>
+                    {stBadge.text}
+                  </span>
+                  {hedgeCycleCount > 0 && (
+                    <span className="text-[10px] text-slate-500">Dongu #{hedgeCycleCount}</span>
+                  )}
+                  {hedgeLevels && (
+                    <span className="text-[10px] text-slate-600 ml-auto">
+                      TP: {hedgeLevels.long?.tp_pct || "?"}% / SL: {hedgeLevels.long?.sl_pct || "?"}%
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Çift Yönlü Pozisyon Kartları */}
+              {hasPositions ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {/* LONG */}
+                  <div className={clsx(
+                    "rounded-lg border p-2.5 space-y-1",
+                    hedgeLongPos ? "bg-green-500/5 border-green-500/20" : "bg-slate-900/30 border-slate-800 opacity-40"
+                  )}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-500/15 text-green-400">
+                        LONG {hedgeLongPos?.leverage || ""}x
+                      </span>
+                      {hedgeLongPos ? (
+                        <span className={clsx("text-xs font-bold tabular-nums", hedgeLongPos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400")}>
+                          {hedgeLongPos.pnl_usdt >= 0 ? "+" : ""}{hedgeLongPos.pnl_usdt.toFixed(2)}$
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-600">Kapali</span>
+                      )}
+                    </div>
+                    {hedgeLongPos && (
+                      <div className="space-y-0.5 text-[10px]">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Giris</span>
+                          <span className="text-slate-300 tabular-nums">${hedgeLongPos.entry_price.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Miktar</span>
+                          <span className="text-slate-300 tabular-nums">${hedgeLongPos.notional.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">PnL %</span>
+                          <span className={clsx("font-medium tabular-nums", hedgeLongPos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                            {hedgeLongPos.pnl_pct >= 0 ? "+" : ""}{hedgeLongPos.pnl_pct.toFixed(2)}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SHORT */}
+                  <div className={clsx(
+                    "rounded-lg border p-2.5 space-y-1",
+                    hedgeShortPos ? "bg-red-500/5 border-red-500/20" : "bg-slate-900/30 border-slate-800 opacity-40"
+                  )}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">
+                        SHORT {hedgeShortPos?.leverage || ""}x
+                      </span>
+                      {hedgeShortPos ? (
+                        <span className={clsx("text-xs font-bold tabular-nums", hedgeShortPos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400")}>
+                          {hedgeShortPos.pnl_usdt >= 0 ? "+" : ""}{hedgeShortPos.pnl_usdt.toFixed(2)}$
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-600">Kapali</span>
+                      )}
+                    </div>
+                    {hedgeShortPos && (
+                      <div className="space-y-0.5 text-[10px]">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Giris</span>
+                          <span className="text-slate-300 tabular-nums">${hedgeShortPos.entry_price.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Miktar</span>
+                          <span className="text-slate-300 tabular-nums">${hedgeShortPos.notional.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">PnL %</span>
+                          <span className={clsx("font-medium tabular-nums", hedgeShortPos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                            {hedgeShortPos.pnl_pct >= 0 ? "+" : ""}{hedgeShortPos.pnl_pct.toFixed(2)}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : running ? (
+                <div className="text-center py-3 text-slate-600 text-[10px]">
+                  Pozisyon bekleniyor...
+                </div>
+              ) : null}
+            </>
+          )
+        }
+
+        // ── STANDART BOT LAYOUT ─────────────────────────────────────────────
         return (
+          <>
           <div className="grid grid-cols-3 gap-2">
             {/* Fiyat */}
             <div className={clsx(
@@ -474,51 +644,52 @@ export default function BotCard({
               <p className="text-sm font-bold text-white tabular-nums">{balanceVal}</p>
             </div>
           </div>
+
+          {/* Açık Pozisyon (standart botlar) */}
+          {activePos && (
+            <div className={clsx(
+              "rounded-lg border p-2.5 space-y-1.5",
+              activePos.side === "long"
+                ? "bg-green-500/5 border-green-500/20"
+                : "bg-red-500/5 border-red-500/20"
+            )}>
+              <div className="flex items-center justify-between">
+                <span className={clsx(
+                  "text-xs font-bold px-2 py-0.5 rounded",
+                  activePos.side === "long"
+                    ? "bg-green-500/15 text-green-400"
+                    : "bg-red-500/15 text-red-400"
+                )}>
+                  {activePos.side === "long" ? "LONG" : "SHORT"} {activePos.leverage}x
+                </span>
+                <span className={clsx(
+                  "text-sm font-bold",
+                  activePos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400"
+                )}>
+                  {activePos.pnl_usdt >= 0 ? "+" : ""}{activePos.pnl_usdt.toFixed(2)} USDT
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-[11px]">
+                <div>
+                  <span className="text-slate-500">Giris</span>
+                  <p className="text-slate-300 font-medium">${activePos.entry_price.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
+                </div>
+                <div>
+                  <span className="text-slate-500">Miktar</span>
+                  <p className="text-slate-300 font-medium">${activePos.notional.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
+                </div>
+                <div>
+                  <span className="text-slate-500">PnL %</span>
+                  <p className={clsx("font-medium", activePos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                    {activePos.pnl_pct >= 0 ? "+" : ""}{activePos.pnl_pct.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          </>
         )
       })()}
-
-      {/* Açık Pozisyon */}
-      {activePos && (
-        <div className={clsx(
-          "rounded-lg border p-2.5 space-y-1.5",
-          activePos.side === "long"
-            ? "bg-green-500/5 border-green-500/20"
-            : "bg-red-500/5 border-red-500/20"
-        )}>
-          <div className="flex items-center justify-between">
-            <span className={clsx(
-              "text-xs font-bold px-2 py-0.5 rounded",
-              activePos.side === "long"
-                ? "bg-green-500/15 text-green-400"
-                : "bg-red-500/15 text-red-400"
-            )}>
-              {activePos.side === "long" ? "LONG" : "SHORT"} {activePos.leverage}x
-            </span>
-            <span className={clsx(
-              "text-sm font-bold",
-              activePos.pnl_usdt >= 0 ? "text-green-400" : "text-red-400"
-            )}>
-              {activePos.pnl_usdt >= 0 ? "+" : ""}{activePos.pnl_usdt.toFixed(2)} USDT
-            </span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-[11px]">
-            <div>
-              <span className="text-slate-500">Giris</span>
-              <p className="text-slate-300 font-medium">${activePos.entry_price.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
-            </div>
-            <div>
-              <span className="text-slate-500">Miktar</span>
-              <p className="text-slate-300 font-medium">${activePos.notional.toLocaleString("tr-TR", {maximumFractionDigits: 2})}</p>
-            </div>
-            <div>
-              <span className="text-slate-500">PnL %</span>
-              <p className={clsx("font-medium", activePos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
-                {activePos.pnl_pct >= 0 ? "+" : ""}{activePos.pnl_pct.toFixed(2)}%
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {status?.risk?.killed && (
         <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-2.5 py-1.5">

@@ -2206,6 +2206,18 @@ class BotEngine:
 
     async def _write_hedge_status(self, redis, symbol: str, state: str, price: float, sd: dict):
         """Hedge bot anlık durumunu Redis'e yaz (frontend okur)."""
+        # Borsadaki gerçek pozisyonları çek (PnL dahil)
+        positions = []
+        try:
+            positions = await self._get_hedge_positions(symbol)
+        except Exception:
+            pass
+
+        long_pos = next((p for p in positions if p["side"] == "long"), None)
+        short_pos = next((p for p in positions if p["side"] == "short"), None)
+        net_pnl_usdt = sum(p["pnl_usdt"] for p in positions)
+        net_pnl_pct = sum(p["pnl_pct"] for p in positions)
+
         status_data = {
             "name":         self.config["name"],
             "symbol":       symbol,
@@ -2219,6 +2231,13 @@ class BotEngine:
             "cycle_count":  sd.get("cycle_count", 0),
             "risk":         self.risk.status(),
             "ts":           datetime.utcnow().isoformat(),
+            # Çift yönlü pozisyon verileri
+            "is_hedge":         True,
+            "positions":        positions,
+            "long_position":    long_pos,
+            "short_position":   short_pos,
+            "net_pnl_usdt":     round(net_pnl_usdt, 4),
+            "net_pnl_pct":      round(net_pnl_pct, 2),
         }
         await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
 

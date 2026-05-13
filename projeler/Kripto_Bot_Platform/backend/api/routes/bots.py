@@ -919,10 +919,58 @@ async def get_bot_position(bot_id: int):
 
         # Pozisyon — MEXC için direkt contract API kullan (CCXT fetch_positions eksik veri döner)
         pos_data = None
+        all_positions = []  # Hedge bot için tüm pozisyonlar
         exchange_name = (bot.exchange or "bitget").lower()
+        is_hedge = bot.strategy in ("hedge_bot", "dual_hedge")
+
+        def _parse_mexc_pos(pos: dict) -> dict | None:
+            vol = float(pos.get("holdVol", 0) or 0)
+            if vol == 0:
+                return None
+            pos_type = int(pos.get("positionType", 1))  # 1=long, 2=short
+            side = "long" if pos_type == 1 else "short"
+            entry = float(pos.get("openAvgPrice", 0) or 0)
+            unrealized_pnl = float(pos.get("unrealisedPnl", 0) or pos.get("unrealizedPnl", 0) or 0)
+            notional = float(pos.get("positionValue", 0) or 0)
+            leverage = int(pos.get("leverage", 1) or 1)
+            if not notional and entry > 0:
+                contract_size = float(pos.get("contractSize", 0.001) or 0.001)
+                notional = vol * entry * contract_size
+            margin = notional / leverage if leverage else notional
+            pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
+            return {
+                "side": side,
+                "size": vol,
+                "entry_price": entry,
+                "notional": round(notional, 2),
+                "pnl_usdt": round(unrealized_pnl, 4),
+                "pnl_pct": round(pnl_pct, 2),
+                "leverage": leverage,
+            }
+
+        def _parse_ccxt_pos(p: dict) -> dict | None:
+            contracts = float(p.get("contracts", 0) or 0)
+            if contracts == 0:
+                return None
+            entry = float(p.get("entryPrice", 0) or 0)
+            notional = float(p.get("notional", 0) or 0) or (contracts * entry)
+            side = p.get("side", "long")
+            leverage = float(p.get("leverage", 1) or 1)
+            unrealized_pnl = float(p.get("unrealizedPnl", 0) or 0)
+            margin = notional / leverage if leverage else notional
+            pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
+            return {
+                "side": side,
+                "size": contracts,
+                "entry_price": entry,
+                "notional": round(notional, 2),
+                "pnl_usdt": round(unrealized_pnl, 4),
+                "pnl_pct": round(pnl_pct, 2),
+                "leverage": leverage,
+            }
+
         try:
             if exchange_name == "mexc":
-                # MEXC direkt contract API — engine ile aynı yöntem
                 mexc_symbol = bot.symbol.split("/")[0] + "_" + bot.symbol.split("/")[1].split(":")[0]
                 resp = await asyncio.wait_for(
                     ex_client.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol}),
@@ -931,60 +979,38 @@ async def get_bot_position(bot_id: int):
                 data = resp.get("data", []) if isinstance(resp, dict) else resp
                 if data and isinstance(data, list):
                     for pos in data:
-                        vol = float(pos.get("holdVol", 0) or 0)
-                        if vol == 0:
-                            continue
-                        pos_type = int(pos.get("positionType", 1))  # 1=long, 2=short
-                        side = "long" if pos_type == 1 else "short"
-                        entry = float(pos.get("openAvgPrice", 0) or 0)
-                        unrealized_pnl = float(pos.get("unrealisedPnl", 0) or pos.get("unrealizedPnl", 0) or 0)
-                        notional = float(pos.get("positionValue", 0) or 0)
-                        leverage = int(pos.get("leverage", 1) or 1)
-                        if not notional and entry > 0:
-                            contract_size = float(pos.get("contractSize", 0.001) or 0.001)
-                            notional = vol * entry * contract_size
-                        # PnL yüzde: margin bazlı (leverage dahil)
-                        margin = notional / leverage if leverage else notional
-                        pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
-
-                        pos_data = {
-                            "side": side,
-                            "size": vol,
-                            "entry_price": entry,
-                            "notional": round(notional, 2),
-                            "pnl_usdt": round(unrealized_pnl, 4),
-                            "pnl_pct": round(pnl_pct, 2),
-                            "leverage": leverage,
-                        }
-                        break  # İlk açık pozisyonu al
+                        parsed = _parse_mexc_pos(pos)
+                        if parsed:
+                            all_positions.append(parsed)
             else:
-                # Diğer borsalar: standart CCXT
                 positions = await asyncio.wait_for(ex_client.exchange.fetch_positions([bot.symbol]), timeout=10)
-                open_pos = [p for p in positions if float(p.get("contracts", 0) or 0) != 0]
+                for p in positions:
+                    parsed = _parse_ccxt_pos(p)
+                    if parsed:
+                        all_positions.append(parsed)
 
-                if open_pos:
-                    p = open_pos[0]
-                    entry = float(p.get("entryPrice", 0) or 0)
-                    contracts = float(p.get("contracts", 0) or 0)
-                    notional = float(p.get("notional", 0) or 0) or (contracts * entry)
-                    side = p.get("side", "long")
-                    leverage = float(p.get("leverage", 1) or 1)
-                    unrealized_pnl = float(p.get("unrealizedPnl", 0) or 0)
-                    # PnL yüzde: margin bazlı
-                    margin = notional / leverage if leverage else notional
-                    pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
-
-                    pos_data = {
-                        "side": side,
-                        "size": contracts,
-                        "entry_price": entry,
-                        "notional": round(notional, 2),
-                        "pnl_usdt": round(unrealized_pnl, 4),
-                        "pnl_pct": round(pnl_pct, 2),
-                        "leverage": leverage,
-                    }
+            # Tek pozisyon (standart botlar): ilkini al
+            if all_positions:
+                pos_data = all_positions[0]
         except Exception as e:
             print(f"[Position API] fetch_positions hatası ({exchange_name}): {e}")
+
+        # Hedge bot: tüm pozisyonları + net PnL döndür
+        if is_hedge:
+            net_pnl_usdt = sum(p["pnl_usdt"] for p in all_positions)
+            net_pnl_pct = sum(p["pnl_pct"] for p in all_positions)
+            long_pos = next((p for p in all_positions if p["side"] == "long"), None)
+            short_pos = next((p for p in all_positions if p["side"] == "short"), None)
+            return {
+                "price": cur_price,
+                "position": pos_data,
+                "is_hedge": True,
+                "positions": all_positions,
+                "long_position": long_pos,
+                "short_position": short_pos,
+                "net_pnl_usdt": round(net_pnl_usdt, 4),
+                "net_pnl_pct": round(net_pnl_pct, 2),
+            }
 
         return {"price": cur_price, "position": pos_data}
     except Exception as e:
