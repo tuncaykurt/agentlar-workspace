@@ -528,6 +528,21 @@ class BotEngine:
             if not data or not isinstance(data, list):
                 return []
 
+            # Güncel fiyatı bir kez çek (PnL hesaplama için)
+            current_price = 0.0
+            try:
+                ticker = await self.exchange.exchange.contractPublicGetTicker({"symbol": mexc_symbol})
+                td = ticker.get("data", {})
+                if isinstance(td, dict):
+                    current_price = float(td.get("lastPrice", 0) or 0)
+                elif isinstance(td, list):
+                    for t in td:
+                        if t.get("symbol") == mexc_symbol:
+                            current_price = float(t.get("lastPrice", 0) or 0)
+                            break
+            except Exception:
+                pass
+
             found = []
             for pos in data:
                 vol = float(pos.get("holdVol", 0) or 0)
@@ -536,12 +551,28 @@ class BotEngine:
                 pos_type = int(pos.get("positionType", 1))  # 1=long, 2=short
                 side = "long" if pos_type == 1 else "short"
                 entry = float(pos.get("openAvgPrice", 0) or 0)
-                unrealized_pnl = float(pos.get("unrealisedPnl", 0) or pos.get("unrealizedPnl", 0) or 0)
+                leverage = int(pos.get("leverage", 0) or 0)
+                contract_size = float(pos.get("contractSize", 0.001) or 0.001)
+
+                # Notional hesapla
                 notional = float(pos.get("positionValue", 0) or 0)
                 if not notional and entry > 0:
-                    contract_size = float(pos.get("contractSize", 0.001) or 0.001)
                     notional = vol * entry * contract_size
-                pnl_pct = (unrealized_pnl / notional * 100) if notional else 0
+
+                # PnL: MEXC unrealisedPnl çoğu zaman 0 döner, kendimiz hesaplıyoruz
+                unrealized_pnl = float(pos.get("unrealisedPnl", 0) or pos.get("unrealizedPnl", 0) or 0)
+
+                # API'den gelen PnL 0 ise ve fiyat bilgisi varsa kendimiz hesapla
+                if unrealized_pnl == 0 and current_price > 0 and entry > 0:
+                    position_value = vol * contract_size  # coin cinsinden pozisyon
+                    if side == "long":
+                        unrealized_pnl = position_value * (current_price - entry)
+                    else:
+                        unrealized_pnl = position_value * (entry - current_price)
+
+                # Margin = notional / leverage, PnL% = pnl / margin * 100
+                margin = notional / leverage if leverage > 0 else notional
+                pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
 
                 found.append({
                     "side": side,
@@ -550,7 +581,7 @@ class BotEngine:
                     "notional": round(notional, 2),
                     "pnl_usdt": round(unrealized_pnl, 4),
                     "pnl_pct": round(pnl_pct, 2),
-                    "leverage": int(pos.get("leverage", 0) or 0),
+                    "leverage": leverage,
                     "tp": float(pos.get("takeProfitPrice", 0) or 0),
                     "sl": float(pos.get("stopLossPrice", 0) or 0),
                 })

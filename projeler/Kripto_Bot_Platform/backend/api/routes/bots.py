@@ -932,19 +932,29 @@ async def get_bot_position(bot_id: int):
         exchange_name = (bot.exchange or "bitget").lower()
         is_hedge = bot.strategy in ("hedge_bot", "dual_hedge")
 
-        def _parse_mexc_pos(pos: dict) -> dict | None:
+        def _parse_mexc_pos(pos: dict, cur_price: float = 0) -> dict | None:
             vol = float(pos.get("holdVol", 0) or 0)
             if vol == 0:
                 return None
             pos_type = int(pos.get("positionType", 1))  # 1=long, 2=short
             side = "long" if pos_type == 1 else "short"
             entry = float(pos.get("openAvgPrice", 0) or 0)
-            unrealized_pnl = float(pos.get("unrealisedPnl", 0) or pos.get("unrealizedPnl", 0) or 0)
-            notional = float(pos.get("positionValue", 0) or 0)
             leverage = int(pos.get("leverage", 1) or 1)
+            contract_size = float(pos.get("contractSize", 0.001) or 0.001)
+
+            notional = float(pos.get("positionValue", 0) or 0)
             if not notional and entry > 0:
-                contract_size = float(pos.get("contractSize", 0.001) or 0.001)
                 notional = vol * entry * contract_size
+
+            # PnL: MEXC API çoğunlukla 0 döner, kendimiz hesaplıyoruz
+            unrealized_pnl = float(pos.get("unrealisedPnl", 0) or pos.get("unrealizedPnl", 0) or 0)
+            if unrealized_pnl == 0 and cur_price > 0 and entry > 0:
+                position_value = vol * contract_size  # coin cinsinden
+                if side == "long":
+                    unrealized_pnl = position_value * (cur_price - entry)
+                else:
+                    unrealized_pnl = position_value * (entry - cur_price)
+
             margin = notional / leverage if leverage else notional
             pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
             return {
@@ -988,7 +998,7 @@ async def get_bot_position(bot_id: int):
                 data = resp.get("data", []) if isinstance(resp, dict) else resp
                 if data and isinstance(data, list):
                     for pos in data:
-                        parsed = _parse_mexc_pos(pos)
+                        parsed = _parse_mexc_pos(pos, cur_price)
                         if parsed:
                             all_positions.append(parsed)
             else:
