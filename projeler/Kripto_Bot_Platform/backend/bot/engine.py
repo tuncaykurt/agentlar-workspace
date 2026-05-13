@@ -1826,36 +1826,31 @@ class BotEngine:
             short_qty = max(1, int(total_qty * (1 - p.long_size_ratio)))
 
             if not paper:
-                # 1) Önce her iki market order'ı TP/SL'siz aç
-                long_ok, short_ok = False, False
-                try:
-                    await self.exchange.place_order(
-                        symbol, "buy", long_qty, "market",
-                        pos_side="long",
-                    )
-                    long_ok = True
-                    print(f"[HedgeBot {bot_name}] ✓ Long market order açıldı: {long_qty} kontrat")
-                except Exception as e:
-                    print(f"[HedgeBot {bot_name}] ✗ Long açma hatası: {e}")
-                    await self._alert(f"❌ Hedge Long açma hatası: {e}")
+                # 1) Her iki market order'ı AYNI ANDA aç (fiyat kaymasını önle)
+                results = await asyncio.gather(
+                    self.exchange.place_order(symbol, "buy", long_qty, "market", pos_side="long"),
+                    self.exchange.place_order(symbol, "sell", short_qty, "market", pos_side="short"),
+                    return_exceptions=True,
+                )
+                long_ok  = not isinstance(results[0], Exception)
+                short_ok = not isinstance(results[1], Exception)
 
-                try:
-                    await self.exchange.place_order(
-                        symbol, "sell", short_qty, "market",
-                        pos_side="short",
-                    )
-                    short_ok = True
-                    print(f"[HedgeBot {bot_name}] ✓ Short market order açıldı: {short_qty} kontrat")
-                except Exception as e:
-                    print(f"[HedgeBot {bot_name}] ✗ Short açma hatası: {e}")
-                    await self._alert(f"❌ Hedge Short açma hatası: {e}")
+                if long_ok:
+                    print(f"[HedgeBot {bot_name}] ✓ Long açıldı: {long_qty} kontrat")
+                else:
+                    print(f"[HedgeBot {bot_name}] ✗ Long hatası: {results[0]}")
+                if short_ok:
+                    print(f"[HedgeBot {bot_name}] ✓ Short açıldı: {short_qty} kontrat")
+                else:
+                    print(f"[HedgeBot {bot_name}] ✗ Short hatası: {results[1]}")
 
                 if not long_ok and not short_ok:
                     print(f"[HedgeBot {bot_name}] Her iki yön de açılamadı — döngü iptal")
+                    await self._alert(f"❌ Hedge Bot: Long ve Short açılamadı")
                     return
 
-                # 2) Pozisyonlar oluşsun diye bekle, sonra TP/SL ekle
-                await asyncio.sleep(2)
+                # 2) Pozisyonlar oluşsun diye kısa bekle, sonra TP/SL'leri AYNI ANDA ekle
+                await asyncio.sleep(1.5)
                 try:
                     await self._set_hedge_tp_sl(symbol, new_levels, long_ok, short_ok, long_qty, short_qty)
                 except Exception as e:
@@ -2035,53 +2030,71 @@ class BotEngine:
             await self._write_hedge_status(redis, symbol, sd.get("state", state), current_price, sd)
 
     async def _set_hedge_tp_sl(self, symbol: str, levels: dict, long_ok: bool, short_ok: bool, long_qty: int, short_qty: int):
-        """Hedge pozisyonlarına MEXC stoporder/place ile TP/SL ekle."""
+        """Hedge pozisyonlarına MEXC stoporder/place ile TP/SL ekle (paralel)."""
         mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
         bot_name = self.config.get("name", "?")
 
+        # Pozisyonları sorgula (3 deneme)
+        pos_data = None
         for attempt in range(1, 4):
             try:
                 pos_resp = await self.exchange.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
                 pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp
+                break
             except Exception as e:
                 print(f"[HedgeBot {bot_name}] Position query hatası (attempt {attempt}/3): {e}")
                 await asyncio.sleep(1)
-                continue
 
-            for side_name, target_type, qty, ok, lvl_key in [
-                ("long", 1, long_qty, long_ok, "long"),
-                ("short", 2, short_qty, short_ok, "short"),
-            ]:
-                if not ok:
-                    continue
-                for p in (pos_data or []):
-                    if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
-                        pos_id = int(p.get("positionId", 0))
-                        if not pos_id:
-                            continue
-                        stop_body = {
-                            "positionId": pos_id,
-                            "vol": int(qty),
-                            "profitTrend": 1,
-                            "lossTrend": 1,
-                            "stopLossType": 0,
-                            "takeProfitType": 0,
-                            "stopLossOrderPrice": 0,
-                            "takeProfitOrderPrice": 0,
-                        }
-                        tp = levels[lvl_key]["tp"]
-                        sl = levels[lvl_key]["sl"]
-                        if tp:
-                            stop_body["takeProfitPrice"] = round(float(tp), 2)
-                        if sl:
-                            stop_body["stopLossPrice"] = round(float(sl), 2)
-                        try:
-                            await self.exchange.exchange.contractPrivatePostStoporderPlace(stop_body)
-                            print(f"[HedgeBot {bot_name}] ✓ {side_name.upper()} TP/SL konuldu: TP={tp} SL={sl}")
-                        except Exception as e:
-                            print(f"[HedgeBot {bot_name}] ✗ {side_name.upper()} TP/SL hatası: {e}")
-                        break
-            return  # Başarılı query yapıldıysa çık
+        if not pos_data:
+            print(f"[HedgeBot {bot_name}] ✗ Pozisyon bulunamadı — TP/SL konulamadı")
+            return
+
+        # Her iki taraf için stop body'leri hazırla
+        tasks = []
+        for side_name, target_type, qty, ok, lvl_key in [
+            ("long", 1, long_qty, long_ok, "long"),
+            ("short", 2, short_qty, short_ok, "short"),
+        ]:
+            if not ok:
+                continue
+            for p in (pos_data or []):
+                if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
+                    pos_id = int(p.get("positionId", 0))
+                    if not pos_id:
+                        continue
+                    stop_body = {
+                        "positionId": pos_id,
+                        "vol": int(qty),
+                        "profitTrend": 1,
+                        "lossTrend": 1,
+                        "stopLossType": 0,
+                        "takeProfitType": 0,
+                        "stopLossOrderPrice": 0,
+                        "takeProfitOrderPrice": 0,
+                    }
+                    tp = levels[lvl_key]["tp"]
+                    sl = levels[lvl_key]["sl"]
+                    if tp:
+                        stop_body["takeProfitPrice"] = round(float(tp), 2)
+                    if sl:
+                        stop_body["stopLossPrice"] = round(float(sl), 2)
+                    tasks.append((side_name, stop_body, tp, sl))
+                    break
+
+        if not tasks:
+            print(f"[HedgeBot {bot_name}] ✗ Açık pozisyon bulunamadı — TP/SL konulamadı")
+            return
+
+        # Tüm TP/SL emirlerini AYNI ANDA gönder
+        results = await asyncio.gather(
+            *[self.exchange.exchange.contractPrivatePostStoporderPlace(t[1]) for t in tasks],
+            return_exceptions=True,
+        )
+        for (side_name, _, tp, sl), result in zip(tasks, results):
+            if isinstance(result, Exception):
+                print(f"[HedgeBot {bot_name}] ✗ {side_name.upper()} TP/SL hatası: {result}")
+            else:
+                print(f"[HedgeBot {bot_name}] ✓ {side_name.upper()} TP/SL konuldu: TP={tp} SL={sl}")
 
     async def _write_hedge_status(self, redis, symbol: str, state: str, price: float, sd: dict):
         """Hedge bot anlık durumunu Redis'e yaz (frontend okur)."""
