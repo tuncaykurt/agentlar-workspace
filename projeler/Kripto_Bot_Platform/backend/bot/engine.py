@@ -1868,14 +1868,26 @@ class BotEngine:
 
             new_levels = compute_hedge_levels(current_price, p)
 
-            # İşlem miktarı hesapla — Risk & Para sayfasındaki bakiye kullanılır
-            # Geriye dönük uyumluluk: eski botlarda position_size_mode varsa onu kullan
-            if p.position_size_mode == "fixed_usdt" and p.position_size_usdt > 0:
+            # İşlem miktarı hesapla — Risk & Para sayfasından gelen değerler öncelikli
+            risk_per_trade = float(self.config.get("risk_per_trade", 0))
+            risk_mode = self.config.get("risk_mode", "pct")
+            initial_balance = float(self.config.get("initial_balance", 0))
+
+            if risk_mode == "usdt" and risk_per_trade > 0:
+                # Sabit USDT miktarı
+                total_usdt = risk_per_trade
+            elif risk_per_trade > 0:
+                # Bakiyenin yüzdesi (risk_per_trade = %, örn: 5 = %5)
+                base_balance = initial_balance if initial_balance > 0 else self.risk.current_balance
+                total_usdt = base_balance * (risk_per_trade / 100)
+            elif p.position_size_mode == "fixed_usdt" and p.position_size_usdt > 0:
+                # Geriye dönük uyumluluk: eski botlarda position_size params varsa
                 total_usdt = p.position_size_usdt
-            elif p.position_size_mode == "percentage" and p.position_size_pct < 100:
+            elif p.position_size_mode == "percentage" and p.position_size_pct <= 100:
                 total_usdt = self.risk.current_balance * (p.position_size_pct / 100)
             else:
-                total_usdt = self.risk.current_balance  # tüm bakiye
+                total_usdt = self.risk.current_balance
+            print(f"[HedgeBot {bot_name}] İşlem miktarı: {total_usdt:.2f}$ (risk_per_trade={risk_per_trade}, mode={risk_mode}, balance={initial_balance})")
 
             # MEXC kontrat hesabı: notional / (price * contractSize)
             contract_size = 0.001  # ETH default
