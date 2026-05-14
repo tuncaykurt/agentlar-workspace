@@ -1788,7 +1788,19 @@ export default function BotsPage() {
                           <StrategySignalCard strategyId={form.strategy} getParam={getParam} />
                           <div className={`grid gap-4 ${form.strategy === "grid_bot" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
                             {selectedStrategy.params
-                              .filter(param => !((form.strategy === "hedge_bot" || form.strategy === "dual_hedge") && param.key === "trigger_mode"))
+                              .filter(param => {
+                                const isHedge = form.strategy === "hedge_bot" || form.strategy === "dual_hedge"
+                                if (!isHedge) return true
+                                // trigger_mode artık üstte kart olarak var
+                                if (param.key === "trigger_mode") return false
+                                // Sinyal ağırlığı sadece on_signal modunda göster
+                                if ((param.key === "signal_weight_enabled" || param.key === "signal_weight_ratio") && form.strategy_params.trigger_mode !== "on_signal") return false
+                                // Ağırlık açıkken long_size_ratio gizle (ağırlık oranı devralır)
+                                if (param.key === "long_size_ratio" && form.strategy_params.trigger_mode === "on_signal" && form.strategy_params.signal_weight_enabled) return false
+                                // Ağırlık kapalıyken ağırlık oranını gizle
+                                if (param.key === "signal_weight_ratio" && !form.strategy_params.signal_weight_enabled) return false
+                                return true
+                              })
                               .map(param => (
                               <Field key={param.key} label={param.label} description={param.description}>
                                 {param.type === "number" && (
