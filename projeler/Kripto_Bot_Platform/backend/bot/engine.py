@@ -2031,7 +2031,16 @@ class BotEngine:
             # Fiyat bazlı TP/SL kontrolü (yedek — borsa henüz tetiklemediyse)
             hits = check_price_levels(current_price, levels, active_sides)
 
-            # Peak güncelle
+            # Peak güncelle (her taraf ayrı — trailing stop için)
+            long_peak  = sd.get("long_peak", entry_price or current_price)
+            short_peak = sd.get("short_peak", entry_price or current_price)
+            if "long" in active_sides:
+                long_peak = max(long_peak, current_price)
+            if "short" in active_sides:
+                short_peak = min(short_peak, current_price)
+            sd["long_peak"]  = long_peak
+            sd["short_peak"] = short_peak
+            # Eski peak_price uyumluluğu
             if peak_price is None:
                 peak_price = current_price
             if "long" in active_sides:
@@ -2039,6 +2048,23 @@ class BotEngine:
             if "short" in active_sides:
                 peak_price = min(peak_price, current_price)
             sd["peak_price"] = peak_price
+
+            # ── Trailing Stop kontrolü (açık pozisyonlar kârdayken geri çekilme) ──
+            if p.trailing_enabled and entry_price:
+                trail_pct = p.trailing_pct / 100
+                # Long trailing: kâr zirvesinden geri çekildi mi?
+                if "long" in active_sides and long_peak > entry_price:
+                    long_trail_price = long_peak * (1 - trail_pct)
+                    if current_price <= long_trail_price:
+                        print(f"[HedgeBot {bot_name}] Long trailing stop tetiklendi: peak={long_peak:.4f} → {current_price:.4f} (geri çekilme {p.trailing_pct}%)")
+                        hits["long"]["tp"] = True  # TP gibi davran
+
+                # Short trailing: kâr zirvesinden (dipten) geri çekildi mi?
+                if "short" in active_sides and short_peak < entry_price:
+                    short_trail_price = short_peak * (1 + trail_pct)
+                    if current_price >= short_trail_price:
+                        print(f"[HedgeBot {bot_name}] Short trailing stop tetiklendi: peak={short_peak:.4f} → {current_price:.4f} (geri çekilme {p.trailing_pct}%)")
+                        hits["short"]["tp"] = True
 
             winner = loser = None
             if hits["long"]["tp"]:

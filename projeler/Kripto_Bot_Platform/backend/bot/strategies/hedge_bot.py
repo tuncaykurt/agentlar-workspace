@@ -55,6 +55,11 @@ class HedgeBotParams:
         self.short_tp_pct = float(params.get("short_tp_pct", 2.0))
         self.short_sl_pct = float(params.get("short_sl_pct", 4.0))
 
+        # ── Trailing Stop (kazanan taraf kârdayken geri çekilme koruması) ───
+        self.trailing_enabled = bool(params.get("trailing_enabled", False))
+        self.trailing_pct     = float(params.get("trailing_pct", 0.05))
+        # Kâr zirvesinden bu % geri çekilirse pozisyonu kapat
+
         # ── Kaybeden Taraf Yönetimi ──────────────────────────────────────────
         self.losing_side_mode = params.get("losing_side_mode", "hold_to_breakeven")
         # hold_to_breakeven : break-even'e dönene kadar tut

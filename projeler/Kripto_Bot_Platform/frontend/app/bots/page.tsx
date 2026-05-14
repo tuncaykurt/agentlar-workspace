@@ -187,7 +187,9 @@ const STRATEGIES: Strategy[] = [
         ],
       },
       { key: "breakeven_buffer_pct", label: "Break-Even Buffer %", type: "number", min: 0, max: 5, step: 0.05, default: 0.1, description: "Break-even + bu kadar kâra geçince kapat (0.1 = %0.1 kâr)" },
-      { key: "losing_trail_pct",     label: "Trailing Stop %",    type: "number", min: 0.1, max: 20, step: 0.1, default: 1.5, description: "Trailing mod: zirveden bu kadar geri çekilince kapat" },
+      { key: "trailing_enabled",     label: "Trailing Stop",      type: "boolean", default: false, description: "Kazanan taraf kâra geçtiğinde geri çekilmeye karşı koruma" },
+      { key: "trailing_pct",         label: "Trailing Geri Çekilme %", type: "number", min: 0.01, max: 20, step: 0.01, default: 0.05, description: "Kâr zirvesinden bu kadar geri çekilirse pozisyonu kapat (örn: 0.05 = %0.05)" },
+      { key: "losing_trail_pct",     label: "Kaybeden Trailing %", type: "number", min: 0.1, max: 20, step: 0.1, default: 1.5, description: "Kaybeden taraf: zirveden bu kadar geri çekilince kapat" },
       { key: "reopen_after_tp",  label: "Döngü Yenile",          type: "boolean", default: true,               description: "Döngü tamamlanınca yeniden aç" },
       { key: "reopen_delay_secs", label: "Yeniden Açma Gecikmesi (sn)", type: "number", min: 0, max: 3600, step: 30, default: 300, description: "Döngü tamamlanınca kaç saniye bekle" },
       { key: "max_cycles",       label: "Maksimum Döngü",         type: "number", min: 0, max: 100, step: 1, default: 0,  description: "0 = sınırsız döngü" },
@@ -1799,6 +1801,16 @@ export default function BotsPage() {
                                 if (param.key === "long_size_ratio" && form.strategy_params.trigger_mode === "on_signal" && form.strategy_params.signal_weight_enabled) return false
                                 // Ağırlık kapalıyken ağırlık oranını gizle
                                 if (param.key === "signal_weight_ratio" && !form.strategy_params.signal_weight_enabled) return false
+                                // Trailing Stop: trailing_pct sadece trailing_enabled açıkken
+                                if (param.key === "trailing_pct" && !form.strategy_params.trailing_enabled) return false
+                                // losing_trail_pct sadece losing_side_mode=trailing iken
+                                if (param.key === "losing_trail_pct" && form.strategy_params.losing_side_mode !== "trailing") return false
+                                // breakeven_buffer_pct sadece hold_to_breakeven modunda
+                                if (param.key === "breakeven_buffer_pct" && form.strategy_params.losing_side_mode !== "hold_to_breakeven") return false
+                                // İşlem saatleri: start/end sadece enabled iken
+                                if ((param.key === "trading_start_hour" || param.key === "trading_end_hour") && !form.strategy_params.trading_hours_enabled) return false
+                                // Funding eşiği sadece funding koruması açıkken
+                                if (param.key === "funding_pause_threshold" && !form.strategy_params.funding_pause_enabled) return false
                                 return true
                               })
                               .map(param => (
