@@ -924,6 +924,52 @@ export default function BotCard({
           {showTrades && (
             <div className="mt-2 space-y-2">
               {/* Ozet kutuları */}
+              {isHedge ? (
+                // Hedge bot: döngü bazlı özet
+                (() => {
+                  const hist = perf.trade_history || []
+                  // Döngüleri say: aynı dakikada açılan long+short = 1 döngü
+                  const sorted = [...hist].sort((a, b) => new Date(a.opened_at || 0).getTime() - new Date(b.opened_at || 0).getTime())
+                  const usedIds = new Set<number>()
+                  let totalCycles = 0, winCycles = 0, loseCycles = 0, openCycles = 0
+                  for (const t of sorted) {
+                    if (usedIds.has(t.id)) continue
+                    const ts = new Date(t.opened_at || 0).getTime()
+                    const pair = sorted.find(p => !usedIds.has(p.id) && p.id !== t.id && p.side !== t.side && Math.abs(new Date(p.opened_at || 0).getTime() - ts) < 60000)
+                    usedIds.add(t.id)
+                    if (pair) usedIds.add(pair.id)
+                    totalCycles++
+                    const l = t.side === "long" ? t : pair
+                    const s = t.side === "short" ? t : pair
+                    const bothClosed = (!l || l.status === "CLOSED") && (!s || s.status === "CLOSED")
+                    if (!bothClosed) { openCycles++; continue }
+                    const net = (l?.pnl ?? 0) + (s?.pnl ?? 0)
+                    if (net >= 0) winCycles++; else loseCycles++
+                  }
+                  const closedCycles = winCycles + loseCycles
+                  const cycleWinRate = closedCycles > 0 ? (winCycles / closedCycles * 100) : 0
+                  return (
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <div className="bg-slate-900/60 rounded-lg p-1.5 text-center border border-slate-800">
+                        <p className="text-[9px] text-slate-500">Dongu</p>
+                        <p className="text-xs font-bold text-white">{totalCycles}</p>
+                      </div>
+                      <div className="bg-green-500/5 rounded-lg p-1.5 text-center border border-green-500/20">
+                        <p className="text-[9px] text-green-400/70">Kazanan</p>
+                        <p className="text-xs font-bold text-green-400">{winCycles}</p>
+                      </div>
+                      <div className="bg-red-500/5 rounded-lg p-1.5 text-center border border-red-500/20">
+                        <p className="text-[9px] text-red-400/70">Kaybeden</p>
+                        <p className="text-xs font-bold text-red-400">{loseCycles}</p>
+                      </div>
+                      <div className="bg-blue-500/5 rounded-lg p-1.5 text-center border border-blue-500/20">
+                        <p className="text-[9px] text-blue-400/70">Basari</p>
+                        <p className="text-xs font-bold text-blue-400">%{cycleWinRate.toFixed(1)}</p>
+                      </div>
+                    </div>
+                  )
+                })()
+              ) : (
               <div className="grid grid-cols-4 gap-1.5">
                 <div className="bg-slate-900/60 rounded-lg p-1.5 text-center border border-slate-800">
                   <p className="text-[9px] text-slate-500">Toplam</p>
@@ -942,6 +988,7 @@ export default function BotCard({
                   <p className="text-xs font-bold text-blue-400">%{perf.trades.win_rate}</p>
                 </div>
               </div>
+              )}
 
               {/* PnL ozet */}
               {perf.trades.closed > 0 && (
@@ -968,77 +1015,177 @@ export default function BotCard({
               {/* Trade listesi */}
               {perf.trade_history && perf.trade_history.length > 0 && (
                 <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
-                  {perf.trade_history.map(t => {
-                    const isLong = t.side === "long"
-                    const isClosed = t.status === "CLOSED"
-                    const pnlPositive = (t.pnl ?? 0) >= 0
-                    const borderColor = !isClosed
-                      ? "border-yellow-500/20"
-                      : pnlPositive ? "border-green-500/20" : "border-red-500/20"
-                    const bgColor = !isClosed
-                      ? "bg-yellow-500/5"
-                      : pnlPositive ? "bg-green-500/5" : "bg-red-500/5"
-                    const exitLabel: Record<string, string> = {
-                      tp: "TP Vurdu",
-                      exchange_sl: "SL Vurdu",
-                      close_both: "Kapandi",
-                      breakeven: "Basabasina",
-                      trailing: "Trailing",
-                    }
-                    return (
-                      <div key={t.id} className={clsx("rounded-lg border text-[10px]", bgColor, borderColor)}>
-                        <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 border-b border-white/5 flex-wrap">
-                          <span className={clsx(
-                            "font-bold px-1.5 py-0.5 rounded text-[9px]",
-                            isLong ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                          )}>
-                            {isLong ? "LONG" : "SHORT"}
-                          </span>
-                          <span className="text-slate-300 font-medium">
-                            Giris: {fmtPrice(t.entry_price)}
-                          </span>
-                          {isClosed && t.exit_price && (
-                            <>
-                              <span className="text-slate-600">→</span>
-                              <span className="text-slate-300">
-                                Cikis: {fmtPrice(t.exit_price)}
+                  {isHedge ? (
+                    // ── Hedge Bot: Döngü bazlı grupla ──
+                    (() => {
+                      type HedgeTrade = typeof perf.trade_history extends Array<infer T> ? T : never
+                      // Aynı anda açılan Long+Short'u eşleştir (60sn tolerans)
+                      const cycles: { long: HedgeTrade | null; short: HedgeTrade | null; ts: number }[] = []
+                      const used = new Set<number>()
+                      const sorted = [...perf.trade_history!].sort((a, b) =>
+                        new Date(a.opened_at || 0).getTime() - new Date(b.opened_at || 0).getTime()
+                      )
+                      for (const t of sorted) {
+                        if (used.has(t.id)) continue
+                        const ts = new Date(t.opened_at || 0).getTime()
+                        // Eşini bul (aynı dakika içinde, karşı yön)
+                        const pair = sorted.find(p =>
+                          !used.has(p.id) && p.id !== t.id && p.side !== t.side &&
+                          Math.abs(new Date(p.opened_at || 0).getTime() - ts) < 60000
+                        )
+                        const cycle: typeof cycles[0] = { long: null, short: null, ts }
+                        if (t.side === "long") { cycle.long = t; cycle.short = pair || null }
+                        else { cycle.short = t; cycle.long = pair || null }
+                        used.add(t.id)
+                        if (pair) used.add(pair.id)
+                        cycles.push(cycle)
+                      }
+                      // En yeniden eskiye
+                      cycles.reverse()
+
+                      return cycles.map((c, i) => {
+                        const longT = c.long
+                        const shortT = c.short
+                        const bothClosed = (!longT || longT.status === "CLOSED") && (!shortT || shortT.status === "CLOSED")
+                        const anyOpen = (longT?.status === "OPEN") || (shortT?.status === "OPEN")
+                        const netPnl = (longT?.pnl ?? 0) + (shortT?.pnl ?? 0)
+                        const entryPrice = longT?.entry_price || shortT?.entry_price || 0
+                        const leverage = longT?.leverage || shortT?.leverage || 0
+                        const openedAt = longT?.opened_at || shortT?.opened_at
+                        const dur = Math.max(longT?.duration_min || 0, shortT?.duration_min || 0)
+
+                        const exitLabel: Record<string, string> = {
+                          tp: "TP", exchange_tp_sl: "TP/SL", exchange_sl: "SL",
+                          close_both: "Kapandi", breakeven: "BE", trailing: "Trail",
+                        }
+                        const longExit = longT?.exit_reason ? (exitLabel[longT.exit_reason] ?? longT.exit_reason) : null
+                        const shortExit = shortT?.exit_reason ? (exitLabel[shortT.exit_reason] ?? shortT.exit_reason) : null
+
+                        const borderColor = anyOpen ? "border-yellow-500/20" : netPnl >= 0 ? "border-green-500/20" : "border-red-500/20"
+                        const bgColor = anyOpen ? "bg-yellow-500/5" : netPnl >= 0 ? "bg-green-500/5" : "bg-red-500/5"
+
+                        return (
+                          <div key={`cycle-${i}`} className={clsx("rounded-lg border text-[10px]", bgColor, borderColor)}>
+                            <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 border-b border-white/5 flex-wrap">
+                              <span className="font-bold px-1.5 py-0.5 rounded text-[9px] bg-blue-500/20 text-blue-400">
+                                DÖNGÜ #{cycles.length - i}
                               </span>
-                            </>
-                          )}
-                          {t.leverage && (
-                            <span className="text-slate-600 text-[9px]">{t.leverage}x</span>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between px-2 py-1 flex-wrap gap-x-2">
-                          {isClosed ? (
-                            <span className={clsx("font-semibold", pnlPositive ? "text-green-400" : "text-red-400")}>
-                              {t.exit_reason ? (exitLabel[t.exit_reason] ?? t.exit_reason) : "Kapandi"}
-                              {t.pnl != null && (
-                                <span className="ml-1">
-                                  {t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}
-                                  {t.pnl_pct != null && (
-                                    <span className="ml-0.5 text-slate-500">
-                                      ({t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%)
-                                    </span>
-                                  )}
-                                </span>
+                              <span className="text-slate-300 font-medium">
+                                Giris: {fmtPrice(entryPrice)}
+                              </span>
+                              {leverage > 0 && <span className="text-slate-600 text-[9px]">{leverage}x</span>}
+                            </div>
+                            {/* Long + Short satırları */}
+                            <div className="px-2 py-1 space-y-0.5">
+                              {longT && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-green-400 font-medium">Long</span>
+                                  <span className={clsx("font-medium", longT.status === "OPEN" ? "text-yellow-400" : (longT.pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
+                                    {longT.status === "OPEN" ? "● Acik" : `${longExit} ${longT.pnl != null ? `${longT.pnl >= 0 ? "+" : ""}$${longT.pnl.toFixed(2)}` : ""}`}
+                                  </span>
+                                </div>
                               )}
+                              {shortT && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-red-400 font-medium">Short</span>
+                                  <span className={clsx("font-medium", shortT.status === "OPEN" ? "text-yellow-400" : (shortT.pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
+                                    {shortT.status === "OPEN" ? "● Acik" : `${shortExit} ${shortT.pnl != null ? `${shortT.pnl >= 0 ? "+" : ""}$${shortT.pnl.toFixed(2)}` : ""}`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            {/* Net sonuç */}
+                            <div className="flex items-center justify-between px-2 py-1 border-t border-white/5 flex-wrap gap-x-2">
+                              {bothClosed ? (
+                                <span className={clsx("font-bold", netPnl >= 0 ? "text-green-400" : "text-red-400")}>
+                                  Net: {netPnl >= 0 ? "+" : ""}${netPnl.toFixed(2)}
+                                </span>
+                              ) : (
+                                <span className="font-semibold text-yellow-400">● Pozisyon acik</span>
+                              )}
+                              <div className="flex items-center gap-2 text-slate-600 ml-auto">
+                                {dur > 0 && <span>⏱ {dur < 60 ? `${dur}dk` : `${Math.floor(dur / 60)}s ${dur % 60}dk`}</span>}
+                                <span>{openedAt ? new Date(openedAt).toLocaleString("tr-TR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : ""}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()
+                  ) : (
+                    // ── Normal bot: tekil trade gösterimi ──
+                    perf.trade_history.map(t => {
+                      const isLong = t.side === "long"
+                      const isClosed = t.status === "CLOSED"
+                      const pnlPositive = (t.pnl ?? 0) >= 0
+                      const borderColor = !isClosed
+                        ? "border-yellow-500/20"
+                        : pnlPositive ? "border-green-500/20" : "border-red-500/20"
+                      const bgColor = !isClosed
+                        ? "bg-yellow-500/5"
+                        : pnlPositive ? "bg-green-500/5" : "bg-red-500/5"
+                      const exitLabel: Record<string, string> = {
+                        tp: "TP Vurdu",
+                        exchange_sl: "SL Vurdu",
+                        close_both: "Kapandi",
+                        breakeven: "Basabasina",
+                        trailing: "Trailing",
+                      }
+                      return (
+                        <div key={t.id} className={clsx("rounded-lg border text-[10px]", bgColor, borderColor)}>
+                          <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 border-b border-white/5 flex-wrap">
+                            <span className={clsx(
+                              "font-bold px-1.5 py-0.5 rounded text-[9px]",
+                              isLong ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                            )}>
+                              {isLong ? "LONG" : "SHORT"}
                             </span>
-                          ) : (
-                            <span className="font-semibold text-yellow-400">● Acik</span>
-                          )}
-                          <div className="flex items-center gap-2 text-slate-600 ml-auto">
-                            {t.duration_min != null && t.duration_min > 0 && (
-                              <span>⏱ {t.duration_min < 60 ? `${t.duration_min}dk` : `${Math.floor(t.duration_min / 60)}s ${t.duration_min % 60}dk`}</span>
+                            <span className="text-slate-300 font-medium">
+                              Giris: {fmtPrice(t.entry_price)}
+                            </span>
+                            {isClosed && t.exit_price && (
+                              <>
+                                <span className="text-slate-600">→</span>
+                                <span className="text-slate-300">
+                                  Cikis: {fmtPrice(t.exit_price)}
+                                </span>
+                              </>
                             )}
-                            <span>
-                              {t.opened_at ? new Date(t.opened_at).toLocaleString("tr-TR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : ""}
-                            </span>
+                            {t.leverage && (
+                              <span className="text-slate-600 text-[9px]">{t.leverage}x</span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between px-2 py-1 flex-wrap gap-x-2">
+                            {isClosed ? (
+                              <span className={clsx("font-semibold", pnlPositive ? "text-green-400" : "text-red-400")}>
+                                {t.exit_reason ? (exitLabel[t.exit_reason] ?? t.exit_reason) : "Kapandi"}
+                                {t.pnl != null && (
+                                  <span className="ml-1">
+                                    {t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}
+                                    {t.pnl_pct != null && (
+                                      <span className="ml-0.5 text-slate-500">
+                                        ({t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%)
+                                      </span>
+                                    )}
+                                  </span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="font-semibold text-yellow-400">● Acik</span>
+                            )}
+                            <div className="flex items-center gap-2 text-slate-600 ml-auto">
+                              {t.duration_min != null && t.duration_min > 0 && (
+                                <span>⏱ {t.duration_min < 60 ? `${t.duration_min}dk` : `${Math.floor(t.duration_min / 60)}s ${t.duration_min % 60}dk`}</span>
+                              )}
+                              <span>
+                                {t.opened_at ? new Date(t.opened_at).toLocaleString("tr-TR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : ""}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })
+                  )}
                 </div>
               )}
             </div>
