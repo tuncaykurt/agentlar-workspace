@@ -1838,6 +1838,7 @@ class BotEngine:
 
             # Tetikleyici
             should_open = False
+            signal_action = None  # sinyal yönü (buy/sell) — ağırlık için
             if p.trigger_mode == "on_start":
                 should_open = True
             elif p.trigger_mode == "on_signal":
@@ -1851,6 +1852,7 @@ class BotEngine:
                     last_ts_str = (last_ts_raw.decode() if isinstance(last_ts_raw, bytes) else str(last_ts_raw)) if last_ts_raw else ""
                     if last_ts_str != sig_ts:
                         should_open = True
+                        signal_action = sig_data.get("action", "").lower()  # buy/sell
                         await redis.set(last_ts_key, sig_ts, ex=600)
 
             if not should_open:
@@ -1885,14 +1887,26 @@ class BotEngine:
 
             notional = total_usdt * p.leverage
             total_contracts = notional / (current_price * contract_size)
-            # Eşit bölme: her iki tarafı aynı tutara zorla (hedge mantığı gereği)
-            if p.long_size_ratio == 0.5:
+
+            # Pozisyon büyüklük oranını belirle
+            effective_ratio = p.long_size_ratio  # varsayılan: 0.5 = eşit
+
+            # Sinyal ağırlığı aktifse ve sinyal yönü varsa, o yönü büyüt
+            if p.signal_weight_enabled and signal_action:
+                if signal_action in ("buy", "long"):
+                    effective_ratio = p.signal_weight_ratio  # örn 0.65 → Long %65
+                    print(f"[HedgeBot {bot_name}] Sinyal: BUY → Long ağırlıklı ({p.signal_weight_ratio:.0%})")
+                elif signal_action in ("sell", "short"):
+                    effective_ratio = 1 - p.signal_weight_ratio  # örn 0.35 → Long %35
+                    print(f"[HedgeBot {bot_name}] Sinyal: SELL → Short ağırlıklı ({p.signal_weight_ratio:.0%})")
+
+            if effective_ratio == 0.5:
                 half = max(1, round(total_contracts / 2))
                 long_qty = half
                 short_qty = half
             else:
-                long_qty  = max(1, round(total_contracts * p.long_size_ratio))
-                short_qty = max(1, round(total_contracts * (1 - p.long_size_ratio)))
+                long_qty  = max(1, round(total_contracts * effective_ratio))
+                short_qty = max(1, round(total_contracts * (1 - effective_ratio)))
             print(f"[HedgeBot {bot_name}] Miktar: {total_usdt}$ × {p.leverage}x = {notional}$ notional → Long:{long_qty} Short:{short_qty} kontrat (contractSize={contract_size})")
 
             if not paper:

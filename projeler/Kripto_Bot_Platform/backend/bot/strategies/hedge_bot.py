@@ -42,6 +42,13 @@ class HedgeBotParams:
         self.long_size_ratio    = float(params.get("long_size_ratio", 0.5))
         # 0.5 = eşit büyüklük; 0.6 = long daha büyük
 
+        # ── Sinyal Ağırlığı ────────────────────────────────────────────────
+        self.signal_weight_enabled = bool(params.get("signal_weight_enabled", False))
+        self.signal_weight_ratio   = float(params.get("signal_weight_ratio", 0.65))
+        # buy sinyali → long = signal_weight_ratio, short = 1 - ratio
+        # sell sinyali → short = signal_weight_ratio, long = 1 - ratio
+        # Kapalıysa long_size_ratio kullanılır
+
         # ── TP/SL (fiyat hareketi % olarak, kaldıraçsız) ────────────────────
         self.long_tp_pct  = float(params.get("long_tp_pct",  2.0))
         self.long_sl_pct  = float(params.get("long_sl_pct",  4.0))

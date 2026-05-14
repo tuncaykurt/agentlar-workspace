@@ -172,6 +172,8 @@ const STRATEGIES: Strategy[] = [
         ],
       },
       { key: "long_size_ratio", label: "Long Büyüklük Oranı",   type: "number",  min: 0.1, max: 0.9, step: 0.05, default: 0.5, description: "0.5 = eşit büyüklük, 0.6 = long daha büyük" },
+      { key: "signal_weight_enabled", label: "Sinyal Yönüne Göre Ağırlık", type: "boolean", default: false, description: "TV sinyalinin yönüne göre o tarafın pozisyonunu büyüt" },
+      { key: "signal_weight_ratio",   label: "Ağırlık Oranı",              type: "number",  min: 0.55, max: 0.9, step: 0.05, default: 0.65, description: "Buy sinyali → Long bu oranda, Short kalan (örn: 0.65 → %65 Long, %35 Short)" },
       { key: "long_tp_pct",    label: "Long TP %",               type: "number",  min: 0.1, max: 100, step: 0.5, default: 30,   description: "Long pozisyonu kapat (giriş fiyatından % yükseliş)" },
       { key: "long_sl_pct",    label: "Long SL %",               type: "number",  min: 0.1, max: 100, step: 0.5, default: 20,   description: "Long stop-loss (giriş fiyatından % düşüş)" },
       { key: "short_tp_pct",   label: "Short TP %",              type: "number",  min: 0.1, max: 100, step: 0.5, default: 30,   description: "Short pozisyonu kapat (giriş fiyatından % düşüş)" },
