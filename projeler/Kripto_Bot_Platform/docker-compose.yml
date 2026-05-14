@@ -84,6 +84,8 @@ services:
     image: freqtradeorg/freqtrade:stable
     restart: unless-stopped
     container_name: freqtrade
+    profiles:
+      - freqtrade
     volumes:
       - "../Freqtrade_Core/user_data:/freqtrade/user_data"
     ports:

@@ -28,34 +28,51 @@ class BitgetClient:
 
     async def _ws_connect(self, subscribe_msg: dict, handler, label: str):
         """WS bağlantı + ping/pong + otomatik yeniden bağlanma."""
+        retry_count = 0
         while True:
             try:
                 async with websockets.connect(
                     self.ws_url,
-                    ping_interval=20,
-                    ping_timeout=10,
-                    close_timeout=5,
+                    ping_interval=None,   # Bitget protocol-level ping desteklemiyor
+                    ping_timeout=None,
+                    close_timeout=10,
                 ) as ws:
+                    retry_count = 0
                     await ws.send(json.dumps(subscribe_msg))
                     print(f"[Bitget WS] {label} abone olundu")
 
-                    async for raw in ws:
-                        data = json.loads(raw)
+                    # Bitget 30s sessizlikte koparır — 25s'de ping at
+                    async def keep_alive():
+                        while True:
+                            await asyncio.sleep(25)
+                            await ws.send("ping")
 
-                        # Ping/pong — Bitget v2 "ping" text mesajı gönderir
-                        if raw == "ping":
-                            await ws.send("pong")
-                            continue
+                    ping_task = asyncio.create_task(keep_alive())
+                    try:
+                        async for raw in ws:
+                            # Bitget v2 text "ping"/"pong" mesajları — JSON değil
+                            if raw == "ping":
+                                await ws.send("pong")
+                                continue
+                            if raw == "pong":
+                                continue
 
-                        if "data" in data:
-                            await handler(data)
+                            data = json.loads(raw)
+                            if "data" in data:
+                                await handler(data)
+                    finally:
+                        ping_task.cancel()
 
             except (websockets.ConnectionClosed, ConnectionError, OSError) as e:
-                print(f"[Bitget WS] {label} koptu: {e} — 5s sonra tekrar")
-                await asyncio.sleep(5)
+                retry_count += 1
+                delay = min(60, 5 * retry_count)
+                print(f"[Bitget WS] {label} koptu: {e} — {delay}s sonra tekrar (#{retry_count})")
+                await asyncio.sleep(delay)
             except Exception as e:
-                print(f"[Bitget WS] {label} hata: {e} — 10s sonra tekrar")
-                await asyncio.sleep(10)
+                retry_count += 1
+                delay = min(120, 10 * retry_count)
+                print(f"[Bitget WS] {label} hata: {e} — {delay}s sonra tekrar (#{retry_count})")
+                await asyncio.sleep(delay)
 
     async def subscribe_kline(self, symbol: str, interval: str = "1m"):
         """Canlı mum verisi — Bitget WS v2 formatı."""
