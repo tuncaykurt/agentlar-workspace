@@ -503,9 +503,15 @@ function TradingViewWebhookCard({
   // Botun yönüne göre action belirleme
   const actionForIndicator = direction === "sell_only" ? "sell" : "buy"
 
-  // Hedge bot: action önemsiz, sadece sinyal gelmiş olması yeterli
-  const jsonTemplateHedge = `{
-  "action":   "open",
+  // Hedge bot: action buy/sell/open — ağırlık açıksa yöne göre büyütür
+  const jsonTemplateHedgeBuy = `{
+  "action":   "buy",
+  "symbol":   "{{ticker}}",
+  "price":    {{close}},
+  "interval": "{{interval}}"
+}`
+  const jsonTemplateHedgeSell = `{
+  "action":   "sell",
   "symbol":   "{{ticker}}",
   "price":    {{close}},
   "interval": "{{interval}}"
@@ -526,7 +532,10 @@ function TradingViewWebhookCard({
   "message":  "{{strategy.order.comment}}"
 }`
 
-  const activeTemplate = isHedge ? jsonTemplateHedge : (alarmType === "indicator" ? jsonTemplateIndicator : jsonTemplateStrategy)
+  const [hedgeAction, setHedgeAction] = useState<"buy"|"sell">("buy")
+  const activeTemplate = isHedge
+    ? (hedgeAction === "buy" ? jsonTemplateHedgeBuy : jsonTemplateHedgeSell)
+    : (alarmType === "indicator" ? jsonTemplateIndicator : jsonTemplateStrategy)
 
   const copy = (text: string, key: "url"|"json") => {
     navigator.clipboard.writeText(text).then(() => {
@@ -583,14 +592,24 @@ function TradingViewWebhookCard({
         </div>
       </div>
 
-      {/* Hedge bot: alarm tipi seçimi gereksiz, açıklama göster */}
+      {/* Hedge bot: açıklama + buy/sell şablon seçimi */}
       {isHedge ? (
-        <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
+        <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-3">
           <p className="text-xs font-semibold text-emerald-400">🔀 Hedge Bot — Çift Yönlü Tetikleme</p>
           <p className="text-[11px] text-slate-400">
             Sinyal geldiğinde aynı anda <span className="text-green-400 font-medium">LONG</span> + <span className="text-red-400 font-medium">SHORT</span> pozisyon açılır.
-            Action değeri (<code className="text-slate-500">buy/sell/open</code>) önemsiz — herhangi bir sinyal yeterli.
+            Sinyal ağırlığı açıksa <code className="text-green-400">buy</code> → Long büyük, <code className="text-red-400">sell</code> → Short büyük.
           </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setHedgeAction("buy")}
+              className={`flex-1 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${hedgeAction === "buy" ? "border-green-500/50 bg-green-500/10 text-green-300" : "border-slate-700 text-slate-400 hover:text-white"}`}>
+              Yükseliş Alarmı (buy)
+            </button>
+            <button type="button" onClick={() => setHedgeAction("sell")}
+              className={`flex-1 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${hedgeAction === "sell" ? "border-red-500/50 bg-red-500/10 text-red-300" : "border-slate-700 text-slate-400 hover:text-white"}`}>
+              Düşüş Alarmı (sell)
+            </button>
+          </div>
         </div>
       ) : (
         <>
@@ -635,11 +654,15 @@ function TradingViewWebhookCard({
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-slate-300">
             Alarm Mesaji (JSON Sablonu)
-            {alarmType === "indicator" && (
+            {isHedge ? (
+              <span className={`ml-2 text-[10px] font-normal ${hedgeAction === "buy" ? "text-green-400" : "text-red-400"}`}>
+                action: {hedgeAction}
+              </span>
+            ) : alarmType === "indicator" ? (
               <span className="ml-2 text-[10px] text-emerald-400 font-normal">
                 action: {actionForIndicator}
               </span>
-            )}
+            ) : null}
           </p>
           <button
             type="button"
@@ -652,7 +675,7 @@ function TradingViewWebhookCard({
         <pre className="text-[11px] font-mono text-emerald-300 leading-relaxed bg-black/40 rounded-lg px-3 py-2.5 overflow-x-auto">{activeTemplate}</pre>
         {isHedge ? (
           <p className="text-[10px] text-slate-500">
-            Bu mesajı TradingView alarm mesajı alanına yapıştır. <span className="text-amber-400">action</span> değeri fark etmez — sinyal geldiğinde LONG + SHORT aynı anda açılır. <span className="text-sky-400">{"{{interval}}"}</span> → grafik periyodunu otomatik doldurur.
+            TradingView'de iki ayrı alarm oluştur: biri <span className="text-green-400">buy</span> (yükseliş), diğeri <span className="text-red-400">sell</span> (düşüş). Ağırlık açıksa sinyal yönündeki taraf büyük açılır.
           </p>
         ) : alarmType === "indicator" ? (
           <p className="text-[10px] text-slate-500">
