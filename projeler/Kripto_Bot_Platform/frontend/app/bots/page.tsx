@@ -455,7 +455,7 @@ function Toggle({ checked, onChange, label }: {
 // TradingView yalnızca 80 ve 443 portlarını kabul eder — nginx port 80'de dinliyor
 
 function TradingViewWebhookCard({
-  token, onTokenInit, direction, onDirection, signalTimeframe, onSignalTimeframe, isEditing,
+  token, onTokenInit, direction, onDirection, signalTimeframe, onSignalTimeframe, isEditing, isHedge,
 }: {
   token: string
   onTokenInit: (t: string) => void
@@ -464,6 +464,7 @@ function TradingViewWebhookCard({
   signalTimeframe: string
   onSignalTimeframe: (v: string) => void
   isEditing?: boolean
+  isHedge?: boolean
 }) {
   const [copied, setCopied] = useState<"url"|"json"|null>(null)
   const [alarmType, setAlarmType] = useState<"indicator"|"strategy">("indicator")
@@ -498,6 +499,14 @@ function TradingViewWebhookCard({
   // Botun yönüne göre action belirleme
   const actionForIndicator = direction === "sell_only" ? "sell" : "buy"
 
+  // Hedge bot: action önemsiz, sadece sinyal gelmiş olması yeterli
+  const jsonTemplateHedge = `{
+  "action":   "open",
+  "symbol":   "{{ticker}}",
+  "price":    {{close}},
+  "interval": "{{interval}}"
+}`
+
   const jsonTemplateIndicator = `{
   "action":   "${actionForIndicator}",
   "symbol":   "{{ticker}}",
@@ -513,7 +522,7 @@ function TradingViewWebhookCard({
   "message":  "{{strategy.order.comment}}"
 }`
 
-  const activeTemplate = alarmType === "indicator" ? jsonTemplateIndicator : jsonTemplateStrategy
+  const activeTemplate = isHedge ? jsonTemplateHedge : (alarmType === "indicator" ? jsonTemplateIndicator : jsonTemplateStrategy)
 
   const copy = (text: string, key: "url"|"json") => {
     navigator.clipboard.writeText(text).then(() => {
@@ -570,6 +579,17 @@ function TradingViewWebhookCard({
         </div>
       </div>
 
+      {/* Hedge bot: alarm tipi seçimi gereksiz, açıklama göster */}
+      {isHedge ? (
+        <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
+          <p className="text-xs font-semibold text-emerald-400">🔀 Hedge Bot — Çift Yönlü Tetikleme</p>
+          <p className="text-[11px] text-slate-400">
+            Sinyal geldiğinde aynı anda <span className="text-green-400 font-medium">LONG</span> + <span className="text-red-400 font-medium">SHORT</span> pozisyon açılır.
+            Action değeri (<code className="text-slate-500">buy/sell/open</code>) önemsiz — herhangi bir sinyal yeterli.
+          </p>
+        </div>
+      ) : (
+        <>
       {/* Alarm Tipi Seçimi */}
       <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/50 space-y-3">
         <p className="text-xs font-semibold text-slate-300">Alarm Tipi</p>
@@ -603,6 +623,8 @@ function TradingViewWebhookCard({
             : "Pine Script strateji alarmi. {{strategy.order.action}} otomatik olarak buy/sell degerini alir."}
         </p>
       </div>
+        </>
+      )}
 
       {/* JSON Şablonu */}
       <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/50 space-y-2">
@@ -624,7 +646,11 @@ function TradingViewWebhookCard({
           </button>
         </div>
         <pre className="text-[11px] font-mono text-emerald-300 leading-relaxed bg-black/40 rounded-lg px-3 py-2.5 overflow-x-auto">{activeTemplate}</pre>
-        {alarmType === "indicator" ? (
+        {isHedge ? (
+          <p className="text-[10px] text-slate-500">
+            Bu mesajı TradingView alarm mesajı alanına yapıştır. <span className="text-amber-400">action</span> değeri fark etmez — sinyal geldiğinde LONG + SHORT aynı anda açılır. <span className="text-sky-400">{"{{interval}}"}</span> → grafik periyodunu otomatik doldurur.
+          </p>
+        ) : alarmType === "indicator" ? (
           <p className="text-[10px] text-slate-500">
             Bu mesaji TradingView alarm mesaji alanina yapistir. <span className="text-amber-400">action</span>: {actionForIndicator === "buy" ? "AL — Long" : "SAT — Short"} &nbsp;|&nbsp; <span className="text-sky-400">{"{{interval}}"}</span> → TradingView alarmın tetiklendigi grafigin periyodunu otomatik doldurur (örn: 5m grafik → "5").
           </p>
@@ -1812,6 +1838,7 @@ export default function BotsPage() {
                       signalTimeframe={form.strategy_params.signal_timeframe as string || "5m"}
                       onSignalTimeframe={v => setParam("signal_timeframe", v)}
                       isEditing={!!editingBot}
+                      isHedge={form.strategy === "hedge_bot" || form.strategy === "dual_hedge"}
                     />
                   )}
 
