@@ -1868,11 +1868,31 @@ class BotEngine:
 
             new_levels = compute_hedge_levels(current_price, p)
 
-            # İşlem miktarı hesapla — Risk & Para sayfasından gelen değerler öncelikli
+            # ── İşlem miktarı hesapla ──────────────────────────────────────
+            # 1) Borsadan GERÇEK bakiyeyi çek (en güvenilir kaynak)
+            # 2) risk_per_trade oranıyla çarp
+            # 3) Güvenlik kapağı uygula
             # NOT: Frontend risk_per_trade'i ORAN olarak kaydeder (ör: %5 → 0.05)
+            try:
+                live_bal = await self.exchange.get_balance()
+                live_free = float(live_bal.get("free", 0) or 0)
+                live_total = float(live_bal.get("total", 0) or 0)
+                print(f"[HedgeBot {bot_name}] Borsa bakiyesi: free={live_free:.2f}$, total={live_total:.2f}$")
+            except Exception as e:
+                print(f"[HedgeBot {bot_name}] Bakiye çekilemedi ({e}), config değeri kullanılacak")
+                live_free = 0
+                live_total = 0
+
             risk_per_trade = float(self.config.get("risk_per_trade", 0))
             initial_balance = float(self.config.get("initial_balance", 0))
-            base_balance = initial_balance if initial_balance > 0 else self.risk.current_balance
+
+            # Baz bakiye: borsadaki gerçek serbest bakiye > config başlangıç > risk manager
+            if live_free > 0:
+                base_balance = live_free
+            elif initial_balance > 0:
+                base_balance = initial_balance
+            else:
+                base_balance = self.risk.current_balance
 
             if risk_per_trade > 0:
                 # risk_per_trade DB'de oran: 0.05 = %5
@@ -1881,17 +1901,18 @@ class BotEngine:
                 # Geriye dönük uyumluluk: eski botlarda position_size params varsa
                 total_usdt = p.position_size_usdt
             elif p.position_size_mode == "percentage" and p.position_size_pct <= 100:
-                total_usdt = self.risk.current_balance * (p.position_size_pct / 100)
+                total_usdt = base_balance * (p.position_size_pct / 100)
             else:
-                total_usdt = self.risk.current_balance
+                total_usdt = base_balance
 
-            # Güvenlik: bakiyenin %50'sinden fazlasını tek işlemde kullanma
-            max_allowed = self.risk.current_balance * 0.5
+            # Güvenlik: serbest bakiyenin %50'sinden fazlasını tek işlemde kullanma
+            safety_balance = live_free if live_free > 0 else base_balance
+            max_allowed = safety_balance * 0.5
             if total_usdt > max_allowed and max_allowed > 0:
-                print(f"[HedgeBot {bot_name}] ⚠️ GÜVENLİK: {total_usdt:.2f}$ > bakiyenin %50'si ({max_allowed:.2f}$), sınırlandırıldı!")
+                print(f"[HedgeBot {bot_name}] ⚠️ GÜVENLİK: {total_usdt:.2f}$ > serbest bakiyenin %50'si ({max_allowed:.2f}$), sınırlandırıldı!")
                 total_usdt = max_allowed
 
-            print(f"[HedgeBot {bot_name}] İşlem miktarı: {total_usdt:.2f}$ (risk_per_trade={risk_per_trade}, base_balance={base_balance:.2f})")
+            print(f"[HedgeBot {bot_name}] İşlem miktarı: {total_usdt:.2f}$ (risk={risk_per_trade}, base={base_balance:.2f}, borsa_free={live_free:.2f})")
 
             # MEXC kontrat hesabı: notional / (price * contractSize)
             contract_size = 0.001  # ETH default
