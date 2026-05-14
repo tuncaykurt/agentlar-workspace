@@ -22,7 +22,7 @@ SUPPORTED_EXCHANGES = {
     "mexc": {
         "class": ccxt.mexc,
         "options": {"defaultType": "swap"},
-        "balance_params": {},
+        "balance_params": {"type": "swap"},
         "needs_passphrase": False,
         "label": "MEXC",
     },
