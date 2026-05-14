@@ -25,15 +25,17 @@ class HedgeBotState:
 class HedgeBotParams:
     """Hedge bot parametrelerini merkezi olarak ayrıştırır."""
 
-    def __init__(self, params: dict):
+    def __init__(self, params: dict, bot_config: dict = None):
         # ── Tetikleyici ─────────────────────────────────────────────────────
         self.trigger_mode    = params.get("trigger_mode", "on_start")
         # on_signal: TV webhook / custom sinyal gelince
         # on_start:  bot başlayınca hemen aç
-        # scheduled: belirli intervalda aç
 
         # ── Kaldıraç & Büyüklük ─────────────────────────────────────────────
-        self.leverage           = int(params.get("leverage", 20))
+        # Kaldıraç ve miktar artık Risk & Para sayfasından geliyor (bot_config)
+        # Geriye dönük uyumluluk: eski botlar hala params'tan okuyabilir
+        cfg = bot_config or {}
+        self.leverage           = int(cfg.get("leverage") or params.get("leverage", 20))
         self.position_size_mode = params.get("position_size_mode", "percentage")
         self.position_size_pct  = float(params.get("position_size_pct", 100))
         self.position_size_usdt = float(params.get("position_size_usdt", 100))

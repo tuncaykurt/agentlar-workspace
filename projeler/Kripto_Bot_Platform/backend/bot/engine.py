@@ -1774,7 +1774,7 @@ class BotEngine:
         bot_name = self.config["name"]
         paper    = self.config.get("paper_mode", True)
 
-        p = HedgeBotParams(self.config.get("params", {}))
+        p = HedgeBotParams(self.config.get("params", {}), bot_config=self.config)
 
         # Redis state
         state_key = f"bot:{bot_id}:hedge_state"
@@ -1866,13 +1866,14 @@ class BotEngine:
 
             new_levels = compute_hedge_levels(current_price, p)
 
-            # İşlem miktarı hesapla (mode'a göre)
-            if p.position_size_mode == "fixed_usdt":
+            # İşlem miktarı hesapla — Risk & Para sayfasındaki bakiye kullanılır
+            # Geriye dönük uyumluluk: eski botlarda position_size_mode varsa onu kullan
+            if p.position_size_mode == "fixed_usdt" and p.position_size_usdt > 0:
                 total_usdt = p.position_size_usdt
             elif p.position_size_mode == "percentage" and p.position_size_pct < 100:
                 total_usdt = self.risk.current_balance * (p.position_size_pct / 100)
             else:
-                total_usdt = self.risk.current_balance  # %100 = tüm bakiye
+                total_usdt = self.risk.current_balance  # tüm bakiye
 
             # MEXC kontrat hesabı: notional / (price * contractSize)
             contract_size = 0.001  # ETH default

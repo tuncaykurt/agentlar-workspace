@@ -171,15 +171,6 @@ const STRATEGIES: Strategy[] = [
           { value: "on_signal", label: "Sinyal gelince aç (TV Webhook)" },
         ],
       },
-      { key: "leverage",       label: "Kaldıraç (x)",           type: "number",  min: 1,   max: 500, step: 1,   default: 20,   description: "İşlem kaldıracı — yüksek kaldıraç TP/SL mesafesini küçültür" },
-      { key: "position_size_mode", label: "İşlem Miktarı Modu", type: "select", default: "percentage", description: "Bakiyenin ne kadarıyla işlem açılsın",
-        options: [
-          { value: "percentage", label: "Bakiyenin %'si" },
-          { value: "fixed_usdt", label: "Sabit USDT miktarı" },
-        ],
-      },
-      { key: "position_size_pct",  label: "Bakiye Yüzdesi %",    type: "number",  min: 1,   max: 100, step: 1,   default: 100,  description: "Bakiyenin yüzde kaçıyla işlem aç (100 = tamamı)" },
-      { key: "position_size_usdt", label: "Sabit Miktar (USDT)", type: "number",  min: 1,   max: 100000, step: 1, default: 100,  description: "Her döngüde kullanılacak sabit USDT miktarı" },
       { key: "long_size_ratio", label: "Long Büyüklük Oranı",   type: "number",  min: 0.1, max: 0.9, step: 0.05, default: 0.5, description: "0.5 = eşit büyüklük, 0.6 = long daha büyük" },
       { key: "long_tp_pct",    label: "Long TP %",               type: "number",  min: 0.1, max: 100, step: 0.5, default: 30,   description: "Long pozisyonu kapat (giriş fiyatından % yükseliş)" },
       { key: "long_sl_pct",    label: "Long SL %",               type: "number",  min: 0.1, max: 100, step: 0.5, default: 20,   description: "Long stop-loss (giriş fiyatından % düşüş)" },
@@ -1973,36 +1964,39 @@ export default function BotsPage() {
                     </div>
                   </Field>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <Field label="Pozisyon Yönü" description="Botun hangi yönde işlem yapacağı">
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { v:"both",  label:"Her İkisi", icon:"↕" },
-                          { v:"long",  label:"Sadece Long",  icon:"↑" },
-                          { v:"short", label:"Sadece Short", icon:"↓" },
-                        ].map(o => (
-                          <button key={o.v}
-                            onClick={() => set("strategy_params" as any, { ...form.strategy_params, direction: o.v })}
-                            className={`py-2 rounded-lg border text-xs font-medium transition-all ${
-                              (form.strategy_params.direction ?? "both") === o.v
-                                ? "border-blue-500/60 bg-blue-500/10 text-blue-300"
-                                : "border-slate-800 text-slate-500 hover:border-slate-600"
-                            }`}>
-                            <div className="text-base">{o.icon}</div>
-                            {o.label}
-                          </button>
-                        ))}
-                      </div>
-                    </Field>
+                  {/* Hedge bot zaten çift yönlü — yön ve maks pozisyon gereksiz */}
+                  {form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <Field label="Pozisyon Yönü" description="Botun hangi yönde işlem yapacağı">
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { v:"both",  label:"Her İkisi", icon:"↕" },
+                            { v:"long",  label:"Sadece Long",  icon:"↑" },
+                            { v:"short", label:"Sadece Short", icon:"↓" },
+                          ].map(o => (
+                            <button key={o.v}
+                              onClick={() => set("strategy_params" as any, { ...form.strategy_params, direction: o.v })}
+                              className={`py-2 rounded-lg border text-xs font-medium transition-all ${
+                                (form.strategy_params.direction ?? "both") === o.v
+                                  ? "border-blue-500/60 bg-blue-500/10 text-blue-300"
+                                  : "border-slate-800 text-slate-500 hover:border-slate-600"
+                              }`}>
+                              <div className="text-base">{o.icon}</div>
+                              {o.label}
+                            </button>
+                          ))}
+                        </div>
+                      </Field>
 
-                    <Field label="Maks. Eş Zamanlı Pozisyon">
-                      <NumInput
-                        value={form.max_positions}
-                        onChange={v => set("max_positions", Math.max(1, Math.min(10, v)))}
-                        min={1} max={10} suffix="adet"
-                      />
-                    </Field>
-                  </div>
+                      <Field label="Maks. Eş Zamanlı Pozisyon">
+                        <NumInput
+                          value={form.max_positions}
+                          onChange={v => set("max_positions", Math.max(1, Math.min(10, v)))}
+                          min={1} max={10} suffix="adet"
+                        />
+                      </Field>
+                    </div>
+                  )}
 
                   {/* Paper Trading */}
                   <div className={`p-4 rounded-xl border transition-all ${
