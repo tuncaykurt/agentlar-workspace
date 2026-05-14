@@ -53,6 +53,9 @@ class BotEngine:
         self._trailing: dict = {}
         self._hedge_state: dict = {} # {symbol: {long: {is_partial_closed}, short: {is_partial_closed}}}
         self._last_status_update = 0
+        # Borsa bakiyesi cache (60 sn aralıkla güncellenir)
+        self._live_balance: dict = {}      # {"free": 0, "total": 0, "used": 0}
+        self._balance_updated_at: float = 0  # timestamp
 
         self.risk = RiskManager(
             balance=bot_config.get("initial_balance", 1000),
@@ -60,6 +63,29 @@ class BotEngine:
             max_daily_loss=bot_config.get("max_daily_loss", 0.05),
             leverage=bot_config.get("leverage", 3),
         )
+
+    async def _refresh_balance(self, force: bool = False):
+        """Borsa bakiyesini 60 sn cache ile çek. force=True → anında çek."""
+        import time as _time
+        now = _time.time()
+        if not force and (now - self._balance_updated_at) < 60:
+            return self._live_balance  # cache hâlâ taze
+
+        try:
+            bal = await self.exchange.get_balance()
+            self._live_balance = {
+                "free":  float(bal.get("free", 0) or 0),
+                "total": float(bal.get("total", 0) or 0),
+                "used":  float(bal.get("used", 0) or 0),
+            }
+            self._balance_updated_at = now
+            # Risk manager bakiyesini de güncelle
+            if self._live_balance["free"] > 0:
+                self.risk.current_balance = self._live_balance["free"]
+        except Exception as e:
+            print(f"[Bot {self.config.get('name', '?')}] Bakiye çekilemedi: {e}")
+
+        return self._live_balance
 
     async def run(self):
         self.running = True
@@ -1774,6 +1800,9 @@ class BotEngine:
         bot_name = self.config["name"]
         paper    = self.config.get("paper_mode", True)
 
+        # Her döngüde bakiyeyi güncelle (60 sn cache)
+        await self._refresh_balance()
+
         p = HedgeBotParams(self.config.get("params", {}), bot_config=self.config)
 
         # Redis state
@@ -1869,20 +1898,12 @@ class BotEngine:
             new_levels = compute_hedge_levels(current_price, p)
 
             # ── İşlem miktarı hesapla ──────────────────────────────────────
-            # 1) Borsadan GERÇEK bakiyeyi çek (en güvenilir kaynak)
-            # 2) risk_per_trade oranıyla çarp
-            # 3) Güvenlik kapağı uygula
-            # NOT: Frontend risk_per_trade'i ORAN olarak kaydeder (ör: %5 → 0.05)
-            try:
-                live_bal = await self.exchange.get_balance()
-                live_free = float(live_bal.get("free", 0) or 0)
-                live_total = float(live_bal.get("total", 0) or 0)
-                print(f"[HedgeBot {bot_name}] Borsa bakiyesi: free={live_free:.2f}$, total={live_total:.2f}$")
-            except Exception as e:
-                print(f"[HedgeBot {bot_name}] Bakiye çekilemedi ({e}), config değeri kullanılacak")
-                live_free = 0
-                live_total = 0
+            # Bakiye: döngü başında _refresh_balance() ile güncellendi (60 sn cache)
+            # İşlem açmadan hemen önce taze bakiye çek (force)
+            await self._refresh_balance(force=True)
+            live_free = self._live_balance.get("free", 0)
 
+            # NOT: Frontend risk_per_trade'i ORAN olarak kaydeder (ör: %5 → 0.05)
             risk_per_trade = float(self.config.get("risk_per_trade", 0))
             initial_balance = float(self.config.get("initial_balance", 0))
 
@@ -1898,7 +1919,6 @@ class BotEngine:
                 # risk_per_trade DB'de oran: 0.05 = %5
                 total_usdt = base_balance * risk_per_trade
             elif p.position_size_mode == "fixed_usdt" and p.position_size_usdt > 0:
-                # Geriye dönük uyumluluk: eski botlarda position_size params varsa
                 total_usdt = p.position_size_usdt
             elif p.position_size_mode == "percentage" and p.position_size_pct <= 100:
                 total_usdt = base_balance * (p.position_size_pct / 100)
@@ -1909,7 +1929,7 @@ class BotEngine:
             safety_balance = live_free if live_free > 0 else base_balance
             max_allowed = safety_balance * 0.5
             if total_usdt > max_allowed and max_allowed > 0:
-                print(f"[HedgeBot {bot_name}] ⚠️ GÜVENLİK: {total_usdt:.2f}$ > serbest bakiyenin %50'si ({max_allowed:.2f}$), sınırlandırıldı!")
+                print(f"[HedgeBot {bot_name}] ⚠️ GÜVENLİK: {total_usdt:.2f}$ > bakiyenin %50'si ({max_allowed:.2f}$), sınırlandırıldı!")
                 total_usdt = max_allowed
 
             print(f"[HedgeBot {bot_name}] İşlem miktarı: {total_usdt:.2f}$ (risk={risk_per_trade}, base={base_balance:.2f}, borsa_free={live_free:.2f})")
@@ -2356,6 +2376,8 @@ class BotEngine:
             "short_position":   short_pos,
             "net_pnl_usdt":     round(net_pnl_usdt, 4),
             "net_pnl_pct":      round(net_pnl_pct, 2),
+            # Borsa bakiyesi (60 sn cache)
+            "exchange_balance":  self._live_balance,
         }
         await redis.set(f"bot:{self.config['id']}:status", json.dumps(status_data))
 
