@@ -72,9 +72,37 @@ class HedgeBotParams:
         self.funding_pause_threshold = float(params.get("funding_pause_threshold", 0.1))
         # Saatlik funding rate % bu değeri geçerse pozisyon açma
 
+        # ── İşlem Saatleri ───────────────────────────────────────────────────
+        self.trading_hours_enabled  = bool(params.get("trading_hours_enabled", False))
+        self.trading_start_hour     = int(params.get("trading_start_hour", 20))
+        self.trading_end_hour       = int(params.get("trading_end_hour", 8))
+        # UTC saat — sadece yeni pozisyon açmayı etkiler, açık pozisyonlar etkilenmez
+
         # ── Genel Güvenlik ───────────────────────────────────────────────────
         self.max_loss_pct           = float(params.get("max_loss_pct", 10.0))
         # Toplam sermayenin bu % kadarı kaybedilirse tüm döngü dursun
+
+
+def is_within_trading_hours(params: HedgeBotParams) -> bool:
+    """
+    UTC saatine göre işlem saati kontrolü.
+    Gece seansı destekler: start=20, end=8 → 20:00-08:00 arası True.
+    """
+    if not params.trading_hours_enabled:
+        return True  # Filtre kapalı, her zaman aç
+
+    from datetime import datetime, timezone
+    now_hour = datetime.now(timezone.utc).hour
+
+    start = params.trading_start_hour
+    end = params.trading_end_hour
+
+    if start <= end:
+        # Normal aralık: 08-20 gibi
+        return start <= now_hour < end
+    else:
+        # Gece seansı: 20-08 gibi (gece yarısını geçiyor)
+        return now_hour >= start or now_hour < end
 
 
 def compute_hedge_levels(entry_price: float, params: HedgeBotParams) -> dict:

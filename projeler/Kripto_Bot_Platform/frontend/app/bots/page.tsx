@@ -201,6 +201,9 @@ const STRATEGIES: Strategy[] = [
       { key: "funding_pause_enabled", label: "Funding Koruması",  type: "boolean", default: false,              description: "Yüksek funding rate'de pozisyon açma" },
       { key: "funding_pause_threshold", label: "Funding Eşiği %", type: "number", min: 0.01, max: 1, step: 0.01, default: 0.1, description: "Saatlik funding rate bu değeri geçerse dur" },
       { key: "max_loss_pct",     label: "Maksimum Kayıp %",       type: "number", min: 0, max: 100, step: 1, default: 10, description: "Toplam sermayenin bu %'i kaybedilirse döngü dursun" },
+      { key: "trading_hours_enabled", label: "İşlem Saati Filtresi", type: "boolean", default: false, description: "Sadece belirli saatlerde yeni pozisyon aç (açık pozisyonlar etkilenmez)" },
+      { key: "trading_start_hour",   label: "Başlangıç Saati (UTC)", type: "number", min: 0, max: 23, step: 1, default: 20, description: "Bu saatten itibaren işleme gir (UTC — Türkiye = UTC+3)" },
+      { key: "trading_end_hour",     label: "Bitiş Saati (UTC)",     type: "number", min: 0, max: 23, step: 1, default: 8,  description: "Bu saate kadar işleme gir (UTC — gece seansı: 20-08)" },
     ],
   },
   {
@@ -1550,6 +1553,53 @@ export default function BotsPage() {
                         {selectedStrategy.icon} {selectedStrategy.name} — Strateji Parametreleri
                       </span>
 
+                      {/* ── Hedge Bot Tetikleyici Seçici — üstte belirgin ── */}
+                      {(form.strategy === "hedge_bot" || form.strategy === "dual_hedge") && (
+                        <div className="space-y-3">
+                          <p className="text-xs text-slate-400 font-medium">İşleme Giriş Yöntemi</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setParam("trigger_mode", "on_start")}
+                              className={`text-left p-3 rounded-xl border transition-all ${
+                                (!form.strategy_params.trigger_mode || form.strategy_params.trigger_mode === "on_start")
+                                  ? "border-blue-500/60 bg-blue-500/10 ring-1 ring-blue-500/30"
+                                  : "border-slate-800 hover:border-slate-600 bg-slate-900/40"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">🚀</span>
+                                <div>
+                                  <p className={`text-sm font-semibold ${(!form.strategy_params.trigger_mode || form.strategy_params.trigger_mode === "on_start") ? "text-blue-300" : "text-slate-300"}`}>
+                                    Bot Başlayınca Aç
+                                  </p>
+                                  <p className="text-[10px] text-slate-500">Hemen pozisyon açar, sinyal beklemez</p>
+                                </div>
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setParam("trigger_mode", "on_signal")}
+                              className={`text-left p-3 rounded-xl border transition-all ${
+                                form.strategy_params.trigger_mode === "on_signal"
+                                  ? "border-emerald-500/60 bg-emerald-500/10 ring-1 ring-emerald-500/30"
+                                  : "border-slate-800 hover:border-slate-600 bg-slate-900/40"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">📡</span>
+                                <div>
+                                  <p className={`text-sm font-semibold ${form.strategy_params.trigger_mode === "on_signal" ? "text-emerald-300" : "text-slate-300"}`}>
+                                    TradingView Sinyali ile Aç
+                                  </p>
+                                  <p className="text-[10px] text-slate-500">Webhook gelince pozisyon açar</p>
+                                </div>
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* ── Sinyal Kaynağı Seçici — Grid Bot, TradingView Webhook ve Hedge Bot için gösterilmez ── */}
                       {form.strategy !== "grid_bot" && form.strategy !== "tradingview_webhook" && form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && <div className="space-y-3">
                         <p className="text-xs text-slate-400 font-medium">Sinyal Kaynağı Seç</p>
@@ -1718,7 +1768,9 @@ export default function BotsPage() {
                           {/* Sinyal mantığı açıklama kartı */}
                           <StrategySignalCard strategyId={form.strategy} getParam={getParam} />
                           <div className={`grid gap-4 ${form.strategy === "grid_bot" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
-                            {selectedStrategy.params.map(param => (
+                            {selectedStrategy.params
+                              .filter(param => !((form.strategy === "hedge_bot" || form.strategy === "dual_hedge") && param.key === "trigger_mode"))
+                              .map(param => (
                               <Field key={param.key} label={param.label} description={param.description}>
                                 {param.type === "number" && (
                                   <NumInput

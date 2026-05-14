@@ -1766,6 +1766,7 @@ class BotEngine:
         from bot.strategies.hedge_bot import (
             HedgeBotParams, HedgeBotState,
             compute_hedge_levels, check_price_levels, check_losing_side_exit,
+            is_within_trading_hours,
         )
         from datetime import datetime as _dt, timedelta as _td
 
@@ -1826,6 +1827,14 @@ class BotEngine:
                         return
                 except Exception:
                     pass
+
+            # İşlem saati kontrolü (sadece yeni pozisyon açmayı etkiler)
+            if not is_within_trading_hours(p):
+                from datetime import datetime, timezone
+                now_h = datetime.now(timezone.utc).hour
+                print(f"[HedgeBot {bot_name}] İşlem saati dışında (UTC {now_h}:00, izin: {p.trading_start_hour}-{p.trading_end_hour}) — bekleniyor")
+                await self._write_hedge_status(redis, symbol, state, current_price, sd)
+                return
 
             # Tetikleyici
             should_open = False
