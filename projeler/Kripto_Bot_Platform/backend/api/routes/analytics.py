@@ -743,12 +743,11 @@ async def reset_ai_prompt(
 async def bulk_reanalyze_signals(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """
     Analiz edilmemiş (action='received') tüm sinyalleri toplu analiz eder.
-    Her sinyal için run_passive_analysis arka planda çalıştırılır.
+    Sıralı çalışır — rate limit ve kaynak tükenmeyi önler.
     """
     import asyncio
     from services.signal_analyzer import run_passive_analysis
 
-    # action='received' olup hiç analyze edilmemiş sinyalleri bul
     result = await db.execute(
         select(SignalLog)
         .where(SignalLog.action == "received")
@@ -759,9 +758,9 @@ async def bulk_reanalyze_signals(db: AsyncSession = Depends(get_db)) -> Dict[str
     if not unanalyzed:
         return {"queued": 0, "message": "Analiz edilecek sinyal bulunamadı."}
 
-    queued = 0
+    # Sinyal bilgilerini topla (DB session kapanmadan önce)
+    signals_to_process = []
     for sig in unanalyzed:
-        # TP/SL yüzde hesapla (fiyat varsa)
         tp_pct = 0.0
         sl_pct = 0.0
         if sig.price and sig.price > 0:
@@ -769,32 +768,62 @@ async def bulk_reanalyze_signals(db: AsyncSession = Depends(get_db)) -> Dict[str
                 tp_pct = abs(sig.tp_price - sig.price) / sig.price * 100
             if sig.sl_price and sig.sl_price > 0:
                 sl_pct = abs(sig.sl_price - sig.price) / sig.price * 100
-
-        # Varsayılan TP/SL yoksa standart değer
         if tp_pct == 0:
             tp_pct = 2.0
         if sl_pct == 0:
             sl_pct = 1.0
 
-        exchange = "mexc"  # Varsayılan borsa
-        tf = sig.timeframe or "1h"
+        signals_to_process.append({
+            "log_id": sig.id,
+            "bot_id": sig.bot_id or 0,
+            "symbol": sig.symbol,
+            "signal_type": sig.signal_type or "buy",
+            "price": sig.price or 0,
+            "timeframe": sig.timeframe or "1h",
+            "tp_pct": tp_pct,
+            "sl_pct": sl_pct,
+        })
 
-        asyncio.create_task(run_passive_analysis(
-            log_id=sig.id,
-            bot_id=sig.bot_id or 0,
-            bot_exchange=exchange,
-            symbol=sig.symbol,
-            signal_type=sig.signal_type or "buy",
-            price=sig.price or 0,
-            timeframe=tf,
-            tp_pct=tp_pct,
-            sl_pct=sl_pct,
-        ))
-        queued += 1
+    total = len(signals_to_process)
+
+    # Arka planda SIRALI çalıştır — her sinyal bittikten sonra bir sonraki başlar
+    async def _process_sequentially():
+        ok = 0
+        fail = 0
+        for i, s in enumerate(signals_to_process):
+            try:
+                print(f"[BulkAnalyze] {i+1}/{total} — #{s['log_id']} {s['symbol']} {s['signal_type']}...")
+                await asyncio.wait_for(
+                    run_passive_analysis(
+                        log_id=s["log_id"],
+                        bot_id=s["bot_id"],
+                        bot_exchange="mexc",
+                        symbol=s["symbol"],
+                        signal_type=s["signal_type"],
+                        price=s["price"],
+                        timeframe=s["timeframe"],
+                        tp_pct=s["tp_pct"],
+                        sl_pct=s["sl_pct"],
+                    ),
+                    timeout=60,
+                )
+                ok += 1
+            except asyncio.TimeoutError:
+                fail += 1
+                print(f"[BulkAnalyze] #{s['log_id']} TIMEOUT (60s)")
+            except Exception as e:
+                fail += 1
+                print(f"[BulkAnalyze] #{s['log_id']} HATA: {e}")
+            # Rate limit koruması — her sinyal arası 2sn bekle
+            if i < total - 1:
+                await asyncio.sleep(2)
+        print(f"[BulkAnalyze] ✓ Tamamlandı: {ok} başarılı, {fail} hatalı / {total} toplam")
+
+    asyncio.create_task(_process_sequentially())
 
     return {
-        "queued": queued,
-        "message": f"{queued} sinyal analiz kuyruğuna alındı. Arka planda işleniyor.",
+        "queued": total,
+        "message": f"{total} sinyal sıralı analiz başlatıldı. Her sinyal ~30sn sürer, toplam ~{total * 30 // 60} dk.",
     }
 
 
