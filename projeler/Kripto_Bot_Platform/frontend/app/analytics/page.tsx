@@ -1423,31 +1423,33 @@ export default function AnalyticsPage() {
                     {/* Satır 3: Filtre Ozet Badges */}
                     {item.filter_analysis && (() => {
                       const lines = (item.filter_analysis as string).split(" | ")
-                      const badges: {icon: string; name: string; pass: boolean | null; detail?: string}[] = []
+                      const badges: {icon: string; name: string; pass: boolean | null; off?: boolean; detail?: string}[] = []
+
+                      const parseBadge = (lc: string, line: string, icon: string, name: string) => {
+                        const isOff = lc.includes("kapalı")
+                        // "kapalı, ✓ geçerdi" veya "kapalı, ✗ kalırdı" — simülasyon sonucunu oku
+                        const wouldPass = lc.includes("geçerdi") || lc.includes("geçti")
+                        const wouldBlock = lc.includes("kalırdı") || lc.includes("engel")
+                        const pass = wouldPass ? true : wouldBlock ? false : lc.includes("✓")
+                        badges.push({ icon, name, pass: isOff && !wouldPass && !wouldBlock ? null : pass, off: isOff })
+                      }
+
                       for (const line of lines) {
                         const lc = line.toLowerCase()
-                        // Standart filtreler: "📰 Haber[✓ serbest]", "📈 Trend[✗ ENGEL]", "🕐 Saat[— kapalı]"
                         if (lc.includes("haber[") && !lc.includes("ai haber")) {
-                          badges.push({ icon: "📰", name: "Haber", pass: lc.includes("✓"), detail: lc.includes("kapalı") ? undefined : line.split("]")[0].split("[")[1] })
-                          if (lc.includes("kapalı")) badges[badges.length - 1].pass = null
+                          parseBadge(lc, line, "📰", "Haber")
                         } else if (lc.includes("saat[")) {
-                          badges.push({ icon: "🕐", name: "Saat", pass: lc.includes("✓"), detail: lc.includes("kapalı") ? undefined : line.split("]")[0].split("[")[1] })
-                          if (lc.includes("kapalı")) badges[badges.length - 1].pass = null
+                          parseBadge(lc, line, "🕐", "Saat")
                         } else if (lc.includes("volatilite[")) {
-                          badges.push({ icon: "⚡", name: "Vol", pass: lc.includes("✓"), detail: lc.includes("kapalı") ? undefined : line.split("]")[0].split("[")[1] })
-                          if (lc.includes("kapalı")) badges[badges.length - 1].pass = null
+                          parseBadge(lc, line, "⚡", "Vol")
                         } else if (lc.includes("trend[") && !lc.includes("ai trend")) {
-                          badges.push({ icon: "📈", name: "Trend", pass: lc.includes("✓"), detail: lc.includes("kapalı") ? undefined : line.split("]")[0].split("[")[1] })
-                          if (lc.includes("kapalı")) badges[badges.length - 1].pass = null
+                          parseBadge(lc, line, "📈", "Trend")
                         } else if (lc.includes("ai haber[")) {
-                          const isBlock = lc.includes("engel")
-                          badges.push({ icon: "🤖📰", name: "AI Haber", pass: !isBlock })
-                        } else if (lc.includes("ai öz-öğrenme[") || lc.includes("ai öz-ögrenme[")) {
-                          const isBlock = lc.includes("engel")
-                          badges.push({ icon: "🤖🧠", name: "AI Ogrenme", pass: !isBlock })
+                          badges.push({ icon: "🤖📰", name: "AI Haber", pass: !lc.includes("engel") })
+                        } else if (lc.includes("ai öz-öğrenme[") || lc.includes("ai öz-ögrenme[") || lc.includes("öz-öğrenme[")) {
+                          badges.push({ icon: "🤖🧠", name: "AI Ogrenme", pass: !lc.includes("engel") })
                         } else if (lc.includes("ai trend[")) {
-                          const isBlock = lc.includes("engel")
-                          badges.push({ icon: "🤖📈", name: "AI Trend", pass: !isBlock })
+                          badges.push({ icon: "🤖📈", name: "AI Trend", pass: !lc.includes("engel") })
                         }
                       }
                       if (badges.length === 0) return null
@@ -1458,8 +1460,9 @@ export default function AnalyticsPage() {
                               b.pass === null ? "bg-slate-700/30 text-slate-500 border-slate-700/40" :
                               b.pass ? "bg-green-500/10 text-green-400 border-green-500/30" :
                               "bg-red-500/10 text-red-400 border-red-500/30"
-                            }`} title={b.detail}>
+                            }`}>
                               {b.icon} {b.name} {b.pass === null ? "—" : b.pass ? "✓" : "✗"}
+                              {b.off && <span className="text-[8px] opacity-50 ml-0.5">(off)</span>}
                             </span>
                           ))}
                         </div>
