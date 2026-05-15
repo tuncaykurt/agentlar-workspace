@@ -585,13 +585,9 @@ class BotEngine:
                 if not notional and entry > 0:
                     notional = vol * entry * contract_size
 
-                # ── PnL: MEXC API değerleri + funding fee ──────────────────
-                # MEXC unrealisedPnl string veya sayı dönebilir
+                # ── PnL: MEXC API değeri veya manuel hesap ──────────────────
                 _raw_pnl = pos.get("unrealisedPnl") or pos.get("unrealizedPnl") or 0
                 unrealized_pnl = float(_raw_pnl)
-
-                # holdFee: pozisyon açıkken biriken funding fee (genelde negatif)
-                hold_fee = float(pos.get("holdFee", 0) or 0)
 
                 # API'den gelen PnL 0 ise ve fiyat bilgisi varsa kendimiz hesapla
                 if unrealized_pnl == 0 and current_price > 0 and entry > 0:
@@ -601,21 +597,18 @@ class BotEngine:
                     else:
                         unrealized_pnl = position_value * (entry - current_price)
 
-                # Toplam PnL = unrealized + funding fee (MEXC böyle gösterir)
-                total_pnl = unrealized_pnl + hold_fee
-
                 # Debug: MEXC pozisyon verilerini logla
                 print(f"[MEXC Pos] {side} vol={vol} entry={entry} cur={current_price} "
-                      f"rawPnl={_raw_pnl} holdFee={hold_fee} totalPnl={total_pnl:.4f} "
+                      f"rawPnl={_raw_pnl} calcPnl={unrealized_pnl:.4f} "
                       f"oim={pos.get('oim')} im={pos.get('im')} notional={notional}")
 
                 # PnL%: initial margin (oim veya im) üzerinden hesapla — MEXC ile aynı
                 initial_margin = float(pos.get("oim", 0) or pos.get("im", 0) or 0)
                 if initial_margin > 0:
-                    pnl_pct = (total_pnl / initial_margin) * 100
+                    pnl_pct = (unrealized_pnl / initial_margin) * 100
                 elif notional > 0 and leverage > 0:
                     margin = notional / leverage
-                    pnl_pct = (total_pnl / margin * 100) if margin else 0
+                    pnl_pct = (unrealized_pnl / margin * 100) if margin else 0
                 else:
                     pnl_pct = 0
 
@@ -624,7 +617,7 @@ class BotEngine:
                     "size": vol,
                     "entry_price": entry,
                     "notional": round(notional, 2),
-                    "pnl_usdt": round(total_pnl, 4),
+                    "pnl_usdt": round(unrealized_pnl, 4),
                     "pnl_pct": round(pnl_pct, 2),
                     "leverage": leverage,
                     "tp": float(pos.get("takeProfitPrice", 0) or 0),
