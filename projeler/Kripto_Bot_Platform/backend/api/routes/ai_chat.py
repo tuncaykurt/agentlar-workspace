@@ -64,7 +64,10 @@ async def chat(req: ChatRequest):
         raise HTTPException(status_code=400, detail="OpenRouter API key tanımlı değil")
 
     # Proje context'ini topla
-    context = await _build_project_context()
+    try:
+        context = await _build_project_context()
+    except Exception as e:
+        context = f"(Proje verileri yüklenemedi: {str(e)[:200]})"
 
     # System message — AI'ya tüm bilgileri ver
     system_msg = f"""Sen KriptoBot Trading Platform'un yapay zeka asistanısın.
@@ -265,8 +268,9 @@ async def _build_project_context() -> str:
                 outcome_str = f"Sonuç: {s.outcome}" if hasattr(s, 'outcome') and s.outcome else ""
                 tp_str = f"TP: ${s.tp_price:.2f}" if hasattr(s, 'tp_price') and s.tp_price else ""
                 sl_str = f"SL: ${s.sl_price:.2f}" if hasattr(s, 'sl_price') and s.sl_price else ""
+                price_str = f"${s.price:.2f}" if s.price else "$0.00"
                 sig_detail_lines.append(
-                    f"  {s.symbol} {s.signal_type} @ ${s.price:.2f if s.price else 0} | "
+                    f"  {s.symbol} {s.signal_type} @ {price_str} | "
                     f"Durum: {s.action} | {tp_str} {sl_str} {outcome_str} | "
                     f"Kaynak: {s.source or '?'}"
                 )
