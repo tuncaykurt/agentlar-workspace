@@ -137,6 +137,103 @@ async def run_passive_analysis(
             else:
                 filter_lines.append("📈 Trend[— kapalı]")
 
+        # ── AI Analizleri (tüm sinyaller için çalışır) ──────────────────────
+        try:
+            from ai.smart_filter import (
+                ai_news_analysis, ai_self_learning_analysis,
+                ai_trend_volatility_analysis,
+            )
+
+            ai_tasks = []
+
+            # AI Haber Analizi
+            try:
+                from services.economic_calendar import get_upcoming_events
+                upcoming = await get_upcoming_events(hours=24)
+            except Exception:
+                upcoming = []
+            ai_tasks.append(("news", ai_news_analysis(symbol, signal_type, upcoming)))
+
+            # AI Öz-Öğrenme Analizi
+            past_signals = []
+            try:
+                from sqlalchemy import select as _asel
+                async with async_session() as _asess:
+                    _aq = await _asess.execute(
+                        _asel(SignalLog).where(
+                            SignalLog.bot_id == bot_id,
+                            SignalLog.action.in_(["executed", "analyzed"]),
+                        ).order_by(SignalLog.created_at.desc()).limit(100)
+                    )
+                    _arows = _aq.scalars().all()
+                    past_signals = [{
+                        "action": r.action, "signal_type": r.signal_type,
+                        "price": r.price, "tp_price": r.tp_price, "sl_price": r.sl_price,
+                        "outcome": r.outcome, "rsi_14": r.rsi_14,
+                        "volatility_atr": r.volatility_atr, "ema200_dist": r.ema200_dist,
+                        "created_at": r.created_at.isoformat() if r.created_at else "",
+                        "max_price_in_range": r.max_price_in_range,
+                        "min_price_in_range": r.min_price_in_range,
+                    } for r in _arows]
+            except Exception:
+                pass
+
+            import datetime as _dt
+            cur_h = _dt.datetime.utcnow().hour
+            ai_tasks.append(("learning", ai_self_learning_analysis(
+                symbol, signal_type, price,
+                rsi_14, volatility_atr, ema200_dist,
+                past_signals, cur_h)))
+
+            # AI Trend + Volatilite Analizi
+            ai_tasks.append(("trend", ai_trend_volatility_analysis(
+                symbol, signal_type, price,
+                rsi_14, volatility_atr,
+                None,  # ema200_val — hesaplanmadıysa None
+                ema200_dist,
+                ohlcv[-20:] if len(ohlcv) >= 20 else None)))
+
+            # Paralel çalıştır
+            raw_results = await asyncio.gather(*[t[1] for t in ai_tasks], return_exceptions=True)
+            ai_results = {}
+            for i, (name, _) in enumerate(ai_tasks):
+                if isinstance(raw_results[i], Exception):
+                    ai_results[name] = {"error": str(raw_results[i])[:100]}
+                else:
+                    ai_results[name] = raw_results[i]
+
+            # AI sonuçlarını analiz satırlarına ekle
+            def _trunc(s, n=350):
+                return s[:n].rstrip(".,;: ") + "…" if len(s) > n else s
+
+            news_ai = ai_results.get("news", {})
+            if news_ai.get("reason"):
+                risk = news_ai.get("risk_level", "?")
+                icon = "🔴" if risk == "critical" else "🟡" if risk == "high" else "🟢"
+                block_txt = "ENGEL" if news_ai.get("should_block") else "geçti"
+                filter_lines.append(f"🤖 AI Haber[{icon} {block_txt}]: {_trunc(news_ai['reason'])}")
+                if news_ai.get("news_summary"):
+                    filter_lines.append(f"   📡 {_trunc(news_ai['news_summary'], 250)}")
+
+            learn_ai = ai_results.get("learning", {})
+            if learn_ai.get("reason"):
+                block_txt = "ENGEL" if learn_ai.get("should_block") else "geçti"
+                filter_lines.append(f"🤖 AI Öz-Öğrenme[{block_txt}]: {_trunc(learn_ai['reason'], 400)}")
+                if learn_ai.get("suggestion"):
+                    filter_lines.append(f"   💡 {_trunc(learn_ai['suggestion'], 250)}")
+
+            trend_ai = ai_results.get("trend", {})
+            if trend_ai.get("reason"):
+                block_txt = "ENGEL" if trend_ai.get("should_block") else "geçti"
+                td = trend_ai.get("trend_direction", "?")
+                ts = trend_ai.get("trend_strength", "?")
+                vl = trend_ai.get("volatility_level", "?")
+                filter_lines.append(f"🤖 AI Trend[{block_txt}]: {td}/{ts} vol={vl} — {_trunc(trend_ai['reason'])}")
+
+        except Exception as ai_err:
+            filter_lines.append(f"🤖 AI Analiz hatası: {str(ai_err)[:100]}")
+            print(f"[SignalAnalyzer] AI analiz hatası: {ai_err}")
+
         full_analysis = " | ".join(analysis_lines + filter_lines)
 
         # TP/SL hesapla

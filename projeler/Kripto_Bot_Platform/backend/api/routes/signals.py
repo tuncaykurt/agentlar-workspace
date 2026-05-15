@@ -441,19 +441,20 @@ async def tradingview_webhook(token: str, request: Request):
                     session.add(log)
                     await session.flush()   # log.id'yi al
 
-                    if not is_running:
-                        # Pasif bot: arka planda tam analiz yap
-                        passive_tasks.append((
-                            log.id, bot.id,
-                            bot.exchange or "mexc",
-                            symbol_ccxt or symbol_raw,
-                            sig_type, price,
-                            effective_tf or "1h",
-                            tp_pct, sl_pct,
-                        ))
-                        print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' pasif — analiz kuyruğa alındı")
+                    # Tüm sinyaller için arka planda analiz yap
+                    # (aktif bot: engine ayrıca kendi logunu oluşturur, bu kayıt "analyzed" olarak güncellenir)
+                    passive_tasks.append((
+                        log.id, bot.id,
+                        bot.exchange or "mexc",
+                        symbol_ccxt or symbol_raw,
+                        sig_type, price,
+                        effective_tf or "1h",
+                        tp_pct, sl_pct,
+                    ))
+                    if is_running:
+                        print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' aktif — engine işleyecek + arka plan analiz TP={tp_price} SL={sl_price}")
                     else:
-                        print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' aktif — engine işleyecek TP={tp_price} SL={sl_price}")
+                        print(f"[TV Webhook] Bot #{bot.id} '{bot.name}' pasif — analiz kuyruğa alındı")
                         
                         # Freqtrade forwarding
                         if bot.strategy == "freqtrade":
