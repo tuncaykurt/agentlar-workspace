@@ -17,10 +17,11 @@ const COLOR_MAP: Record<string, string> = {
 }
 
 const TABS = [
-  { key: "blocked",  label: "Reddedildi",   color: "text-red-400   border-red-500/60   bg-red-500/10"  },
-  { key: "executed", label: "Onaylandı",    color: "text-green-400 border-green-500/60 bg-green-500/10"},
-  { key: "analyzed", label: "Pasif Analiz", color: "text-sky-400   border-sky-500/60   bg-sky-500/10"  },
-  { key: "all",      label: "Tümü",         color: "text-slate-300 border-slate-600    bg-slate-800"   },
+  { key: "all",      label: "Tümü",           color: "text-slate-300 border-slate-600    bg-slate-800"   },
+  { key: "analyzed", label: "Analiz Edildi",   color: "text-sky-400   border-sky-500/60   bg-sky-500/10"  },
+  { key: "received", label: "Bekleyen",        color: "text-amber-400 border-amber-500/60 bg-amber-500/10"},
+  { key: "executed", label: "İşleme Alındı",   color: "text-green-400 border-green-500/60 bg-green-500/10"},
+  { key: "blocked",  label: "Reddedildi",      color: "text-red-400   border-red-500/60   bg-red-500/10"  },
 ] as const
 
 type TabKey = typeof TABS[number]["key"]
@@ -778,13 +779,13 @@ function AiPromptEditor() {
 }
 
 export default function AnalyticsPage() {
-  const [activeTab,   setActiveTab]   = useState<TabKey>("all")
+  const [activeTab, setActiveTab] = useState<TabKey>("all")
   const [page,        setPage]        = useState(0)
   const [selectedBot, setSelectedBot] = useState<number | null>(null)
   const [togglingFilter, setTogglingFilter] = useState<string | null>(null)
   const [bulkAnalyzing, setBulkAnalyzing] = useState(false)
   const [bulkResult, setBulkResult] = useState<string | null>(null)
-  const PAGE_SIZE = 20
+  const PAGE_SIZE = 50
 
   const { data, error, isLoading } = useSWR('/analytics/dashboard', fetcher, { refreshInterval: 15000 })
 
@@ -794,9 +795,9 @@ export default function AnalyticsPage() {
     { refreshInterval: 20000 }
   )
 
-  // Sinyal araligi analizi icin tum sinyaller (analyzed + executed)
+  // Sinyal araligi analizi icin tum sinyaller (received dahil)
   const { data: allSignalsData, isLoading: allSignalsLoading } = useSWR(
-    '/analytics/filtered-signals?action=all&limit=50',
+    '/analytics/filtered-signals?action=all&limit=100',
     fetcher,
     { refreshInterval: 30000 }
   )
@@ -854,6 +855,8 @@ export default function AnalyticsPage() {
 
   // ── Sinyal akış istatistikleri ──────────────────────────────────────────
   const totalSignals   = Object.values(rawStats as Record<string, number>).reduce((a, b) => a + b, 0)
+  const receivedCount  = rawStats.received || 0
+  const analyzedCount  = rawStats.analyzed || 0
   const blockedCount   = (rawStats.filtered || 0) + (rawStats.rejected || 0)
   const executedCount  = rawStats.executed || 0
 
@@ -926,7 +929,12 @@ export default function AnalyticsPage() {
             {totalSignals > 0 ? totalSignals : <span className="text-slate-600">—</span>}
           </div>
           {totalSignals > 0 ? (
-            <div className="text-xs text-slate-500 mt-1">{blockedCount} reddedildi · {executedCount} onaylandi</div>
+            <div className="text-xs text-slate-500 mt-1">
+              {analyzedCount > 0 && <span>{analyzedCount} analiz </span>}
+              {receivedCount > 0 && <span className="text-amber-400">· {receivedCount} bekliyor </span>}
+              {executedCount > 0 && <span>· {executedCount} islem </span>}
+              {blockedCount > 0 && <span>· {blockedCount} red</span>}
+            </div>
           ) : (
             <div className="text-xs text-slate-600 mt-1">Webhook sinyali bekleniyor</div>
           )}
@@ -987,32 +995,52 @@ export default function AnalyticsPage() {
                   {
                     label: "Gelen Toplam Sinyal",
                     val: totalSignals,
-                    desc: "TradingView'den al\u0131nan ham sinyaller",
+                    desc: "TradingView'den alinan tum sinyaller",
                     bg: "bg-gradient-to-r from-blue-600/40 to-blue-400/20",
                     border: "border-blue-500/50",
                     text: "text-blue-200",
-                    icon: "\uD83D\uDCE5",
+                    icon: "📥",
                     width: 100
                   },
-                  blockedCount > 0 && {
-                    label: "Reddedilen (Ak\u0131ll\u0131 Koruma)",
-                    val: blockedCount,
-                    desc: "Filtreler taraf\u0131ndan engellendi",
-                    bg: "bg-gradient-to-r from-red-600/40 to-red-400/20",
-                    border: "border-red-500/50",
-                    text: "text-red-200",
-                    icon: "\uD83D\uDEE1\uFE0F",
-                    width: (blockedCount / totalSignals) * 100
+                  analyzedCount > 0 && {
+                    label: "Analiz Edildi",
+                    val: analyzedCount,
+                    desc: "RSI/ATR/EMA200 + AI filtre analizi tamamlandi",
+                    bg: "bg-gradient-to-r from-sky-600/40 to-sky-400/20",
+                    border: "border-sky-500/50",
+                    text: "text-sky-200",
+                    icon: "📊",
+                    width: (analyzedCount / totalSignals) * 100
+                  },
+                  receivedCount > 0 && {
+                    label: "Analiz Bekliyor",
+                    val: receivedCount,
+                    desc: "Henuz analiz edilmemis — Toplu Analiz ile isleyin",
+                    bg: "bg-gradient-to-r from-amber-600/40 to-amber-400/20",
+                    border: "border-amber-500/50",
+                    text: "text-amber-200",
+                    icon: "⏳",
+                    width: (receivedCount / totalSignals) * 100
                   },
                   executedCount > 0 && {
-                    label: "Onaylanan (\u0130\u015Fleme Al\u0131nd\u0131)",
+                    label: "Isleme Alindi",
                     val: executedCount,
-                    desc: "Piyasada aktif pozisyona d\u00F6n\u00FC\u015Ft\u00FC",
+                    desc: "Piyasada aktif pozisyona donustu",
                     bg: "bg-gradient-to-r from-green-600/40 to-green-400/20",
                     border: "border-green-500/50",
                     text: "text-green-200",
-                    icon: "\u2705",
+                    icon: "✅",
                     width: (executedCount / totalSignals) * 100
+                  },
+                  blockedCount > 0 && {
+                    label: "Reddedilen (Akilli Koruma)",
+                    val: blockedCount,
+                    desc: "Filtreler tarafindan engellendi",
+                    bg: "bg-gradient-to-r from-red-600/40 to-red-400/20",
+                    border: "border-red-500/50",
+                    text: "text-red-200",
+                    icon: "🛡️",
+                    width: (blockedCount / totalSignals) * 100
                   },
                 ].filter(Boolean).map((row: any, idx: number) => (
                   <div key={row.label} className="relative group">
@@ -1326,11 +1354,13 @@ export default function AnalyticsPage() {
 
                 // Durum badge
                 const statusBadge = item.action === "executed"
-                  ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-green-500/10 text-green-300 border-green-500/30">✅ Onaylandı</span>
+                  ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-green-500/10 text-green-300 border-green-500/30">✅ İşleme Alındı</span>
                   : item.action === "filtered"
                   ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-red-500/10 text-red-300 border-red-500/30">❌ Filtrelendi</span>
                   : item.action === "analyzed"
-                  ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-blue-500/10 text-blue-300 border-blue-500/30">📊 Pasif Analiz</span>
+                  ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-blue-500/10 text-blue-300 border-blue-500/30">📊 Analiz Edildi</span>
+                  : item.action === "received"
+                  ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-amber-500/10 text-amber-300 border-amber-500/30 animate-pulse">⏳ Analiz Bekliyor</span>
                   : item.action === "error"
                   ? <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-orange-500/10 text-orange-300 border-orange-500/30">⚠️ Hata</span>
                   : <span className="px-2 py-0.5 rounded-md text-[11px] font-medium border bg-red-500/10 text-red-300 border-red-500/30">❌ Reddedildi</span>

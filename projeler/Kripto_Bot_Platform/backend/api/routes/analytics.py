@@ -68,12 +68,10 @@ async def get_dashboard_analytics(bot_id: int = None, db: AsyncSession = Depends
             "pnl": round(data["pnl_pct"], 2)
         })
 
-    # ── 3. Sinyal akışı istatistikleri ───────────────────────────────────────
+    # ── 3. Sinyal akışı istatistikleri (TÜM action'lar — received dahil) ────
     signals_query = select(
         SignalLog.action,
         func.count(SignalLog.id).label('count')
-    ).where(
-        SignalLog.action.in_(["executed", "filtered", "rejected", "analyzed", "error"])
     ).group_by(SignalLog.action)
     if bot_id:
         signals_query = signals_query.where(SignalLog.bot_id == bot_id)
@@ -117,8 +115,10 @@ async def get_filtered_signals(
             return q.where(SignalLog.action == "executed")
         elif act == "analyzed":
             return q.where(SignalLog.action == "analyzed")
-        else:  # all = tüm sinyal kayıtları (received dahil)
-            return q.where(SignalLog.action.in_(["filtered", "rejected", "executed", "analyzed"]))
+        elif act == "received":
+            return q.where(SignalLog.action == "received")
+        else:  # all = TÜM sinyal kayıtları (received dahil — hiçbir sinyal kaybolmasın)
+            return q
 
     count_q = select(func.count(SignalLog.id))
     count_q = action_filter(count_q, action)
@@ -135,16 +135,17 @@ async def get_filtered_signals(
     rows_raw = result.scalars().all()
 
     # ── Mükerrer sinyal giderme ──────────────────────────────────────────────
-    # Aynı webhook birden fazla bota sinyal oluşturabilir. Aynı (symbol, signal_type, price)
-    # kombinasyonunu 60 saniye içinde tekrar eden kayıtları filtrele (en iyi analiz edileni tut).
+    # Aynı webhook birden fazla bota sinyal oluşturabilir.
+    # Aynı (symbol, signal_type, price, dakika) + FARKLI bot_id olanlardan en iyi analiz edileni tut.
+    # Ama farklı dakika/fiyattaki sinyaller FARKLI sinyaldir — onlara dokunma.
     seen: dict[str, "SignalLog"] = {}
     rows: list = []
     for r in rows_raw:
         ts = r.created_at.strftime("%Y%m%d%H%M") if r.created_at else ""
         key = f"{r.symbol}|{r.signal_type}|{r.price}|{ts}"
         if key in seen:
-            # Daha iyi analiz edilmiş olanı tercih et
             existing = seen[key]
+            # Farklı bot_id — mükerrer, en iyi analiz edileni tut
             if (r.action == "analyzed" and existing.action != "analyzed") or \
                (r.rsi_14 is not None and existing.rsi_14 is None):
                 seen[key] = r
