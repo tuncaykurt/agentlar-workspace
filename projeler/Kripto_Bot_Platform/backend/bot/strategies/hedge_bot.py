@@ -119,41 +119,25 @@ def is_within_trading_hours(params: HedgeBotParams) -> bool:
         return now_hour >= start or now_hour < end
 
 
-def compute_hedge_levels(entry_price: float, params: HedgeBotParams, price_precision: int = 2) -> dict:
+def compute_hedge_levels(entry_price: float, params: HedgeBotParams) -> dict:
     """
-    Giriş fiyatından TP/SL seviyelerini HASSAS hesapla.
+    Giriş fiyatından TP/SL seviyelerini hesapla.
     Tüm % değerleri FİYAT hareketi % (kaldıraçsız).
-
-    price_precision: Borsanın kabul ettiği ondalık basamak (MEXC=2).
-    Hesaplama yüksek hassasiyetle yapılır, son adımda borsaya uygun yuvarlanır.
-    TP her zaman kâr yönünde, SL her zaman zarar yönünde yuvarlanır (lehte yuvarlama).
+    Yuvarlama YOK — hesaplanan değer neyse o gönderilir.
     """
-    import math
     p = entry_price
-
-    # Long TP: yukarı → aşağı yuvarla (daha erken tetiklenir = güvenli)
-    # Long SL: aşağı → yukarı yuvarla (daha erken tetiklenir = güvenli)
-    # Short TP: aşağı → yukarı yuvarla (daha erken tetiklenir = güvenli)
-    # Short SL: yukarı → aşağı yuvarla (daha erken tetiklenir = güvenli)
-    factor = 10 ** price_precision
-
-    long_tp_raw  = p * (1 + params.long_tp_pct  / 100)
-    long_sl_raw  = p * (1 - params.long_sl_pct  / 100)
-    short_tp_raw = p * (1 - params.short_tp_pct / 100)
-    short_sl_raw = p * (1 + params.short_sl_pct / 100)
-
     return {
         "long": {
-            "entry":  round(p, price_precision),
-            "tp":     math.floor(long_tp_raw * factor) / factor,   # aşağı yuvarla
-            "sl":     math.ceil(long_sl_raw * factor) / factor,    # yukarı yuvarla
+            "entry":  p,
+            "tp":     p * (1 + params.long_tp_pct  / 100),
+            "sl":     p * (1 - params.long_sl_pct  / 100),
             "tp_pct": params.long_tp_pct,
             "sl_pct": params.long_sl_pct,
         },
         "short": {
-            "entry":  round(p, price_precision),
-            "tp":     math.ceil(short_tp_raw * factor) / factor,   # yukarı yuvarla
-            "sl":     math.floor(short_sl_raw * factor) / factor,  # aşağı yuvarla
+            "entry":  p,
+            "tp":     p * (1 - params.short_tp_pct / 100),
+            "sl":     p * (1 + params.short_sl_pct / 100),
             "tp_pct": params.short_tp_pct,
             "sl_pct": params.short_sl_pct,
         },
