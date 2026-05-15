@@ -1800,8 +1800,11 @@ class BotEngine:
         bot_name = self.config["name"]
         paper    = self.config.get("paper_mode", True)
 
-        # Her döngüde bakiyeyi güncelle (60 sn cache)
-        await self._refresh_balance()
+        # Bakiye güncelleme (60 sn cache) — hata olursa devam et
+        try:
+            await asyncio.wait_for(self._refresh_balance(), timeout=10)
+        except Exception:
+            pass
 
         p = HedgeBotParams(self.config.get("params", {}), bot_config=self.config)
 
