@@ -14,7 +14,10 @@ RUN pip install --no-cache-dir fastapi==0.111.0 uvicorn[standard]==0.29.0
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN echo "cache-bust-v12"
+RUN echo "cache-bust-v13"
 COPY . .
+
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8000/api/health || exit 1
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
