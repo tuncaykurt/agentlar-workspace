@@ -782,6 +782,8 @@ export default function AnalyticsPage() {
   const [page,        setPage]        = useState(0)
   const [selectedBot, setSelectedBot] = useState<number | null>(null)
   const [togglingFilter, setTogglingFilter] = useState<string | null>(null)
+  const [bulkAnalyzing, setBulkAnalyzing] = useState(false)
+  const [bulkResult, setBulkResult] = useState<string | null>(null)
   const PAGE_SIZE = 20
 
   const { data, error, isLoading } = useSWR('/analytics/dashboard', fetcher, { refreshInterval: 15000 })
@@ -1261,8 +1263,8 @@ export default function AnalyticsPage() {
             </span>
           </h2>
 
-          {/* Tab filtreleri */}
-          <div className="flex gap-2 text-sm">
+          {/* Tab filtreleri + Toplu Analiz */}
+          <div className="flex gap-2 text-sm items-center">
             {TABS.map(tab => (
               <button
                 key={tab.key}
@@ -1274,6 +1276,27 @@ export default function AnalyticsPage() {
                 {tab.label}
               </button>
             ))}
+            <button
+              onClick={async () => {
+                setBulkAnalyzing(true)
+                setBulkResult(null)
+                try {
+                  const res = await api.post('/analytics/bulk-reanalyze', {})
+                  setBulkResult(`${res.queued} sinyal analiz kuyruğuna alındı`)
+                } catch (e: any) {
+                  setBulkResult("Hata: " + (e?.message || "bilinmeyen"))
+                } finally {
+                  setBulkAnalyzing(false)
+                }
+              }}
+              disabled={bulkAnalyzing}
+              className="px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 font-medium transition-all disabled:opacity-50"
+            >
+              {bulkAnalyzing ? "Analiz ediliyor..." : "Toplu Analiz"}
+            </button>
+            {bulkResult && (
+              <span className="text-xs text-amber-400">{bulkResult}</span>
+            )}
           </div>
         </div>
 
@@ -1367,7 +1390,53 @@ export default function AnalyticsPage() {
                       )}
                     </div>
 
-                    {/* Satır 3: Neden badge + Filtre Analizi */}
+                    {/* Satır 3: Filtre Ozet Badges */}
+                    {item.filter_analysis && (() => {
+                      const lines = (item.filter_analysis as string).split(" | ")
+                      const badges: {icon: string; name: string; pass: boolean | null; detail?: string}[] = []
+                      for (const line of lines) {
+                        const lc = line.toLowerCase()
+                        // Standart filtreler: "📰 Haber[✓ serbest]", "📈 Trend[✗ ENGEL]", "🕐 Saat[— kapalı]"
+                        if (lc.includes("haber[") && !lc.includes("ai haber")) {
+                          badges.push({ icon: "📰", name: "Haber", pass: lc.includes("✓"), detail: lc.includes("kapalı") ? undefined : line.split("]")[0].split("[")[1] })
+                          if (lc.includes("kapalı")) badges[badges.length - 1].pass = null
+                        } else if (lc.includes("saat[")) {
+                          badges.push({ icon: "🕐", name: "Saat", pass: lc.includes("✓"), detail: lc.includes("kapalı") ? undefined : line.split("]")[0].split("[")[1] })
+                          if (lc.includes("kapalı")) badges[badges.length - 1].pass = null
+                        } else if (lc.includes("volatilite[")) {
+                          badges.push({ icon: "⚡", name: "Vol", pass: lc.includes("✓"), detail: lc.includes("kapalı") ? undefined : line.split("]")[0].split("[")[1] })
+                          if (lc.includes("kapalı")) badges[badges.length - 1].pass = null
+                        } else if (lc.includes("trend[") && !lc.includes("ai trend")) {
+                          badges.push({ icon: "📈", name: "Trend", pass: lc.includes("✓"), detail: lc.includes("kapalı") ? undefined : line.split("]")[0].split("[")[1] })
+                          if (lc.includes("kapalı")) badges[badges.length - 1].pass = null
+                        } else if (lc.includes("ai haber[")) {
+                          const isBlock = lc.includes("engel")
+                          badges.push({ icon: "🤖📰", name: "AI Haber", pass: !isBlock })
+                        } else if (lc.includes("ai öz-öğrenme[") || lc.includes("ai öz-ögrenme[")) {
+                          const isBlock = lc.includes("engel")
+                          badges.push({ icon: "🤖🧠", name: "AI Ogrenme", pass: !isBlock })
+                        } else if (lc.includes("ai trend[")) {
+                          const isBlock = lc.includes("engel")
+                          badges.push({ icon: "🤖📈", name: "AI Trend", pass: !isBlock })
+                        }
+                      }
+                      if (badges.length === 0) return null
+                      return (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {badges.map((b, i) => (
+                            <span key={i} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                              b.pass === null ? "bg-slate-700/30 text-slate-500 border-slate-700/40" :
+                              b.pass ? "bg-green-500/10 text-green-400 border-green-500/30" :
+                              "bg-red-500/10 text-red-400 border-red-500/30"
+                            }`} title={b.detail}>
+                              {b.icon} {b.name} {b.pass === null ? "—" : b.pass ? "✓" : "✗"}
+                            </span>
+                          ))}
+                        </div>
+                      )
+                    })()}
+
+                    {/* Satır 4: Neden badge + Filtre Detay */}
                     {(item.reason_labels?.length > 0 || item.filter_analysis || item.reason_description || item.reject_reason) && (
                       <div className="pt-2 border-t border-slate-800/60">
                         {item.reason_labels?.length > 0 && (

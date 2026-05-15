@@ -132,7 +132,26 @@ async def get_filtered_signals(
         q = q.where(SignalLog.bot_id == bot_id)
 
     result = await db.execute(q)
-    rows = result.scalars().all()
+    rows_raw = result.scalars().all()
+
+    # ── Mükerrer sinyal giderme ──────────────────────────────────────────────
+    # Aynı webhook birden fazla bota sinyal oluşturabilir. Aynı (symbol, signal_type, price)
+    # kombinasyonunu 60 saniye içinde tekrar eden kayıtları filtrele (en iyi analiz edileni tut).
+    seen: dict[str, "SignalLog"] = {}
+    rows: list = []
+    for r in rows_raw:
+        ts = r.created_at.strftime("%Y%m%d%H%M") if r.created_at else ""
+        key = f"{r.symbol}|{r.signal_type}|{r.price}|{ts}"
+        if key in seen:
+            # Daha iyi analiz edilmiş olanı tercih et
+            existing = seen[key]
+            if (r.action == "analyzed" and existing.action != "analyzed") or \
+               (r.rsi_14 is not None and existing.rsi_14 is None):
+                seen[key] = r
+                rows = [r if x is existing else x for x in rows]
+            continue
+        seen[key] = r
+        rows.append(r)
 
     def build_reason_text(log: SignalLog) -> tuple[list, str]:
         """
@@ -269,7 +288,8 @@ async def get_filtered_signals(
         })
 
     return {
-        "total": total_count,
+        "total": len(items),  # Mükerrer giderilmiş gerçek sayı
+        "total_raw": total_count,
         "limit": limit,
         "offset": offset,
         "items": items,
@@ -717,6 +737,65 @@ async def reset_ai_prompt(
         await db.commit()
 
     return {"ok": True, "key": key, "message": "Prompt varsayılana sıfırlandı."}
+
+
+@router.post("/analytics/bulk-reanalyze")
+async def bulk_reanalyze_signals(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Analiz edilmemiş (action='received') tüm sinyalleri toplu analiz eder.
+    Her sinyal için run_passive_analysis arka planda çalıştırılır.
+    """
+    import asyncio
+    from services.signal_analyzer import run_passive_analysis
+
+    # action='received' olup hiç analyze edilmemiş sinyalleri bul
+    result = await db.execute(
+        select(SignalLog)
+        .where(SignalLog.action == "received")
+        .order_by(SignalLog.created_at.asc())
+    )
+    unanalyzed = result.scalars().all()
+
+    if not unanalyzed:
+        return {"queued": 0, "message": "Analiz edilecek sinyal bulunamadı."}
+
+    queued = 0
+    for sig in unanalyzed:
+        # TP/SL yüzde hesapla (fiyat varsa)
+        tp_pct = 0.0
+        sl_pct = 0.0
+        if sig.price and sig.price > 0:
+            if sig.tp_price and sig.tp_price > 0:
+                tp_pct = abs(sig.tp_price - sig.price) / sig.price * 100
+            if sig.sl_price and sig.sl_price > 0:
+                sl_pct = abs(sig.sl_price - sig.price) / sig.price * 100
+
+        # Varsayılan TP/SL yoksa standart değer
+        if tp_pct == 0:
+            tp_pct = 2.0
+        if sl_pct == 0:
+            sl_pct = 1.0
+
+        exchange = "mexc"  # Varsayılan borsa
+        tf = sig.timeframe or "1h"
+
+        asyncio.create_task(run_passive_analysis(
+            log_id=sig.id,
+            bot_id=sig.bot_id or 0,
+            bot_exchange=exchange,
+            symbol=sig.symbol,
+            signal_type=sig.signal_type or "buy",
+            price=sig.price or 0,
+            timeframe=tf,
+            tp_pct=tp_pct,
+            sl_pct=sl_pct,
+        ))
+        queued += 1
+
+    return {
+        "queued": queued,
+        "message": f"{queued} sinyal analiz kuyruğuna alındı. Arka planda işleniyor.",
+    }
 
 
 @router.delete("/analytics/clear-signals")
