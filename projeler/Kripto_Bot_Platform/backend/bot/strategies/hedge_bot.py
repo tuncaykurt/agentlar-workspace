@@ -128,16 +128,16 @@ def compute_hedge_levels(entry_price: float, params: HedgeBotParams) -> dict:
     p = entry_price
     return {
         "long": {
-            "entry":  round(p, 2),
-            "tp":     round(p * (1 + params.long_tp_pct  / 100), 2),
-            "sl":     round(p * (1 - params.long_sl_pct  / 100), 2),
+            "entry":  round(p, 4),
+            "tp":     round(p * (1 + params.long_tp_pct  / 100), 4),
+            "sl":     round(p * (1 - params.long_sl_pct  / 100), 4),
             "tp_pct": params.long_tp_pct,
             "sl_pct": params.long_sl_pct,
         },
         "short": {
-            "entry":  round(p, 2),
-            "tp":     round(p * (1 - params.short_tp_pct / 100), 2),
-            "sl":     round(p * (1 + params.short_sl_pct / 100), 2),
+            "entry":  round(p, 4),
+            "tp":     round(p * (1 - params.short_tp_pct / 100), 4),
+            "sl":     round(p * (1 + params.short_sl_pct / 100), 4),
             "tp_pct": params.short_tp_pct,
             "sl_pct": params.short_sl_pct,
         },
