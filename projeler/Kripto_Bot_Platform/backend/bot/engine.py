@@ -2509,8 +2509,18 @@ class BotEngine:
                 else:
                     trade.pnl_pct = round((trade.entry_price - exit_price) / trade.entry_price * 100, 4)
 
-                leverage = trade.leverage_used or 1
-                trade.pnl = round(trade.pnl_pct * leverage * trade.quantity * trade.entry_price / 100, 4)
+                # PnL USDT: pnl_pct * notional / 100
+                # quantity = kontrat sayısı, contract_size ile çarparak gerçek pozisyon bulunur
+                # Basitleştirme: risk_per_trade * balance yaklaşımı
+                # NOT: quantity * contract_size * entry_price = notional (kaldıraçlı)
+                #      Gerçek USDT PnL = notional * pnl_pct / 100
+                try:
+                    _market = self.exchange.exchange.market(self.config["symbol"])
+                    _cs = float(_market.get("contractSize", 0.001) or 0.001)
+                except Exception:
+                    _cs = 0.001
+                notional = trade.quantity * _cs * trade.entry_price
+                trade.pnl = round(notional * trade.pnl_pct / 100, 4)
 
                 # Süre hesapla
                 if trade.opened_at:

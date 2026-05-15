@@ -95,6 +95,9 @@ function PriceRangeBar({ item }: { item: any }) {
 }
 
 function SignalRangeSection({ items, isLoading }: { items: any[], isLoading: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const VISIBLE_COUNT = 4
+
   // Executed ve analyzed sinyallerden range analizi olanları göster
   const rangeItems = items.filter((it: any) =>
     (it.action === "executed" || it.action === "analyzed") && it.max_price_in_range != null
@@ -144,7 +147,7 @@ function SignalRangeSection({ items, isLoading }: { items: any[], isLoading: boo
 
       {/* Sinyal kartları */}
       <div className="space-y-3">
-        {rangeItems.map((item: any) => {
+        {(expanded ? rangeItems : rangeItems.slice(0, VISIBLE_COUNT)).map((item: any) => {
           const isLong = item.signal_type === "buy"
           const outcomeColor =
             item.outcome === "tp_hit"     ? "text-green-400 bg-green-500/10 border-green-500/20" :
@@ -225,6 +228,14 @@ function SignalRangeSection({ items, isLoading }: { items: any[], isLoading: boo
             </div>
           )
         })}
+        {rangeItems.length > VISIBLE_COUNT && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="w-full py-2 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-xl hover:bg-slate-800/50 transition-colors"
+          >
+            {expanded ? `Daralt (${VISIBLE_COUNT} sinyal goster)` : `Tumu goster (${rangeItems.length} sinyal)`}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -781,6 +792,13 @@ export default function AnalyticsPage() {
     { refreshInterval: 20000 }
   )
 
+  // Sinyal araligi analizi icin tum sinyaller (analyzed + executed)
+  const { data: allSignalsData, isLoading: allSignalsLoading } = useSWR(
+    '/analytics/filtered-signals?action=all&limit=50',
+    fetcher,
+    { refreshInterval: 30000 }
+  )
+
   // Bots listesi (filtre toggle için)
   const { data: botsData } = useSWR('/bots', fetcher, { refreshInterval: 60000 })
   const bots: any[] = botsData || []
@@ -821,11 +839,18 @@ export default function AnalyticsPage() {
     )
   }
 
-  const overview  = data?.overview || { total_trades: 0, win_rate: 0, total_pnl: 0, winning_trades: 0, losing_trades: 0 }
+  const overview  = data?.overview || {}
   const sessions  = data?.session_performance || []
   const rawStats  = data?.signal_stats || {}
 
-  // ── Doğru toplam hesabı: tüm action türlerinin toplamı ──────────────────
+  // ── Sinyal tabanlı metrikler (birincil) ─────────────────────────────────
+  const sigResolved  = overview.total_signals_resolved || 0
+  const sigWinRate   = overview.signal_win_rate || 0
+  const sigTpCount   = overview.signal_tp_count || 0
+  const sigSlCount   = overview.signal_sl_count || 0
+  const sigPnlPct    = overview.signal_pnl_pct || 0
+
+  // ── Sinyal akış istatistikleri ──────────────────────────────────────────
   const totalSignals   = Object.values(rawStats as Record<string, number>).reduce((a, b) => a + b, 0)
   const blockedCount   = (rawStats.filtered || 0) + (rawStats.rejected || 0)
   const executedCount  = rawStats.executed || 0
@@ -859,34 +884,39 @@ export default function AnalyticsPage() {
       {/* Overview Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm">
-          <div className="text-slate-400 text-sm font-medium mb-1">Toplam İşlem</div>
+          <div className="text-slate-400 text-sm font-medium mb-1">Sonuclanan Sinyal</div>
           <div className="text-3xl font-bold text-white">
-            {overview.total_trades > 0 ? overview.total_trades : <span className="text-slate-600">—</span>}
+            {sigResolved > 0 ? sigResolved : <span className="text-slate-600">—</span>}
           </div>
-          {overview.total_trades === 0 && <div className="text-xs text-slate-600 mt-1">Henüz işlem yok</div>}
+          {sigResolved > 0 ? (
+            <div className="text-xs text-slate-500 mt-1">{sigTpCount} TP / {sigSlCount} SL</div>
+          ) : (
+            <div className="text-xs text-slate-600 mt-1">TP veya SL ile biten sinyal yok</div>
+          )}
         </div>
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent pointer-events-none"></div>
-          <div className="text-slate-400 text-sm font-medium mb-1">Kazanma Oranı (Win Rate)</div>
-          {overview.total_trades > 0 ? (
+          <div className="text-slate-400 text-sm font-medium mb-1">Kazanma Orani (Win Rate)</div>
+          {sigResolved > 0 ? (
             <>
-              <div className="text-3xl font-bold text-green-400">%{overview.win_rate}</div>
-              <div className="text-xs text-slate-500 mt-1">{overview.winning_trades} Kâr / {overview.losing_trades} Zarar</div>
+              <div className="text-3xl font-bold text-green-400">%{sigWinRate}</div>
+              <div className="text-xs text-slate-500 mt-1">{sigTpCount} TP kazandi / {sigSlCount} SL kaybetti</div>
             </>
           ) : (
             <div className="text-3xl font-bold text-slate-600">—</div>
           )}
         </div>
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm relative overflow-hidden">
-          <div className={`absolute inset-0 bg-gradient-to-br ${overview.total_pnl >= 0 ? 'from-blue-500/10' : 'from-red-500/10'} to-transparent pointer-events-none`}></div>
+          <div className={`absolute inset-0 bg-gradient-to-br ${sigPnlPct >= 0 ? 'from-blue-500/10' : 'from-red-500/10'} to-transparent pointer-events-none`}></div>
           <div className="text-slate-400 text-sm font-medium mb-1">Toplam PnL</div>
-          {overview.total_trades > 0 ? (
-            <div className={`text-3xl font-bold ${overview.total_pnl >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
-              ${overview.total_pnl}
+          {sigResolved > 0 ? (
+            <div className={`text-3xl font-bold ${sigPnlPct >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+              %{sigPnlPct > 0 ? '+' : ''}{sigPnlPct}
             </div>
           ) : (
             <div className="text-3xl font-bold text-slate-600">—</div>
           )}
+          {sigResolved > 0 && <div className="text-xs text-slate-500 mt-1">Sinyal bazli toplam</div>}
         </div>
         <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm">
           <div className="text-slate-400 text-sm font-medium mb-1">Gelen Sinyal</div>
@@ -894,7 +924,7 @@ export default function AnalyticsPage() {
             {totalSignals > 0 ? totalSignals : <span className="text-slate-600">—</span>}
           </div>
           {totalSignals > 0 ? (
-            <div className="text-xs text-slate-500 mt-1">{blockedCount} reddedildi · {executedCount} onaylandı</div>
+            <div className="text-xs text-slate-500 mt-1">{blockedCount} reddedildi · {executedCount} onaylandi</div>
           ) : (
             <div className="text-xs text-slate-600 mt-1">Webhook sinyali bekleniyor</div>
           )}
@@ -919,7 +949,7 @@ export default function AnalyticsPage() {
                   <div className="flex justify-between text-sm mb-2">
                     <span className="font-medium text-slate-300 capitalize">{sess.session || "Belirsiz"} Seansı</span>
                     <span className={sess.pnl >= 0 ? "text-green-400" : "text-red-400"}>
-                      ${sess.pnl} (Win: %{sess.win_rate.toFixed(1)})
+                      %{sess.pnl > 0 ? '+' : ''}{sess.pnl} (Win: %{sess.win_rate.toFixed(1)})
                     </span>
                   </div>
                   <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden flex">
@@ -1183,11 +1213,21 @@ export default function AnalyticsPage() {
                     </>
                   ) : (
                     <div className="text-xs text-slate-600 italic pt-1">
-                      Henüz analiz verisi yok
-                      {f.actual_blocks > 0 && (
-                        <span className="ml-1 not-italic text-slate-500">
-                          · {f.actual_blocks} gerçek engel kaydı
+                      {(f.analyzed_blocks || 0) > 0 ? (
+                        <span className="not-italic text-slate-400">
+                          {f.analyzed_blocks} analizde engel tespit edildi
+                          {f.actual_blocks > 0 && <span className="text-slate-500"> · {f.actual_blocks} gercek engel</span>}
+                          <span className="block text-[10px] text-slate-600 mt-0.5">TP/SL sonucu bekleniyor</span>
                         </span>
+                      ) : (
+                        <>
+                          Henuz analiz verisi yok
+                          {f.actual_blocks > 0 && (
+                            <span className="ml-1 not-italic text-slate-500">
+                              · {f.actual_blocks} gercek engel kaydi
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
@@ -1204,7 +1244,7 @@ export default function AnalyticsPage() {
       {/* ── AI TP/SL Öneri + Sinyal Aralığı Analizi ─────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AiSuggestCard botId={selectedBot} />
-        <SignalRangeSection items={filteredData?.items || []} isLoading={filteredLoading} />
+        <SignalRangeSection items={allSignalsData?.items || []} isLoading={allSignalsLoading} />
       </div>
 
       {/* ── AI Prompt Yönetimi ───────────────────────────────────────────── */}

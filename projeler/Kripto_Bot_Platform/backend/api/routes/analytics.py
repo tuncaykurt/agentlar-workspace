@@ -11,66 +11,89 @@ router = APIRouter(tags=["Analytics"])
 
 @router.get("/analytics/dashboard")
 async def get_dashboard_analytics(bot_id: int = None, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
-    # Base query for trades
-    trades_query = select(Trade).where(Trade.status == TradeStatus.CLOSED)
+    """
+    Ana dashboard metrikleri.
+    Birincil kaynak: SignalLog (sinyal tabanlı, gerçek sonuçlarla).
+    İkincil: Trade tablosu (gerçek borsa işlemleri).
+    """
+
+    # ── 1. Sinyal tabanlı metrikler (SignalLog) ──────────────────────────────
+    # Sonuçlanmış sinyaller (tp_hit veya sl_hit)
+    outcome_q = select(SignalLog).where(
+        SignalLog.outcome.in_(["tp_hit", "sl_hit"]),
+    )
     if bot_id:
-        trades_query = trades_query.where(Trade.bot_id == bot_id)
-        
-    result = await db.execute(trades_query)
-    trades = result.scalars().all()
-    
+        outcome_q = outcome_q.where(SignalLog.bot_id == bot_id)
+    outcome_rows = (await db.execute(outcome_q)).scalars().all()
+
+    sig_tp = [s for s in outcome_rows if s.outcome == "tp_hit"]
+    sig_sl = [s for s in outcome_rows if s.outcome == "sl_hit"]
+    sig_total = len(outcome_rows)
+    sig_win_rate = round(len(sig_tp) / sig_total * 100, 2) if sig_total > 0 else 0
+
+    # Sinyal PnL: outcome_pnl_pct toplamı (yüzde bazlı — gerçek)
+    sig_pnl_pct = sum(s.outcome_pnl_pct or 0 for s in outcome_rows)
+
+    # ── 2. Gerçek borsa işlemleri (Trade tablosu) ────────────────────────────
+    trades_q = select(Trade).where(Trade.status == TradeStatus.CLOSED)
+    if bot_id:
+        trades_q = trades_q.where(Trade.bot_id == bot_id)
+    trades = (await db.execute(trades_q)).scalars().all()
+
     total_trades = len(trades)
-    winning_trades = len([t for t in trades if (t.pnl or 0) > 0])
-    losing_trades = len([t for t in trades if (t.pnl or 0) <= 0])
-    
-    win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
-    total_pnl = sum([t.pnl for t in trades if t.pnl])
-    
+    winning_trades = len([t for t in trades if (t.pnl_pct or 0) > 0])
+    losing_trades = len([t for t in trades if (t.pnl_pct or 0) <= 0 and t.pnl_pct is not None])
+    trade_win_rate = round(winning_trades / total_trades * 100, 2) if total_trades > 0 else 0
+
+    # Trade PnL: pnl_pct toplamı (yüzde bazlı)
+    trade_pnl_pct = sum(t.pnl_pct or 0 for t in trades)
+
     # Session performance
     sessions = {}
     for t in trades:
         sess = t.session_type or "unknown"
         if sess not in sessions:
-            sessions[sess] = {"trades": 0, "wins": 0, "pnl": 0}
+            sessions[sess] = {"trades": 0, "wins": 0, "pnl_pct": 0}
         sessions[sess]["trades"] += 1
-        if (t.pnl or 0) > 0:
+        if (t.pnl_pct or 0) > 0:
             sessions[sess]["wins"] += 1
-        sessions[sess]["pnl"] += (t.pnl or 0)
-        
+        sessions[sess]["pnl_pct"] += (t.pnl_pct or 0)
+
     session_stats = []
     for sess, data in sessions.items():
         session_stats.append({
             "session": sess,
             "trades": data["trades"],
-            "win_rate": (data["wins"] / data["trades"] * 100) if data["trades"] > 0 else 0,
-            "pnl": round(data["pnl"], 2)
+            "win_rate": round(data["wins"] / data["trades"] * 100, 1) if data["trades"] > 0 else 0,
+            "pnl": round(data["pnl_pct"], 2)
         })
-        
-    # Signals outcome (Intelligent filter data)
-    # "received" ara durumdur (her sinyal received + executed/filtered/rejected/analyzed üretir)
-    # Gerçek sinyal sayısı için sadece nihai durumları say
+
+    # ── 3. Sinyal akışı istatistikleri ───────────────────────────────────────
     signals_query = select(
         SignalLog.action,
         func.count(SignalLog.id).label('count')
     ).where(
         SignalLog.action.in_(["executed", "filtered", "rejected", "analyzed", "error"])
     ).group_by(SignalLog.action)
-
     if bot_id:
         signals_query = signals_query.where(SignalLog.bot_id == bot_id)
-
     sig_result = await db.execute(signals_query)
-    signal_counts = sig_result.all()
+    signals_data = {row.action: row.count for row in sig_result.all()}
 
-    signals_data = {row.action: row.count for row in signal_counts}
-    
     return {
         "overview": {
+            # Sinyal bazlı (birincil gösterim)
+            "total_signals_resolved": sig_total,  # TP veya SL ile sonuçlanan
+            "signal_win_rate": sig_win_rate,
+            "signal_tp_count": len(sig_tp),
+            "signal_sl_count": len(sig_sl),
+            "signal_pnl_pct": round(sig_pnl_pct, 2),
+            # İşlem bazlı
             "total_trades": total_trades,
-            "win_rate": round(win_rate, 2),
-            "total_pnl": round(total_pnl, 2),
+            "trade_win_rate": trade_win_rate,
             "winning_trades": winning_trades,
-            "losing_trades": losing_trades
+            "losing_trades": losing_trades,
+            "trade_pnl_pct": round(trade_pnl_pct, 2),
         },
         "session_performance": session_stats,
         "signal_stats": signals_data
@@ -134,7 +157,7 @@ async def get_filtered_signals(
             labels.append({"label": "Haber Koruması", "color": "orange", "icon": "📰"})
             description = "Önemli bir ekonomik haber (FED, CPI, NFP vb.) açıklanmadan önce veya sonra işlem yapılması riskli. Bot, haber koruma süresi boyunca yeni pozisyon açmaz."
 
-        # ── Yasak saat / Akıllı saat filtresi ────────────────────────────────
+        # ── Saat filtresi ────────────────────────────────────────────────
         elif any(k in raw_lower for k in ["blackout_hours", "smart_hours", "blocked_hour", "saat", "hour"]):
             labels.append({"label": "Yasak Saat Dilimi", "color": "purple", "icon": "🕐"})
             description = "Bu sinyal, botun işlem yapmadığı yasak saat dilimine denk geldi. Likiditenin düşük veya stresin yüksek olduğu saatlerde işlem yapılmaz."
@@ -262,9 +285,8 @@ _FILTER_DEFS = [
         "name":            "Trend Filtresi (EMA200)",
         "icon":            "📈",
         "field":           "trend_filter_enabled",
-        # analyzed sinyallerin reason alanında aranan marker
-        "engel_markers":   ["trend[✗", "ema200[✗", "📈 trend[✗"],
-        # filtered sinyallerin reject_reason alanında aranan kelimeler
+        # analyzed sinyallerin reason alanında aranan marker (KÜÇÜK HARF)
+        "engel_markers":   ["trend[✗", "ema200[✗"],
         "reject_keywords": ["trend", "ema200"],
     },
     {
@@ -272,7 +294,7 @@ _FILTER_DEFS = [
         "name":            "Volatilite Filtresi (ATR)",
         "icon":            "⚡",
         "field":           "volatility_filter_enabled",
-        "engel_markers":   ["volatilite[✗", "⚡ volatilite[✗"],
+        "engel_markers":   ["volatilite[✗"],
         "reject_keywords": ["volatilite", "volatility", "atr"],
     },
     {
@@ -280,7 +302,7 @@ _FILTER_DEFS = [
         "name":            "Haber Koruması",
         "icon":            "📰",
         "field":           "news_protection_enabled",
-        "engel_markers":   ["haber[✗", "📰 haber[✗"],
+        "engel_markers":   ["haber[✗", "ai haber["],
         "reject_keywords": ["haber", "news", "blackout", "economic"],
     },
     {
@@ -288,7 +310,7 @@ _FILTER_DEFS = [
         "name":            "Yasak Saat Dilimi",
         "icon":            "🕐",
         "field":           "smart_hours_enabled",
-        "engel_markers":   ["saat[✗", "🕐 saat[✗"],
+        "engel_markers":   ["saat[✗"],
         "reject_keywords": ["saat", "hour", "utc yasaklı", "akıllı saat"],
     },
     {
@@ -296,8 +318,8 @@ _FILTER_DEFS = [
         "name":            "Öz-Öğrenme Filtresi",
         "icon":            "🧠",
         "field":           "self_learning_enabled",
-        "engel_markers":   ["öz-öğrenme[✗", "🧠 öz-öğrenme[✗"],
-        "reject_keywords": ["öz-öğrenme", "win rate", "win_rate", "self_learning", "başarı oranı"],
+        "engel_markers":   ["öz-öğrenme[engel", "öz-öğrenme[✗"],
+        "reject_keywords": ["öz-öğrenme", "win_rate", "self_learning", "başarı"],
     },
 ]
 
@@ -328,7 +350,17 @@ async def get_filter_stats(
         analyzed_q = analyzed_q.where(SignalLog.bot_id == bot_id)
     analyzed = (await db.execute(analyzed_q)).scalars().all()
 
-    # 2. Gerçekte engellenmiş sinyaller (engine'den filtered/rejected)
+    # 2. Outcome bilgisi olmayan ama reason'ı olan analyzed sinyaller de dahil et
+    #    (henüz tp/sl vurmamış ama filtre analizi yapılmış sinyaller)
+    all_analyzed_q = select(SignalLog).where(
+        SignalLog.action == "analyzed",
+        SignalLog.reason.isnot(None),
+    )
+    if bot_id:
+        all_analyzed_q = all_analyzed_q.where(SignalLog.bot_id == bot_id)
+    all_analyzed = (await db.execute(all_analyzed_q)).scalars().all()
+
+    # 3. Gerçekte engellenmiş sinyaller (engine'den filtered/rejected)
     filtered_q = select(SignalLog).where(
         SignalLog.action.in_(["filtered", "rejected"]),
     )
@@ -336,7 +368,7 @@ async def get_filter_stats(
         filtered_q = filtered_q.where(SignalLog.bot_id == bot_id)
     filtered = (await db.execute(filtered_q)).scalars().all()
 
-    # 3. Onaylanıp işleme giren sinyaller (tüm filtreleri geçti)
+    # 4. Onaylanıp işleme giren sinyaller (tüm filtreleri geçti)
     executed_q = select(SignalLog).where(
         SignalLog.action == "executed",
         SignalLog.outcome.in_(["tp_hit", "sl_hit"]),
@@ -362,6 +394,7 @@ async def get_filter_stats(
         passed_tp     = 0   # filtre geçti + tp_hit
         passed_sl     = 0   # filtre geçti + sl_hit
 
+        # Outcome'u olan analyzed sinyaller üzerinden hesapla
         for sig in analyzed:
             reason_lc = (sig.reason or "").lower()
             blocked   = any(m in reason_lc for m in markers)
@@ -375,6 +408,12 @@ async def get_filter_stats(
                     passed_tp += 1
                 else:
                     passed_sl += 1
+
+        # Tüm analyzed sinyallerden (outcome olmadan) filtre engel sayısı
+        analyzed_blocks = sum(
+            1 for s in all_analyzed
+            if any(m in (s.reason or "").lower() for m in markers)
+        )
 
         hyp_total = correct_block + wrong_block
         accuracy  = round(correct_block / hyp_total * 100, 1) if hyp_total > 0 else None
@@ -400,8 +439,9 @@ async def get_filter_stats(
             # Filtre geçen sinyallerin win rate'i
             "passed_total":     passed_total,
             "passed_win_rate":  passed_wr,
-            # Gerçek engine engeli
+            # Gerçek engine engeli + analiz engeli
             "actual_blocks":    actual_blocks,
+            "analyzed_blocks":  analyzed_blocks,
             # Öneri: filtre mi açık kalmalı?
             "recommendation":   (
                 "keep_on"  if accuracy is not None and accuracy >= 60 else
@@ -413,6 +453,7 @@ async def get_filter_stats(
     return {
         "filter_stats":         filter_stats,
         "analyzed_with_outcome": len(analyzed),
+        "total_analyzed":        len(all_analyzed),
         "baseline": {
             "executed_total":   exec_total,
             "executed_win_rate": exec_win_rate,
@@ -434,9 +475,6 @@ async def suggest_tp_sl(
     """
     Geçmiş sinyal aralığı analiz verilerinden (max_favorable_pct, price ranges)
     Kelly Kriteri + Beklenen Değer optimizasyonu ile optimal TP% ve SL% hesaplar.
-
-    Eğer anlık piyasa bağlamı (rsi_14, volatility_atr) verilirse, benzer
-    koşullardaki geçmiş sinyallere ağırlık verir (koşullu öneri).
     """
     # 1. Tamamlanmış aralık analizi olan sinyalleri çek
     q = select(SignalLog).where(
@@ -508,7 +546,6 @@ async def suggest_tp_sl(
     sorted_adv = sorted(signals_data, key=lambda x: x["adv"])
 
     def weighted_percentile(sorted_data: list, key: str, pct: float) -> float:
-        """Ağırlıklı yüzdelik hesapla (0–100 arası pct)."""
         target = total_weight * pct / 100.0
         cumsum = 0.0
         for d in sorted_data:
@@ -524,13 +561,6 @@ async def suggest_tp_sl(
     adv_p50 = weighted_percentile(sorted_adv, "adv", 50)
 
     # 4. Kelly Kriteri / Beklenen Değer optimizasyonu
-    #    TP adayları: 0.3% → 20% (0.1 adım)
-    #    SL adayları: 0.2% → 15% (0.1 adım)
-    #    P(win | tp) = ağırlıklı oran(fav >= tp)
-    #    P(loss | sl) = ağırlıklı oran(adv >= sl VE fav < tp)
-    #    EV = P(win)*tp - P(loss)*sl
-    #    En yüksek EV'i veren (tp, sl) çifti seçilir
-
     best_ev   = -999.0
     best_tp   = round(fav_p50, 1)
     best_sl   = round(adv_p25, 1)
@@ -566,12 +596,10 @@ async def suggest_tp_sl(
 
     rr = round(best_tp / best_sl, 2) if best_sl > 0 else None
 
-    # Koşullu mod: anlık piyasa bağlamı verildi mi?
     method = "statistical"
     if rsi_14 is not None or volatility_atr is not None:
         method = "context_weighted"
 
-    # 6. Açıklama metinleri
     reasoning = [
         f"{n} tamamlanmış sinyal analiz edildi",
         f"Ortalama max kazanç potansiyeli: %{round(fav_p50, 2)}",
@@ -622,7 +650,6 @@ async def get_ai_prompts(db: AsyncSession = Depends(get_db)) -> List[Dict[str, A
         result = await db.execute(select(AiPrompt))
         db_prompts = {p.key: p for p in result.scalars().all()}
     except Exception:
-        # Tablo henüz oluşmamış olabilir — varsayılanları döndür
         pass
 
     prompts = []
@@ -694,10 +721,7 @@ async def reset_ai_prompt(
 
 @router.delete("/analytics/clear-signals")
 async def clear_all_signals(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
-    """
-    Tüm sinyal kayıtlarını siler — temiz başlangıç için admin aracı.
-    Gerçek sinyaller geldikçe yeniden dolar.
-    """
+    """Tüm sinyal kayıtlarını siler — temiz başlangıç için admin aracı."""
     result = await db.execute(select(func.count()).select_from(SignalLog))
     count_before = result.scalar() or 0
 
