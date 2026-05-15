@@ -123,3 +123,63 @@ Source: https://mexcdevelop.github.io/apidocs/contract_v1_en/
 - `stoporder/place` pozisyon bazlı çalışır, positionId gerektirir
 - `stoporder/change_price` sadece AÇIK (unfilled) limit order'lar için çalışır
 - CCXT method: `contractPrivatePostStoporderPlace`
+
+---
+
+## Native Trailing Stop (Güncellendi: 2026-05-15)
+
+MEXC borsa tarafında çalışan trailing stop sistemi. Bot kapansa bile borsa takip eder.
+
+### Trailing Order Koy
+**POST** `/api/v1/private/trackorder/place`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| symbol | string | Yes | Contract name (e.g. ETH_USDT) |
+| leverage | int | Yes | Leverage |
+| side | int | Yes | 1=open long, 2=close short, 3=open short, 4=close long |
+| vol | decimal | Yes | Order quantity (contracts) |
+| openType | int | Yes | 1=isolated, 2=cross |
+| trend | int | Yes | 1=latest price, 2=fair price, 3=index price |
+| activePrice | decimal | No | Activation price (0 = immediately active) |
+| backType | int | Yes | 1=percentage, 2=absolute value |
+| backValue | decimal | Yes | Callback value (e.g. 1.0 = %1 geri cekilme) |
+| positionMode | int | Yes | 1=hedge (two-way), 2=one-way |
+| reduceOnly | boolean | No | Reduce-only flag |
+
+### Trailing Order Sorgula
+**GET** `/api/v1/private/trackorder/list/orders`
+- states: 0=Not activated, 1=Activated, 2=Triggered OK, 3=Trigger failed, 4=Canceled
+
+### Trailing Order Iptal
+**POST** `/api/v1/private/trackorder/cancel`
+- symbol, trackOrderId
+
+### Trailing Order Guncelle
+**POST** `/api/v1/private/trackorder/change_order`
+- symbol, trackOrderId, trend, activePrice, backType, backValue, vol
+
+### CCXT Mapping
+| CCXT Method | API Endpoint |
+|-------------|-------------|
+| contractPrivatePostTrackorderPlace | POST /api/v1/private/trackorder/place |
+| contractPrivatePostTrackorderCancel | POST /api/v1/private/trackorder/cancel |
+| contractPrivateGetTrackorderListOrders | GET /api/v1/private/trackorder/list/orders |
+| contractPrivatePostTrackorderChangeOrder | POST /api/v1/private/trackorder/change_order |
+
+### Trailing Stop Akisi
+1. Market order ac: `contractPrivatePostOrderSubmit`
+2. 1-3 sn bekle (pozisyon olussum)
+3. SL koy: `contractPrivatePostStoporderPlace` (sadece SL, TP yok)
+4. Trailing koy: `contractPrivatePostTrackorderPlace`
+   - activePrice = TP hedefi (fiyat buraya ulasinca trailing baslar)
+   - backValue = geri cekilme % (ornegin 1.0 = %1)
+   - side = 4 (close long) veya 2 (close short)
+5. Fiyat activePrice'a ulasinca trailing aktif olur (state 0 -> 1)
+6. Fiyat yukselmeye devam ettikce triggerPrice surekli yukarir
+7. Fiyat triggerPrice'a duserse emir tetiklenir, pozisyon kapatilir
+
+### Avantajlar (Client-side trailing'e gore)
+- Borsa tarafinda calisir, bot restart/internet kesintisinde de aktif
+- activePrice ile TP hedefi gibi kullanilabilir
+- Fallback: trailing basarisizsa klasik TP konur

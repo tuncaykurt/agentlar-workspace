@@ -59,12 +59,17 @@ class _ExClient:
         except Exception as e:
             print(f"[ExClient] set_leverage uyarısı ({self._exchange_name}): {e}")
 
-    async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None):
+    async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None,
+                                       trailing_callback_rate=None, trailing_active_price=None):
         """
-        MEXC futures: market order aç, ardından TP/SL için stoporder/place ile pozisyon bazlı hedefler koy.
-        planorder/place sadece giriş emirleri için çalışır (side 1,3).
-        stoporder/place ise mevcut pozisyona TP/SL bağlar (positionId gerekir).
-        side: "buy"=open long, "sell"=open short
+        MEXC futures: market order aç, ardından TP/SL veya Trailing Stop koy.
+
+        trailing_callback_rate > 0 ise:
+          - TP koymaz, yerine MEXC native trailing stop (trackorder/place) koyar
+          - trailing_active_price = aktivasyon fiyatı (TP hedefi gibi düşün)
+          - Fiyat active_price'a ulaşınca trailing başlar, callback_rate% geri çekilirse kapatır
+        trailing_callback_rate = 0 veya None ise:
+          - Eski davranış: stoporder/place ile TP + SL koyar
         """
         mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
         is_long = side.lower() == "buy"
@@ -85,13 +90,14 @@ class _ExClient:
         print(f"[ExClient] MEXC order response: {resp}")
         order_id = str(resp.get("data", resp.get("orderId", "")))
 
-        # TP/SL: stoporder/place ile pozisyon bazlı TP/SL koy
-        if tp_price or sl_price:
+        use_trailing = trailing_callback_rate and float(trailing_callback_rate) > 0
+
+        # ── Pozisyon ID bul (TP/SL veya Trailing için gerekli) ──
+        if tp_price or sl_price or use_trailing:
             target_type = 1 if is_long else 2
             pos_id = None
             pos_vol = int(amount)
 
-            # Pozisyon sorgulama: 1s, 2s, 3s (toplam max ~6s — MEXC bazen yavaş)
             for attempt, wait in enumerate([1.0, 2.0, 3.0], 1):
                 await asyncio.sleep(wait)
                 try:
@@ -109,49 +115,131 @@ class _ExClient:
                     break
 
             if pos_id:
-                _tp = round(float(tp_price), 2) if tp_price else None
-                _sl = round(float(sl_price), 2) if sl_price else None
+                # ── SL her zaman stoporder/place ile konur ──
+                if sl_price:
+                    _sl = round(float(sl_price), 2)
+                    sl_body = {
+                        "positionId": pos_id,
+                        "vol": pos_vol,
+                        "profitTrend": 1,
+                        "lossTrend": 1,
+                        "stopLossType": 0,
+                        "takeProfitType": 0,
+                        "stopLossOrderPrice": 0,
+                        "takeProfitOrderPrice": 0,
+                        "stopLossPrice": _sl,
+                    }
+                    # Trailing kullanılmıyorsa TP'yi de ekle
+                    if not use_trailing and tp_price:
+                        sl_body["takeProfitPrice"] = round(float(tp_price), 2)
 
-                stop_body = {
-                    "positionId": pos_id,
-                    "vol": pos_vol,
-                    "profitTrend": 1,       # 1=latest price trigger
-                    "lossTrend": 1,         # 1=latest price trigger
-                    "stopLossType": 0,      # 0=market execution
-                    "takeProfitType": 0,    # 0=market execution
-                    "stopLossOrderPrice": 0,
-                    "takeProfitOrderPrice": 0,
-                }
-                if _tp:
-                    stop_body["takeProfitPrice"] = _tp
-                if _sl:
-                    stop_body["stopLossPrice"] = _sl
+                    target_desc = f"SL={_sl}" + (f" TP={round(float(tp_price), 2)}" if not use_trailing and tp_price else "")
+                    print(f"[ExClient] MEXC stoporder/place gönderiliyor: posId={pos_id} {target_desc} vol={pos_vol}")
 
-                print(f"[ExClient] MEXC stoporder/place gönderiliyor: posId={pos_id} TP={_tp} SL={_sl} vol={pos_vol}")
+                    sl_ok = False
+                    for tp_attempt in range(1, 3):
+                        try:
+                            stop_resp = await self.exchange.contractPrivatePostStoporderPlace(sl_body)
+                            resp_data = stop_resp if isinstance(stop_resp, dict) else {}
+                            success = resp_data.get("success", resp_data.get("code", 0) == 0)
+                            print(f"[ExClient] MEXC stoporder/place yanıt (attempt {tp_attempt}): {stop_resp}")
+                            if success or resp_data.get("code") == 0:
+                                sl_ok = True
+                                print(f"[ExClient] ✓ MEXC {target_desc} BAŞARILI")
+                                break
+                            else:
+                                print(f"[ExClient] MEXC stoporder yanıt hatası: {stop_resp}")
+                        except Exception as e:
+                            print(f"[ExClient] MEXC stoporder/place HATA (attempt {tp_attempt}): {e}")
+                        if tp_attempt < 2:
+                            await asyncio.sleep(1.5)
 
-                # TP/SL yerleştirme — 2 deneme
-                tp_sl_ok = False
-                for tp_attempt in range(1, 3):
+                    if not sl_ok:
+                        print(f"[ExClient] ⚠ MEXC SL 2 denemede de başarısız! posId={pos_id}")
+
+                # ── Trailing Stop: trackorder/place ile ──
+                if use_trailing:
+                    trail_side = 4 if is_long else 2  # 4=close long, 2=close short
+                    _active = round(float(trailing_active_price), 2) if trailing_active_price else 0
+                    _callback = round(float(trailing_callback_rate), 4)
+
+                    trail_body = {
+                        "symbol": mexc_symbol,
+                        "leverage": int(leverage),
+                        "side": trail_side,
+                        "vol": pos_vol,
+                        "openType": self._open_type,
+                        "trend": 1,              # 1=latest price
+                        "activePrice": _active,
+                        "backType": 1,           # 1=percentage
+                        "backValue": _callback,
+                        "positionMode": 1,       # 1=hedge (two-way)
+                        "reduceOnly": True,
+                    }
+
+                    print(f"[ExClient] MEXC trailing order gönderiliyor: active={_active} callback={_callback}% vol={pos_vol}")
+
+                    trail_ok = False
+                    for trail_attempt in range(1, 3):
+                        try:
+                            trail_resp = await self.exchange.contractPrivatePostTrackorderPlace(trail_body)
+                            trail_data = trail_resp if isinstance(trail_resp, dict) else {}
+                            trail_success = trail_data.get("success", False) or trail_data.get("code", -1) == 0
+                            print(f"[ExClient] MEXC trackorder/place yanıt (attempt {trail_attempt}): {trail_resp}")
+                            if trail_success:
+                                trail_ok = True
+                                trail_id = trail_data.get("data", "")
+                                print(f"[ExClient] ✓ MEXC TRAILING BAŞARILI: id={trail_id} active={_active} callback={_callback}%")
+                                break
+                            else:
+                                print(f"[ExClient] MEXC trailing yanıt hatası: {trail_resp}")
+                        except Exception as e:
+                            print(f"[ExClient] MEXC trackorder/place HATA (attempt {trail_attempt}): {e}")
+                        if trail_attempt < 2:
+                            await asyncio.sleep(1.5)
+
+                    if not trail_ok:
+                        print(f"[ExClient] ⚠ MEXC Trailing 2 denemede de başarısız — TP fallback olarak konuluyor")
+                        # Fallback: trailing başarısızsa klasik TP koy
+                        if tp_price:
+                            fallback_body = {
+                                "positionId": pos_id,
+                                "vol": pos_vol,
+                                "profitTrend": 1,
+                                "lossTrend": 1,
+                                "stopLossType": 0,
+                                "takeProfitType": 0,
+                                "stopLossOrderPrice": 0,
+                                "takeProfitOrderPrice": 0,
+                                "takeProfitPrice": round(float(tp_price), 2),
+                            }
+                            try:
+                                await self.exchange.contractPrivatePostStoporderPlace(fallback_body)
+                                print(f"[ExClient] ✓ Fallback TP konuldu: {round(float(tp_price), 2)}")
+                            except Exception as e:
+                                print(f"[ExClient] ⚠ Fallback TP de başarısız: {e}")
+
+                elif not sl_price and tp_price:
+                    # Sadece TP varsa (SL yoksa) — ayrı stoporder ile koy
+                    _tp = round(float(tp_price), 2)
+                    tp_only_body = {
+                        "positionId": pos_id,
+                        "vol": pos_vol,
+                        "profitTrend": 1,
+                        "lossTrend": 1,
+                        "stopLossType": 0,
+                        "takeProfitType": 0,
+                        "stopLossOrderPrice": 0,
+                        "takeProfitOrderPrice": 0,
+                        "takeProfitPrice": _tp,
+                    }
                     try:
-                        stop_resp = await self.exchange.contractPrivatePostStoporderPlace(stop_body)
-                        resp_data = stop_resp if isinstance(stop_resp, dict) else {}
-                        success = resp_data.get("success", resp_data.get("code", 0) == 0)
-                        print(f"[ExClient] MEXC stoporder/place yanıt (attempt {tp_attempt}): {stop_resp}")
-                        if success or resp_data.get("code") == 0:
-                            tp_sl_ok = True
-                            print(f"[ExClient] ✓ MEXC TP/SL BAŞARILI: TP={_tp} SL={_sl}")
-                            break
-                        else:
-                            print(f"[ExClient] MEXC stoporder yanıt hatası: {stop_resp}")
+                        await self.exchange.contractPrivatePostStoporderPlace(tp_only_body)
+                        print(f"[ExClient] ✓ MEXC TP BAŞARILI: {_tp}")
                     except Exception as e:
-                        print(f"[ExClient] MEXC stoporder/place HATA (attempt {tp_attempt}): {e}")
-                    if tp_attempt < 2:
-                        await asyncio.sleep(1.5)
-
-                if not tp_sl_ok:
-                    print(f"[ExClient] ⚠ MEXC TP/SL 2 denemede de başarısız! posId={pos_id}")
+                        print(f"[ExClient] ⚠ MEXC TP HATASI: {e}")
             else:
-                print(f"[ExClient] ⚠ MEXC TP/SL ATANAMADI: positionId bulunamadı! (3 deneme sonrası)")
+                print(f"[ExClient] ⚠ MEXC TP/SL/Trailing ATANAMADI: positionId bulunamadı! (3 deneme sonrası)")
 
         return {"id": order_id, "status": "open", "info": resp}
 
@@ -180,10 +268,15 @@ class _ExClient:
         return await self.exchange.create_market_order(symbol, close_side, amount)
 
     async def place_order(self, symbol, side, amount, order_type="market", price=None,
-                          tp_price=None, sl_price=None, pos_side=None):
+                          tp_price=None, sl_price=None, pos_side=None,
+                          trailing_callback_rate=None, trailing_active_price=None):
         if self._exchange_name == "mexc":
             leverage = self._leverage_cache.get(symbol, 10)
-            return await self._mexc_place_order_direct(symbol, side, amount, leverage, tp_price, sl_price, entry_price=price)
+            return await self._mexc_place_order_direct(
+                symbol, side, amount, leverage, tp_price, sl_price, entry_price=price,
+                trailing_callback_rate=trailing_callback_rate,
+                trailing_active_price=trailing_active_price,
+            )
 
         params = self._build_order_params(tp_price, sl_price, pos_side)
         try:

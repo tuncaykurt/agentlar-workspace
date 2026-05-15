@@ -424,13 +424,25 @@ class BotEngine:
             tp_price = round(take_profit, 2) if take_profit else None
             sl_price = round(stop_loss, 2) if stop_loss else None
 
-            print(f"[Bot {bot_name}] İşlem açılıyor: {side} {amount} {symbol} type={order_type} TP={tp_price} SL={sl_price} pos_side={trade.get('pos_side')}")
+            # Trailing stop parametreleri
+            trailing_callback_rate = float(params.get("trailing_callback_rate") or params.get("trailing_stop_pct") or 0)
+            trailing_active_price = tp_price if trailing_callback_rate > 0 else None
+
+            if trailing_callback_rate > 0:
+                print(f"[Bot {bot_name}] İşlem açılıyor: {side} {amount} {symbol} type={order_type} "
+                      f"SL={sl_price} TRAILING(active={trailing_active_price}, callback={trailing_callback_rate}%) "
+                      f"pos_side={trade.get('pos_side')}")
+            else:
+                print(f"[Bot {bot_name}] İşlem açılıyor: {side} {amount} {symbol} type={order_type} TP={tp_price} SL={sl_price} pos_side={trade.get('pos_side')}")
+
             try:
                 order = await self.exchange.place_order(
                     symbol, side, amount, order_type,
                     price=price if order_type == "limit" else None,
                     tp_price=tp_price, sl_price=sl_price,
-                    pos_side=trade.get("pos_side")
+                    pos_side=trade.get("pos_side"),
+                    trailing_callback_rate=trailing_callback_rate if trailing_callback_rate > 0 else None,
+                    trailing_active_price=trailing_active_price,
                 )
                 print(f"[Bot {bot_name}] ✓ İşlem başarılı: order_id={order.get('id', 'N/A')}")
             except RuntimeError as tpsl_err:
@@ -475,18 +487,26 @@ class BotEngine:
 
         self.signal_history.append(trade)
 
-        # Trailing stop başlat
-        params = self.config.get("params", {})
-        trail_pct = params.get("trailing_stop_pct", 0)
-        if trail_pct > 0:
-            self._init_trailing(self.config["symbol"], side, price, trail_pct)
+        # Trailing stop başlat (sadece MEXC native trailing kullanılmıyorsa client-side trailing)
+        exchange_name = getattr(self.exchange, '_exchange_name', '')
+        use_native_trailing = trailing_callback_rate > 0 and exchange_name == "mexc"
+        if not use_native_trailing:
+            trail_pct = float(params.get("trailing_stop_pct", 0))
+            if trail_pct > 0:
+                self._init_trailing(self.config["symbol"], side, price, trail_pct)
+
+        if trailing_callback_rate > 0:
+            trail_info = f" | Trailing({trailing_callback_rate}% @ ${trailing_active_price:,.2f})" if trailing_active_price else f" | Trailing({trailing_callback_rate}%)"
+        else:
+            trail_info = ""
 
         msg = (
             f"{mode} | {'🟢 LONG' if side == 'buy' else '🔴 SHORT'} | "
             f"{self.config['symbol'].replace('/USDT:USDT', '')} @ ${price:,.2f}\n"
             f"Miktar: {qty} | SL: ${stop_loss:,.2f}"
-            + (f" | TP: ${take_profit:,.2f}" if take_profit else "") +
-            f"\nAI Güven: %{confidence} | {analysis}"
+            + (f" | TP: ${take_profit:,.2f}" if take_profit and not use_native_trailing else "")
+            + trail_info
+            + f"\nAI Güven: %{confidence} | {analysis}"
         )
         print(f"[Bot] {msg}")
         await self._alert(msg)
@@ -2023,31 +2043,46 @@ class BotEngine:
             print(f"[HedgeBot {bot_name}] Miktar: {total_usdt}$ × {p.leverage}x = {notional}$ notional → Long:{long_qty} Short:{short_qty} kontrat (contractSize={contract_size})")
 
             if not paper:
-                # Long + Short paralel aç — her place_order kendi TP/SL'ini koyar
+                # Trailing stop parametreleri
+                use_trailing = p.trailing_enabled and p.trailing_pct > 0
+                trail_cb = p.trailing_pct if use_trailing else None
+                long_trail_active = new_levels["long"]["tp"] if use_trailing else None
+                short_trail_active = new_levels["short"]["tp"] if use_trailing else None
+
+                if use_trailing:
+                    print(f"[HedgeBot {bot_name}] MEXC Native Trailing aktif: callback={p.trailing_pct}% "
+                          f"Long active={long_trail_active} Short active={short_trail_active}")
+
+                # Long + Short paralel aç — her place_order kendi TP/SL veya Trailing'ini koyar
                 results = await asyncio.gather(
                     self.exchange.place_order(
                         symbol, "buy", long_qty, "market",
                         tp_price=new_levels["long"]["tp"],
                         sl_price=new_levels["long"]["sl"],
                         pos_side="long",
+                        trailing_callback_rate=trail_cb,
+                        trailing_active_price=long_trail_active,
                     ),
                     self.exchange.place_order(
                         symbol, "sell", short_qty, "market",
                         tp_price=new_levels["short"]["tp"],
                         sl_price=new_levels["short"]["sl"],
                         pos_side="short",
+                        trailing_callback_rate=trail_cb,
+                        trailing_active_price=short_trail_active,
                     ),
                     return_exceptions=True,
                 )
                 long_ok  = not isinstance(results[0], Exception)
                 short_ok = not isinstance(results[1], Exception)
 
+                mode_str = "Trailing" if use_trailing else "TP/SL"
                 if long_ok:
-                    print(f"[HedgeBot {bot_name}] ✓ Long açıldı + TP/SL: {long_qty} kontrat")
+                    print(f"[HedgeBot {bot_name}] ✓ Long açıldı + {mode_str}: {long_qty} kontrat")
                 else:
                     print(f"[HedgeBot {bot_name}] ✗ Long hatası: {results[0]}")
                 if short_ok:
-                    print(f"[HedgeBot {bot_name}] ✓ Short açıldı + TP/SL: {short_qty} kontrat")
+                    print(f"[HedgeBot {bot_name}] ✓ Short açıldı + {mode_str}: {short_qty} kontrat")
                 else:
                     print(f"[HedgeBot {bot_name}] ✗ Short hatası: {results[1]}")
 
@@ -2072,11 +2107,13 @@ class BotEngine:
                 if tid:
                     trade_ids["short"] = tid
 
+            trail_msg = f"\n📊 Trailing: {p.trailing_pct}% geri çekilme" if (p.trailing_enabled and p.trailing_pct > 0) else ""
             await self._alert(
                 f"🔀 Hedge Bot Açıldı {'[PAPER] ' if paper else ''}\n"
                 f"{symbol} @ {current_price:.4f}  Kaldıraç: {p.leverage}x\n"
                 f"📗 Long  TP: {new_levels['long']['tp']}  SL: {new_levels['long']['sl']}\n"
-                f"📕 Short TP: {new_levels['short']['tp']}  SL: {new_levels['short']['sl']}\n"
+                f"📕 Short TP: {new_levels['short']['tp']}  SL: {new_levels['short']['sl']}"
+                f"{trail_msg}\n"
                 f"Net hedef kâr: +{p.long_tp_pct - p.short_sl_pct:.1f}% / döngü"
             )
 
