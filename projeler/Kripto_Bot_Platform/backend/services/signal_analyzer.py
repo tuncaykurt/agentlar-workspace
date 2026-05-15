@@ -276,6 +276,29 @@ async def run_passive_analysis(
         print(f"[SignalAnalyzer] Bot#{bot_id} analiz hatası: {e}")
         import traceback
         traceback.print_exc()
+        # Hata olsa bile sinyali "analyzed" olarak işaretle — yoksa sonsuza kadar "received" kalır
+        try:
+            async with async_session() as session:
+                err_vals: dict = {
+                    "action": "analyzed",
+                    "reason": f"Analiz hatası: {str(e)[:200]}",
+                }
+                # TP/SL varsa outcome=open yap ki signal_tracker takip edebilsin
+                if tp_pct > 0 and sl_pct > 0 and price > 0:
+                    if signal_type == "buy":
+                        err_vals["tp_price"] = round(price * (1 + min(tp_pct, 99) / 100), 6)
+                        err_vals["sl_price"] = round(price * (1 - min(sl_pct, 99) / 100), 6)
+                    else:
+                        err_vals["tp_price"] = round(price * (1 - min(tp_pct, 99) / 100), 6)
+                        err_vals["sl_price"] = round(price * (1 + min(sl_pct, 99) / 100), 6)
+                    err_vals["outcome"] = "open"
+                await session.execute(
+                    update(SignalLog).where(SignalLog.id == log_id).values(**err_vals)
+                )
+                await session.commit()
+                print(f"[SignalAnalyzer] Bot#{bot_id} sinyal #{log_id} hata ile 'analyzed' olarak işaretlendi.")
+        except Exception as e2:
+            print(f"[SignalAnalyzer] Hata recovery de başarısız: {e2}")
     finally:
         try:
             await exchange.close()
