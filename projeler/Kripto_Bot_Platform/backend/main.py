@@ -104,71 +104,78 @@ async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("[Main] Lifespan başlıyor...")
-    tasks = []
+    """
+    Lifespan — HİÇBİR ŞEY BEKLEME.
+    Tüm başlatma işlemleri arka plan task'ı olarak çalışır.
+    Böylece reverse proxy (Caddy/Nginx) timeout'una düşmez.
+    """
+    print("[Main] Lifespan başlıyor (non-blocking)...")
+    tasks: list[asyncio.Task] = []
 
-    # 1. Veritabanı tablolarını oluştur (max 10sn, hata olursa devam et)
-    try:
-        await asyncio.wait_for(_init_db(), timeout=10)
-    except asyncio.TimeoutError:
-        print("[Main] DB init timeout (10s) — devam ediliyor.")
-    except Exception as e:
-        print(f"[Main] DB init hatası (devam ediliyor): {e}")
+    async def _background_init():
+        """Tüm başlatma adımları tek bir background task içinde sırayla çalışır."""
+        symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT"]
 
-    symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT"]
+        # 1. Veritabanı tabloları + migration
+        try:
+            await asyncio.wait_for(_init_db(), timeout=30)
+        except asyncio.TimeoutError:
+            print("[Main] DB init timeout (30s) — devam ediliyor.")
+        except Exception as e:
+            print(f"[Main] DB init hatası (devam ediliyor): {e}")
 
-    # 2. Bitget WebSocket akışları
-    try:
-        if settings.BITGET_API_KEY:
-            for sym in symbols:
-                tasks.append(asyncio.create_task(bitget.subscribe_kline(sym, "1m")))
-                tasks.append(asyncio.create_task(bitget.subscribe_ticker(sym)))
-            print(f"[Main] {len(symbols)} sembol için veri akışı başlatıldı.")
+        # 2. Bitget WebSocket akışları
+        try:
+            if settings.BITGET_API_KEY:
+                for sym in symbols:
+                    tasks.append(asyncio.create_task(bitget.subscribe_kline(sym, "1m")))
+                    tasks.append(asyncio.create_task(bitget.subscribe_ticker(sym)))
+                print(f"[Main] {len(symbols)} sembol için veri akışı başlatıldı.")
+                try:
+                    fetcher = DataFetcher(bitget)
+                    tasks.append(asyncio.create_task(_start_data_sync(fetcher, symbols)))
+                except Exception as e:
+                    print(f"[Main] DataSync başlatılamadı: {e}")
+            else:
+                print("[Main] BITGET_API_KEY tanımlı değil — WebSocket başlatılmadı.")
+        except Exception as e:
+            print(f"[Main] Bitget WS hatası (devam ediliyor): {e}")
 
-            try:
-                fetcher = DataFetcher(bitget)
-                tasks.append(asyncio.create_task(_start_data_sync(fetcher, symbols)))
-            except Exception as e:
-                print(f"[Main] DataSync başlatılamadı: {e}")
-        else:
-            print("[Main] BITGET_API_KEY tanımlı değil — WebSocket başlatılmadı.")
-    except Exception as e:
-        print(f"[Main] Bitget WS hatası (devam ediliyor): {e}")
+        # 3. Likidasyon collector
+        try:
+            liq_tasks = await asyncio.wait_for(start_liquidation_collector(), timeout=10)
+            tasks.extend(liq_tasks)
+        except asyncio.TimeoutError:
+            print("[Main] LiqCollector timeout (10s) — devam ediliyor.")
+        except Exception as e:
+            print(f"[Main] LiqCollector hatası (devam ediliyor): {e}")
 
-    # 3. Likidasyon collector (max 5sn timeout)
-    try:
-        liq_tasks = await asyncio.wait_for(start_liquidation_collector(), timeout=5)
-        tasks.extend(liq_tasks)
-    except asyncio.TimeoutError:
-        print("[Main] LiqCollector timeout (5s) — devam ediliyor.")
-    except Exception as e:
-        print(f"[Main] LiqCollector hatası (devam ediliyor): {e}")
+        # 4. Ekonomik takvim senkronizasyonu
+        try:
+            tasks.append(asyncio.create_task(start_calendar_sync()))
+            print("[Main] Ekonomik takvim senkronizasyonu başlatıldı.")
+        except Exception as e:
+            print(f"[Main] EconCal hatası (devam ediliyor): {e}")
 
-    # 4. Ekonomik takvim senkronizasyonu
-    try:
-        tasks.append(asyncio.create_task(start_calendar_sync()))
-        print("[Main] Ekonomik takvim senkronizasyonu başlatıldı.")
-    except Exception as e:
-        print(f"[Main] EconCal hatası (devam ediliyor): {e}")
+        # 5. Sinyal sonuç takipçisi
+        try:
+            tasks.append(asyncio.create_task(start_signal_tracker()))
+        except Exception as e:
+            print(f"[Main] SignalTracker hatası (devam ediliyor): {e}")
 
-    # 5. Sinyal sonuç takipçisi (TP/SL vuruş kontrolü)
-    try:
-        tasks.append(asyncio.create_task(start_signal_tracker()))
-    except Exception as e:
-        print(f"[Main] SignalTracker hatası (devam ediliyor): {e}")
-
-    print("[Main] ✓ Uygulama hazır — bot auto-start arka planda çalışacak.")
-
-    # 6. Bot auto-start — ARKA PLANDA (lifespan'ı bloklamasın, reverse proxy timeout'a düşmesin)
-    async def _deferred_auto_start():
-        await asyncio.sleep(2)  # App'in tam başlamasını bekle
+        # 6. Bot auto-start
         try:
             await asyncio.wait_for(_auto_start_bots(tasks), timeout=30)
         except asyncio.TimeoutError:
             print("[Main] Bot auto-start timeout (30s).")
         except Exception as e:
             print(f"[Main] Bot auto-start hatası: {e}")
-    tasks.append(asyncio.create_task(_deferred_auto_start()))
+
+        print("[Main] ✓ Arka plan başlatma tamamlandı.")
+
+    # Tek bir background task — lifespan anında yield eder, hiçbir şey beklemez
+    tasks.append(asyncio.create_task(_background_init()))
+    print("[Main] ✓ Uygulama hazır (arka plan servisleri başlatılıyor).")
     yield
 
     # Kapatma
@@ -292,10 +299,10 @@ async def health():
             db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
-        
+
     return {
         "status": "ok",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "database": db_status,
         "environment": settings.ENVIRONMENT
     }
