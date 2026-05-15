@@ -123,21 +123,21 @@ def compute_hedge_levels(entry_price: float, params: HedgeBotParams) -> dict:
     """
     Giriş fiyatından TP/SL seviyelerini hesapla.
     Tüm % değerleri FİYAT hareketi % (kaldıraçsız).
-    Yuvarlama YOK — hesaplanan değer neyse o gönderilir.
+    MEXC 2 ondalık basamak zorunlu tuttuğu için son değer round(2) ile gönderilir.
     """
     p = entry_price
     return {
         "long": {
-            "entry":  p,
-            "tp":     p * (1 + params.long_tp_pct  / 100),
-            "sl":     p * (1 - params.long_sl_pct  / 100),
+            "entry":  round(p, 2),
+            "tp":     round(p * (1 + params.long_tp_pct  / 100), 2),
+            "sl":     round(p * (1 - params.long_sl_pct  / 100), 2),
             "tp_pct": params.long_tp_pct,
             "sl_pct": params.long_sl_pct,
         },
         "short": {
-            "entry":  p,
-            "tp":     p * (1 - params.short_tp_pct / 100),
-            "sl":     p * (1 + params.short_sl_pct / 100),
+            "entry":  round(p, 2),
+            "tp":     round(p * (1 - params.short_tp_pct / 100), 2),
+            "sl":     round(p * (1 + params.short_sl_pct / 100), 2),
             "tp_pct": params.short_tp_pct,
             "sl_pct": params.short_sl_pct,
         },

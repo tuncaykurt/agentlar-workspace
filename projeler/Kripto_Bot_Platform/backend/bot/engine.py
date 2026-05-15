@@ -2023,33 +2023,36 @@ class BotEngine:
             print(f"[HedgeBot {bot_name}] Miktar: {total_usdt}$ × {p.leverage}x = {notional}$ notional → Long:{long_qty} Short:{short_qty} kontrat (contractSize={contract_size})")
 
             if not paper:
-                # Long + Short + TP/SL hepsi AYNI ANDA (her place_order kendi içinde market order + TP/SL halleder)
-                results = await asyncio.gather(
-                    self.exchange.place_order(
+                # SIRAYLA aç: önce Long + TP/SL, sonra Short + TP/SL
+                # Paralel açılırsa MEXC pozisyon sorgusu karışıyor ve TP/SL konulamıyor
+                long_ok = False
+                short_ok = False
+
+                # 1) LONG aç + TP/SL
+                try:
+                    long_result = await self.exchange.place_order(
                         symbol, "buy", long_qty, "market",
                         tp_price=new_levels["long"]["tp"],
                         sl_price=new_levels["long"]["sl"],
                         pos_side="long",
-                    ),
-                    self.exchange.place_order(
+                    )
+                    long_ok = True
+                    print(f"[HedgeBot {bot_name}] ✓ Long açıldı + TP/SL: {long_qty} kontrat")
+                except Exception as e:
+                    print(f"[HedgeBot {bot_name}] ✗ Long hatası: {e}")
+
+                # 2) SHORT aç + TP/SL (Long tamamen yerleştikten sonra)
+                try:
+                    short_result = await self.exchange.place_order(
                         symbol, "sell", short_qty, "market",
                         tp_price=new_levels["short"]["tp"],
                         sl_price=new_levels["short"]["sl"],
                         pos_side="short",
-                    ),
-                    return_exceptions=True,
-                )
-                long_ok  = not isinstance(results[0], Exception)
-                short_ok = not isinstance(results[1], Exception)
-
-                if long_ok:
-                    print(f"[HedgeBot {bot_name}] ✓ Long açıldı + TP/SL: {long_qty} kontrat")
-                else:
-                    print(f"[HedgeBot {bot_name}] ✗ Long hatası: {results[0]}")
-                if short_ok:
+                    )
+                    short_ok = True
                     print(f"[HedgeBot {bot_name}] ✓ Short açıldı + TP/SL: {short_qty} kontrat")
-                else:
-                    print(f"[HedgeBot {bot_name}] ✗ Short hatası: {results[1]}")
+                except Exception as e:
+                    print(f"[HedgeBot {bot_name}] ✗ Short hatası: {e}")
 
                 if not long_ok and not short_ok:
                     print(f"[HedgeBot {bot_name}] Her iki yön de açılamadı — döngü iptal")

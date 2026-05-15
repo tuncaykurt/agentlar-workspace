@@ -89,9 +89,10 @@ class _ExClient:
         if tp_price or sl_price:
             target_type = 1 if is_long else 2
             pos_id = None
+            pos_vol = int(amount)
 
-            # Hızlı retry: 0.3s, 0.7s, 1.5s (toplam max ~2.5s)
-            for attempt, wait in enumerate([0.3, 0.7, 1.5], 1):
+            # Pozisyon sorgulama: 1s, 2s, 3s (toplam max ~6s — MEXC bazen yavaş)
+            for attempt, wait in enumerate([1.0, 2.0, 3.0], 1):
                 await asyncio.sleep(wait)
                 try:
                     pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
@@ -99,36 +100,59 @@ class _ExClient:
                     for p in (pos_data or []):
                         if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
                             pos_id = int(p.get("positionId", 0))
+                            pos_vol = int(float(p.get("holdVol", amount)))
                             break
                 except Exception as e:
                     print(f"[ExClient] MEXC position query HATA (attempt {attempt}): {e}")
                 if pos_id:
-                    print(f"[ExClient] MEXC position found: id={pos_id} type={target_type} (attempt {attempt})")
+                    print(f"[ExClient] MEXC position found: id={pos_id} type={target_type} vol={pos_vol} (attempt {attempt})")
                     break
 
             if pos_id:
+                # MEXC fiyatları 2 ondalık basamak zorunlu tutar
+                _tp = round(float(tp_price), 2) if tp_price else None
+                _sl = round(float(sl_price), 2) if sl_price else None
+
                 stop_body = {
                     "positionId": pos_id,
-                    "vol": int(amount),
-                    "profitTrend": 1,       # 1=latest price
-                    "lossTrend": 1,         # 1=latest price
-                    "stopLossType": 0,      # 0=market
-                    "takeProfitType": 0,    # 0=market
+                    "vol": pos_vol,
+                    "profitTrend": 1,       # 1=latest price trigger
+                    "lossTrend": 1,         # 1=latest price trigger
+                    "stopLossType": 0,      # 0=market execution
+                    "takeProfitType": 0,    # 0=market execution
                     "stopLossOrderPrice": 0,
                     "takeProfitOrderPrice": 0,
                 }
-                if tp_price:
-                    stop_body["takeProfitPrice"] = float(tp_price)
-                if sl_price:
-                    stop_body["stopLossPrice"] = float(sl_price)
+                if _tp:
+                    stop_body["takeProfitPrice"] = _tp
+                if _sl:
+                    stop_body["stopLossPrice"] = _sl
 
-                try:
-                    stop_resp = await self.exchange.contractPrivatePostStoporderPlace(stop_body)
-                    print(f"[ExClient] MEXC stoporder/place OK: {stop_resp}")
-                except Exception as e:
-                    print(f"[ExClient] MEXC stoporder/place HATA: {e}")
+                print(f"[ExClient] MEXC stoporder/place gönderiliyor: posId={pos_id} TP={_tp} SL={_sl} vol={pos_vol}")
+
+                # TP/SL yerleştirme — 2 deneme
+                tp_sl_ok = False
+                for tp_attempt in range(1, 3):
+                    try:
+                        stop_resp = await self.exchange.contractPrivatePostStoporderPlace(stop_body)
+                        resp_data = stop_resp if isinstance(stop_resp, dict) else {}
+                        success = resp_data.get("success", resp_data.get("code", 0) == 0)
+                        print(f"[ExClient] MEXC stoporder/place yanıt (attempt {tp_attempt}): {stop_resp}")
+                        if success or resp_data.get("code") == 0:
+                            tp_sl_ok = True
+                            print(f"[ExClient] ✓ MEXC TP/SL BAŞARILI: TP={_tp} SL={_sl}")
+                            break
+                        else:
+                            print(f"[ExClient] MEXC stoporder yanıt hatası: {stop_resp}")
+                    except Exception as e:
+                        print(f"[ExClient] MEXC stoporder/place HATA (attempt {tp_attempt}): {e}")
+                    if tp_attempt < 2:
+                        await asyncio.sleep(1.5)
+
+                if not tp_sl_ok:
+                    print(f"[ExClient] ⚠ MEXC TP/SL 2 denemede de başarısız! posId={pos_id}")
             else:
-                print(f"[ExClient] MEXC TP/SL ATLANAMADI: positionId bulunamadı!")
+                print(f"[ExClient] ⚠ MEXC TP/SL ATANAMADI: positionId bulunamadı! (3 deneme sonrası)")
 
         return {"id": order_id, "status": "open", "info": resp}
 
