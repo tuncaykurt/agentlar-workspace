@@ -25,57 +25,52 @@ async def _init_db():
     except Exception as e:
         print(f"[Main] DB bağlantı hatası (uygulama devam ediyor): {e}")
 
-    # Eksik kolonları ekle (mevcut tabloya ALTER TABLE)
-    migrations = [
-        ("bots", "initial_balance", "ALTER TABLE bots ADD COLUMN initial_balance FLOAT DEFAULT 1000.0"),
-        ("bots", "params", "ALTER TABLE bots ADD COLUMN params TEXT"),
-        ("bots", "risk_per_trade", "ALTER TABLE bots ADD COLUMN risk_per_trade FLOAT DEFAULT 0.01"),
-        ("bots", "max_daily_loss", "ALTER TABLE bots ADD COLUMN max_daily_loss FLOAT DEFAULT 0.05"),
-        # Trade zengin metadata
-        ("trades", "exchange", "ALTER TABLE trades ADD COLUMN exchange VARCHAR"),
-        ("trades", "session_type", "ALTER TABLE trades ADD COLUMN session_type VARCHAR"),
-        ("trades", "exit_reason", "ALTER TABLE trades ADD COLUMN exit_reason VARCHAR"),
-        ("trades", "volatility_1h", "ALTER TABLE trades ADD COLUMN volatility_1h FLOAT"),
-        ("trades", "volume_ratio", "ALTER TABLE trades ADD COLUMN volume_ratio FLOAT"),
-        ("trades", "funding_rate", "ALTER TABLE trades ADD COLUMN funding_rate FLOAT"),
-        ("trades", "rsi_at_entry", "ALTER TABLE trades ADD COLUMN rsi_at_entry FLOAT"),
-        ("trades", "ema200_trend", "ALTER TABLE trades ADD COLUMN ema200_trend VARCHAR"),
-        ("trades", "leverage_used", "ALTER TABLE trades ADD COLUMN leverage_used INTEGER"),
-        ("trades", "duration_minutes", "ALTER TABLE trades ADD COLUMN duration_minutes INTEGER"),
-        # Bot filters
-        ("bot_filters", "volatility_filter_enabled", "ALTER TABLE bot_filters ADD COLUMN volatility_filter_enabled BOOLEAN DEFAULT FALSE"),
-        # Signal logs ek kolonları (tablo create_all ile oluşur, bu sadece güvenlik)
-        ("signal_logs", "raw_payload", "ALTER TABLE signal_logs ADD COLUMN raw_payload TEXT"),
-        # Sinyal performans takibi
-        ("signal_logs", "outcome", "ALTER TABLE signal_logs ADD COLUMN outcome VARCHAR"),
-        ("signal_logs", "outcome_price", "ALTER TABLE signal_logs ADD COLUMN outcome_price FLOAT"),
-        ("signal_logs", "outcome_pnl_pct", "ALTER TABLE signal_logs ADD COLUMN outcome_pnl_pct FLOAT"),
-        ("signal_logs", "outcome_at", "ALTER TABLE signal_logs ADD COLUMN outcome_at TIMESTAMPTZ"),
-        ("signal_logs", "rsi_14", "ALTER TABLE signal_logs ADD COLUMN rsi_14 FLOAT"),
-        ("signal_logs", "volatility_atr", "ALTER TABLE signal_logs ADD COLUMN volatility_atr FLOAT"),
-        ("signal_logs", "volume_ratio", "ALTER TABLE signal_logs ADD COLUMN volume_ratio FLOAT"),
-        ("signal_logs", "ema200_dist", "ALTER TABLE signal_logs ADD COLUMN ema200_dist FLOAT"),
-        # Sinyal zaman dilimi
-        ("signal_logs", "timeframe", "ALTER TABLE signal_logs ADD COLUMN timeframe VARCHAR"),
-        # Webhook profil ek kolonları
-        ("webhook_profiles", "username", "ALTER TABLE webhook_profiles ADD COLUMN username VARCHAR DEFAULT 'default'"),
-        ("webhook_profiles", "leverage", "ALTER TABLE webhook_profiles ADD COLUMN leverage INTEGER DEFAULT 20"),
-        # Sinyal aralığı analizi kolonları
-        ("signal_logs", "max_price_in_range", "ALTER TABLE signal_logs ADD COLUMN max_price_in_range FLOAT"),
-        ("signal_logs", "min_price_in_range", "ALTER TABLE signal_logs ADD COLUMN min_price_in_range FLOAT"),
-        ("signal_logs", "max_favorable_pct", "ALTER TABLE signal_logs ADD COLUMN max_favorable_pct FLOAT"),
-        ("signal_logs", "tp_was_reachable", "ALTER TABLE signal_logs ADD COLUMN tp_was_reachable BOOLEAN"),
-        ("signal_logs", "sl_was_hit", "ALTER TABLE signal_logs ADD COLUMN sl_was_hit BOOLEAN"),
-        ("signal_logs", "max_adverse_pct", "ALTER TABLE signal_logs ADD COLUMN max_adverse_pct FLOAT"),
+    # Eksik kolonları ekle — TEK transaction, IF NOT EXISTS (PG 9.6+)
+    # Bu sayede zaten varolan kolonlar ERROR üretmez, 25+ bağlantı yerine 1 bağlantı açılır.
+    _migrations = [
+        ("bots", "initial_balance", "FLOAT DEFAULT 1000.0"),
+        ("bots", "params", "TEXT"),
+        ("bots", "risk_per_trade", "FLOAT DEFAULT 0.01"),
+        ("bots", "max_daily_loss", "FLOAT DEFAULT 0.05"),
+        ("trades", "exchange", "VARCHAR"),
+        ("trades", "session_type", "VARCHAR"),
+        ("trades", "exit_reason", "VARCHAR"),
+        ("trades", "volatility_1h", "FLOAT"),
+        ("trades", "volume_ratio", "FLOAT"),
+        ("trades", "funding_rate", "FLOAT"),
+        ("trades", "rsi_at_entry", "FLOAT"),
+        ("trades", "ema200_trend", "VARCHAR"),
+        ("trades", "leverage_used", "INTEGER"),
+        ("trades", "duration_minutes", "INTEGER"),
+        ("bot_filters", "volatility_filter_enabled", "BOOLEAN DEFAULT FALSE"),
+        ("signal_logs", "raw_payload", "TEXT"),
+        ("signal_logs", "outcome", "VARCHAR"),
+        ("signal_logs", "outcome_price", "FLOAT"),
+        ("signal_logs", "outcome_pnl_pct", "FLOAT"),
+        ("signal_logs", "outcome_at", "TIMESTAMPTZ"),
+        ("signal_logs", "rsi_14", "FLOAT"),
+        ("signal_logs", "volatility_atr", "FLOAT"),
+        ("signal_logs", "volume_ratio", "FLOAT"),
+        ("signal_logs", "ema200_dist", "FLOAT"),
+        ("signal_logs", "timeframe", "VARCHAR"),
+        ("webhook_profiles", "username", "VARCHAR DEFAULT 'default'"),
+        ("webhook_profiles", "leverage", "INTEGER DEFAULT 20"),
+        ("signal_logs", "max_price_in_range", "FLOAT"),
+        ("signal_logs", "min_price_in_range", "FLOAT"),
+        ("signal_logs", "max_favorable_pct", "FLOAT"),
+        ("signal_logs", "tp_was_reachable", "BOOLEAN"),
+        ("signal_logs", "sl_was_hit", "BOOLEAN"),
+        ("signal_logs", "max_adverse_pct", "FLOAT"),
     ]
-    for table, column, sql in migrations:
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(sql))
-                print(f"[Migration] {table}.{column} kolonu eklendi.")
-        except Exception as e:
-            # Kolon zaten varsa veya başka bir hata olursa yoksay (SQLite Duplicate column name hatası)
-            pass
+    try:
+        async with engine.begin() as conn:
+            for table, column, col_type in _migrations:
+                await conn.execute(text(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
+                ))
+        print(f"[Migration] {len(_migrations)} kolon kontrolü tamamlandı (tek transaction).")
+    except Exception as e:
+        print(f"[Migration] Toplu migration hatası (devam ediliyor): {e}")
 
 
 async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
