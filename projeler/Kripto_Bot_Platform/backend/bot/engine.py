@@ -72,7 +72,7 @@ class BotEngine:
             return self._live_balance  # cache hâlâ taze
 
         try:
-            bal = await self.exchange.get_balance()
+            bal = await asyncio.wait_for(self.exchange.get_balance(), timeout=10)
             self._live_balance = {
                 "free":  float(bal.get("free", 0) or 0),
                 "total": float(bal.get("total", 0) or 0),
