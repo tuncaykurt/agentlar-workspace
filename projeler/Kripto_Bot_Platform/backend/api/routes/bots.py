@@ -118,9 +118,9 @@ class _ExClient:
                     "takeProfitOrderPrice": 0,
                 }
                 if tp_price:
-                    stop_body["takeProfitPrice"] = round(float(tp_price), 2)
+                    stop_body["takeProfitPrice"] = float(tp_price)
                 if sl_price:
-                    stop_body["stopLossPrice"] = round(float(sl_price), 2)
+                    stop_body["stopLossPrice"] = float(sl_price)
 
                 try:
                     stop_resp = await self.exchange.contractPrivatePostStoporderPlace(stop_body)
