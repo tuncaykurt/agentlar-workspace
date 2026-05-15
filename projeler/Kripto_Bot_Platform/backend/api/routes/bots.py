@@ -109,8 +109,8 @@ class _ExClient:
                     break
 
             if pos_id:
-                _tp = round(float(tp_price), 4) if tp_price else None
-                _sl = round(float(sl_price), 4) if sl_price else None
+                _tp = round(float(tp_price), 2) if tp_price else None
+                _sl = round(float(sl_price), 2) if sl_price else None
 
                 stop_body = {
                     "positionId": pos_id,
