@@ -7,9 +7,11 @@ import { useState } from "react"
 const LINKS = [
   { href: "/dashboard",     label: "Dashboard" },
   { href: "/bots",          label: "Botlar" },
+  { href: "/trades",        label: "Islemler" },
   { href: "/backtest",      label: "Backtest" },
   { href: "/strategy-view", label: "Strateji" },
   { href: "/analytics",     label: "Analiz" },
+  { href: "/ai-chat",       label: "AI Chat" },
   { href: "/news",           label: "Haberler" },
   { href: "/freqtrade",      label: "Freqtrade" },
   { href: "/settings",      label: "Borsa Bağlantısı" },
