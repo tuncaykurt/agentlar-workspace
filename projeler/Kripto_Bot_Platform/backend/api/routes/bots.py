@@ -29,6 +29,18 @@ class _ExClient:
         """MEXC openType: 1=isolated, 2=cross"""
         return 1 if self._margin_type == "isolated" else 2
 
+    async def get_balance(self) -> dict:
+        """Borsa bakiyesini USDT cinsinden döner."""
+        from exchange.exchange_factory import SUPPORTED_EXCHANGES
+        config = SUPPORTED_EXCHANGES.get(self._exchange_name, {})
+        balance_params = config.get("balance_params", {})
+        balance = await self.exchange.fetch_balance(balance_params)
+        return {
+            "total": float(balance["total"].get("USDT", 0) or 0),
+            "free": float(balance["free"].get("USDT", 0) or 0),
+            "used": float(balance["used"].get("USDT", 0) or 0),
+        }
+
     async def set_leverage(self, symbol, leverage):
         # Zaten aynı leverage set edilmişse API çağrısı yapma
         if self._leverage_cache.get(symbol) == leverage:

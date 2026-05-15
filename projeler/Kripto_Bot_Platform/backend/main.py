@@ -107,11 +107,11 @@ async def lifespan(app: FastAPI):
     print("[Main] Lifespan başlıyor...")
     tasks = []
 
-    # 1. Veritabanı tablolarını oluştur (max 15sn, hata olursa devam et)
+    # 1. Veritabanı tablolarını oluştur (max 10sn, hata olursa devam et)
     try:
-        await asyncio.wait_for(_init_db(), timeout=15)
+        await asyncio.wait_for(_init_db(), timeout=10)
     except asyncio.TimeoutError:
-        print("[Main] DB init timeout (15s) — devam ediliyor.")
+        print("[Main] DB init timeout (10s) — devam ediliyor.")
     except Exception as e:
         print(f"[Main] DB init hatası (devam ediliyor): {e}")
 
@@ -135,12 +135,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Main] Bitget WS hatası (devam ediliyor): {e}")
 
-    # 3. Likidasyon collector (max 10sn timeout)
+    # 3. Likidasyon collector (max 5sn timeout)
     try:
-        liq_tasks = await asyncio.wait_for(start_liquidation_collector(), timeout=10)
+        liq_tasks = await asyncio.wait_for(start_liquidation_collector(), timeout=5)
         tasks.extend(liq_tasks)
     except asyncio.TimeoutError:
-        print("[Main] LiqCollector timeout (10s) — devam ediliyor.")
+        print("[Main] LiqCollector timeout (5s) — devam ediliyor.")
     except Exception as e:
         print(f"[Main] LiqCollector hatası (devam ediliyor): {e}")
 
@@ -157,15 +157,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Main] SignalTracker hatası (devam ediliyor): {e}")
 
-    # 6. Bot auto-start (max 15sn timeout)
-    try:
-        await asyncio.wait_for(_auto_start_bots(tasks), timeout=15)
-    except asyncio.TimeoutError:
-        print("[Main] Bot auto-start timeout (15s) — devam ediliyor.")
-    except Exception as e:
-        print(f"[Main] Bot auto-start hatası (devam ediliyor): {e}")
+    print("[Main] ✓ Uygulama hazır — bot auto-start arka planda çalışacak.")
 
-    print("[Main] ✓ Uygulama hazır.")
+    # 6. Bot auto-start — ARKA PLANDA (lifespan'ı bloklamasın, reverse proxy timeout'a düşmesin)
+    async def _deferred_auto_start():
+        await asyncio.sleep(2)  # App'in tam başlamasını bekle
+        try:
+            await asyncio.wait_for(_auto_start_bots(tasks), timeout=30)
+        except asyncio.TimeoutError:
+            print("[Main] Bot auto-start timeout (30s).")
+        except Exception as e:
+            print(f"[Main] Bot auto-start hatası: {e}")
+    tasks.append(asyncio.create_task(_deferred_auto_start()))
     yield
 
     # Kapatma
