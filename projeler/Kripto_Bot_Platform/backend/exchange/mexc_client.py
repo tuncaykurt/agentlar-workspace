@@ -58,6 +58,7 @@ class MEXCClient:
 
             pos_id = None
             actual_entry = None
+            actual_leverage = 20
             target_type = 1 if is_long else 2
             _waits = [0.3, 0.7, 1.5]
             for attempt in range(1, 4):
@@ -69,12 +70,13 @@ class MEXCClient:
                         if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
                             pos_id = int(p.get("positionId", 0))
                             actual_entry = float(p.get("openAvg", 0) or p.get("openAvgPrice", 0) or 0)
+                            actual_leverage = int(p.get("leverage", 20))
                             break
                 except Exception as e:
                     print(f"[MEXCClient] position query error (attempt {attempt}/3): {e}")
 
                 if pos_id:
-                    print(f"[MEXCClient] Position ID bulundu: {pos_id} entry={actual_entry} (attempt {attempt}/3)")
+                    print(f"[MEXCClient] Position ID bulundu: {pos_id} entry={actual_entry} lev={actual_leverage} (attempt {attempt}/3)")
                     break
                 print(f"[MEXCClient] Position ID bulunamadi (attempt {attempt}/3), tekrar deneniyor...")
 
@@ -119,7 +121,7 @@ class MEXCClient:
                     trail_side = 4 if is_long else 2
                     trail_body = {
                         "symbol": mexc_symbol,
-                        "leverage": 20,
+                        "leverage": actual_leverage,
                         "side": trail_side,
                         "vol": int(amount),
                         "openType": 1,
@@ -128,8 +130,8 @@ class MEXCClient:
                         "backType": 1,
                         "backValue": round(float(trailing_callback_rate), 4),
                         "positionMode": 1,
-                        "reduceOnly": True,
                     }
+                    print(f"[MEXCClient] Trailing order: {trail_body}")
                     try:
                         trail_resp = await self.exchange.contractPrivatePostTrackorderPlace(trail_body)
                         print(f"[MEXCClient] ✓ Trailing order konuldu: {trail_resp}")

@@ -100,6 +100,7 @@ class _ExClient:
             pos_vol = int(amount)
 
             actual_entry = None
+            actual_leverage = int(leverage)
             for attempt, wait in enumerate([0.3, 0.7, 1.5], 1):
                 await asyncio.sleep(wait)
                 try:
@@ -110,11 +111,12 @@ class _ExClient:
                             pos_id = int(p.get("positionId", 0))
                             pos_vol = int(float(p.get("holdVol", amount)))
                             actual_entry = float(p.get("openAvg", 0) or p.get("openAvgPrice", 0) or p.get("avgPrice", 0) or 0)
+                            actual_leverage = int(p.get("leverage", leverage))
                             break
                 except Exception as e:
                     print(f"[ExClient] MEXC position query HATA (attempt {attempt}): {e}")
                 if pos_id:
-                    print(f"[ExClient] MEXC position found: id={pos_id} type={target_type} vol={pos_vol} entry={actual_entry} (attempt {attempt})")
+                    print(f"[ExClient] MEXC position found: id={pos_id} type={target_type} vol={pos_vol} entry={actual_entry} leverage={actual_leverage} (attempt {attempt})")
                     break
 
             # ── Gerçek giriş fiyatından TP/SL yeniden hesapla ──
@@ -182,7 +184,7 @@ class _ExClient:
 
                     trail_body = {
                         "symbol": mexc_symbol,
-                        "leverage": int(leverage),
+                        "leverage": actual_leverage,
                         "side": trail_side,
                         "vol": pos_vol,
                         "openType": self._open_type,
@@ -191,10 +193,9 @@ class _ExClient:
                         "backType": 1,           # 1=percentage
                         "backValue": _callback,
                         "positionMode": 1,       # 1=hedge (two-way)
-                        "reduceOnly": True,
                     }
 
-                    print(f"[ExClient] MEXC trailing order gönderiliyor: active={_active} callback={_callback}% vol={pos_vol}")
+                    print(f"[ExClient] MEXC trailing order: {trail_body}")
 
                     trail_ok = False
                     for trail_attempt in range(1, 3):
