@@ -2054,6 +2054,7 @@ class BotEngine:
                           f"Long active={long_trail_active} Short active={short_trail_active}")
 
                 # Long + Short paralel aç — her place_order kendi TP/SL veya Trailing'ini koyar
+                # tp_pct/sl_pct geçerek gerçek giriş fiyatından TP/SL hesaplanmasını sağla
                 results = await asyncio.gather(
                     self.exchange.place_order(
                         symbol, "buy", long_qty, "market",
@@ -2062,6 +2063,8 @@ class BotEngine:
                         pos_side="long",
                         trailing_callback_rate=trail_cb,
                         trailing_active_price=long_trail_active,
+                        tp_pct=p.long_tp_pct,
+                        sl_pct=p.long_sl_pct,
                     ),
                     self.exchange.place_order(
                         symbol, "sell", short_qty, "market",
@@ -2070,6 +2073,8 @@ class BotEngine:
                         pos_side="short",
                         trailing_callback_rate=trail_cb,
                         trailing_active_price=short_trail_active,
+                        tp_pct=p.short_tp_pct,
+                        sl_pct=p.short_sl_pct,
                     ),
                     return_exceptions=True,
                 )

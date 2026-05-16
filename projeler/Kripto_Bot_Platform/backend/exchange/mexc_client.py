@@ -36,6 +36,8 @@ class MEXCClient:
         pos_side: str = None,
         trailing_callback_rate: float = None,
         trailing_active_price: float = None,
+        tp_pct: float = None,
+        sl_pct: float = None,
     ) -> dict:
         import asyncio
         params = {}
@@ -55,6 +57,7 @@ class MEXCClient:
             is_long = side.lower() == "buy"
 
             pos_id = None
+            actual_entry = None
             target_type = 1 if is_long else 2
             for attempt in range(1, 4):
                 await asyncio.sleep(1.0 + attempt * 0.5)
@@ -64,14 +67,27 @@ class MEXCClient:
                     for p in (pos_data or []):
                         if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
                             pos_id = int(p.get("positionId", 0))
+                            actual_entry = float(p.get("openAvg", 0) or p.get("openAvgPrice", 0) or 0)
                             break
                 except Exception as e:
                     print(f"[MEXCClient] position query error (attempt {attempt}/3): {e}")
 
                 if pos_id:
-                    print(f"[MEXCClient] ✓ Position ID bulundu: {pos_id} (attempt {attempt}/3)")
+                    print(f"[MEXCClient] Position ID bulundu: {pos_id} entry={actual_entry} (attempt {attempt}/3)")
                     break
-                print(f"[MEXCClient] ⚠ Position ID bulunamadı (attempt {attempt}/3), tekrar deneniyor...")
+                print(f"[MEXCClient] Position ID bulunamadi (attempt {attempt}/3), tekrar deneniyor...")
+
+            # Gerçek giriş fiyatından TP/SL yeniden hesapla
+            if pos_id and actual_entry and actual_entry > 0 and tp_pct is not None and sl_pct is not None:
+                if is_long:
+                    tp_price = round(actual_entry * (1 + float(tp_pct) / 100), 2)
+                    sl_price = round(actual_entry * (1 - float(sl_pct) / 100), 2)
+                else:
+                    tp_price = round(actual_entry * (1 - float(tp_pct) / 100), 2)
+                    sl_price = round(actual_entry * (1 + float(sl_pct) / 100), 2)
+                if use_trailing and tp_price:
+                    trailing_active_price = tp_price
+                print(f"[MEXCClient] TP/SL gercek giris fiyatindan hesaplandi: entry={actual_entry} TP={tp_price} SL={sl_price}")
 
             if pos_id:
                 # SL her zaman stoporder ile konur

@@ -60,7 +60,8 @@ class _ExClient:
             print(f"[ExClient] set_leverage uyarısı ({self._exchange_name}): {e}")
 
     async def _mexc_place_order_direct(self, symbol, side, amount, leverage, tp_price=None, sl_price=None, entry_price=None,
-                                       trailing_callback_rate=None, trailing_active_price=None):
+                                       trailing_callback_rate=None, trailing_active_price=None,
+                                       tp_pct=None, sl_pct=None):
         """
         MEXC futures: market order aç, ardından TP/SL veya Trailing Stop koy.
 
@@ -98,6 +99,7 @@ class _ExClient:
             pos_id = None
             pos_vol = int(amount)
 
+            actual_entry = None
             for attempt, wait in enumerate([1.0, 2.0, 3.0], 1):
                 await asyncio.sleep(wait)
                 try:
@@ -107,12 +109,27 @@ class _ExClient:
                         if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
                             pos_id = int(p.get("positionId", 0))
                             pos_vol = int(float(p.get("holdVol", amount)))
+                            actual_entry = float(p.get("openAvg", 0) or p.get("openAvgPrice", 0) or p.get("avgPrice", 0) or 0)
                             break
                 except Exception as e:
                     print(f"[ExClient] MEXC position query HATA (attempt {attempt}): {e}")
                 if pos_id:
-                    print(f"[ExClient] MEXC position found: id={pos_id} type={target_type} vol={pos_vol} (attempt {attempt})")
+                    print(f"[ExClient] MEXC position found: id={pos_id} type={target_type} vol={pos_vol} entry={actual_entry} (attempt {attempt})")
                     break
+
+            # ── Gerçek giriş fiyatından TP/SL yeniden hesapla ──
+            if pos_id and actual_entry and actual_entry > 0 and tp_pct is not None and sl_pct is not None:
+                old_tp, old_sl = tp_price, sl_price
+                if is_long:
+                    tp_price = round(actual_entry * (1 + float(tp_pct) / 100), 2)
+                    sl_price = round(actual_entry * (1 - float(sl_pct) / 100), 2)
+                else:
+                    tp_price = round(actual_entry * (1 - float(tp_pct) / 100), 2)
+                    sl_price = round(actual_entry * (1 + float(sl_pct) / 100), 2)
+                if use_trailing:
+                    trailing_active_price = tp_price  # Trailing aktivasyon = yeni TP
+                print(f"[ExClient] TP/SL gercek giris fiyatindan yeniden hesaplandi: entry={actual_entry} "
+                      f"TP {old_tp}->{tp_price} SL {old_sl}->{sl_price}")
 
             if pos_id:
                 # ── SL her zaman stoporder/place ile konur ──
@@ -269,13 +286,15 @@ class _ExClient:
 
     async def place_order(self, symbol, side, amount, order_type="market", price=None,
                           tp_price=None, sl_price=None, pos_side=None,
-                          trailing_callback_rate=None, trailing_active_price=None):
+                          trailing_callback_rate=None, trailing_active_price=None,
+                          tp_pct=None, sl_pct=None):
         if self._exchange_name == "mexc":
             leverage = self._leverage_cache.get(symbol, 10)
             return await self._mexc_place_order_direct(
                 symbol, side, amount, leverage, tp_price, sl_price, entry_price=price,
                 trailing_callback_rate=trailing_callback_rate,
                 trailing_active_price=trailing_active_price,
+                tp_pct=tp_pct, sl_pct=sl_pct,
             )
 
         params = self._build_order_params(tp_price, sl_price, pos_side)
