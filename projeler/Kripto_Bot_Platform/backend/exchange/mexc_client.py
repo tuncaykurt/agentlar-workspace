@@ -59,8 +59,9 @@ class MEXCClient:
             pos_id = None
             actual_entry = None
             target_type = 1 if is_long else 2
+            _waits = [0.3, 0.7, 1.5]
             for attempt in range(1, 4):
-                await asyncio.sleep(1.0 + attempt * 0.5)
+                await asyncio.sleep(_waits[attempt - 1])
                 try:
                     pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
                     pos_data = pos_resp.get("data", []) if isinstance(pos_resp, dict) else pos_resp

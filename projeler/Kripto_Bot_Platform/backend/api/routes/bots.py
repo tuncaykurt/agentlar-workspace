@@ -100,7 +100,7 @@ class _ExClient:
             pos_vol = int(amount)
 
             actual_entry = None
-            for attempt, wait in enumerate([1.0, 2.0, 3.0], 1):
+            for attempt, wait in enumerate([0.3, 0.7, 1.5], 1):
                 await asyncio.sleep(wait)
                 try:
                     pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
