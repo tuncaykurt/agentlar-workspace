@@ -1334,21 +1334,25 @@ export default function BotsPage() {
   }, [form.exchange, wizardOpen])
 
   // Borsa değiştiğinde tüm sembol listesini çek
-  useEffect(() => {
-    if (!form.exchange || !wizardOpen) return
-    let cancelled = false
+  const [symbolsError, setSymbolsError] = useState<string | null>(null)
+  const fetchSymbols = (exchange: string) => {
     setSymbolsLoading(true)
+    setSymbolsError(null)
     setExchangeSymbols([])
-    api.get(`/exchanges/${form.exchange}/symbols`)
+    api.get(`/exchanges/${exchange}/symbols`)
       .then((data: any) => {
-        if (cancelled) return
         if (data?.symbols && Array.isArray(data.symbols)) {
           setExchangeSymbols(data.symbols)
         }
       })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setSymbolsLoading(false) })
-    return () => { cancelled = true }
+      .catch((e: any) => {
+        setSymbolsError(e?.message || "Semboller yüklenemedi")
+      })
+      .finally(() => setSymbolsLoading(false))
+  }
+  useEffect(() => {
+    if (!form.exchange || !wizardOpen) return
+    fetchSymbols(form.exchange)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.exchange, wizardOpen])
 
@@ -2178,7 +2182,18 @@ export default function BotsPage() {
                             {symbolsLoading ? (
                               <div className="px-4 py-8 text-center text-slate-500 text-sm">
                                 <div className="animate-spin inline-block w-5 h-5 border-2 border-slate-600 border-t-blue-500 rounded-full mb-2" />
-                                <p>Semboller yükleniyor...</p>
+                                <p>Semboller yükleniyor... (ilk sefer biraz uzun sürebilir)</p>
+                              </div>
+                            ) : symbolsError ? (
+                              <div className="px-4 py-6 text-center space-y-2">
+                                <p className="text-red-400 text-sm">{symbolsError}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => fetchSymbols(form.exchange)}
+                                  className="px-4 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-300 text-xs hover:bg-blue-600/40 transition-colors"
+                                >
+                                  Tekrar Dene
+                                </button>
                               </div>
                             ) : (
                               (() => {

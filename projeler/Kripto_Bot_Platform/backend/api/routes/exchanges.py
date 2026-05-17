@@ -197,23 +197,11 @@ async def test_order(exchange: str, data: TestOrderRequest):
         await client.close()
 
 
-@router.get("/{exchange}/symbols")
-async def get_symbols(exchange: str):
-    """Borsadaki tüm futures sembollerini fee ve max leverage bilgisiyle döndür."""
-    redis = get_redis()
-
-    # 5 dakikalık cache — sembol listesi sık değişmez
-    cache_key = f"symbols_cache:{exchange}"
-    cached = await redis.get(cache_key)
-    if cached:
-        return json.loads(cached)
-
-    raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{exchange}")
-    if not raw:
-        raise HTTPException(404, f"{exchange} için API key bulunamadı")
-
-    keys = json.loads(raw)
+async def _fetch_symbols_from_exchange(exchange: str, keys: dict) -> dict:
+    """Borsa sembollerini çek — arka planda veya direkt çağrılır."""
     client = create_exchange_client(exchange, keys["api_key"], keys["secret"], keys.get("passphrase", ""))
+    # Timeout ayarı — gateway timeout'unu önlemek için
+    client.timeout = 30000  # 30 saniye
 
     try:
         await client.load_markets()
@@ -239,29 +227,54 @@ async def get_symbols(exchange: str):
             if leverage_limits and leverage_limits.get("max"):
                 max_leverage = int(leverage_limits["max"])
 
-            # Precision info
             base = market.get("base", "")
 
             symbols.append({
                 "symbol": symbol,
                 "base": base,
-                "taker_fee": round(taker_fee * 100, 4),  # yüzde olarak
+                "taker_fee": round(taker_fee * 100, 4),
                 "maker_fee": round(maker_fee * 100, 4),
                 "zero_fee": taker_fee == 0 and maker_fee == 0,
                 "max_leverage": max_leverage,
             })
 
-        # Base'e göre alfabetik sırala
         symbols.sort(key=lambda x: x["base"])
+        return {"exchange": exchange, "symbols": symbols, "total": len(symbols)}
+    finally:
+        await client.close()
 
-        result = {"exchange": exchange, "symbols": symbols, "total": len(symbols)}
-        await redis.set(cache_key, json.dumps(result), ex=300)  # 5 dk cache
+
+@router.get("/{exchange}/symbols")
+async def get_symbols(exchange: str):
+    """Borsadaki tüm futures sembollerini fee ve max leverage bilgisiyle döndür."""
+    import asyncio
+    redis = get_redis()
+
+    # 1 saatlik cache — sembol listesi nadiren değişir
+    cache_key = f"symbols_cache:{exchange}"
+    cached = await redis.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
+    raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{exchange}")
+    if not raw:
+        raise HTTPException(404, f"{exchange} için API key bulunamadı")
+
+    keys = json.loads(raw)
+
+    try:
+        # 45 saniye timeout ile çalıştır — gateway timeout'unun altında kal
+        result = await asyncio.wait_for(
+            _fetch_symbols_from_exchange(exchange, keys),
+            timeout=45.0
+        )
+        await redis.set(cache_key, json.dumps(result), ex=3600)  # 1 saat cache
         return result
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "Borsa API yanıt vermedi — lütfen tekrar deneyin")
     except Exception as e:
         import traceback
         raise HTTPException(400, f"Sembol listesi alınamadı: {str(e)}\n{traceback.format_exc()}")
-    finally:
-        await client.close()
 
 
 class ClosePositionRequest(BaseModel):
