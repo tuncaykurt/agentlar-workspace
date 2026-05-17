@@ -1259,6 +1259,8 @@ export default function BotsPage() {
   const [symbolsLoading,   setSymbolsLoading]   = useState(false)
   const [symbolSearch,     setSymbolSearch]      = useState("")
   const [symbolDropdownOpen, setSymbolDropdownOpen] = useState(false)
+  const [symbolFilterFee,  setSymbolFilterFee]   = useState<"all"|"zero"|"low">("all")  // all, zero (0 fee), low (<0.04%)
+  const [symbolFilterLev,  setSymbolFilterLev]   = useState<number>(0) // 0 = hepsi, 50/100/200 = min leverage
   const symbolDropdownRef = useRef<HTMLDivElement>(null)
 
   // Dropdown dışına tıklanınca kapat
@@ -2115,6 +2117,56 @@ export default function BotsPage() {
                               className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                             />
                           </div>
+                          {/* Filtreler */}
+                          <div className="px-3 py-2 border-b border-slate-800 space-y-2">
+                            {/* Fee filtresi */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-slate-500 w-14 shrink-0">Komisyon:</span>
+                              {([
+                                { v: "all", label: "Tümü" },
+                                { v: "zero", label: "0 Fee" },
+                                { v: "low", label: "< 0.04%" },
+                              ] as const).map(f => (
+                                <button
+                                  key={f.v}
+                                  type="button"
+                                  onClick={() => setSymbolFilterFee(f.v)}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                                    symbolFilterFee === f.v
+                                      ? f.v === "zero" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                                        : "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+                                      : "bg-slate-800 text-slate-500 border border-slate-700 hover:border-slate-600"
+                                  }`}
+                                >
+                                  {f.label}
+                                </button>
+                              ))}
+                            </div>
+                            {/* Kaldıraç filtresi */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-slate-500 w-14 shrink-0">Kaldıraç:</span>
+                              {([
+                                { v: 0, label: "Tümü" },
+                                { v: 50, label: "50x+" },
+                                { v: 100, label: "100x+" },
+                                { v: 125, label: "125x+" },
+                                { v: 200, label: "200x+" },
+                              ] as const).map(f => (
+                                <button
+                                  key={f.v}
+                                  type="button"
+                                  onClick={() => setSymbolFilterLev(f.v)}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                                    symbolFilterLev === f.v
+                                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                                      : "bg-slate-800 text-slate-500 border border-slate-700 hover:border-slate-600"
+                                  }`}
+                                >
+                                  {f.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           {/* Liste başlığı */}
                           <div className="grid grid-cols-[1fr_80px_60px] px-4 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800">
                             <span>Sembol</span>
@@ -2122,7 +2174,7 @@ export default function BotsPage() {
                             <span className="text-center">Kaldıraç</span>
                           </div>
                           {/* Sembol listesi */}
-                          <div className="max-h-72 overflow-y-auto">
+                          <div className="max-h-64 overflow-y-auto">
                             {symbolsLoading ? (
                               <div className="px-4 py-8 text-center text-slate-500 text-sm">
                                 <div className="animate-spin inline-block w-5 h-5 border-2 border-slate-600 border-t-blue-500 rounded-full mb-2" />
@@ -2130,17 +2182,31 @@ export default function BotsPage() {
                               </div>
                             ) : (
                               (() => {
-                                const items = exchangeSymbols.length > 0
+                                let items = exchangeSymbols.length > 0
                                   ? exchangeSymbols.filter(s =>
                                       s.base.toLowerCase().includes(symbolSearch.toLowerCase()) ||
                                       s.symbol.toLowerCase().includes(symbolSearch.toLowerCase())
                                     )
                                   : FALLBACK_SYMBOLS
                                       .filter(s => s.toLowerCase().includes(symbolSearch.toLowerCase()))
-                                      .map(s => ({ symbol: s, base: s.split("/")[0], taker_fee: 0.06, maker_fee: 0.02, zero_fee: false, max_leverage: null }))
+                                      .map(s => ({ symbol: s, base: s.split("/")[0], taker_fee: 0.06, maker_fee: 0.02, zero_fee: false, max_leverage: null as number | null }))
+
+                                // Fee filtresi
+                                if (symbolFilterFee === "zero") {
+                                  items = items.filter(s => s.zero_fee)
+                                } else if (symbolFilterFee === "low") {
+                                  items = items.filter(s => s.taker_fee < 0.04)
+                                }
+
+                                // Kaldıraç filtresi
+                                if (symbolFilterLev > 0) {
+                                  items = items.filter(s => s.max_leverage != null && s.max_leverage >= symbolFilterLev)
+                                }
 
                                 if (items.length === 0) return (
-                                  <div className="px-4 py-6 text-center text-slate-500 text-sm">Sonuç bulunamadı</div>
+                                  <div className="px-4 py-6 text-center text-slate-500 text-sm">
+                                    Filtreye uygun sonuç bulunamadı
+                                  </div>
                                 )
 
                                 return items.map((s) => (
@@ -2174,8 +2240,17 @@ export default function BotsPage() {
                           </div>
                           {/* Alt bilgi */}
                           {exchangeSymbols.length > 0 && (
-                            <div className="px-4 py-2 border-t border-slate-800 text-[10px] text-slate-600">
-                              Toplam {exchangeSymbols.length} çift • {exchangeSymbols.filter(s => s.zero_fee).length} adet 0 fee
+                            <div className="px-4 py-2 border-t border-slate-800 text-[10px] text-slate-600 flex justify-between">
+                              <span>Toplam {exchangeSymbols.length} çift • {exchangeSymbols.filter(s => s.zero_fee).length} adet 0 fee</span>
+                              {(symbolFilterFee !== "all" || symbolFilterLev > 0) && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setSymbolFilterFee("all"); setSymbolFilterLev(0) }}
+                                  className="text-blue-400 hover:text-blue-300"
+                                >
+                                  Filtreleri temizle
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
