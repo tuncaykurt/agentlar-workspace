@@ -128,7 +128,7 @@ class BotEngine:
                 # ── Dual Hedge Bot Stratejisi ─────────────────────────
                 if strategy == "dual_hedge":
                     await self._run_dual_hedge_cycle(redis, symbol)
-                    await asyncio.sleep(60) # 1 dakikada bir kontrol (Dinamik TP/SL için)
+                    await asyncio.sleep(5)  # 5sn'de bir kontrol (dinamik TP/SL + trailing için hızlı tepki şart)
                     continue
 
                 # ── Grid Bot Stratejisi ───────────────────────────────
