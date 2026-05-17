@@ -197,6 +197,73 @@ async def test_order(exchange: str, data: TestOrderRequest):
         await client.close()
 
 
+@router.get("/{exchange}/symbols")
+async def get_symbols(exchange: str):
+    """Borsadaki tüm futures sembollerini fee ve max leverage bilgisiyle döndür."""
+    redis = get_redis()
+
+    # 5 dakikalık cache — sembol listesi sık değişmez
+    cache_key = f"symbols_cache:{exchange}"
+    cached = await redis.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
+    raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{exchange}")
+    if not raw:
+        raise HTTPException(404, f"{exchange} için API key bulunamadı")
+
+    keys = json.loads(raw)
+    client = create_exchange_client(exchange, keys["api_key"], keys["secret"], keys.get("passphrase", ""))
+
+    try:
+        await client.load_markets()
+        symbols = []
+        for symbol, market in client.markets.items():
+            # Sadece aktif swap/futures kontratları
+            if not market.get("swap") and not market.get("future"):
+                continue
+            if not market.get("active", True):
+                continue
+            # Sadece USDT marjinli
+            if market.get("settle") != "USDT" and market.get("quote") != "USDT":
+                continue
+
+            # Fee bilgisi
+            taker_fee = market.get("taker", 0) or 0
+            maker_fee = market.get("maker", 0) or 0
+
+            # Max leverage
+            max_leverage = None
+            limits = market.get("limits", {})
+            leverage_limits = limits.get("leverage", {})
+            if leverage_limits and leverage_limits.get("max"):
+                max_leverage = int(leverage_limits["max"])
+
+            # Precision info
+            base = market.get("base", "")
+
+            symbols.append({
+                "symbol": symbol,
+                "base": base,
+                "taker_fee": round(taker_fee * 100, 4),  # yüzde olarak
+                "maker_fee": round(maker_fee * 100, 4),
+                "zero_fee": taker_fee == 0 and maker_fee == 0,
+                "max_leverage": max_leverage,
+            })
+
+        # Base'e göre alfabetik sırala
+        symbols.sort(key=lambda x: x["base"])
+
+        result = {"exchange": exchange, "symbols": symbols, "total": len(symbols)}
+        await redis.set(cache_key, json.dumps(result), ex=300)  # 5 dk cache
+        return result
+    except Exception as e:
+        import traceback
+        raise HTTPException(400, f"Sembol listesi alınamadı: {str(e)}\n{traceback.format_exc()}")
+    finally:
+        await client.close()
+
+
 class ClosePositionRequest(BaseModel):
     symbol: str = "ETH/USDT:USDT"
 

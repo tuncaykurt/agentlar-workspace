@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { api } from "@/lib/api"
 import BotCard from "@/components/BotCard/BotCard"
 
@@ -13,13 +13,22 @@ interface Bot {
   params?: Record<string, any> | null
 }
 
-// ─── Semboller ────────────────────────────────────────────────────────────────
-const SYMBOLS = [
+// ─── Semboller (fallback) ─────────────────────────────────────────────────────
+const FALLBACK_SYMBOLS = [
   "BTC/USDT:USDT","ETH/USDT:USDT","SOL/USDT:USDT","BNB/USDT:USDT",
   "XRP/USDT:USDT","ADA/USDT:USDT","AVAX/USDT:USDT","DOGE/USDT:USDT",
   "ARB/USDT:USDT","OP/USDT:USDT","LINK/USDT:USDT","SUI/USDT:USDT",
   "INJ/USDT:USDT","TON/USDT:USDT","NEAR/USDT:USDT","KAS/USDT:USDT",
 ]
+
+interface ExchangeSymbol {
+  symbol: string
+  base: string
+  taker_fee: number
+  maker_fee: number
+  zero_fee: boolean
+  max_leverage: number | null
+}
 
 // ─── Strateji kataloğu ────────────────────────────────────────────────────────
 interface StrategyParam {
@@ -1246,6 +1255,24 @@ export default function BotsPage() {
   const [exchangeBalance,  setExchangeBalance]  = useState<number | null>(null)
   const [balanceLoading,   setBalanceLoading]   = useState(false)
   const [filter,           setFilter]           = useState<"all"|"active"|"stopped"|"paper"|"live">("all")
+  const [exchangeSymbols,  setExchangeSymbols]  = useState<ExchangeSymbol[]>([])
+  const [symbolsLoading,   setSymbolsLoading]   = useState(false)
+  const [symbolSearch,     setSymbolSearch]      = useState("")
+  const [symbolDropdownOpen, setSymbolDropdownOpen] = useState(false)
+  const symbolDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Dropdown dışına tıklanınca kapat
+  useEffect(() => {
+    if (!symbolDropdownOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (symbolDropdownRef.current && !symbolDropdownRef.current.contains(e.target as Node)) {
+        setSymbolDropdownOpen(false)
+        setSymbolSearch("")
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [symbolDropdownOpen])
 
   useEffect(() => {
     api.get("/bots/").then(data => {
@@ -1300,6 +1327,25 @@ export default function BotsPage() {
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setBalanceLoading(false) })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.exchange, wizardOpen])
+
+  // Borsa değiştiğinde tüm sembol listesini çek
+  useEffect(() => {
+    if (!form.exchange || !wizardOpen) return
+    let cancelled = false
+    setSymbolsLoading(true)
+    setExchangeSymbols([])
+    api.get(`/exchanges/${form.exchange}/symbols`)
+      .then((data: any) => {
+        if (cancelled) return
+        if (data?.symbols && Array.isArray(data.symbols)) {
+          setExchangeSymbols(data.symbols)
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSymbolsLoading(false) })
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.exchange, wizardOpen])
@@ -2025,18 +2071,115 @@ export default function BotsPage() {
                     </div>
                   </Field>
 
-                  <Field label="İşlem Sembolü" description="Botun işlem yapacağı futures kontrat">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-64 overflow-y-auto pr-1">
-                      {SYMBOLS.map(s => (
-                        <button key={s} onClick={() => set("symbol", s)}
-                          className={`py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
-                            form.symbol === s
-                              ? "border-blue-500/60 bg-blue-500/10 text-blue-300"
-                              : "border-slate-800 text-slate-400 hover:border-slate-600 hover:text-white"
-                          }`}>
-                          {fmtSymbol(s)}
-                        </button>
-                      ))}
+                  <Field label="İşlem Sembolü" description="Botun işlem yapacağı futures kontrat — arama yaparak bulabilirsiniz">
+                    <div className="relative" ref={symbolDropdownRef}>
+                      {/* Seçili sembol + açma butonu */}
+                      <button
+                        type="button"
+                        onClick={() => setSymbolDropdownOpen(!symbolDropdownOpen)}
+                        className="w-full flex items-center justify-between bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-sm hover:border-slate-500 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-white font-medium">{fmtSymbol(form.symbol)}</span>
+                          {(() => {
+                            const info = exchangeSymbols.find(s => s.symbol === form.symbol)
+                            if (info) return (
+                              <span className="flex items-center gap-2 text-xs">
+                                <span className={info.zero_fee ? "text-emerald-400 font-semibold" : "text-slate-500"}>
+                                  {info.zero_fee ? "0 FEE" : `${info.taker_fee}%`}
+                                </span>
+                                {info.max_leverage && (
+                                  <span className="text-amber-400">{info.max_leverage}x</span>
+                                )}
+                              </span>
+                            )
+                            return null
+                          })()}
+                        </div>
+                        <svg className={`w-4 h-4 text-slate-500 transition-transform ${symbolDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {/* Dropdown */}
+                      {symbolDropdownOpen && (
+                        <div className="absolute z-50 mt-1 w-full bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+                          {/* Arama kutusu */}
+                          <div className="p-2 border-b border-slate-700">
+                            <input
+                              type="text"
+                              value={symbolSearch}
+                              onChange={e => setSymbolSearch(e.target.value)}
+                              placeholder="Coin ara... (BTC, ETH, SOL...)"
+                              autoFocus
+                              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          {/* Liste başlığı */}
+                          <div className="grid grid-cols-[1fr_80px_60px] px-4 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800">
+                            <span>Sembol</span>
+                            <span className="text-center">Fee</span>
+                            <span className="text-center">Kaldıraç</span>
+                          </div>
+                          {/* Sembol listesi */}
+                          <div className="max-h-72 overflow-y-auto">
+                            {symbolsLoading ? (
+                              <div className="px-4 py-8 text-center text-slate-500 text-sm">
+                                <div className="animate-spin inline-block w-5 h-5 border-2 border-slate-600 border-t-blue-500 rounded-full mb-2" />
+                                <p>Semboller yükleniyor...</p>
+                              </div>
+                            ) : (
+                              (() => {
+                                const items = exchangeSymbols.length > 0
+                                  ? exchangeSymbols.filter(s =>
+                                      s.base.toLowerCase().includes(symbolSearch.toLowerCase()) ||
+                                      s.symbol.toLowerCase().includes(symbolSearch.toLowerCase())
+                                    )
+                                  : FALLBACK_SYMBOLS
+                                      .filter(s => s.toLowerCase().includes(symbolSearch.toLowerCase()))
+                                      .map(s => ({ symbol: s, base: s.split("/")[0], taker_fee: 0.06, maker_fee: 0.02, zero_fee: false, max_leverage: null }))
+
+                                if (items.length === 0) return (
+                                  <div className="px-4 py-6 text-center text-slate-500 text-sm">Sonuç bulunamadı</div>
+                                )
+
+                                return items.map((s) => (
+                                  <button
+                                    key={s.symbol}
+                                    type="button"
+                                    onClick={() => {
+                                      set("symbol", s.symbol)
+                                      setSymbolDropdownOpen(false)
+                                      setSymbolSearch("")
+                                    }}
+                                    className={`w-full grid grid-cols-[1fr_80px_60px] items-center px-4 py-2 text-sm transition-colors ${
+                                      form.symbol === s.symbol
+                                        ? "bg-blue-500/10 border-l-2 border-blue-500"
+                                        : "hover:bg-slate-800 border-l-2 border-transparent"
+                                    }`}
+                                  >
+                                    <span className={`text-left font-medium ${form.symbol === s.symbol ? "text-blue-300" : "text-white"}`}>
+                                      {s.base}<span className="text-slate-600">/USDT</span>
+                                    </span>
+                                    <span className={`text-center text-xs ${s.zero_fee ? "text-emerald-400 font-bold" : "text-slate-500"}`}>
+                                      {s.zero_fee ? "0 FEE ✓" : `${s.taker_fee}%`}
+                                    </span>
+                                    <span className="text-center text-xs text-amber-400">
+                                      {s.max_leverage ? `${s.max_leverage}x` : "—"}
+                                    </span>
+                                  </button>
+                                ))
+                              })()
+                            )}
+                          </div>
+                          {/* Alt bilgi */}
+                          {exchangeSymbols.length > 0 && (
+                            <div className="px-4 py-2 border-t border-slate-800 text-[10px] text-slate-600">
+                              Toplam {exchangeSymbols.length} çift • {exchangeSymbols.filter(s => s.zero_fee).length} adet 0 fee
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </Field>
 
