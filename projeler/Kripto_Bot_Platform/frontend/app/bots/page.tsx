@@ -327,6 +327,81 @@ const STRATEGIES: Strategy[] = [
       { key: "take_profit_price", label: "Take Profit Fiyatı", type: "number",  min: 0,    max: 9999999, step: 0.01, default: 0, description: "Fiyat bu seviyeye ulaşırsa gridleri kapat (0 = yüzde modunu kullan)" },
     ],
   },
+  {
+    id: "smart_scanner",
+    name: "Smart Scanner Bot",
+    category: "Custom" as const,
+    icon: "🧠",
+    description: "Tüm zero-fee coinleri otomatik tarar, en iyi fırsatları seçer ve işleme girer. Manuel Kriter veya AI Karar modu ile çalışır.",
+    signals: ["Otomatik coin seçimi", "Çoklu pozisyon yönetimi", "AI analiz"],
+    params: [
+      { key: "selection_mode", label: "Seçim Modu", type: "select", default: "manual", description: "Manuel: kendi kriterleriniz | AI: yapay zeka coin seçer",
+        options: [
+          { value: "manual", label: "Manuel Kriter" },
+          { value: "ai",     label: "AI Karar (Claude)" },
+        ],
+      },
+      { key: "scan_interval", label: "Tarama Aralığı (sn)", type: "number", min: 30, max: 3600, step: 10, default: 120, description: "Kaç saniyede bir tüm coinleri tara" },
+      { key: "max_positions", label: "Max Pozisyon", type: "number", min: 1, max: 10, step: 1, default: 3, description: "Aynı anda max kaç coin'de pozisyon açılsın" },
+      { key: "leverage",      label: "Kaldıraç",     type: "number", min: 1, max: 100, step: 1, default: 5, description: "Varsayılan kaldıraç (AI modunda AI önerebilir)" },
+      { key: "tp_pct",        label: "Take Profit %", type: "number", min: 0.1, max: 100, step: 0.1, default: 2, description: "Kâr al yüzdesi (AI modunda AI önerebilir)" },
+      { key: "sl_pct",        label: "Stop Loss %",   type: "number", min: 0.1, max: 100, step: 0.1, default: 1, description: "Zarar durdur yüzdesi (AI modunda AI önerebilir)" },
+
+      // ─── Manuel Kriter Parametreleri ───
+      { key: "trend_filter", label: "Trend Filtresi", type: "select", default: "any", description: "Sadece belirli trend yönündeki coinleri seç",
+        options: [
+          { value: "any",     label: "Hepsi" },
+          { value: "bullish", label: "Sadece Bullish (Yükselen)" },
+          { value: "bearish", label: "Sadece Bearish (Düşen)" },
+        ],
+      },
+      { key: "min_adx", label: "Min ADX (Trend Gücü)", type: "number", min: 0, max: 100, step: 1, default: 0, description: "0 = kapalı. 25+ güçlü trend, 40+ çok güçlü" },
+      { key: "ema200_position", label: "EMA200 Pozisyonu", type: "select", default: "any", description: "Fiyatın EMA200'e göre konumu",
+        options: [
+          { value: "any",   label: "Farketmez" },
+          { value: "above", label: "EMA200 Üstünde (Bullish)" },
+          { value: "below", label: "EMA200 Altında (Bearish)" },
+        ],
+      },
+      { key: "rsi_zone", label: "RSI Bölgesi", type: "select", default: "any", description: "Hangi RSI bölgesindeki coinleri seç",
+        options: [
+          { value: "any",        label: "Hepsi" },
+          { value: "oversold",   label: "Aşırı Satım (RSI < 30)" },
+          { value: "neutral",    label: "Nötr (30-70)" },
+          { value: "overbought", label: "Aşırı Alım (RSI > 70)" },
+        ],
+      },
+      { key: "rsi_min", label: "Min RSI", type: "number", min: 0, max: 100, step: 1, default: 0, description: "Minimum RSI değeri (0 = kapalı)" },
+      { key: "rsi_max", label: "Max RSI", type: "number", min: 0, max: 100, step: 1, default: 100, description: "Maksimum RSI değeri (100 = kapalı)" },
+      { key: "min_atr_pct", label: "Min ATR%", type: "number", min: 0, max: 50, step: 0.01, default: 0, description: "Minimum volatilite (ATR/Fiyat %). 0 = kapalı" },
+      { key: "max_atr_pct", label: "Max ATR%", type: "number", min: 0, max: 50, step: 0.01, default: 100, description: "Maksimum volatilite. 100 = kapalı" },
+      { key: "min_volume_ratio", label: "Min Hacim Oranı", type: "number", min: 0, max: 50, step: 0.1, default: 0, description: "Minimum hacim spike (0 = kapalı, 2+ = ortalamanın 2 katı)" },
+      { key: "min_price_change_24h", label: "Min 24h Değişim %", type: "number", min: -100, max: 100, step: 0.5, default: -100, description: "Son 24 saatteki minimum değişim yüzdesi" },
+      { key: "max_price_change_24h", label: "Max 24h Değişim %", type: "number", min: -100, max: 100, step: 0.5, default: 100, description: "Son 24 saatteki maksimum değişim yüzdesi" },
+      { key: "min_leverage", label: "Min Kaldıraç", type: "number", min: 0, max: 200, step: 1, default: 0, description: "Coin'in desteklediği minimum kaldıraç (0 = kapalı)" },
+      { key: "trade_direction", label: "İşlem Yönü", type: "select", default: "auto", description: "Hangi yönde işlem açılsın",
+        options: [
+          { value: "auto",  label: "Otomatik (Trende göre)" },
+          { value: "long",  label: "Sadece Long" },
+          { value: "short", label: "Sadece Short" },
+        ],
+      },
+      { key: "sort_by", label: "Sıralama Kriteri", type: "select", default: "score", description: "Coinleri neye göre sırala",
+        options: [
+          { value: "score",           label: "Toplam Skor (önerilen)" },
+          { value: "rsi_14",          label: "RSI" },
+          { value: "adx",             label: "ADX (Trend Gücü)" },
+          { value: "volume_ratio",    label: "Hacim Oranı" },
+          { value: "atr_pct",         label: "ATR% (Volatilite)" },
+          { value: "price_change_24h", label: "24h Değişim %" },
+        ],
+      },
+      { key: "max_coins", label: "Max Seçim", type: "number", min: 1, max: 10, step: 1, default: 3, description: "Her taramada max kaç coin seçilsin" },
+
+      // ─── AI Modu Parametreleri ───
+      { key: "min_ai_confidence", label: "Min AI Güven Skoru", type: "number", min: 0, max: 100, step: 5, default: 60, description: "AI'ın coin seçimi için minimum güven skoru (sadece AI modunda)" },
+    ],
+  },
 ]
 
 // "BTC/USDT:USDT" → "BTCUSDT.P"
@@ -1368,6 +1443,27 @@ export default function BotsPage() {
     form.strategy_params[k] ?? def
 
   const buildPayload = (f: FormState) => {
+    // Smart Scanner: symbol AUTO, tüm params strategy_params'ta
+    if (f.strategy === "smart_scanner") {
+      return {
+        name: f.name,
+        symbol: "AUTO",
+        strategy: "smart_scanner",
+        exchange: f.exchange,
+        paper_mode: f.paper_mode,
+        leverage: Number(f.strategy_params.leverage ?? 5),
+        risk_per_trade: f.risk_mode === "pct"
+          ? f.risk_per_trade / 100
+          : f.risk_per_trade / f.initial_balance,
+        max_daily_loss: f.max_daily_loss / 100,
+        initial_balance: f.initial_balance,
+        tp_pct: Number(f.strategy_params.tp_pct ?? 2),
+        sl_pct: Number(f.strategy_params.sl_pct ?? 1),
+        trailing_sl: false,
+        params: f.strategy_params,
+      }
+    }
+
     // Grid bot: kaldıraç yok, özel paramlar
     if (f.strategy === "grid_bot") {
       const count   = Number(f.strategy_params.grid_count   ?? 20)
@@ -1519,7 +1615,7 @@ export default function BotsPage() {
 
   const canNext = () => {
     if (step === 0) return !!form.strategy
-    if (step === 1) return !!form.symbol
+    if (step === 1) return form.strategy === "smart_scanner" || !!form.symbol
     if (step === 2) return form.leverage >= 1 && form.risk_per_trade > 0
     return !!form.name
   }
@@ -2058,7 +2154,37 @@ export default function BotsPage() {
               )}
 
               {/* ── Adım 1: Sembol & Zaman ── */}
-              {step === 1 && (
+              {step === 1 && form.strategy === "smart_scanner" && (
+                <div className="space-y-5">
+                  <Field label="Borsa" description="Smart Scanner otomatik coin seçer — sadece borsayı belirleyin">
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { v: "mexc",   label: "MEXC",   icon: "🟢" },
+                        { v: "bitget", label: "Bitget", icon: "🔵" },
+                        { v: "binance", label: "Binance", icon: "🟡" },
+                      ].map(o => (
+                        <button key={o.v} onClick={() => set("exchange", o.v)}
+                          className={`py-2.5 px-3 rounded-lg border text-sm font-medium transition-all ${
+                            form.exchange === o.v
+                              ? "border-blue-500/60 bg-blue-500/10 text-blue-300"
+                              : "border-slate-800 text-slate-400 hover:border-slate-600 hover:text-white"
+                          }`}>{o.icon} {o.label}</button>
+                      ))}
+                    </div>
+                  </Field>
+                  <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">🧠</span>
+                      <span className="text-sm font-medium text-blue-300">Otomatik Coin Seçimi</span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      Smart Scanner Bot, tüm zero-fee coinleri otomatik tarar ve belirlediğiniz kriterlere göre
+                      en iyi fırsatları seçerek işleme girer. Sembol seçmenize gerek yok.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {step === 1 && form.strategy !== "smart_scanner" && (
                 <div className="space-y-5">
                   <Field label="Borsa" description="Botun işlem yapacağı borsa">
                     <div className="grid grid-cols-3 gap-2">
@@ -2477,7 +2603,7 @@ export default function BotsPage() {
                     <input
                       value={form.name}
                       onChange={e => set("name", e.target.value)}
-                      placeholder={`${selectedStrategy.name} Botu — ${form.symbol.replace("/USDT:USDT","")}`}
+                      placeholder={form.strategy === "smart_scanner" ? "Smart Scanner Bot" : `${selectedStrategy.name} Botu — ${form.symbol.replace("/USDT:USDT","")}`}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors placeholder-slate-600"
                     />
                   </Field>
@@ -2487,7 +2613,7 @@ export default function BotsPage() {
                     {[
                       { label: "Strateji",   value: selectedStrategy.name,                   icon: selectedStrategy.icon },
                       { label: "Borsa",      value: form.exchange.toUpperCase(),             icon: "🏦" },
-                      { label: "Sembol",     value: fmtSymbol(form.symbol),                       icon: "🪙" },
+                      { label: "Sembol",     value: form.strategy === "smart_scanner" ? "Otomatik Seçim" : fmtSymbol(form.symbol), icon: form.strategy === "smart_scanner" ? "🧠" : "🪙" },
                       { label: "Kaldıraç",   value: `${form.leverage}x ${form.margin_type === "isolated" ? "Isolated" : "Cross"}`, icon: "⚡" },
                       { label: "Bakiye",     value: `$${form.initial_balance.toLocaleString()}`, icon: "💵" },
                       { label: "TP / SL",    value: `${form.tp_pct}% / ${form.sl_pct}%`,   icon: "🎯" },

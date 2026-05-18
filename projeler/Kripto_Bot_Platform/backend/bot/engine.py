@@ -25,6 +25,7 @@ from bot.strategies.ut_bot import UTBotStrategy
 from bot.strategies.supertrend import SupertrendStrategy
 from bot.strategies.bb_ema_cross import BBEMACrossStrategy
 from bot.strategies.dual_hedge import DualHedgeStrategy
+from bot.strategies.smart_scanner import ManualCriteria, score_coin_manual, build_ai_prompt, determine_trade_direction
 import json
 
 
@@ -105,13 +106,16 @@ class BotEngine:
         except Exception as e:
             print(f"[Bot {bot_name}] load_markets() HATASI: {e}")
 
-        try:
-            ticker = await asyncio.wait_for(self.exchange.exchange.fetch_ticker(symbol), timeout=15)
-            print(f"[Bot {bot_name}] Bağlantı OK — fiyat: {ticker.get('last')}")
-        except asyncio.TimeoutError:
-            print(f"[Bot {bot_name}] fetch_ticker TIMEOUT (15s) — devam ediliyor")
-        except Exception as e:
-            print(f"[Bot {bot_name}] BAĞLANTI HATASI: {e}")
+        if symbol != "AUTO":
+            try:
+                ticker = await asyncio.wait_for(self.exchange.exchange.fetch_ticker(symbol), timeout=15)
+                print(f"[Bot {bot_name}] Bağlantı OK — fiyat: {ticker.get('last')}")
+            except asyncio.TimeoutError:
+                print(f"[Bot {bot_name}] fetch_ticker TIMEOUT (15s) — devam ediliyor")
+            except Exception as e:
+                print(f"[Bot {bot_name}] BAĞLANTI HATASI: {e}")
+        else:
+            print(f"[Bot {bot_name}] AUTO mod — coin seçimi otomatik yapılacak")
 
         while self.running:
             try:
@@ -162,6 +166,13 @@ class BotEngine:
                         except Exception:
                             pass
                     await asyncio.sleep(0.1)
+                    continue
+
+                # ── Smart Scanner Bot ─────────────────────────────────
+                if strategy == "smart_scanner":
+                    await self._run_smart_scanner_cycle(redis)
+                    scan_interval = int(self.config.get("params", {}).get("scan_interval", 120))
+                    await asyncio.sleep(scan_interval)
                     continue
 
                 # 0. Trailing stop kontrolü (aktif pozisyon varsa)
@@ -2634,6 +2645,298 @@ class BotEngine:
                 print(f"[HedgeBot {self.config['name']}] Trade kapatıldı: #{trade.id} {side} → {exit_reason} PnL={trade.pnl_pct:.2f}% ${trade.pnl:.4f}")
         except Exception as e:
             print(f"[HedgeBot {self.config['name']}] Trade kapanış kayıt hatası: {e}")
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  SMART SCANNER BOT — Otomatik coin seçimi + işlem açma
+    # ══════════════════════════════════════════════════════════════════════
+
+    async def _run_smart_scanner_cycle(self, redis):
+        """
+        Smart Scanner döngüsü:
+        1. coin_snapshots tablosundan tüm coinleri oku
+        2. Manuel veya AI modu ile en iyi coinleri seç
+        3. Seçilen coinler için işlem aç
+        """
+        from sqlalchemy import text as sql_text
+        from ai.openrouter import _call
+        from core.config import settings
+
+        bot_name = self.config["name"]
+        bot_id = self.config["id"]
+        params = self.config.get("params", {})
+        mode = params.get("selection_mode", "manual")  # "manual" veya "ai"
+        max_positions = int(params.get("max_positions", 3))
+        paper = self.config.get("paper_mode", True)
+
+        # ── 1. coin_snapshots'dan verileri çek ──
+        try:
+            async with async_session() as session:
+                result = await session.execute(sql_text("""
+                    SELECT base, symbol, price, price_change_1h, price_change_24h,
+                           rsi_14, atr, atr_pct, ema200, ema200_dist,
+                           macd_hist, supertrend_dir, adx, volume_ratio,
+                           bb_upper, bb_lower, max_leverage, zero_fee, updated_at
+                    FROM coin_snapshots
+                    WHERE zero_fee = true AND price > 0
+                    ORDER BY updated_at DESC
+                """))
+                rows = result.fetchall()
+        except Exception as e:
+            print(f"[SmartScanner {bot_name}] DB hatası: {e}")
+            await self._write_scanner_status(redis, bot_id, bot_name, error=str(e))
+            return
+
+        if not rows:
+            print(f"[SmartScanner {bot_name}] Henüz coin verisi yok — collector çalışmayı bekliyor")
+            await self._write_scanner_status(redis, bot_id, bot_name, error="Coin verisi yok")
+            return
+
+        coins = []
+        for r in rows:
+            coins.append({
+                "base": r[0], "symbol": r[1], "price": float(r[2] or 0),
+                "price_change_1h": float(r[3]) if r[3] else None,
+                "price_change_24h": float(r[4]) if r[4] else None,
+                "rsi_14": float(r[5]) if r[5] else None,
+                "atr": float(r[6]) if r[6] else None,
+                "atr_pct": float(r[7]) if r[7] else None,
+                "ema200": float(r[8]) if r[8] else None,
+                "ema200_dist": float(r[9]) if r[9] else None,
+                "macd_hist": float(r[10]) if r[10] else None,
+                "supertrend_dir": int(r[11]) if r[11] is not None else None,
+                "adx": float(r[12]) if r[12] else None,
+                "volume_ratio": float(r[13]) if r[13] else None,
+                "bb_upper": float(r[14]) if r[14] else None,
+                "bb_lower": float(r[15]) if r[15] else None,
+                "max_leverage": int(r[16]) if r[16] else None,
+                "zero_fee": bool(r[17]),
+            })
+
+        print(f"[SmartScanner {bot_name}] {len(coins)} coin analiz ediliyor (mod={mode})")
+
+        # ── 2. Açık pozisyonları kontrol et ──
+        active_positions = []
+        try:
+            active_raw = await redis.get(f"bot:{bot_id}:active_positions")
+            if active_raw:
+                active_positions = json.loads(active_raw)
+        except Exception:
+            pass
+
+        if len(active_positions) >= max_positions:
+            print(f"[SmartScanner {bot_name}] Max pozisyon ({max_positions}) doldu — bekleniyor")
+            await self._write_scanner_status(redis, bot_id, bot_name,
+                coins_total=len(coins), active=active_positions, mode=mode, waiting=True)
+            return
+
+        # ── 3. Coin seçimi ──
+        selections = []
+
+        if mode == "ai":
+            # ══ AI KARAR MODU ══
+            try:
+                prompt = build_ai_prompt(coins, active_positions)
+                model = settings.AI_DEEP_MODEL  # Claude ile en iyi analiz
+                ai_response = await _call(model, prompt, max_tokens=1500)
+
+                ai_selections = ai_response.get("selections", [])
+                market_regime = ai_response.get("market_regime", "unknown")
+                market_analysis = ai_response.get("market_analysis", "")
+
+                print(f"[SmartScanner {bot_name}] AI: regime={market_regime}, {len(ai_selections)} seçim")
+                if ai_response.get("skipped_reason"):
+                    print(f"[SmartScanner {bot_name}] AI pas geçti: {ai_response['skipped_reason']}")
+
+                for sel in ai_selections:
+                    if sel.get("coin") in active_positions:
+                        continue
+                    if sel.get("confidence", 0) < int(params.get("min_ai_confidence", 60)):
+                        continue
+                    selections.append({
+                        "coin": sel["coin"],
+                        "symbol": sel.get("symbol", f"{sel['coin']}/USDT:USDT"),
+                        "direction": sel.get("direction", "long"),
+                        "confidence": sel.get("confidence", 50),
+                        "leverage": sel.get("leverage_suggestion", int(params.get("leverage", 5))),
+                        "tp_pct": sel.get("tp_suggestion_pct", float(params.get("tp_pct", 2))),
+                        "sl_pct": sel.get("sl_suggestion_pct", float(params.get("sl_pct", 1))),
+                        "reason": sel.get("entry_reason", "AI seçimi"),
+                        "source": "ai",
+                        "market_regime": market_regime,
+                    })
+
+            except Exception as e:
+                print(f"[SmartScanner {bot_name}] AI hatası: {e}")
+                import traceback
+                traceback.print_exc()
+
+        else:
+            # ══ MANUEL KRİTER MODU ══
+            criteria = ManualCriteria(
+                trend_filter=str(params.get("trend_filter", "any")),
+                min_adx=float(params.get("min_adx", 0)),
+                ema200_position=str(params.get("ema200_position", "any")),
+                rsi_min=float(params.get("rsi_min", 0)),
+                rsi_max=float(params.get("rsi_max", 100)),
+                rsi_zone=str(params.get("rsi_zone", "any")),
+                min_atr_pct=float(params.get("min_atr_pct", 0)),
+                max_atr_pct=float(params.get("max_atr_pct", 100)),
+                min_price_change_24h=float(params.get("min_price_change_24h", -100)),
+                max_price_change_24h=float(params.get("max_price_change_24h", 100)),
+                min_volume_ratio=float(params.get("min_volume_ratio", 0)),
+                min_leverage=int(params.get("min_leverage", 0)),
+                sort_by=str(params.get("sort_by", "score")),
+                sort_dir=str(params.get("sort_dir", "desc")),
+                max_coins=int(params.get("max_coins", 3)),
+                trade_direction=str(params.get("trade_direction", "auto")),
+            )
+
+            scored = []
+            for coin in coins:
+                if coin["base"] in active_positions:
+                    continue
+                sc = score_coin_manual(coin, criteria)
+                if sc is not None:
+                    scored.append((coin, sc))
+
+            # Sıralama
+            if criteria.sort_by == "score":
+                scored.sort(key=lambda x: x[1], reverse=(criteria.sort_dir == "desc"))
+            else:
+                scored.sort(
+                    key=lambda x: x[0].get(criteria.sort_by) or 0,
+                    reverse=(criteria.sort_dir == "desc"),
+                )
+
+            # En iyi N coin
+            top = scored[:criteria.max_coins]
+            remaining_slots = max_positions - len(active_positions)
+            top = top[:remaining_slots]
+
+            for coin, sc in top:
+                direction = determine_trade_direction(coin, criteria)
+                selections.append({
+                    "coin": coin["base"],
+                    "symbol": coin["symbol"],
+                    "direction": direction,
+                    "confidence": int(min(sc, 100)),
+                    "leverage": int(params.get("leverage", 5)),
+                    "tp_pct": float(params.get("tp_pct", 2)),
+                    "sl_pct": float(params.get("sl_pct", 1)),
+                    "reason": f"Skor: {sc:.0f} | RSI:{coin.get('rsi_14','?')} ADX:{coin.get('adx','?')} Vol:{coin.get('volume_ratio','?')}x",
+                    "source": "manual",
+                    "score": sc,
+                })
+
+            print(f"[SmartScanner {bot_name}] Manuel: {len(scored)} coin geçti, {len(selections)} seçildi")
+
+        # ── 4. İşlem aç ──
+        opened = []
+        for sel in selections:
+            try:
+                symbol = sel["symbol"]
+                side = "buy" if sel["direction"] == "long" else "sell"
+                leverage = sel.get("leverage", int(params.get("leverage", 5)))
+                tp_pct = sel.get("tp_pct", float(params.get("tp_pct", 2)))
+                sl_pct = sel.get("sl_pct", float(params.get("sl_pct", 1)))
+
+                # Fiyat bilgisi al
+                try:
+                    ticker = await asyncio.wait_for(
+                        self.exchange.exchange.fetch_ticker(symbol), timeout=10
+                    )
+                    price = float(ticker["last"])
+                except Exception as e:
+                    print(f"[SmartScanner {bot_name}] {symbol} fiyat alınamadı: {e}")
+                    continue
+
+                # TP/SL hesapla
+                if sel["direction"] == "long":
+                    tp_price = round(price * (1 + tp_pct / 100), 6)
+                    sl_price = round(price * (1 - sl_pct / 100), 6)
+                else:
+                    tp_price = round(price * (1 - tp_pct / 100), 6)
+                    sl_price = round(price * (1 + sl_pct / 100), 6)
+
+                # Pozisyon büyüklüğü
+                risk_per_trade = self.risk.risk_per_trade
+                qty = self.risk.position_size(price, sl_price)
+
+                if qty <= 0:
+                    print(f"[SmartScanner {bot_name}] {sel['coin']} — pozisyon büyüklüğü 0, atlanıyor")
+                    continue
+
+                # AI result formatında
+                ai_result = {
+                    "approved": True,
+                    "confidence": sel.get("confidence", 50),
+                    "take_profit": tp_price,
+                    "stop_loss": sl_price,
+                    "analysis": sel.get("reason", "Smart Scanner seçimi"),
+                }
+
+                # Leverage ayarla
+                try:
+                    await self.exchange.set_leverage(symbol, leverage)
+                except Exception:
+                    pass
+
+                # İşlem aç
+                await self._execute(side, price, qty, sl_price, ai_result)
+
+                # Signal log
+                await self._log_signal(side, price, source=f"smart_scanner_{sel['source']}",
+                    action="executed", confidence=sel.get("confidence"),
+                    tp_price=tp_price, sl_price=sl_price,
+                    reject_reason=None)
+
+                opened.append(sel["coin"])
+                active_positions.append(sel["coin"])
+
+                print(f"[SmartScanner {bot_name}] ✅ {sel['direction'].upper()} {sel['coin']} @ ${price:,.4f} "
+                      f"TP={tp_pct}% SL={sl_pct}% Lev={leverage}x Conf={sel.get('confidence')}%")
+
+            except Exception as e:
+                print(f"[SmartScanner {bot_name}] {sel['coin']} işlem hatası: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Aktif pozisyonları Redis'e kaydet
+        try:
+            await redis.set(f"bot:{bot_id}:active_positions", json.dumps(active_positions), ex=86400)
+        except Exception:
+            pass
+
+        # Status güncelle
+        await self._write_scanner_status(redis, bot_id, bot_name,
+            coins_total=len(coins), mode=mode,
+            active=active_positions, opened=opened,
+            selections=[{k: v for k, v in s.items() if k != "market_regime"} for s in selections])
+
+    async def _write_scanner_status(self, redis, bot_id, bot_name, **kwargs):
+        """Smart Scanner status bilgisini Redis'e yaz."""
+        status = {
+            "name": bot_name,
+            "symbol": "AUTO",
+            "strategy": "smart_scanner",
+            "signal": None,
+            "price": 0,
+            "scanner": {
+                "coins_total": kwargs.get("coins_total", 0),
+                "mode": kwargs.get("mode", "manual"),
+                "active_positions": kwargs.get("active", []),
+                "last_opened": kwargs.get("opened", []),
+                "last_selections": kwargs.get("selections", []),
+                "waiting": kwargs.get("waiting", False),
+                "error": kwargs.get("error"),
+            },
+            "risk": self.risk.status(),
+            "ts": datetime.utcnow().isoformat(),
+        }
+        try:
+            await redis.set(f"bot:{bot_id}:status", json.dumps(status))
+        except Exception:
+            pass
 
     def stop(self):
         self.running = False

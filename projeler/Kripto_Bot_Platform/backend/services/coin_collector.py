@@ -3,13 +3,14 @@ Coin Veri Toplayıcı — Zero-fee coinlerin göstergelerini arka planda toplar.
 
 Akış:
 1. Başlangıçta MEXC'den zero-fee sembol listesini çeker (1 saat cache)
-2. Her 5 dakikada tüm zero-fee coinler için OHLCV verisini çeker
+2. Paralel batch halinde tüm zero-fee coinler için OHLCV verisini çeker
 3. RSI, ATR, EMA200, MACD, Supertrend vb. hesaplar
 4. CoinSnapshot tablosuna kaydeder (UPSERT)
 
-Rate limit koruması: coinler arası 1sn bekleme, toplu hata durumunda 30sn pause.
+Rate limit koruması: semaphore ile eşzamanlılık sınırı + otomatik hız ayarı.
 """
 import asyncio
+import time
 from datetime import datetime
 
 import ccxt.async_support as ccxt
@@ -21,10 +22,11 @@ import json
 
 
 # Güncelleme aralığı (saniye)
-UPDATE_INTERVAL = 10    # döngüler arası minimum bekleme
-COIN_DELAY = 0.15       # coinler arası başlangıç bekleme (rate limit)
-COIN_DELAY_MAX = 3.0    # rate limit varsa maksimum bekleme
-SYMBOLS_CACHE_TTL = 3600  # 1 saat
+UPDATE_INTERVAL = 10        # döngüler arası minimum bekleme
+BATCH_CONCURRENCY = 5       # aynı anda max kaç OHLCV isteği
+COIN_DELAY = 0.08           # istek sonrası bekleme (rate limit)
+COIN_DELAY_MAX = 3.0        # rate limit varsa maksimum bekleme
+SYMBOLS_CACHE_TTL = 3600    # 1 saat
 
 
 async def _get_zero_fee_symbols(exchange_client) -> list[dict]:
@@ -83,10 +85,11 @@ async def _fetch_and_analyze(exchange_client, sym_info: dict, timeframe: str = "
             timeout=15,
         )
     except asyncio.TimeoutError:
-        print(f"[CoinCollector] OHLCV timeout: {symbol}")
         return None
     except Exception as e:
-        print(f"[CoinCollector] OHLCV hatası {symbol}: {e}")
+        err_str = str(e).lower()
+        if "rate" in err_str or "429" in err_str or "too many" in err_str:
+            raise  # rate limit'i yukarıya ilet
         return None
 
     if len(ohlcv) < 55:
@@ -185,9 +188,32 @@ async def _upsert_snapshot(data: dict):
         await session.commit()
 
 
+async def _process_coin(exchange_client, sym_info: dict, semaphore: asyncio.Semaphore,
+                        delay: float, stats: dict):
+    """Semaphore kontrollü tek coin işleme."""
+    async with semaphore:
+        try:
+            data = await _fetch_and_analyze(exchange_client, sym_info)
+            if data:
+                await _upsert_snapshot(data)
+                stats["ok"] += 1
+            else:
+                stats["fail"] += 1
+        except Exception as e:
+            err_str = str(e).lower()
+            if "rate" in err_str or "429" in err_str or "too many" in err_str or "limit" in err_str:
+                stats["rate_limited"] += 1
+                wait = min(delay * 5, 10)
+                await asyncio.sleep(wait)
+            else:
+                stats["fail"] += 1
+        # İstekler arası kısa bekleme
+        await asyncio.sleep(delay)
+
+
 async def run_collection_cycle(current_delay: float = COIN_DELAY) -> float:
     """
-    Tek bir toplama döngüsü — tüm zero-fee coinleri tara.
+    Tek bir toplama döngüsü — paralel batch halinde tüm zero-fee coinleri tara.
     Rate limit algılanırsa delay'i artırır, sorunsuzsa azaltır.
     Returns: sonraki döngü için güncel delay değeri.
     """
@@ -200,43 +226,29 @@ async def run_collection_cycle(current_delay: float = COIN_DELAY) -> float:
             print("[CoinCollector] Zero-fee sembol bulunamadı.")
             return current_delay
 
-        ok = 0
-        fail = 0
-        rate_limited = 0
+        stats = {"ok": 0, "fail": 0, "rate_limited": 0}
+        semaphore = asyncio.Semaphore(BATCH_CONCURRENCY)
+        t0 = time.monotonic()
 
-        for i, sym in enumerate(symbols):
-            try:
-                data = await _fetch_and_analyze(exchange, sym)
-                if data:
-                    await _upsert_snapshot(data)
-                    ok += 1
-                else:
-                    fail += 1
-            except Exception as e:
-                err_str = str(e).lower()
-                if "rate" in err_str or "429" in err_str or "too many" in err_str or "limit" in err_str:
-                    rate_limited += 1
-                    # Rate limit — hemen bekle ve yavaşla
-                    wait = min(current_delay * 3, 10)
-                    print(f"[CoinCollector] ⚠ Rate limit! {sym['symbol']} — {wait:.1f}s bekleniyor...")
-                    await asyncio.sleep(wait)
-                else:
-                    fail += 1
-                    print(f"[CoinCollector] {sym['symbol']} hatası: {e}")
+        # Tüm coinleri paralel çalıştır (semaphore ile kontrollü)
+        tasks = [
+            _process_coin(exchange_client=exchange, sym_info=sym,
+                          semaphore=semaphore, delay=current_delay, stats=stats)
+            for sym in symbols
+        ]
+        await asyncio.gather(*tasks)
 
-            if i < len(symbols) - 1:
-                await asyncio.sleep(current_delay)
+        elapsed = time.monotonic() - t0
 
         # Delay otomatik ayarla
         new_delay = current_delay
-        if rate_limited > 0:
+        if stats["rate_limited"] > 0:
             new_delay = min(current_delay * 2, COIN_DELAY_MAX)
-            print(f"[CoinCollector] Rate limit ({rate_limited}x) → delay {current_delay:.2f}s → {new_delay:.2f}s")
-        elif rate_limited == 0 and current_delay > COIN_DELAY:
+            print(f"[CoinCollector] Rate limit ({stats['rate_limited']}x) → delay {current_delay:.2f}s → {new_delay:.2f}s")
+        elif stats["rate_limited"] == 0 and current_delay > COIN_DELAY:
             new_delay = max(current_delay * 0.7, COIN_DELAY)
 
-        elapsed = len(symbols) * current_delay
-        print(f"[CoinCollector] Döngü: {ok}✓ {fail}✗ {rate_limited}⚠ / {len(symbols)} ({elapsed:.0f}s) delay={new_delay:.2f}s")
+        print(f"[CoinCollector] Döngü: {stats['ok']}✓ {stats['fail']}✗ {stats['rate_limited']}⚠ / {len(symbols)} ({elapsed:.1f}s) delay={new_delay:.2f}s concurrency={BATCH_CONCURRENCY}")
         return new_delay
 
     except Exception as e:
@@ -251,7 +263,7 @@ async def run_collection_cycle(current_delay: float = COIN_DELAY) -> float:
 
 async def start_coin_collector():
     """Arka plan görevi: sürekli zero-fee coinleri tara, rate limit'e göre hız ayarla."""
-    print("[CoinCollector] Coin veri toplayıcı başladı (adaptive rate limit).")
+    print("[CoinCollector] Coin veri toplayıcı başladı (parallel batch, adaptive rate limit).")
 
     await asyncio.sleep(60)  # DB init + diğer servisler hazır olsun
 
