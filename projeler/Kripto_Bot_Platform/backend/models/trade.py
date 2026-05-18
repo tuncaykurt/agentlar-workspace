@@ -212,6 +212,52 @@ class AiPrompt(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class CoinSnapshot(Base):
+    """
+    Coin anlık gösterge verileri — arka plan worker tarafından güncellenir.
+    Zero-fee coinler öncelikli, tüm USDT-M futures çiftleri desteklenir.
+    """
+    __tablename__ = "coin_snapshots"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    exchange = Column(String, nullable=False, default="mexc")
+    symbol = Column(String, nullable=False)               # BTC/USDT:USDT
+    base = Column(String, nullable=False)                  # BTC
+    timeframe = Column(String, nullable=False, default="1h")
+
+    # Fiyat
+    price = Column(Float, nullable=True)
+    price_change_1h = Column(Float, nullable=True)         # son 1 saatlik değişim %
+    price_change_24h = Column(Float, nullable=True)        # 24 saatlik değişim %
+
+    # Göstergeler
+    rsi_14 = Column(Float, nullable=True)
+    atr = Column(Float, nullable=True)
+    atr_pct = Column(Float, nullable=True)                 # ATR / fiyat * 100
+    ema200 = Column(Float, nullable=True)
+    ema200_dist = Column(Float, nullable=True)             # fiyat - EMA200 arası %
+    macd_hist = Column(Float, nullable=True)
+    supertrend_dir = Column(Integer, nullable=True)        # 1=bullish, -1=bearish
+    adx = Column(Float, nullable=True)
+    volume_ratio = Column(Float, nullable=True)            # güncel hacim / 20 periyot ort.
+    bb_upper = Column(Float, nullable=True)
+    bb_lower = Column(Float, nullable=True)
+
+    # Meta
+    zero_fee = Column(Boolean, default=False)
+    taker_fee = Column(Float, nullable=True)
+    maker_fee = Column(Float, nullable=True)
+    max_leverage = Column(Integer, nullable=True)
+
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("exchange", "symbol", "timeframe", name="uq_coin_snapshot"),
+        Index("ix_coin_snapshot_lookup", "exchange", "symbol"),
+        Index("ix_coin_snapshot_zero_fee", "zero_fee", "exchange"),
+    )
+
+
 class Liquidation(Base):
     """
     Gerçek zamanlı likidasyon emirleri.

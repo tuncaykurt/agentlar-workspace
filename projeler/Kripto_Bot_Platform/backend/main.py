@@ -7,13 +7,14 @@ from sqlalchemy import select, text
 from core.config import settings
 from core.database import async_session
 from core.database import engine, Base
-from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest, calendar, analytics, freqtrade, trades, ai_chat
+from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest, calendar, analytics, freqtrade, trades, ai_chat, coins
 from api.websocket import market_ws, bot_status_ws
 from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
 from services.liquidation_collector import start_liquidation_collector
 from services.economic_calendar import start_calendar_sync
 from services.signal_tracker import start_signal_tracker
+from services.coin_collector import start_coin_collector
 
 
 async def _init_db():
@@ -158,7 +159,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"[Main] SignalTracker hatası (devam ediliyor): {e}")
 
-        # 6. Bot auto-start
+        # 6. Coin veri toplayıcı (zero-fee coinler)
+        try:
+            tasks.append(asyncio.create_task(start_coin_collector()))
+            print("[Main] Coin veri toplayıcı başlatıldı.")
+        except Exception as e:
+            print(f"[Main] CoinCollector hatası (devam ediliyor): {e}")
+
+        # 7. Bot auto-start
         try:
             await asyncio.wait_for(_auto_start_bots(tasks), timeout=30)
         except asyncio.TimeoutError:
@@ -274,6 +282,7 @@ for _prefix in ["/api", "/api/api"]:
     app.include_router(freqtrade.router, prefix=_prefix)
     app.include_router(trades.router, prefix=_prefix)
     app.include_router(ai_chat.router, prefix=_prefix)
+    app.include_router(coins.router, prefix=_prefix)
 
 
 # WebSocket routes
