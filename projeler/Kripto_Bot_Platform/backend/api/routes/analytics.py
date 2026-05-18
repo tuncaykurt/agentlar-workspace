@@ -863,7 +863,7 @@ async def patch_filter_markers(db: AsyncSession = Depends(get_db)) -> Dict[str, 
 
             # Volatilite simülasyonu
             if sig.volatility_atr and sig.price and sig.price > 0:
-                atr_threshold = sig.price * 0.02
+                atr_threshold = sig.price * 0.0015
                 vol_blocked = sig.volatility_atr > atr_threshold
                 v_sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
                 sim_parts.append(f"⚡ Volatilite[— kapalı, {v_sim}]")
@@ -879,16 +879,31 @@ async def patch_filter_markers(db: AsyncSession = Depends(get_db)) -> Dict[str, 
                 reason = reason.replace("Filtre: yapılandırılmamış", " | ".join(sim_parts))
                 changed = True
 
-        # ATR simülasyonu eksikse ekle (BotFilter var ama ATR simülasyonu yok)
-        has_vol_no_sim = "Volatilite[— kapalı]" in reason and "Volatilite[— kapalı," not in reason
-        if has_vol_no_sim:
-            if sig.volatility_atr and sig.price and sig.price > 0:
-                atr_threshold = sig.price * 0.02
-                vol_blocked = sig.volatility_atr > atr_threshold
-                sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
+        # ATR simülasyonu: eksikse ekle veya eski eşikle yanlış hesaplanmışsa düzelt
+        if sig.volatility_atr and sig.price and sig.price > 0:
+            atr_threshold = sig.price * 0.0015
+            vol_blocked = sig.volatility_atr > atr_threshold
+            new_sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
+
+            if "Volatilite[— kapalı]" in reason and "Volatilite[— kapalı," not in reason:
+                # Simülasyon hiç yoktu — ekle
                 reason = reason.replace(
                     "⚡ Volatilite[— kapalı]",
-                    f"⚡ Volatilite[— kapalı, {sim}]"
+                    f"⚡ Volatilite[— kapalı, {new_sim}]"
+                )
+                changed = True
+            elif "Volatilite[— kapalı, ✓ geçerdi]" in reason and vol_blocked:
+                # Eski eşikle yanlış hesaplanmış — düzelt
+                reason = reason.replace(
+                    "⚡ Volatilite[— kapalı, ✓ geçerdi]",
+                    "⚡ Volatilite[— kapalı, ✗ kalırdı]"
+                )
+                changed = True
+            elif "Volatilite[— kapalı, ✗ kalırdı]" in reason and not vol_blocked:
+                # Eski eşikle yanlış hesaplanmış — düzelt
+                reason = reason.replace(
+                    "⚡ Volatilite[— kapalı, ✗ kalırdı]",
+                    "⚡ Volatilite[— kapalı, ✓ geçerdi]"
                 )
                 changed = True
 

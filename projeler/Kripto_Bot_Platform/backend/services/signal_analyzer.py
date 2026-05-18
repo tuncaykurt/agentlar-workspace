@@ -132,7 +132,7 @@ async def run_passive_analysis(
         vol_blocked = False
         atr_threshold = (f.max_volatility_atr if has_filter else None)
         if not atr_threshold and volatility_atr and price and price > 0:
-            atr_threshold = price * 0.02  # varsayılan: fiyatın %2'si
+            atr_threshold = price * 0.0015  # varsayılan: fiyatın %0.15'i
         if atr_threshold and volatility_atr:
             vol_blocked = volatility_atr > atr_threshold
 
