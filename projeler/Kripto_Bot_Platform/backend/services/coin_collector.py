@@ -21,8 +21,9 @@ import json
 
 
 # Güncelleme aralığı (saniye)
-UPDATE_INTERVAL = 30    # döngüler arası minimum bekleme
-COIN_DELAY = 0.3        # coinler arası bekleme (rate limit)
+UPDATE_INTERVAL = 10    # döngüler arası minimum bekleme
+COIN_DELAY = 0.15       # coinler arası başlangıç bekleme (rate limit)
+COIN_DELAY_MAX = 3.0    # rate limit varsa maksimum bekleme
 SYMBOLS_CACHE_TTL = 3600  # 1 saat
 
 
@@ -184,8 +185,12 @@ async def _upsert_snapshot(data: dict):
         await session.commit()
 
 
-async def run_collection_cycle():
-    """Tek bir toplama döngüsü — tüm zero-fee coinleri tara."""
+async def run_collection_cycle(current_delay: float = COIN_DELAY) -> float:
+    """
+    Tek bir toplama döngüsü — tüm zero-fee coinleri tara.
+    Rate limit algılanırsa delay'i artırır, sorunsuzsa azaltır.
+    Returns: sonraki döngü için güncel delay değeri.
+    """
     exchange = ccxt.mexc({"options": {"defaultType": "swap"}})
     exchange.timeout = 20000
 
@@ -193,10 +198,12 @@ async def run_collection_cycle():
         symbols = await _get_zero_fee_symbols(exchange)
         if not symbols:
             print("[CoinCollector] Zero-fee sembol bulunamadı.")
-            return
+            return current_delay
 
         ok = 0
         fail = 0
+        rate_limited = 0
+
         for i, sym in enumerate(symbols):
             try:
                 data = await _fetch_and_analyze(exchange, sym)
@@ -206,17 +213,35 @@ async def run_collection_cycle():
                 else:
                     fail += 1
             except Exception as e:
-                fail += 1
-                print(f"[CoinCollector] {sym['symbol']} hatası: {e}")
+                err_str = str(e).lower()
+                if "rate" in err_str or "429" in err_str or "too many" in err_str or "limit" in err_str:
+                    rate_limited += 1
+                    # Rate limit — hemen bekle ve yavaşla
+                    wait = min(current_delay * 3, 10)
+                    print(f"[CoinCollector] ⚠ Rate limit! {sym['symbol']} — {wait:.1f}s bekleniyor...")
+                    await asyncio.sleep(wait)
+                else:
+                    fail += 1
+                    print(f"[CoinCollector] {sym['symbol']} hatası: {e}")
 
-            # Rate limit koruması
             if i < len(symbols) - 1:
-                await asyncio.sleep(COIN_DELAY)
+                await asyncio.sleep(current_delay)
 
-        print(f"[CoinCollector] Döngü tamamlandı: {ok} başarılı, {fail} başarısız / {len(symbols)} toplam")
+        # Delay otomatik ayarla
+        new_delay = current_delay
+        if rate_limited > 0:
+            new_delay = min(current_delay * 2, COIN_DELAY_MAX)
+            print(f"[CoinCollector] Rate limit ({rate_limited}x) → delay {current_delay:.2f}s → {new_delay:.2f}s")
+        elif rate_limited == 0 and current_delay > COIN_DELAY:
+            new_delay = max(current_delay * 0.7, COIN_DELAY)
+
+        elapsed = len(symbols) * current_delay
+        print(f"[CoinCollector] Döngü: {ok}✓ {fail}✗ {rate_limited}⚠ / {len(symbols)} ({elapsed:.0f}s) delay={new_delay:.2f}s")
+        return new_delay
 
     except Exception as e:
         print(f"[CoinCollector] Döngü hatası: {e}")
+        return min(current_delay * 1.5, COIN_DELAY_MAX)
     finally:
         try:
             await exchange.close()
@@ -225,17 +250,17 @@ async def run_collection_cycle():
 
 
 async def start_coin_collector():
-    """Arka plan görevi: her 5 dakikada zero-fee coinleri tara."""
-    print(f"[CoinCollector] Coin veri toplayıcı başladı ({UPDATE_INTERVAL}s aralık).")
+    """Arka plan görevi: sürekli zero-fee coinleri tara, rate limit'e göre hız ayarla."""
+    print("[CoinCollector] Coin veri toplayıcı başladı (adaptive rate limit).")
 
-    # İlk çalıştırma — 10sn bekle (DB init tamamlansın)
-    await asyncio.sleep(10)
+    await asyncio.sleep(10)  # DB init bekle
 
+    delay = COIN_DELAY
     while True:
         try:
-            await run_collection_cycle()
+            delay = await run_collection_cycle(delay)
         except Exception as e:
             print(f"[CoinCollector] Kritik hata: {e}")
-            await asyncio.sleep(30)  # hata sonrası 30sn bekle
+            delay = min(delay * 2, COIN_DELAY_MAX)
 
         await asyncio.sleep(UPDATE_INTERVAL)
