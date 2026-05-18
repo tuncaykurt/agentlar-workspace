@@ -398,6 +398,13 @@ class BotEngine:
             except Exception as e:
                 print(f"[Bot {bot_name}] Leverage ayar hatası (devam): {e}")
 
+            # Eski stop/trailing emirleri temizle (yeni işlem açılacak, birikme olmasın)
+            try:
+                await self._cancel_existing_stop_orders(symbol)
+                await self._cancel_existing_trailing_orders(symbol)
+            except Exception as e:
+                print(f"[Bot {bot_name}] Eski emirleri temizleme hatası (devam): {e}")
+
             # Kontrat boyutu hesabı
             amount = qty
             try:
@@ -732,13 +739,14 @@ class BotEngine:
                         except Exception as e:
                             print(f"[Bot] Kısmi kapatma hatası: {e}")
                 else:
-                    # Normal TP/SL güncelleme
+                    # Normal TP/SL güncelleme — önce eski emirleri iptal et
                     print(f"[Bot] Dinamik TP/SL Güncelleme: {upd['side']} -> SL: {upd.get('sl')}, TP: {upd.get('tp')}")
                     try:
+                        await self._cancel_existing_stop_orders(symbol, pos_side=upd["side"])
                         await self.exchange.modify_position_tpsl(
-                            symbol, 
-                            tp_price=upd.get("tp"), 
-                            sl_price=upd.get("sl"), 
+                            symbol,
+                            tp_price=upd.get("tp"),
+                            sl_price=upd.get("sl"),
                             pos_side=upd["side"]
                         )
                         if upd.get("sl"):
@@ -1174,6 +1182,104 @@ class BotEngine:
             return await self.exchange.get_funding_rate(symbol)
         except:
             return 0.0
+
+    async def _cancel_existing_stop_orders(self, symbol: str, pos_side: str = None):
+        """
+        MEXC'deki mevcut stop emirlerini (TP/SL) iptal et.
+        Yeni TP/SL koymadan önce çağrılır — emir birikimini önler.
+        pos_side: 'long' veya 'short' — None ise tüm stop emirleri iptal edilir.
+        """
+        exchange_name = getattr(self.exchange, '_exchange_name', '')
+        if exchange_name != "mexc":
+            return  # Şimdilik sadece MEXC için
+
+        mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
+        bot_name = self.config.get("name", "?")
+
+        try:
+            # 1. Stop order'ları sorgula (aktif + bekleyen)
+            resp = await self.exchange.exchange.contractPrivateGetStoporderListOrders({
+                "symbol": mexc_symbol,
+                "is_finished": 0,  # 0 = aktif emirler
+                "page_num": 1,
+                "page_size": 50,
+            })
+            orders = []
+            if isinstance(resp, dict):
+                orders = resp.get("data", []) or []
+
+            if not orders:
+                return
+
+            # 2. pos_side filtrele (1=long, 2=short)
+            target_type = None
+            if pos_side == "long":
+                target_type = 1
+            elif pos_side == "short":
+                target_type = 2
+
+            to_cancel = []
+            for o in orders:
+                if target_type and int(o.get("positionType", 0)) != target_type:
+                    continue
+                order_id = o.get("stopOrderId") or o.get("orderId") or o.get("id")
+                if order_id:
+                    to_cancel.append(order_id)
+
+            if not to_cancel:
+                return
+
+            # 3. Stoporder/change_price ile iptal (TP/SL'i 0'a set et = iptal)
+            # Alternatif: Her pozisyon için stoporder/place yeni değerle override eder
+            # Ama en temizi: orderId ile change_price'a 0 göndermek
+            for oid in to_cancel:
+                try:
+                    await self.exchange.exchange.contractPrivatePostStoporderChangePrice({
+                        "orderId": int(oid),
+                        "stopLossPrice": 0,
+                        "takeProfitPrice": 0,
+                    })
+                except Exception as e:
+                    # change_price çalışmazsa logla ama devam et
+                    print(f"[{bot_name}] Stop order iptal hatası (orderId={oid}): {e}")
+
+            print(f"[{bot_name}] {len(to_cancel)} eski stop emri iptal edildi ({pos_side or 'all'}) — {symbol}")
+
+        except Exception as e:
+            print(f"[{bot_name}] Stop order sorgu/iptal hatası: {e}")
+
+    async def _cancel_existing_trailing_orders(self, symbol: str):
+        """MEXC'deki mevcut trailing stop emirlerini iptal et."""
+        exchange_name = getattr(self.exchange, '_exchange_name', '')
+        if exchange_name != "mexc":
+            return
+
+        mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
+        bot_name = self.config.get("name", "?")
+
+        try:
+            resp = await self.exchange.exchange.contractPrivateGetTrackorderListOrders({
+                "symbol": mexc_symbol,
+                "states": "0,1",  # 0=bekleyen, 1=aktif
+            })
+            orders = (resp.get("data", []) if isinstance(resp, dict) else []) or []
+
+            for o in orders:
+                track_id = o.get("trackOrderId") or o.get("id")
+                if track_id:
+                    try:
+                        await self.exchange.exchange.contractPrivatePostTrackorderCancel({
+                            "symbol": mexc_symbol,
+                            "trackOrderId": int(track_id),
+                        })
+                    except Exception as e:
+                        print(f"[{bot_name}] Trailing iptal hatası (id={track_id}): {e}")
+
+            if orders:
+                print(f"[{bot_name}] {len(orders)} eski trailing emri iptal edildi — {symbol}")
+
+        except Exception as e:
+            print(f"[{bot_name}] Trailing sorgu/iptal hatası: {e}")
 
     def _calc_atr(self, ohlcv: list, period: int = 14) -> float:
         if len(ohlcv) < period + 1:
@@ -2346,6 +2452,12 @@ class BotEngine:
         """Hedge pozisyonlarına MEXC stoporder/place ile TP/SL ekle (paralel)."""
         mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
         bot_name = self.config.get("name", "?")
+
+        # Önce mevcut stop emirlerini iptal et — birikmesini önle
+        if long_ok:
+            await self._cancel_existing_stop_orders(symbol, pos_side="long")
+        if short_ok:
+            await self._cancel_existing_stop_orders(symbol, pos_side="short")
 
         # Pozisyonları sorgula (3 deneme)
         pos_data = None
