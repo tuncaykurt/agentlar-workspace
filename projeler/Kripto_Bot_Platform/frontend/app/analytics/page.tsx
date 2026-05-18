@@ -820,13 +820,14 @@ export default function AnalyticsPage() {
     { refreshInterval: 30000 }
   )
 
-  // Bir kez mevcut sinyallerin ATR/Saat simülasyonunu retroaktif güncelle
+  // Bir kez mevcut sinyallerin filtre simülasyonunu ve next_signal sonuçlarını düzelt
   const [filterPatched, setFilterPatched] = useState(false)
   useEffect(() => {
     if (filterPatched) return
-    api.get('/analytics/patch-filter-markers')
-      .then(() => { setFilterPatched(true); mutateFilterStats() })
-      .catch(() => setFilterPatched(true))
+    Promise.all([
+      api.get('/analytics/patch-filter-markers').catch(() => null),
+      api.get('/analytics/fix-next-signal-outcomes').catch(() => null),
+    ]).then(() => { setFilterPatched(true); mutateFilterStats() })
   }, [filterPatched])
 
   const toggleFilter = async (field: string, currentValue: boolean) => {

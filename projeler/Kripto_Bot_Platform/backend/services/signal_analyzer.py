@@ -409,31 +409,69 @@ async def finalize_previous_signal(
                 max_fav_pct = 0
                 max_adv_pct = 0
                 pnl_pct = 0
+                is_long = sig.signal_type == "buy"
+
                 if sig.price and sig.price > 0:
-                    if sig.signal_type == "buy":
+                    if is_long:
                         max_fav_pct = round((max_p - sig.price) / sig.price * 100, 2)
                         max_adv_pct = round((min_p - sig.price) / sig.price * 100, 2)
-                        pnl_pct = round((new_signal_price - sig.price) / sig.price * 100, 2)
                     else:
                         max_fav_pct = round((sig.price - min_p) / sig.price * 100, 2)
                         max_adv_pct = round((sig.price - max_p) / sig.price * 100, 2)
-                        pnl_pct = round((sig.price - new_signal_price) / sig.price * 100, 2)
+
+                # TP/SL kontrolü — sinyal arasında vurulmuş olabilir
+                outcome = "next_signal"
+                tp_reachable = False
+                sl_was_hit = False
+
+                if sig.tp_price and sig.sl_price and sig.price:
+                    if is_long:
+                        tp_reachable = max_p >= sig.tp_price
+                        sl_was_hit = min_p <= sig.sl_price
+                    else:
+                        tp_reachable = min_p <= sig.tp_price
+                        sl_was_hit = max_p >= sig.sl_price
+
+                    if sl_was_hit and tp_reachable:
+                        # İkisi de vuruldu — SL genelde önce vurulur (kötü senaryo)
+                        outcome = "sl_hit"
+                    elif sl_was_hit:
+                        outcome = "sl_hit"
+                    elif tp_reachable:
+                        outcome = "tp_hit"
+
+                # PnL hesapla
+                if sig.price and sig.price > 0:
+                    if outcome == "tp_hit":
+                        pnl_pct = round(abs(sig.tp_price - sig.price) / sig.price * 100, 2)
+                    elif outcome == "sl_hit":
+                        pnl_pct = round(-abs(sig.sl_price - sig.price) / sig.price * 100, 2)
+                    else:
+                        if is_long:
+                            pnl_pct = round((new_signal_price - sig.price) / sig.price * 100, 2)
+                        else:
+                            pnl_pct = round((sig.price - new_signal_price) / sig.price * 100, 2)
+
+                outcome_price = sig.tp_price if outcome == "tp_hit" else \
+                                sig.sl_price if outcome == "sl_hit" else new_signal_price
 
                 async with async_session() as session:
                     await session.execute(
                         update(SignalLog).where(SignalLog.id == sig.id).values(
-                            outcome="next_signal",
-                            outcome_price=new_signal_price,
+                            outcome=outcome,
+                            outcome_price=outcome_price,
                             outcome_pnl_pct=pnl_pct,
                             outcome_at=now,
                             max_price_in_range=max_p,
                             min_price_in_range=min_p,
                             max_favorable_pct=max_fav_pct,
-                            max_adverse_pct=max_adv_pct
+                            max_adverse_pct=max_adv_pct,
+                            tp_was_reachable=tp_reachable,
+                            sl_was_hit=sl_was_hit,
                         )
                     )
                     await session.commit()
-                    print(f"[SignalAnalyzer] Önceki sinyal kapatıldı #{sig.id}: PnL={pnl_pct}%, MaxFav={max_fav_pct}%, MaxAdv={max_adv_pct}%")
+                    print(f"[SignalAnalyzer] Sinyal #{sig.id} kapatıldı: {outcome} PnL={pnl_pct}% (MaxFav={max_fav_pct}% MaxAdv={max_adv_pct}%)")
 
         finally:
             await exchange.close()

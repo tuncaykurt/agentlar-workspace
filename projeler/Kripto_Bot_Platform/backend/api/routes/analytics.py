@@ -897,6 +897,63 @@ async def patch_filter_markers(db: AsyncSession = Depends(get_db)) -> Dict[str, 
     return {"total_checked": len(rows), "patched": len(updates)}
 
 
+@router.get("/analytics/fix-next-signal-outcomes")
+async def fix_next_signal_outcomes(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
+    """
+    outcome='next_signal' olan sinyalleri TP/SL kontrolü ile düzeltir.
+    max/min_price_in_range verisi varsa, TP/SL'ye ulaşılıp ulaşılmadığını kontrol eder.
+    """
+    result = await db.execute(
+        select(SignalLog).where(
+            SignalLog.outcome == "next_signal",
+            SignalLog.tp_price.isnot(None),
+            SignalLog.sl_price.isnot(None),
+            SignalLog.max_price_in_range.isnot(None),
+        )
+    )
+    signals = result.scalars().all()
+    fixed = 0
+
+    for sig in signals:
+        is_long = sig.signal_type == "buy"
+        max_p = sig.max_price_in_range or 0
+        min_p = sig.min_price_in_range or 0
+
+        if is_long:
+            tp_hit = max_p >= sig.tp_price
+            sl_hit = min_p <= sig.sl_price
+        else:
+            tp_hit = min_p <= sig.tp_price
+            sl_hit = max_p >= sig.sl_price
+
+        if not tp_hit and not sl_hit:
+            continue
+
+        if sl_hit and tp_hit:
+            outcome = "sl_hit"
+        elif sl_hit:
+            outcome = "sl_hit"
+        else:
+            outcome = "tp_hit"
+
+        if outcome == "tp_hit":
+            pnl_pct = round(abs(sig.tp_price - sig.price) / sig.price * 100, 2)
+            outcome_price = sig.tp_price
+        else:
+            pnl_pct = round(-abs(sig.sl_price - sig.price) / sig.price * 100, 2)
+            outcome_price = sig.sl_price
+
+        await db.execute(
+            text("UPDATE signal_logs SET outcome = :o, outcome_price = :op, outcome_pnl_pct = :pnl, tp_was_reachable = :tpr, sl_was_hit = :slh WHERE id = :id"),
+            {"o": outcome, "op": outcome_price, "pnl": pnl_pct, "tpr": tp_hit, "slh": sl_hit, "id": sig.id}
+        )
+        fixed += 1
+
+    if fixed:
+        await db.commit()
+    return {"total_checked": len(signals), "fixed": fixed}
+
+
 @router.delete("/analytics/clear-signals")
 async def clear_all_signals(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """Tüm sinyal kayıtlarını siler — temiz başlangıç için admin aracı."""
