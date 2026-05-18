@@ -832,8 +832,14 @@ async def bulk_reanalyze_signals(db: AsyncSession = Depends(get_db)) -> Dict[str
 async def patch_filter_markers(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """
     Mevcut analyzed sinyallerin reason alanını ATR ve Saat simülasyonu ile günceller.
-    Hızlı çalışır — sadece eksik/yanlış olanları düzeltir.
+    Redis cache ile korunur — son 5dk içinde çalıştıysa skip eder.
     """
+    from core.redis_client import get_redis
+    redis = get_redis()
+    cache_key = "patch_filter_markers:done"
+    if await redis.get(cache_key):
+        return {"total_checked": 0, "patched": 0, "cached": True}
+
     _default_blocked_hours = [1, 2, 3, 4, 5]
     _ATR_RATIO = 0.0015  # fiyatın %0.15'i
 
@@ -894,6 +900,7 @@ async def patch_filter_markers(db: AsyncSession = Depends(get_db)) -> Dict[str, 
     if updates:
         await db.commit()
 
+    await redis.set(cache_key, "1", ex=300)  # 5dk cache
     return {"total_checked": len(rows), "patched": len(updates)}
 
 
@@ -901,8 +908,13 @@ async def patch_filter_markers(db: AsyncSession = Depends(get_db)) -> Dict[str, 
 async def fix_next_signal_outcomes(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """
     outcome='next_signal' olan sinyalleri TP/SL kontrolü ile düzeltir.
-    max/min_price_in_range verisi varsa, TP/SL'ye ulaşılıp ulaşılmadığını kontrol eder.
+    Redis cache ile korunur — son 5dk içinde çalıştıysa skip eder.
     """
+    from core.redis_client import get_redis
+    redis = get_redis()
+    cache_key = "fix_next_signal:done"
+    if await redis.get(cache_key):
+        return {"total_checked": 0, "fixed": 0, "cached": True}
     result = await db.execute(
         select(SignalLog).where(
             SignalLog.outcome == "next_signal",
@@ -951,6 +963,7 @@ async def fix_next_signal_outcomes(db: AsyncSession = Depends(get_db)) -> Dict[s
 
     if fixed:
         await db.commit()
+    await redis.set(cache_key, "1", ex=300)  # 5dk cache
     return {"total_checked": len(signals), "fixed": fixed}
 
 

@@ -253,7 +253,7 @@ async def start_coin_collector():
     """Arka plan görevi: sürekli zero-fee coinleri tara, rate limit'e göre hız ayarla."""
     print("[CoinCollector] Coin veri toplayıcı başladı (adaptive rate limit).")
 
-    await asyncio.sleep(10)  # DB init bekle
+    await asyncio.sleep(60)  # DB init + diğer servisler hazır olsun
 
     delay = COIN_DELAY
     while True:
