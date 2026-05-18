@@ -828,6 +828,7 @@ export default function AnalyticsPage() {
       api.get('/analytics/patch-filter-markers').catch(() => null),
       api.get('/analytics/fix-next-signal-outcomes').catch(() => null),
     ]).then(() => { setFilterPatched(true); mutateFilterStats() })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterPatched])
 
   const toggleFilter = async (field: string, currentValue: boolean) => {
