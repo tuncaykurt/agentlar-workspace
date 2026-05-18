@@ -21,8 +21,8 @@ import json
 
 
 # Güncelleme aralığı (saniye)
-UPDATE_INTERVAL = 300   # 5 dakika
-COIN_DELAY = 1.0        # coinler arası bekleme (rate limit)
+UPDATE_INTERVAL = 30    # döngüler arası minimum bekleme
+COIN_DELAY = 0.3        # coinler arası bekleme (rate limit)
 SYMBOLS_CACHE_TTL = 3600  # 1 saat
 
 
