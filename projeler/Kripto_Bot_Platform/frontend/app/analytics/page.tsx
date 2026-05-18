@@ -824,7 +824,7 @@ export default function AnalyticsPage() {
   const [filterPatched, setFilterPatched] = useState(false)
   useEffect(() => {
     if (filterPatched) return
-    api.post('/analytics/patch-filter-markers')
+    api.get('/analytics/patch-filter-markers')
       .then(() => { setFilterPatched(true); mutateFilterStats() })
       .catch(() => setFilterPatched(true))
   }, [filterPatched])

@@ -828,108 +828,73 @@ async def bulk_reanalyze_signals(db: AsyncSession = Depends(get_db)) -> Dict[str
     }
 
 
-@router.post("/analytics/patch-filter-markers")
+@router.get("/analytics/patch-filter-markers")
 async def patch_filter_markers(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """
     Mevcut analyzed sinyallerin reason alanını ATR ve Saat simülasyonu ile günceller.
-    Eski sinyallerde eksik olan 'Volatilite' ve 'Saat' pasif simülasyonlarını ekler.
+    Hızlı çalışır — sadece eksik/yanlış olanları düzeltir.
     """
-    import json as _json
-    import re
+    _default_blocked_hours = [1, 2, 3, 4, 5]
+    _ATR_RATIO = 0.0015  # fiyatın %0.15'i
 
+    # Sadece düzeltme gerektiren sinyalleri çek (hepsini değil)
     result = await db.execute(
-        select(SignalLog).where(
+        select(SignalLog.id, SignalLog.reason, SignalLog.volatility_atr,
+               SignalLog.price, SignalLog.created_at, SignalLog.ema200_dist,
+               SignalLog.signal_type)
+        .where(
             SignalLog.action.in_(["analyzed", "executed"]),
             SignalLog.reason.isnot(None),
         )
     )
-    signals = result.scalars().all()
-    patched = 0
-    _default_blocked_hours = [1, 2, 3, 4, 5]
+    rows = result.all()
+    updates = []
 
-    for sig in signals:
-        reason = sig.reason or ""
-        changed = False
+    for row in rows:
+        reason = row.reason or ""
+        new_reason = reason
 
-        # "Filtre: yapılandırılmamış" olan sinyallere tüm filtre simülasyonlarını ekle
-        if "Filtre: yapılandırılmamış" in reason:
+        # 1) "Filtre: yapılandırılmamış" → tüm simülasyonları ekle
+        if "Filtre: yapılandırılmamış" in new_reason:
             sim_parts = []
-
-            # Saat simülasyonu
-            if sig.created_at:
-                sig_hour = sig.created_at.hour
-                h_sim = "✗ kalırdı" if sig_hour in _default_blocked_hours else "✓ geçerdi"
+            if row.created_at:
+                h_sim = "✗ kalırdı" if row.created_at.hour in _default_blocked_hours else "✓ geçerdi"
                 sim_parts.append(f"🕐 Saat[— kapalı, {h_sim}]")
-
-            # Volatilite simülasyonu
-            if sig.volatility_atr and sig.price and sig.price > 0:
-                atr_threshold = sig.price * 0.0015
-                vol_blocked = sig.volatility_atr > atr_threshold
-                v_sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
-                sim_parts.append(f"⚡ Volatilite[— kapalı, {v_sim}]")
-
-            # Trend simülasyonu
-            if sig.ema200_dist is not None and sig.signal_type:
-                trend_fail = (sig.signal_type == "buy" and sig.ema200_dist < 0) or \
-                             (sig.signal_type == "sell" and sig.ema200_dist > 0)
-                t_sim = "✗ kalırdı" if trend_fail else "✓ geçerdi"
-                sim_parts.append(f"📈 Trend[— kapalı, {t_sim}] dist={sig.ema200_dist:+.2f}%")
-
+            if row.volatility_atr and row.price and row.price > 0:
+                v_blocked = row.volatility_atr > row.price * _ATR_RATIO
+                sim_parts.append(f"⚡ Volatilite[— kapalı, {'✗ kalırdı' if v_blocked else '✓ geçerdi'}]")
+            if row.ema200_dist is not None and row.signal_type:
+                t_fail = (row.signal_type == "buy" and row.ema200_dist < 0) or \
+                         (row.signal_type == "sell" and row.ema200_dist > 0)
+                sim_parts.append(f"📈 Trend[— kapalı, {'✗ kalırdı' if t_fail else '✓ geçerdi'}] dist={row.ema200_dist:+.2f}%")
             if sim_parts:
-                reason = reason.replace("Filtre: yapılandırılmamış", " | ".join(sim_parts))
-                changed = True
+                new_reason = new_reason.replace("Filtre: yapılandırılmamış", " | ".join(sim_parts))
 
-        # ATR simülasyonu: eksikse ekle veya eski eşikle yanlış hesaplanmışsa düzelt
-        if sig.volatility_atr and sig.price and sig.price > 0:
-            atr_threshold = sig.price * 0.0015
-            vol_blocked = sig.volatility_atr > atr_threshold
-            new_sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
+        # 2) ATR simülasyonu düzelt/ekle
+        if row.volatility_atr and row.price and row.price > 0:
+            v_blocked = row.volatility_atr > row.price * _ATR_RATIO
+            correct_marker = f"⚡ Volatilite[— kapalı, {'✗ kalırdı' if v_blocked else '✓ geçerdi'}]"
 
-            if "Volatilite[— kapalı]" in reason and "Volatilite[— kapalı," not in reason:
-                # Simülasyon hiç yoktu — ekle
-                reason = reason.replace(
-                    "⚡ Volatilite[— kapalı]",
-                    f"⚡ Volatilite[— kapalı, {new_sim}]"
-                )
-                changed = True
-            elif "Volatilite[— kapalı, ✓ geçerdi]" in reason and vol_blocked:
-                # Eski eşikle yanlış hesaplanmış — düzelt
-                reason = reason.replace(
-                    "⚡ Volatilite[— kapalı, ✓ geçerdi]",
-                    "⚡ Volatilite[— kapalı, ✗ kalırdı]"
-                )
-                changed = True
-            elif "Volatilite[— kapalı, ✗ kalırdı]" in reason and not vol_blocked:
-                # Eski eşikle yanlış hesaplanmış — düzelt
-                reason = reason.replace(
-                    "⚡ Volatilite[— kapalı, ✗ kalırdı]",
-                    "⚡ Volatilite[— kapalı, ✓ geçerdi]"
-                )
-                changed = True
+            if "Volatilite[— kapalı]" in new_reason and "Volatilite[— kapalı," not in new_reason:
+                new_reason = new_reason.replace("⚡ Volatilite[— kapalı]", correct_marker)
+            elif v_blocked and "Volatilite[— kapalı, ✓ geçerdi]" in new_reason:
+                new_reason = new_reason.replace("⚡ Volatilite[— kapalı, ✓ geçerdi]", correct_marker)
+            elif not v_blocked and "Volatilite[— kapalı, ✗ kalırdı]" in new_reason:
+                new_reason = new_reason.replace("⚡ Volatilite[— kapalı, ✗ kalırdı]", correct_marker)
 
-        # Saat simülasyonu: varsayılan saatlerle kontrol et
-        if "Saat[— kapalı, ✓ geçerdi]" in reason and sig.created_at:
-            sig_hour = sig.created_at.hour
-            if sig_hour in _default_blocked_hours:
-                reason = reason.replace(
-                    "🕐 Saat[— kapalı, ✓ geçerdi]",
-                    "🕐 Saat[— kapalı, ✗ kalırdı]"
-                )
-                changed = True
+        if new_reason != reason:
+            updates.append({"_id": row.id, "_reason": new_reason})
 
-        if changed:
-            await db.execute(
-                text("UPDATE signal_logs SET reason = :reason WHERE id = :id"),
-                {"reason": reason, "id": sig.id}
-            )
-            patched += 1
+    # Batch update
+    for u in updates:
+        await db.execute(
+            text("UPDATE signal_logs SET reason = :r WHERE id = :i"),
+            {"r": u["_reason"], "i": u["_id"]}
+        )
+    if updates:
+        await db.commit()
 
-    await db.commit()
-    return {
-        "total_checked": len(signals),
-        "patched": patched,
-        "message": f"{patched} sinyalin filtre simülasyonu güncellendi.",
-    }
+    return {"total_checked": len(rows), "patched": len(updates)}
 
 
 @router.delete("/analytics/clear-signals")
