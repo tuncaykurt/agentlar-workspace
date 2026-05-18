@@ -85,88 +85,86 @@ async def run_passive_analysis(
             )
             f = res.scalar_one_or_none()
 
-        if not f:
-            filter_lines.append("Filtre: yapılandırılmamış")
+        # BotFilter yoksa varsayılan değerlerle simülasyon çalışır
+        has_filter = f is not None
+
+        # ── Haber koruması ──
+        from services.economic_calendar import is_news_blackout
+        try:
+            blackout = await is_news_blackout(minutes_buffer=(f.news_blackout_minutes if f else None) or 30)
+            news_blocked = blackout.get("blackout", False)
+        except Exception:
+            blackout = {}
+            news_blocked = False
+
+        if has_filter and f.news_protection_enabled:
+            if news_blocked:
+                filter_lines.append(f"📰 Haber[✗ ENGEL]: {blackout.get('reason', '')}")
+            else:
+                filter_lines.append("📰 Haber[✓ geçti]")
         else:
-            # ── Haber koruması ──
-            from services.economic_calendar import is_news_blackout
+            sim = "✗ kalırdı" if news_blocked else "✓ geçerdi"
+            filter_lines.append(f"📰 Haber[— kapalı, {sim}]")
+
+        # ── Saat filtresi ──
+        import datetime as _dt
+        cur_h = _dt.datetime.utcnow().hour
+        hour_blocked = False
+        _default_blocked_hours = [1, 2, 3, 4, 5]  # UTC — düşük likidite
+        blocked_list = _default_blocked_hours
+        if has_filter and f.blocked_hours:
             try:
-                blackout = await is_news_blackout(minutes_buffer=f.news_blackout_minutes or 30)
-                news_blocked = blackout.get("blackout", False)
+                blocked_list = json.loads(f.blocked_hours)
             except Exception:
-                blackout = {}
-                news_blocked = False
+                pass
+        hour_blocked = cur_h in blocked_list
 
-            if f.news_protection_enabled:
-                if news_blocked:
-                    filter_lines.append(f"📰 Haber[✗ ENGEL]: {blackout.get('reason', '')}")
-                else:
-                    filter_lines.append("📰 Haber[✓ geçti]")
+        if has_filter and f.smart_hours_enabled and f.blocked_hours:
+            if hour_blocked:
+                filter_lines.append(f"🕐 Saat[✗ ENGEL]: {cur_h}:00 UTC yasaklı")
             else:
-                sim = "✗ kalırdı" if news_blocked else "✓ geçerdi"
-                filter_lines.append(f"📰 Haber[— kapalı, {sim}]")
+                filter_lines.append(f"🕐 Saat[✓ {cur_h}:00 UTC]")
+        else:
+            sim = "✗ kalırdı" if hour_blocked else "✓ geçerdi"
+            filter_lines.append(f"🕐 Saat[— kapalı, {sim}]")
 
-            # ── Saat filtresi ──
-            import datetime as _dt
-            cur_h = _dt.datetime.utcnow().hour
-            hour_blocked = False
-            # Kullanıcı tanımlı saatler veya varsayılan düşük likidite saatleri
-            _default_blocked_hours = [1, 2, 3, 4, 5]  # UTC — düşük likidite
-            blocked_list = _default_blocked_hours
-            if f.blocked_hours:
-                try:
-                    blocked_list = json.loads(f.blocked_hours)
-                except Exception:
-                    pass
-            hour_blocked = cur_h in blocked_list
+        # ── Volatilite filtresi ──
+        vol_blocked = False
+        atr_threshold = (f.max_volatility_atr if has_filter else None)
+        if not atr_threshold and volatility_atr and price and price > 0:
+            atr_threshold = price * 0.02  # varsayılan: fiyatın %2'si
+        if atr_threshold and volatility_atr:
+            vol_blocked = volatility_atr > atr_threshold
 
-            if f.smart_hours_enabled and f.blocked_hours:
-                if hour_blocked:
-                    filter_lines.append(f"🕐 Saat[✗ ENGEL]: {cur_h}:00 UTC yasaklı")
-                else:
-                    filter_lines.append(f"🕐 Saat[✓ {cur_h}:00 UTC]")
+        if has_filter and f.volatility_filter_enabled and atr_threshold and volatility_atr:
+            if vol_blocked:
+                filter_lines.append(f"⚡ Volatilite[✗ ENGEL]: ATR={volatility_atr:.4f} > {atr_threshold:.4f}")
             else:
-                sim = "✗ kalırdı" if hour_blocked else "✓ geçerdi"
-                filter_lines.append(f"🕐 Saat[— kapalı, {sim}]")
-
-            # ── Volatilite filtresi ──
-            vol_blocked = False
-            # Kullanıcı eşiği veya varsayılan: ATR/fiyat > %2 = yüksek volatilite
-            atr_threshold = f.max_volatility_atr
-            if not atr_threshold and volatility_atr and price and price > 0:
-                atr_threshold = price * 0.02  # varsayılan: fiyatın %2'si
-            if atr_threshold and volatility_atr:
-                vol_blocked = volatility_atr > atr_threshold
-
-            if f.volatility_filter_enabled and atr_threshold and volatility_atr:
-                if vol_blocked:
-                    filter_lines.append(f"⚡ Volatilite[✗ ENGEL]: ATR={volatility_atr:.4f} > {atr_threshold:.4f}")
-                else:
-                    filter_lines.append(f"⚡ Volatilite[✓ ATR={volatility_atr:.4f}]")
+                filter_lines.append(f"⚡ Volatilite[✓ ATR={volatility_atr:.4f}]")
+        else:
+            if volatility_atr and atr_threshold:
+                sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
+                filter_lines.append(f"⚡ Volatilite[— kapalı, {sim}]")
             else:
-                if volatility_atr and atr_threshold:
-                    sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
-                    filter_lines.append(f"⚡ Volatilite[— kapalı, {sim}]")
-                else:
-                    filter_lines.append("⚡ Volatilite[— kapalı]")
+                filter_lines.append("⚡ Volatilite[— kapalı]")
 
-            # ── Trend filtresi ──
-            trend_fail = False
-            if ema200_dist is not None:
-                trend_fail = (signal_type == "buy" and ema200_dist < 0) or \
-                             (signal_type == "sell" and ema200_dist > 0)
+        # ── Trend filtresi ──
+        trend_fail = False
+        if ema200_dist is not None:
+            trend_fail = (signal_type == "buy" and ema200_dist < 0) or \
+                         (signal_type == "sell" and ema200_dist > 0)
 
-            if ema200_dist is not None:
-                if f.trend_filter_enabled:
-                    if trend_fail:
-                        filter_lines.append(f"📈 Trend[✗ ENGEL]: dist={ema200_dist:+.2f}%")
-                    else:
-                        filter_lines.append(f"📈 Trend[✓ dist={ema200_dist:+.2f}%]")
+        if ema200_dist is not None:
+            if has_filter and f.trend_filter_enabled:
+                if trend_fail:
+                    filter_lines.append(f"📈 Trend[✗ ENGEL]: dist={ema200_dist:+.2f}%")
                 else:
-                    sim = "✗ kalırdı" if trend_fail else "✓ geçerdi"
-                    filter_lines.append(f"📈 Trend[— kapalı, {sim}] dist={ema200_dist:+.2f}%")
+                    filter_lines.append(f"📈 Trend[✓ dist={ema200_dist:+.2f}%]")
             else:
-                filter_lines.append("📈 Trend[— kapalı]")
+                sim = "✗ kalırdı" if trend_fail else "✓ geçerdi"
+                filter_lines.append(f"📈 Trend[— kapalı, {sim}] dist={ema200_dist:+.2f}%")
+        else:
+            filter_lines.append("📈 Trend[— kapalı]")
 
         # ── AI Analizleri (tüm sinyaller için çalışır) ──────────────────────
         try:

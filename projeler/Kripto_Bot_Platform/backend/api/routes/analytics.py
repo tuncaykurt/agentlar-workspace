@@ -851,20 +851,50 @@ async def patch_filter_markers(db: AsyncSession = Depends(get_db)) -> Dict[str, 
         reason = sig.reason or ""
         changed = False
 
-        # ATR simülasyonu eksikse ekle
-        if "Volatilite[— kapalı]" in reason and sig.volatility_atr and sig.price and sig.price > 0:
-            atr_threshold = sig.price * 0.02
-            vol_blocked = sig.volatility_atr > atr_threshold
-            sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
-            reason = reason.replace(
-                "⚡ Volatilite[— kapalı]",
-                f"⚡ Volatilite[— kapalı, {sim}]"
-            )
-            changed = True
+        # "Filtre: yapılandırılmamış" olan sinyallere tüm filtre simülasyonlarını ekle
+        if "Filtre: yapılandırılmamış" in reason:
+            sim_parts = []
 
-        # Saat simülasyonu: sinyal saatini kontrol et
+            # Saat simülasyonu
+            if sig.created_at:
+                sig_hour = sig.created_at.hour
+                h_sim = "✗ kalırdı" if sig_hour in _default_blocked_hours else "✓ geçerdi"
+                sim_parts.append(f"🕐 Saat[— kapalı, {h_sim}]")
+
+            # Volatilite simülasyonu
+            if sig.volatility_atr and sig.price and sig.price > 0:
+                atr_threshold = sig.price * 0.02
+                vol_blocked = sig.volatility_atr > atr_threshold
+                v_sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
+                sim_parts.append(f"⚡ Volatilite[— kapalı, {v_sim}]")
+
+            # Trend simülasyonu
+            if sig.ema200_dist is not None and sig.signal_type:
+                trend_fail = (sig.signal_type == "buy" and sig.ema200_dist < 0) or \
+                             (sig.signal_type == "sell" and sig.ema200_dist > 0)
+                t_sim = "✗ kalırdı" if trend_fail else "✓ geçerdi"
+                sim_parts.append(f"📈 Trend[— kapalı, {t_sim}] dist={sig.ema200_dist:+.2f}%")
+
+            if sim_parts:
+                reason = reason.replace("Filtre: yapılandırılmamış", " | ".join(sim_parts))
+                changed = True
+
+        # ATR simülasyonu eksikse ekle (BotFilter var ama ATR simülasyonu yok)
+        has_vol_no_sim = "Volatilite[— kapalı]" in reason and "Volatilite[— kapalı," not in reason
+        if has_vol_no_sim:
+            if sig.volatility_atr and sig.price and sig.price > 0:
+                atr_threshold = sig.price * 0.02
+                vol_blocked = sig.volatility_atr > atr_threshold
+                sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
+                reason = reason.replace(
+                    "⚡ Volatilite[— kapalı]",
+                    f"⚡ Volatilite[— kapalı, {sim}]"
+                )
+                changed = True
+
+        # Saat simülasyonu: varsayılan saatlerle kontrol et
         if "Saat[— kapalı, ✓ geçerdi]" in reason and sig.created_at:
-            sig_hour = sig.created_at.hour  # UTC
+            sig_hour = sig.created_at.hour
             if sig_hour in _default_blocked_hours:
                 reason = reason.replace(
                     "🕐 Saat[— kapalı, ✓ geçerdi]",
