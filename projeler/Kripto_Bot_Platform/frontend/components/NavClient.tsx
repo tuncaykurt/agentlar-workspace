@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/backtest",      label: "Backtest" },
   { href: "/strategy-view", label: "Strateji" },
   { href: "/analytics",     label: "Analiz" },
+  { href: "/scanner",       label: "Tarayıcı" },
   { href: "/ai-chat",       label: "AI Chat" },
   { href: "/news",           label: "Haberler" },
   { href: "/freqtrade",      label: "Freqtrade" },
