@@ -110,12 +110,15 @@ async def run_passive_analysis(
             import datetime as _dt
             cur_h = _dt.datetime.utcnow().hour
             hour_blocked = False
+            # Kullanıcı tanımlı saatler veya varsayılan düşük likidite saatleri
+            _default_blocked_hours = [1, 2, 3, 4, 5]  # UTC — düşük likidite
+            blocked_list = _default_blocked_hours
             if f.blocked_hours:
                 try:
-                    blocked = json.loads(f.blocked_hours)
-                    hour_blocked = cur_h in blocked
+                    blocked_list = json.loads(f.blocked_hours)
                 except Exception:
                     pass
+            hour_blocked = cur_h in blocked_list
 
             if f.smart_hours_enabled and f.blocked_hours:
                 if hour_blocked:
@@ -128,16 +131,20 @@ async def run_passive_analysis(
 
             # ── Volatilite filtresi ──
             vol_blocked = False
-            if f.max_volatility_atr and volatility_atr:
-                vol_blocked = volatility_atr > f.max_volatility_atr
+            # Kullanıcı eşiği veya varsayılan: ATR/fiyat > %2 = yüksek volatilite
+            atr_threshold = f.max_volatility_atr
+            if not atr_threshold and volatility_atr and price and price > 0:
+                atr_threshold = price * 0.02  # varsayılan: fiyatın %2'si
+            if atr_threshold and volatility_atr:
+                vol_blocked = volatility_atr > atr_threshold
 
-            if f.volatility_filter_enabled and f.max_volatility_atr and volatility_atr:
+            if f.volatility_filter_enabled and atr_threshold and volatility_atr:
                 if vol_blocked:
-                    filter_lines.append(f"⚡ Volatilite[✗ ENGEL]: ATR={volatility_atr:.4f} > {f.max_volatility_atr:.4f}")
+                    filter_lines.append(f"⚡ Volatilite[✗ ENGEL]: ATR={volatility_atr:.4f} > {atr_threshold:.4f}")
                 else:
                     filter_lines.append(f"⚡ Volatilite[✓ ATR={volatility_atr:.4f}]")
             else:
-                if volatility_atr and f.max_volatility_atr:
+                if volatility_atr and atr_threshold:
                     sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
                     filter_lines.append(f"⚡ Volatilite[— kapalı, {sim}]")
                 else:

@@ -307,7 +307,7 @@ _FILTER_DEFS = [
         "icon":            "📈",
         "field":           "trend_filter_enabled",
         # analyzed sinyallerin reason alanında aranan marker (KÜÇÜK HARF)
-        "engel_markers":   ["trend[✗", "ema200[✗"],
+        "engel_markers":   ["trend[✗", "ema200[✗", "trend[— kapalı, ✗"],
         "reject_keywords": ["trend", "ema200"],
     },
     {
@@ -315,7 +315,7 @@ _FILTER_DEFS = [
         "name":            "Volatilite Filtresi (ATR)",
         "icon":            "⚡",
         "field":           "volatility_filter_enabled",
-        "engel_markers":   ["volatilite[✗"],
+        "engel_markers":   ["volatilite[✗", "volatilite[— kapalı, ✗"],
         "reject_keywords": ["volatilite", "volatility", "atr"],
     },
     {
@@ -323,7 +323,7 @@ _FILTER_DEFS = [
         "name":            "Haber Koruması",
         "icon":            "📰",
         "field":           "news_protection_enabled",
-        "engel_markers":   ["haber[✗", "ai haber["],
+        "engel_markers":   ["haber[✗", "ai haber[", "haber[— kapalı, ✗"],
         "reject_keywords": ["haber", "news", "blackout", "economic"],
     },
     {
@@ -331,7 +331,7 @@ _FILTER_DEFS = [
         "name":            "Yasak Saat Dilimi",
         "icon":            "🕐",
         "field":           "smart_hours_enabled",
-        "engel_markers":   ["saat[✗"],
+        "engel_markers":   ["saat[✗", "saat[— kapalı, ✗"],
         "reject_keywords": ["saat", "hour", "utc yasaklı", "akıllı saat"],
     },
     {
@@ -339,7 +339,7 @@ _FILTER_DEFS = [
         "name":            "Öz-Öğrenme Filtresi",
         "icon":            "🧠",
         "field":           "self_learning_enabled",
-        "engel_markers":   ["öz-öğrenme[engel", "öz-öğrenme[✗"],
+        "engel_markers":   ["öz-öğrenme[engel", "öz-öğrenme[✗", "ai öz-öğrenme[engel"],
         "reject_keywords": ["öz-öğrenme", "win_rate", "self_learning", "başarı"],
     },
 ]
@@ -825,6 +825,65 @@ async def bulk_reanalyze_signals(db: AsyncSession = Depends(get_db)) -> Dict[str
     return {
         "queued": total,
         "message": f"{total} sinyal sıralı analiz başlatıldı. Her sinyal ~30sn sürer, toplam ~{total * 30 // 60} dk.",
+    }
+
+
+@router.post("/analytics/patch-filter-markers")
+async def patch_filter_markers(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Mevcut analyzed sinyallerin reason alanını ATR ve Saat simülasyonu ile günceller.
+    Eski sinyallerde eksik olan 'Volatilite' ve 'Saat' pasif simülasyonlarını ekler.
+    """
+    import json as _json
+    import re
+
+    result = await db.execute(
+        select(SignalLog).where(
+            SignalLog.action.in_(["analyzed", "executed"]),
+            SignalLog.reason.isnot(None),
+        )
+    )
+    signals = result.scalars().all()
+    patched = 0
+    _default_blocked_hours = [1, 2, 3, 4, 5]
+
+    for sig in signals:
+        reason = sig.reason or ""
+        changed = False
+
+        # ATR simülasyonu eksikse ekle
+        if "Volatilite[— kapalı]" in reason and sig.volatility_atr and sig.price and sig.price > 0:
+            atr_threshold = sig.price * 0.02
+            vol_blocked = sig.volatility_atr > atr_threshold
+            sim = "✗ kalırdı" if vol_blocked else "✓ geçerdi"
+            reason = reason.replace(
+                "⚡ Volatilite[— kapalı]",
+                f"⚡ Volatilite[— kapalı, {sim}]"
+            )
+            changed = True
+
+        # Saat simülasyonu: sinyal saatini kontrol et
+        if "Saat[— kapalı, ✓ geçerdi]" in reason and sig.created_at:
+            sig_hour = sig.created_at.hour  # UTC
+            if sig_hour in _default_blocked_hours:
+                reason = reason.replace(
+                    "🕐 Saat[— kapalı, ✓ geçerdi]",
+                    "🕐 Saat[— kapalı, ✗ kalırdı]"
+                )
+                changed = True
+
+        if changed:
+            await db.execute(
+                text("UPDATE signal_logs SET reason = :reason WHERE id = :id"),
+                {"reason": reason, "id": sig.id}
+            )
+            patched += 1
+
+    await db.commit()
+    return {
+        "total_checked": len(signals),
+        "patched": patched,
+        "message": f"{patched} sinyalin filtre simülasyonu güncellendi.",
     }
 
 
