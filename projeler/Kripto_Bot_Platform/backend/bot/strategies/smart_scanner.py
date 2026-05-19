@@ -173,28 +173,33 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None) -> st
     active_str = ", ".join(active_positions) if active_positions else "Yok"
 
     # Coin verilerini tablo formatında hazırla
+    def _v(val, default=0):
+        """None-safe: dict.get() key varsa None dönebilir, bunu yakala."""
+        return default if val is None else val
+
     coin_rows = []
     for c in coins:
         coin_rows.append(
             f"  {c.get('base','?'):>8} | "
-            f"${c.get('price',0):>12,.4f} | "
-            f"{c.get('price_change_24h',0):>+7.2f}% | "
-            f"RSI:{c.get('rsi_14',0):>5.1f} | "
-            f"ATR%:{c.get('atr_pct',0):>6.3f} | "
-            f"ADX:{c.get('adx',0):>5.1f} | "
+            f"${_v(c.get('price')):>12,.4f} | "
+            f"{_v(c.get('price_change_24h')):>+7.2f}% | "
+            f"RSI:{_v(c.get('rsi_14')):>5.1f} | "
+            f"ATR%:{_v(c.get('atr_pct')):>6.3f} | "
+            f"ADX:{_v(c.get('adx')):>5.1f} | "
             f"Trend:{'↑' if c.get('supertrend_dir')==1 else '↓' if c.get('supertrend_dir')==-1 else '—'} | "
-            f"Vol:{c.get('volume_ratio',0):>4.1f}x | "
-            f"EMA200:{c.get('ema200_dist',0):>+7.2f}% | "
-            f"MACD:{c.get('macd_hist',0):>+10.6f} | "
-            f"BB:[{c.get('bb_lower',0):>.2f}-{c.get('bb_upper',0):>.2f}] | "
-            f"Lev:{c.get('max_leverage','?')}x"
+            f"Vol:{_v(c.get('volume_ratio')):>4.1f}x | "
+            f"EMA200:{_v(c.get('ema200_dist')):>+7.2f}% | "
+            f"MACD:{_v(c.get('macd_hist')):>+10.6f} | "
+            f"BB:[{_v(c.get('bb_lower')):>.2f}-{_v(c.get('bb_upper')):>.2f}] | "
+            f"Lev:{c.get('max_leverage') or '?'}x"
         )
     coin_table = "\n".join(coin_rows)
 
     # Piyasa genel durumu
     bullish_count = sum(1 for c in coins if c.get("supertrend_dir") == 1)
     bearish_count = sum(1 for c in coins if c.get("supertrend_dir") == -1)
-    avg_rsi = sum(c.get("rsi_14", 50) for c in coins if c.get("rsi_14")) / max(1, sum(1 for c in coins if c.get("rsi_14")))
+    rsi_vals = [c["rsi_14"] for c in coins if c.get("rsi_14") is not None]
+    avg_rsi = sum(rsi_vals) / max(1, len(rsi_vals)) if rsi_vals else 50.0
     oversold = [c["base"] for c in coins if c.get("rsi_14") and c["rsi_14"] < 30]
     overbought = [c["base"] for c in coins if c.get("rsi_14") and c["rsi_14"] > 70]
     high_vol = [c["base"] for c in coins if c.get("volume_ratio") and c["volume_ratio"] > 2]
