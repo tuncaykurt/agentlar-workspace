@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     OPENROUTER_API_KEY: str = ""
     AI_FAST_MODEL: str = "deepseek/deepseek-chat"
-    AI_DEEP_MODEL: str = "anthropic/claude-3.5-sonnet"
+    AI_DEEP_MODEL: str = "anthropic/claude-sonnet-4"
     AI_SEARCH_MODEL: str = "perplexity/sonar-pro"  # internet araştırması için
     AI_MIN_CONFIDENCE: int = 60      # Bu skorun altındaki sinyaller reddedilir
 
