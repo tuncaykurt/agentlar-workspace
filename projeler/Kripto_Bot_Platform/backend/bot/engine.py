@@ -172,7 +172,9 @@ class BotEngine:
                 if strategy == "smart_scanner":
                     await self._run_smart_scanner_cycle(redis)
                     scan_interval = int(self.config.get("params", {}).get("scan_interval", 120))
-                    await asyncio.sleep(scan_interval)
+                    mode = self.config.get("params", {}).get("selection_mode", "manual")
+                    min_interval = 60 if mode == "ai" else 30
+                    await asyncio.sleep(max(scan_interval, min_interval))
                     continue
 
                 # 0. Trailing stop kontrolü (aktif pozisyon varsa)
@@ -2762,7 +2764,7 @@ class BotEngine:
         if saved_positions:
             try:
                 exchange_positions = await asyncio.wait_for(
-                    self.exchange.exchange.fetch_positions(), timeout=15
+                    self.exchange.exchange.fetch_positions(), timeout=8
                 )
                 open_symbols = set()
                 for pos in exchange_positions:
@@ -2826,13 +2828,16 @@ class BotEngine:
                 # Açık pozisyondakileri çıkar, ilgi skoruna göre sırala
                 ai_candidates = [c for c in coins if c["base"] not in active_positions]
                 ai_candidates.sort(key=_interest_score, reverse=True)
-                ai_top = ai_candidates[:40]  # En ilgi çekici 40 coin
+                ai_top = ai_candidates[:20]  # En ilgi çekici 20 coin (token limiti için)
 
                 print(f"[SmartScanner {bot_name}] AI'ya {len(ai_top)}/{len(coins)} coin gönderiliyor")
 
                 prompt = build_ai_prompt(ai_top, active_positions)
-                model = settings.AI_DEEP_MODEL  # Claude ile en iyi analiz
-                ai_response = await _call(model, prompt, max_tokens=1500)
+                model = settings.AI_DEEP_MODEL
+                ai_response = await asyncio.wait_for(
+                    _call(model, prompt, max_tokens=1200),
+                    timeout=45,  # 45s max — Gateway Timeout'u önle
+                )
 
                 ai_selections = ai_response.get("selections", [])
                 market_regime = ai_response.get("market_regime", "unknown")
