@@ -4,7 +4,7 @@
 # Bu dosya projenin bağımsız olduğu dönemden kalmadır.
 # Artık Antigravity ekosistemi altındayız.
 #
-# Mail gönderimi için: _skills/eposta-gonderim/scripts/send_email.py
+# Mail gönderimi için: _skills/marketing/eposta-gonderim/scripts/send_email.py
 # Workflow: /mail-gonder veya /marka-outreach
 #
 # Bu dosyayı değiştirmeyin, sadece referans olarak tutulur.

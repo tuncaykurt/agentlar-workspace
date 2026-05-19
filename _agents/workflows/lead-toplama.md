@@ -14,13 +14,13 @@ Instagram, TikTok, YouTube, LinkedIn, Google Maps ve topluluk platformlarından 
 
 ## Gerekli Skill
 
-`_skills/lead-generation/SKILL.md` → **ÖNCE OKU** — Apify aktör kataloğu, karar ağacı ve enrichment pipeline detayları burada.
+`_skills/marketing/lead-generation/SKILL.md` → **ÖNCE OKU** — Apify aktör kataloğu, karar ağacı ve enrichment pipeline detayları burada.
 
 ## Gerekli Kaynaklar
 
 | Kaynak | Yol | Açıklama |
 |--------|-----|----------|
-| Lead Generation Skill | `_skills/lead-generation/SKILL.md` | Apify aktörleri ve pipeline mantığı |
+| Lead Generation Skill | `_skills/marketing/lead-generation/SKILL.md` | Apify aktörleri ve pipeline mantığı |
 | API Anahtarları | `_knowledge/api-anahtarlari.md` | Apify, Hunter.io, Apollo.io tokenları |
 | Agent Yönergesi | `_agents/musteri-kazanim/AGENT.md` | Orkestrasyon ve ICP detayları |
 | Kampanya Config'leri | `_agents/musteri-kazanim/config/` | Hazır kampanya YAML'ları |

@@ -148,10 +148,10 @@ Bu proje Antigravity ekosisteminin bir parçasıdır:
 | Bileşen | Yol | İlişki |
 |---------|-----|--------|
 | **Müşteri Kazanım Agenti** | `_agents/musteri-kazanim/AGENT.md` | Orkestrasyon |
-| **Lead Generation Skill** | `_skills/lead-generation/SKILL.md` | Marka bulma |
-| **E-posta Gönderim Skill** | `_skills/eposta-gonderim/SKILL.md` | Mail gönderim motoru |
+| **Lead Generation Skill** | `_skills/marketing/lead-generation/SKILL.md` | Marka bulma |
+| **E-posta Gönderim Skill** | `_skills/marketing/eposta-gonderim/SKILL.md` | Mail gönderim motoru |
 | **API Anahtarları** | `_knowledge/api-anahtarlari.md` | Credential'lar |
-| **Şifre Yönetici** | `_skills/sifre-yonetici/SKILL.md` | Token yönetimi |
+| **Şifre Yönetici** | `_skills/dev/sifre-yonetici/SKILL.md` | Token yönetimi |
 
 ### Slash Command'lar
 

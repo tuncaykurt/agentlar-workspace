@@ -76,7 +76,7 @@ Yeni proje oluşturulduğunda, arşive taşındığında veya silindiğinde şu 
 - **Tokenlar:** `_knowledge/credentials/master.env`
 - **Google Service Account:** `_knowledge/credentials/google-service-account.json`
 - **OAuth Dosyaları:** `_knowledge/credentials/oauth/`
-- **Skill:** `_skills/sifre-yonetici/SKILL.md`
+- **Skill:** `_skills/dev/sifre-yonetici/SKILL.md`
 - **Workflow:** `/sifre-bagla`
 
 ### Token Güncellemesi

@@ -173,6 +173,8 @@ class WebhookProfile(Base):
     sl_pct = Column(Float, nullable=False, default=1.0)    # Stop Loss %
     leverage = Column(Integer, nullable=False, default=20)  # kaldıraç
     enabled = Column(Boolean, default=True)                 # aktif mi
+    use_ai_validation = Column(Boolean, default=False)      # AI Doğrulama aktif mi?
+    ai_mode = Column(String, default="balanced")            # strict, balanced, relaxed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

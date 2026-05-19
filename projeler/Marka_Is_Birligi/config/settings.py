@@ -6,8 +6,8 @@
 #
 # API Anahtarları    → _knowledge/api-anahtarlari.md
 # Kampanya Ayarları  → config/kampanya.yaml
-# Mail Gönderimi     → _skills/eposta-gonderim/
-# Lead Bulma         → _skills/lead-generation/
+# Mail Gönderimi     → _skills/marketing/eposta-gonderim/
+# Lead Bulma         → _skills/marketing/lead-generation/
 #
 # Bu dosyayı değiştirmeyin, sadece referans olarak tutulur.
 # ═══════════════════════════════════════════════════════════

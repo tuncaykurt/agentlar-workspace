@@ -43,8 +43,8 @@ description: |
 
 | Skill | Konum | Ne İçin Kullanılır |
 |-------|-------|-------------------|
-| **Kie AI Video Production** | `_skills/kie-ai-video-production/SKILL.md` | Video/görsel üretimi (Kling, Veo, Sora vb.) |
-| **Competitor Radar** | `_skills/rakip-analiz/SKILL.md` | Rakip analizi (Instagram, TikTok, Meta Ads) |
+| **Kie AI Video Production** | `_skills/content/kie-ai-video-production/SKILL.md` | Video/görsel üretimi (Kling, Veo, Sora vb.) |
+| **Competitor Radar** | `_skills/marketing/rakip-analiz/SKILL.md` | Rakip analizi (Instagram, TikTok, Meta Ads) |
 
 ---
 
@@ -55,7 +55,7 @@ description: |
 | **Calculator** | Proje içi `tools/calculator.py` | Yatırım/finans hesaplamaları |
 | **Transcript** | Proje içi `tools/transcript.py` | Videolardan transkript çıkarma |
 | **Currency** | Proje içi `tools/currency.py` | Döviz çevirisi |
-| **Radar Engine** | `_skills/rakip-analiz/scripts/radar_engine.py` | Rakip profil analizi |
+| **Radar Engine** | `_skills/marketing/rakip-analiz/scripts/radar_engine.py` | Rakip profil analizi |
 
 > 💡 Araçlar `Projeler/` altındaki ilgili projenin `tools/` klasöründe tutulur.
 
@@ -139,7 +139,7 @@ hedef_kitle: "Hedef kitlenizin açıklaması"
 **Tetikleyici:** Script hazır olduğunda video gerektiğinde
 **Girdi:** Script veya video prompt'u
 **Çıktı:** AI ile üretilmiş video/görsel URL'leri
-**Kullandığı Skill:** `_skills/kie-ai-video-production/SKILL.md`
+**Kullandığı Skill:** `_skills/content/kie-ai-video-production/SKILL.md`
 
 ---
 
@@ -186,7 +186,7 @@ Farklı bir marka/müşteri için çalışılacaksa `config/` altına yeni YAML 
 
 ## 📌 İlişkili Kaynaklar
 
-- **Video Üretim Skill:** `_skills/kie-ai-video-production/SKILL.md`
-- **Rakip Analiz Skill:** `_skills/rakip-analiz/SKILL.md`
+- **Video Üretim Skill:** `_skills/content/kie-ai-video-production/SKILL.md`
+- **Rakip Analiz Skill:** `_skills/marketing/rakip-analiz/SKILL.md`
 - **API Anahtarları:** `_knowledge/api-anahtarlari.md`
 - **Ana Workflow:** `_agents/workflows/icerik-uretimi.md` (slash command)

@@ -16,8 +16,8 @@ Marka iş birliği outreach sürecini uçtan uca yönetir: marka bulma, iletişi
 
 | Skill | Yol | Ne İçin |
 |-------|-----|---------|
-| Lead Generation | `_skills/lead-generation/SKILL.md` | Marka lead bulma |
-| E-posta Gönderim | `_skills/eposta-gonderim/SKILL.md` | Gmail API ile gönderim |
+| Lead Generation | `_skills/marketing/lead-generation/SKILL.md` | Marka lead bulma |
+| E-posta Gönderim | `_skills/marketing/eposta-gonderim/SKILL.md` | Gmail API ile gönderim |
 
 ## Gerekli Kaynaklar
 
@@ -54,7 +54,7 @@ Marka iş birliği outreach sürecini uçtan uca yönetir: marka bulma, iletişi
 > ⚠️ Mevcut listede yeterli marka varsa bu adım atlanabilir.
 
 1. Kullanıcıdan hedef sektörleri ve bölgeyi onayla
-2. `_skills/lead-generation/SKILL.md`'deki pipeline'ı kullan:
+2. `_skills/marketing/lead-generation/SKILL.md`'deki pipeline'ı kullan:
    - Google Maps: `compass/crawler-google-places` → sektöre göre firma bul
    - Web Enrichment: `vdrmota/contact-info-scraper` → iletişim bilgisi çıkar
 3. Bulunan markaları `markalar.csv`'ye **Antigravity standart formatında** ekle:
@@ -98,13 +98,13 @@ Marka iş birliği outreach sürecini uçtan uca yönetir: marka bulma, iletişi
    - Kullanıcı onayı al → `dry_run: false`
 
 2. **Gmail bağlantısı:**
-   - `_skills/eposta-gonderim/scripts/send_email.py` kullan
+   - `_skills/marketing/eposta-gonderim/scripts/send_email.py` kullan
    - Credentials: `_knowledge/api-anahtarlari.md` → Gmail OAuth 2.0
-   - Token: `_skills/eposta-gonderim/token.json`
+   - Token: `_skills/marketing/eposta-gonderim/token.json`
 
 3. **Gönderim komutu:**
    ```bash
-   python3 _skills/eposta-gonderim/scripts/send_email.py \
+   python3 _skills/marketing/eposta-gonderim/scripts/send_email.py \
      --to "{email}" \
      --subject "{marka_adi} x [İSİM SOYAD] | İş Birliği Teklifi" \
      --body "{kisisellestirilmis_html}" \

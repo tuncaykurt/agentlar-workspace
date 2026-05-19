@@ -40,7 +40,7 @@ drive = get_drive_service("outreach")
 
 Tüm API anahtarları tek dosyada: `_knowledge/credentials/master.env`
 
-Projelere bağlamak için `_skills/sifre-yonetici/` skill'ini kullan (detaylar `SKILL.md`'de).
+Projelere bağlamak için `_skills/dev/sifre-yonetici/` skill'ini kullan (detaylar `SKILL.md`'de).
 
 ---
 

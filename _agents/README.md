@@ -11,8 +11,8 @@ Bu klasör, Antigravity'nin akıllı orkestrasyon agent'larını içerir. Her ag
 **Amaç:** Herhangi bir hedef kitle için lead bulma, iletişim bilgisi çıkarma ve e-posta outreach sürecini tek bir agent olarak yürütmek.
 
 **Kullandığı Skill'ler:**
-- `_skills/lead-generation/` → Apify ile profil tarama
-- `_skills/eposta-gonderim/` → Gmail ile e-posta gönderimi
+- `_skills/marketing/lead-generation/` → Apify ile profil tarama
+- `_skills/marketing/eposta-gonderim/` → Gmail ile e-posta gönderimi
 
 **Yapı:**
 ```
@@ -33,8 +33,8 @@ musteri-kazanim/
 **Amaç:** Hedef sektörde içerik üretim sürecini (araştırma → script yazma → video prompting) uçtan uca yönetmek.
 
 **Kullandığı Skill'ler:**
-- `_skills/kie-ai-video-production/` → Video üretimi
-- `_skills/rakip-analiz/` → Rakip analizi
+- `_skills/content/kie-ai-video-production/` → Video üretimi
+- `_skills/marketing/rakip-analiz/` → Rakip analizi
 
 **Yapı:**
 ```
@@ -53,9 +53,9 @@ icerik-uretim/
 **Amaç:** Projelerin production'a alınmasını ve dış dünyayla paylaşılmasını yönetmek.
 
 **Kullandığı Skill'ler:**
-- `_skills/canli-yayina-al/` → Coolify/GitHub deploy pipeline
-- `_skills/folder-paylasim/` → Proje export ve paylaşım paketleme
-- `_skills/proje-gorsellestirici/` → HTML görselleştirme
+- `_skills/content/canli-yayina-al/` → Coolify/GitHub deploy pipeline
+- `_skills/dev/folder-paylasim/` → Proje export ve paylaşım paketleme
+- `_skills/analysis/proje-gorsellestirici/` → HTML görselleştirme
 
 **Yapı:**
 ```

@@ -13,7 +13,7 @@ Kie AI modelleri kullanarak video ve görsel içerik üretme adımları.
 ## Bağlam
 - **Agent:** `_agents/icerik-uretim/AGENT.md`
 - **Config:** `_agents/icerik-uretim/config/ornek-marka.yaml`
-- **Skill:** `_skills/kie-ai-video-production/SKILL.md` → ÖNCE OKU
+- **Skill:** `_skills/content/kie-ai-video-production/SKILL.md` → ÖNCE OKU
 - **API:** `_knowledge/api-anahtarlari.md` → Kie AI bölümü
 - **API Dökümanları:** `Projeler/İçerik Otomasyon Test/api-docs/`
 
@@ -22,17 +22,18 @@ Kie AI modelleri kullanarak video ve görsel içerik üretme adımları.
 Bu workflow, İçerik Üretim Agent'ının son adımıdır. Tam pipeline şu şekilde akar:
 
 ```
-1. [Araştırma]     → _agents/icerik-uretim/workflows/arastirma-yap.md
-2. [Script Yazma]  → _agents/icerik-uretim/workflows/script-yaz.md
+1. [Trend Analizi] → _skills/marketing/social-trends/SKILL.md (Yeni)
+2. [Araştırma]     → _agents/icerik-uretim/workflows/arastirma-yap.md
+3. [Script Yazma]  → _agents/icerik-uretim/workflows/script-yaz.md
    veya [İlham Al] → _agents/icerik-uretim/workflows/ilham-al.md
    veya [Hesaplama]→ _agents/icerik-uretim/workflows/hesaplama-scripti.md
-3. [Video Üretim]  → BU WORKFLOW (icerik-uretimi.md)
+4. [Video Üretim]  → BU WORKFLOW (icerik-uretimi.md)
 ```
 
 ## Adımlar
 
 1. **SKILL.md dosyasını oku**
-   - `_skills/kie-ai-video-production/SKILL.md`
+   - `_skills/content/kie-ai-video-production/SKILL.md`
    - Hangi model ne zaman kullanılır, HTTP akışı nasıl işler
 
 2. **Script'ten video stratejisi belirle**
@@ -67,7 +68,7 @@ Bu workflow, İçerik Üretim Agent'ının son adımıdır. Tam pipeline şu şe
    - Script'in seslendirme gerektirip gerektirmediğini belirle
    - Gerekiyorsa: ElevenLabs ile Türkçe dış ses üret
    - FFmpeg ile video + ses birleştir
-   - Detay: `_skills/kie-ai-video-production/pipelines/video-seslendirme.md`
+   - Detay: `_skills/content/kie-ai-video-production/pipelines/video-seslendirme.md`
 
 7. **Sonucu al ve teslim et**
    - `state: success` → `resultJson` içinden URL'i parse et

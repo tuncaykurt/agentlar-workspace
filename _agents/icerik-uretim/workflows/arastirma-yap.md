@@ -13,8 +13,8 @@ Dubai gayrimenkul piyasası hakkında güncel araştırma yapma adımları.
 - **Agent:** `_agents/icerik-uretim/AGENT.md`
 - **Config:** `_agents/icerik-uretim/config/ornek-marka.yaml`
 - **Müşteri:** [MÜŞTERİ_ADI] — Dubai yatırım danışmanı
-- **Skill:** `_skills/kie-ai-video-production/SKILL.md`
-- **Rakip Analiz Skill:** `_skills/rakip-analiz/SKILL.md`
+- **Skill:** `_skills/content/kie-ai-video-production/SKILL.md`
+- **Rakip Analiz Skill:** `_skills/marketing/rakip-analiz/SKILL.md`
 - **Kaynak Script'ler:** `Projeler/Dubai Emlak İçerik Yazarı/reference-scripts/`
 
 ## Adımlar
@@ -32,8 +32,8 @@ Dubai gayrimenkul piyasası hakkında güncel araştırma yapma adımları.
    - Kira ROI yüzdesi
 
 3. **Rakip içerik analizi** (opsiyonel)
-   - `_skills/rakip-analiz/SKILL.md` → Radar Engine ile rakip içerikleri analiz et
-   - `_skills/lead-generation/SKILL.md` → Apify ile rakip videoları bul
+   - `_skills/marketing/rakip-analiz/SKILL.md` → Radar Engine ile rakip içerikleri analiz et
+   - `_skills/marketing/lead-generation/SKILL.md` → Apify ile rakip videoları bul
    - Transcript'i analiz et
    - `Projeler/Dubai Emlak İçerik Yazarı/rakipler.md` dosyasını güncelle
 

@@ -96,8 +96,8 @@ kurallar:
 
 # ── Skill ve Tool Referansları ────────────────────────────────
 skills:
-  video_uretim: "_skills/kie-ai-video-production/SKILL.md"
-  rakip_analiz: "_skills/rakip-analiz/SKILL.md"
+  video_uretim: "_skills/content/kie-ai-video-production/SKILL.md"
+  rakip_analiz: "_skills/marketing/rakip-analiz/SKILL.md"
 
 # ── Rakip Listesi ─────────────────────────────────────────────
 rakipler:

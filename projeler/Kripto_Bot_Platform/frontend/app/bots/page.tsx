@@ -287,12 +287,35 @@ const STRATEGIES: Strategy[] = [
   },
   {
     id: "tradingview_webhook",
-    name: "TradingView Alarm",
+    name: "TradingView Alarm + AI Motoru",
     category: "Webhook",
     icon: "📡",
-    description: "TradingView'de oluşturulan alarm webhook'u gelince otomatik işlem açar. Her strateji/indikatör için çalışır — Pine Script zorunlu değil.",
-    signals: ["TradingView alarm tetiklemesi", "Webhook POST isteği"],
-    params: [],
+    description: "TradingView webhook sinyallerini alır. Seçeneğe bağlı olarak sinyali Yapay Zeka (AI) Karar Motoruna gönderir ve kaldıraç, miktar ve onay kararlarını AI'a bırakır.",
+    signals: ["TradingView alarm tetiklemesi", "Webhook POST isteği", "AI Filtresi ve Optimizasyonu"],
+    params: [
+      { key: "use_ai", label: "Yapay Zeka (AI) Motorunu Kullan", type: "boolean", default: false, description: "Sinyalleri işleme sokmadan önce AI analizinden geçir ve kararı AI'a bırak." },
+      { key: "ai_mode", label: "AI Karar Yetkisi", type: "select", default: "filter", description: "AI motorunun yetki seviyesini seçin.",
+        options: [
+          { value: "filter", label: "Sadece Filtrele (Riskliyse Reddet)" },
+          { value: "leverage_size", label: "Kaldıraç ve İşlem Miktarını Belirle" },
+          { value: "autonomous", label: "Tam Otonom (Filtre, Kaldıraç, TP/SL)" },
+        ],
+      },
+      { key: "ai_risk_level", label: "AI Risk Toleransı", type: "select", default: "medium", description: "AI'ın risk iştahını belirleyin.",
+        options: [
+          { value: "low", label: "Düşük Risk (Sadece Güçlü Sinyaller)" },
+          { value: "medium", label: "Orta Risk (Dengeli Büyüme)" },
+          { value: "high", label: "Yüksek Risk (Agresif Büyüme)" },
+        ],
+      },
+      { key: "ai_data_sources", label: "AI Veri Kaynakları", type: "select", default: "tv", description: "AI'ın karar verirken kullanacağı ek veri kaynakları.",
+        options: [
+          { value: "tv", label: "Sadece TradingView Sinyali" },
+          { value: "tv_coinglass", label: "TV Sinyali + CoinGlass (Yakında)" },
+          { value: "all", label: "TV + CoinGlass + CryptoPanic (Yakında)" },
+        ],
+      }
+    ],
   },
   {
     id: "grid_bot",
@@ -343,7 +366,7 @@ const STRATEGIES: Strategy[] = [
       },
       { key: "scan_interval", label: "Tarama Aralığı (sn)", type: "number", min: 30, max: 3600, step: 10, default: 120, description: "Kaç saniyede bir tüm coinleri tara" },
       { key: "max_positions", label: "Max Pozisyon", type: "number", min: 1, max: 10, step: 1, default: 3, description: "Aynı anda max kaç coin'de pozisyon açılsın" },
-      { key: "leverage",      label: "Kaldıraç",     type: "number", min: 1, max: 100, step: 1, default: 5, description: "Varsayılan kaldıraç (AI modunda AI önerebilir)" },
+      { key: "leverage",      label: "Kaldıraç",     type: "number", min: 1, max: 500, step: 1, default: 5, description: "Varsayılan kaldıraç (AI modunda AI önerebilir)" },
       { key: "tp_pct",        label: "Take Profit %", type: "number", min: 0.1, max: 100, step: 0.1, default: 2, description: "Kâr al yüzdesi (AI modunda AI önerebilir)" },
       { key: "sl_pct",        label: "Stop Loss %",   type: "number", min: 0.1, max: 100, step: 0.1, default: 1, description: "Zarar durdur yüzdesi (AI modunda AI önerebilir)" },
 
@@ -545,7 +568,7 @@ function Toggle({ checked, onChange, label }: {
 // TradingView yalnızca 80 ve 443 portlarını kabul eder — nginx port 80'de dinliyor
 
 function TradingViewWebhookCard({
-  token, onTokenInit, direction, onDirection, signalTimeframe, onSignalTimeframe, isEditing, isHedge,
+  token, onTokenInit, direction, onDirection, signalTimeframe, onSignalTimeframe, isEditing, isHedge, useAi,
 }: {
   token: string
   onTokenInit: (t: string) => void
@@ -555,6 +578,7 @@ function TradingViewWebhookCard({
   onSignalTimeframe: (v: string) => void
   isEditing?: boolean
   isHedge?: boolean
+  useAi?: boolean
 }) {
   const [copied, setCopied] = useState<"url"|"json"|null>(null)
   const [alarmType, setAlarmType] = useState<"indicator"|"strategy">("indicator")
@@ -833,6 +857,21 @@ function TradingViewWebhookCard({
           ))}
         </div>
       </div>
+
+      {/* AI Karar Motoru Bilgisi */}
+      {useAi && (
+        <div className="p-4 rounded-xl border border-purple-500/30 bg-purple-500/10 space-y-2 mt-2 relative overflow-hidden">
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl" />
+          <p className="text-sm font-semibold text-purple-300 flex items-center gap-2">
+            <span className="text-lg">🧠</span> Yapay Zeka (AI) Karar Motoru Aktif
+          </p>
+          <p className="text-[11px] text-purple-200/80 leading-relaxed">
+            TradingView'den gelen her sinyal işleme alınmadan önce 4 farklı yapay zeka ajanı <strong>(Teknik, Risk, Duyarlılık, Meta)</strong> tarafından değerlendirilir.
+            AI motoru sinyali onaylayabilir, reddedebilir veya yetkisine göre işlem kaldıracını ve giriş miktarını dinamik olarak optimize edebilir.
+            Önce AI doğrulayıcısına giden sinyal, risk koşullarını karşılarsa onaylanır ve işleme alınır.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -1451,7 +1490,7 @@ export default function BotsPage() {
         strategy: "smart_scanner",
         exchange: f.exchange,
         paper_mode: f.paper_mode,
-        leverage: Number(f.strategy_params.leverage ?? 5),
+        leverage: f.leverage,
         risk_per_trade: f.risk_mode === "pct"
           ? f.risk_per_trade / 100
           : f.risk_per_trade / f.initial_balance,
@@ -1460,7 +1499,7 @@ export default function BotsPage() {
         tp_pct: Number(f.strategy_params.tp_pct ?? 2),
         sl_pct: Number(f.strategy_params.sl_pct ?? 1),
         trailing_sl: false,
-        params: f.strategy_params,
+        params: { ...f.strategy_params, leverage: f.leverage },
       }
     }
 
@@ -2038,6 +2077,7 @@ export default function BotsPage() {
                       onSignalTimeframe={v => setParam("signal_timeframe", v)}
                       isEditing={!!editingBot}
                       isHedge={form.strategy === "hedge_bot" || form.strategy === "dual_hedge"}
+                      useAi={form.strategy_params.use_ai as boolean || false}
                     />
                   )}
 

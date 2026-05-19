@@ -5,7 +5,7 @@ description: proje-gorsellestir - Bir otomasyon veya yazılım projesini şık b
 > **🤖 Agent:** Bu workflow `_agents/yayinla-paylas/AGENT.md` agent'ının bir parçasıdır.
 > Agent üzerinden veya bağımsız olarak `/proje-gorsellestir` komutuyla çalıştırılabilir.
 
-Bu komut çağrıldığında, hedeflenen proje klasörü veya içeriği için `_skills/proje-gorsellestirici/SKILL.md` yönergelerini takip ederek premium bir "Proje Akışı" HTML arayüzü dosyası oluşturmalısın.
+Bu komut çağrıldığında, hedeflenen proje klasörü veya içeriği için `_skills/analysis/proje-gorsellestirici/SKILL.md` yönergelerini takip ederek premium bir "Proje Akışı" HTML arayüzü dosyası oluşturmalısın.
 
 1. Kullanıcıdan bir proje yolu veya projenin açıklaması verildiyse bunu analiz et.
 2. Eğer gerekiyorsa ilgili klasörün ne işe yaradığını anlamak için kısa bir `list_dir` veya `view_file` yap.

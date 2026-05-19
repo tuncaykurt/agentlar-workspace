@@ -1,0 +1,3 @@
+2026-05-18 11:52:57,750 - freqtrade.strategy.interface - WARNING - Outdated history for pair SOL/USDT. Last tick is 212 minutes old
+2026-05-18 11:52:57,923 - freqtrade.strategy.interface - WARNING - Outdated history for pair BNB/USDT. Last tick is 212 minutes old
+2026-05-18 11:52:57,931 - freqtrade.strategy.interface - WARNING - Outdated history for pair XRP/USDT. Last tick is 212 minutes old

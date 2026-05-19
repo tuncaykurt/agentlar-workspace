@@ -34,25 +34,33 @@ class RiskManager:
 
     def position_size(self, entry_price: float, stop_loss_price: float) -> float:
         """
-        Risk bazlı pozisyon büyüklüğü hesapla.
-        Risk tutarı = bakiye * risk_per_trade
-        Stop mesafesi = |entry - stop| / entry
+        Risk bazlı pozisyon büyüklüğü hesapla (kaldıraç dahil).
+        Risk tutarı  = bakiye * risk_per_trade  (teminat/margin)
+        Notional     = margin * leverage
+        Quantity     = notional / entry_price
+        Stop mesafesi: |entry - stop| / entry
         """
         if self.killed:
             return 0.0
 
+        if entry_price <= 0:
+            return 0.0
+
         if self.risk_per_trade > 1.0:
-            risk_amount = self.risk_per_trade
+            risk_amount = float(self.risk_per_trade)
         else:
-            risk_amount = self.current_balance * self.risk_per_trade
+            risk_amount = float(self.current_balance) * float(self.risk_per_trade)
+
         stop_distance_pct = abs(entry_price - stop_loss_price) / entry_price
 
         if stop_distance_pct == 0:
             return 0.0
 
-        position_value = risk_amount / stop_distance_pct
+        # Kaldıraç faktörü: margin * leverage = notional
+        leverage = max(1, int(self.leverage))
+        position_value = (risk_amount / stop_distance_pct) * leverage
         quantity = position_value / entry_price
-        return round(quantity, 4)
+        return round(quantity, 8)  # 8 basamak hassasiyet
 
     def check_kill_switch(self) -> bool:
         """Günlük kayıp limitini kontrol et."""

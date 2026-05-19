@@ -6,7 +6,7 @@ description: Durum Kontrol — Tüm projelerin sağlık durumunu kontrol et, oto
 
 Bu workflow, Antigravity ekosistemindeki tüm projelerin durumunu kontrol eder ve bilinen hataları otomatik düzeltir.
 
-**İlgili Skill:** `_skills/servis-izleyici/`
+**İlgili Skill:** `_skills/analysis/servis-izleyici/`
 
 ## Modlar
 
@@ -21,31 +21,31 @@ Bu workflow, Antigravity ekosistemindeki tüm projelerin durumunu kontrol eder v
 
 1. Servis izleyici skill'ini oku ve anla:
 ```
-view_file: ~/Desktop/Antigravity/_skills/servis-izleyici/SKILL.md
+view_file: ~/Desktop/Antigravity/_skills/analysis/servis-izleyici/SKILL.md
 ```
 
 2. **Genel check-up + otomatik iyileştirme** (varsayılan — kullanıcı "durum kontrol" derse bunu çalıştır):
 // turbo
 ```bash
-python3 ~/Desktop/Antigravity/_skills/servis-izleyici/scripts/health_check.py --check-up --auto-heal --dry-run
+python3 ~/Desktop/Antigravity/_skills/analysis/servis-izleyici/scripts/health_check.py --check-up --auto-heal --dry-run
 ```
 
 3. **Sadece Coolify kontrolü** (kullanıcı "Coolify'e bak" derse):
 // turbo
 ```bash
-python3 ~/Desktop/Antigravity/_skills/servis-izleyici/scripts/health_check.py --dry-run
+python3 ~/Desktop/Antigravity/_skills/analysis/servis-izleyici/scripts/health_check.py --dry-run
 ```
 
 4. **Sadece cron kontrolü** (kullanıcı "cron'ları kontrol et" derse):
 // turbo
 ```bash
-python3 ~/Desktop/Antigravity/_skills/servis-izleyici/scripts/health_check.py --cron-only --dry-run
+python3 ~/Desktop/Antigravity/_skills/analysis/servis-izleyici/scripts/health_check.py --cron-only --dry-run
 ```
 
 5. Log dosyasının son çıktısını göster:
 // turbo
 ```bash
-tail -30 ~/Desktop/Antigravity/_skills/servis-izleyici/logs/health_check.log
+tail -30 ~/Desktop/Antigravity/_skills/analysis/servis-izleyici/logs/health_check.log
 ```
 
 6. Kullanıcıya sonucu raporla. Aşağıdaki bilgileri göster:
@@ -61,7 +61,7 @@ tail -30 ~/Desktop/Antigravity/_skills/servis-izleyici/logs/health_check.log
 - LaunchAgent saatlik otomatik `--check-up --auto-heal` çalıştırır (gerçek aksiyon + e-posta)
 - E-posta sadece sorun tespit edildiğinde ve `--dry-run` olmadan gönderilir
 - Self-heal sonuçları ayrı bir e-posta ile raporlanır (düzeltilen/düzeltilemeyen ayrı)
-- Tüm loglar `_skills/servis-izleyici/logs/health_check.log` dosyasında tutulur
+- Tüm loglar `_skills/analysis/servis-izleyici/logs/health_check.log` dosyasında tutulur
 - Coolify token'ı `_knowledge/credentials/master.env` dosyasından okunur
-- Playbook: `_skills/servis-izleyici/scripts/healing_playbook.json`
+- Playbook: `_skills/analysis/servis-izleyici/scripts/healing_playbook.json`
 

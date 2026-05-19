@@ -28,6 +28,14 @@ Antigravity bir göreve başlamadan önce ilgili skill'i okuyarak nasıl davrana
 | 15 | `servis-izleyici` | Railway + Cron + Lokal proje sağlık kontrolü | Tüm agent'lar |
 | 16 | `reels-kapak` | AI ile Instagram Reels kapak görseli üretimi (Kie AI pipeline) | 🤖 `icerik-uretim` |
 | 17 | `telefon-formatlayici` | Telefon numarası formatlama ve doğrulama | — (bağımsız) |
+| 18 | `web-intelligence` | Tavily + Firecrawl ile gürültüsüz, rafine web araştırması | Tüm agent'lar |
+| 19 | `on-chain-action` | Coinbase AgentKit ile cüzdan yönetimi ve swap/transfer | 🤖 `kripto-bot` |
+| 20 | `real-estate-scoring` | Dubai projelerini ROI ve risk bazlı matematiksel skorlama | 🤖 `yatirim-analiz` |
+| 21 | `long-term-memory` | Pinecone + Mem0 ile kalıcı müşteri ve strateji hafızası | Tüm agent'lar |
+| 22 | `firecrawl-cli` | Web tarama, kazıma ve interaktif sayfa kontrolü (CLI) | Tüm agent'lar |
+| 23 | `vapi-voice` | Vapi AI ile sesli asistan ve otomatik lead arama | 🤖 `musteri-kazanim` |
+| 24 | `social-trends` | Sosyal medya viral içerik ve rakip strateji analizi | 🤖 `icerik-uretim` |
+| 25 | `doc-intelligence` | IBM Docling ile PDF/Broşürlerden veri çıkarma | 🤖 `yatirim-analiz` |
 
 ---
 

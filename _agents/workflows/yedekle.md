@@ -6,19 +6,19 @@ description: Manuel yedekleme — Antigravity projesini anında yedekle ve sonuc
 
 Bu workflow, Antigravity projesinin anlık yedeğini alır.
 
-**İlgili Skill:** `_skills/otomatik-yedekleme/`
+**İlgili Skill:** `_skills/system/otomatik-yedekleme/`
 
 ## Adımlar
 
 1. Yedekleme skill'ini oku ve anla:
 ```
-view_file: ~/Desktop/Antigravity/_skills/otomatik-yedekleme/SKILL.md
+view_file: ~/Desktop/Antigravity/_skills/system/otomatik-yedekleme/SKILL.md
 ```
 
 2. Yedekleme script'ini çalıştır:
 // turbo
 ```bash
-bash ~/Desktop/Antigravity/_skills/otomatik-yedekleme/scripts/backup.sh
+bash ~/Desktop/Antigravity/_skills/system/otomatik-yedekleme/scripts/backup.sh
 ```
 
 3. Yedekleme sonucunu doğrula — mevcut yedekleri listele:

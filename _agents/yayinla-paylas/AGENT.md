@@ -30,9 +30,9 @@ Her iki akışta da **güvenlik birinci** prensibi uygulanır — API anahtarlar
 
 | Skill | Konum | Ne Zaman Kullanılır |
 |-------|-------|---------------------|
-| **Production Deploy** | `_skills/canli-yayina-al/SKILL.md` | Deploy akışında — GitHub push + Coolify deployment |
-| **Proje Paylaşımı** | `_skills/folder-paylasim/SKILL.md` | Export akışında — temizleme, paketleme, rehber oluşturma |
-| **Proje Görselleştirici** | `_skills/proje-gorsellestirici/SKILL.md` | Opsiyonel — projenin nasıl çalıştığını gösteren interaktif HTML |
+| **Production Deploy** | `_skills/content/canli-yayina-al/SKILL.md` | Deploy akışında — GitHub push + Coolify deployment |
+| **Proje Paylaşımı** | `_skills/dev/folder-paylasim/SKILL.md` | Export akışında — temizleme, paketleme, rehber oluşturma |
+| **Proje Görselleştirici** | `_skills/analysis/proje-gorsellestirici/SKILL.md` | Opsiyonel — projenin nasıl çalıştığını gösteren interaktif HTML |
 
 ---
 
@@ -62,10 +62,10 @@ Kullanıcı bir deploy veya paylaşım talebi ile geldiğinde şu akışı takip
 
 ## 🚂 Bölüm A — Deploy Akışı (Test → Production)
 
-Bu akış `_skills/canli-yayina-al/SKILL.md` yönergesini takip eder.
+Bu akış `_skills/content/canli-yayina-al/SKILL.md` yönergesini takip eder.
 
 ### Adım A1: Pre-Deploy Kontrol
-1. `_skills/canli-yayina-al/SKILL.md` dosyasını oku
+1. `_skills/content/canli-yayina-al/SKILL.md` dosyasını oku
 2. Projenin deploy türünü belirle (yeni mi, güncelleme mi?)
 3. `_knowledge/deploy-registry.md` dosyasını kontrol et
 
@@ -92,16 +92,16 @@ Bu akış `_skills/canli-yayina-al/SKILL.md` yönergesini takip eder.
 3. Kullanıcıya rapor ver
 
 ### Adım A6: Görselleştirme (Opsiyonel)
-- Kullanıcı isterse `_skills/proje-gorsellestirici/SKILL.md` ile projenin çalışma akışını HTML olarak oluştur
+- Kullanıcı isterse `_skills/analysis/proje-gorsellestirici/SKILL.md` ile projenin çalışma akışını HTML olarak oluştur
 
 ---
 
 ## 📦 Bölüm B — Export Akışı (Paylaşıma Hazır Paket)
 
-Bu akış `_skills/folder-paylasim/SKILL.md` yönergesini takip eder.
+Bu akış `_skills/dev/folder-paylasim/SKILL.md` yönergesini takip eder.
 
 ### Adım B1: Hedef Belirleme
-1. `_skills/folder-paylasim/SKILL.md` dosyasını oku
+1. `_skills/dev/folder-paylasim/SKILL.md` dosyasını oku
 2. Paylaşılacak öğeyi belirle:
    - **Skill** → `_skills/[skill-adi]/` klasörü
    - **Proje** → `Projeler/[proje-adi]/` klasörü
@@ -133,7 +133,7 @@ Bu akış `_skills/folder-paylasim/SKILL.md` yönergesini takip eder.
 
 1. Hedef projeyi analiz et
 2. 3-6 temel adıma böl (teknik olmayan, anlaşılır dil)
-3. `_skills/proje-gorsellestirici/resources/template.html` şablonunu oku
+3. `_skills/analysis/proje-gorsellestirici/resources/template.html` şablonunu oku
 4. Proje-özel node'ları oluştur ve şablona yerleştir
 5. `Sistem_Nasil_Calisir.html` olarak kaydet
 
@@ -178,9 +178,9 @@ Bu workflow'lar hem bu agent'ın parçası olarak hem de `_agents/workflows/` al
 
 - `_knowledge/api-anahtarlari.md` — API key'lerin merkezi deposu
 - `_knowledge/deploy-registry.md` — Deploy edilmiş projelerin kayıt defteri
-- `_skills/canli-yayina-al/SKILL.md` — Deploy skill yönergesi
-- `_skills/folder-paylasim/SKILL.md` — Paylaşım skill yönergesi
-- `_skills/proje-gorsellestirici/SKILL.md` — Görselleştirme skill yönergesi
+- `_skills/content/canli-yayina-al/SKILL.md` — Deploy skill yönergesi
+- `_skills/dev/folder-paylasim/SKILL.md` — Paylaşım skill yönergesi
+- `_skills/analysis/proje-gorsellestirici/SKILL.md` — Görselleştirme skill yönergesi
 
 ---
 

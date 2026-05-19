@@ -403,9 +403,13 @@ class BotEngine:
             self.paper_trades.append(trade)
         else:
             symbol = self.config["symbol"]
+            
+            # AI veya webhook'tan gelen dinamik kaldıracı kullan
+            leverage = int(ai_result.get("dynamic_leverage") or self.risk.leverage)
+            
             try:
-                await self.exchange.set_leverage(symbol, self.risk.leverage)
-                print(f"[Bot {bot_name}] Leverage {self.risk.leverage}x ayarlandı")
+                await self.exchange.set_leverage(symbol, leverage)
+                print(f"[Bot {bot_name}] Leverage {leverage}x ayarlandı")
             except Exception as e:
                 print(f"[Bot {bot_name}] Leverage ayar hatası (devam): {e}")
 
@@ -422,18 +426,32 @@ class BotEngine:
                 market = self.exchange.exchange.market(symbol)
                 contract_size = float(market.get("contractSize", 1) or 1)
                 exchange_name = getattr(self.exchange, '_exchange_name', '')
-                if exchange_name == "mexc" and contract_size > 0:
+                
+                # Webhook'ta açıkça miktar belirtilmişse onu kullan
+                if ai_result.get("explicit_amount"):
+                    amount = max(1, int(float(ai_result["explicit_amount"])))
+                    print(f"[Bot {bot_name}] Explicit amount kullanılıyor: {amount}")
+                elif exchange_name == "mexc" and contract_size > 0:
                     # MEXC: notional = margin * leverage, kontrat = notional / (fiyat * contractSize)
                     params_cfg = self.config.get("params", {})
                     risk_mode = params_cfg.get("risk_mode", "pct")
                     risk_val = self.risk.risk_per_trade
                     margin_usdt = risk_val if risk_val > 1.0 else self.risk.current_balance * risk_val
-                    leverage = self.risk.leverage
+                    
+                    ai_modifier = float(ai_result.get("ai_modifier", 1.0))
+                    if ai_modifier != 1.0:
+                        margin_usdt *= ai_modifier
+                        print(f"[Bot {bot_name}] AI modifier uygulandı: {ai_modifier:.2f}x -> margin_usdt: ${margin_usdt:.2f}")
+                        
                     notional = margin_usdt * leverage
                     amount = max(1, int(notional / (price * contract_size)))
                     print(f"[Bot {bot_name}] MEXC Kontrat: margin=${margin_usdt:.2f} × {leverage}x = ${notional:.2f} → {amount} kontrat @ ${price} (contractSize={contract_size})")
                 elif contract_size > 0:
-                    amount = max(1, int(qty / contract_size))
+                    ai_modifier = float(ai_result.get("ai_modifier", 1.0))
+                    if ai_modifier != 1.0:
+                        amount = max(1, int((qty * ai_modifier) / contract_size))
+                    else:
+                        amount = max(1, int(qty / contract_size))
                     print(f"[Bot {bot_name}] Kontrat: qty={qty} → amount={amount} (contractSize={contract_size})")
             except Exception as e:
                 print(f"[Bot {bot_name}] Kontrat hesabı hatası (devam): {e}")
@@ -1647,6 +1665,18 @@ class BotEngine:
             stop_loss = self.risk.atr_stop_loss(price, atr_approx, signal_type)
 
         qty = self.risk.position_size(price, stop_loss)
+        
+        # Dinamik değerleri al
+        dynamic_qty = sig.get("entry_size") or sig.get("amount")
+        dynamic_leverage = sig.get("leverage")
+        ai_modifier = sig.get("ai_modifier", 1.0)
+        
+        if dynamic_qty is not None:
+            try:
+                qty = float(dynamic_qty)
+            except ValueError:
+                pass
+
         print(f"[Bot {bot_name}] Hesaplama: TP={take_profit} SL={stop_loss} qty={qty} (balance={self.risk.balance}, risk_per_trade={self.risk.risk_per_trade})")
 
         # Emri HEMEN gönder (AI beklenmez)
@@ -1658,6 +1688,9 @@ class BotEngine:
                 "stop_loss": stop_loss,
                 "take_profit": take_profit,
                 "analysis": f"{source} — {reason}",
+                "dynamic_leverage": dynamic_leverage,
+                "ai_modifier": ai_modifier,
+                "explicit_amount": dynamic_qty
             }
             try:
                 await self._execute(signal_type, price, qty, stop_loss, ai_result)

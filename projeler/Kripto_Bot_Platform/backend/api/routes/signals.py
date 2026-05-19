@@ -343,11 +343,49 @@ async def tradingview_webhook(token: str, request: Request):
         from core.redis_client import get_redis
         redis = get_redis()
 
+        # Botları bul ve AI ayarlarını kontrol et
+        from core.database import async_session
+        from models.trade import Bot
+        from sqlalchemy import select as sa_select
+        import json as _json
+
+        profile_dict = {}
+        use_ai = False
+        
+        async with async_session() as session:
+            # Token'a veya sembole bağlı botları bul
+            res = await session.execute(
+                sa_select(Bot).where(
+                    Bot.strategy == "tradingview_webhook",
+                    Bot.symbol == symbol_ccxt,
+                    Bot.running == True
+                )
+            )
+            matched_tv_bots = res.scalars().all()
+            
+            for b in matched_tv_bots:
+                try:
+                    bp = _json.loads(b.params) if b.params else {}
+                    if bp.get("use_ai"):
+                        use_ai = True
+                        profile_dict = {
+                            "token": token,
+                            "use_ai_validation": True,
+                            "ai_mode": bp.get("ai_mode", "filter"),
+                            "ai_risk_level": bp.get("ai_risk_level", "medium"),
+                            "leverage": b.leverage or 1,
+                        }
+                        break
+                except Exception:
+                    pass
+
         # 1) Token bazlı anahtar — bot engine bu token'ı izleyebilir
         await redis.set(f"tv_webhook:{token}", json.dumps(payload), ex=600)
 
-        # 2) CCXT sembol bazlı anahtar — bot engine custom_signal olarak okur
-        if symbol_ccxt:
+        # 2) CCXT sembol bazlı anahtar — AI Doğrulama YOKSA hemen yaz
+        use_ai = profile_dict.get("use_ai_validation", False)
+        
+        if symbol_ccxt and not use_ai:
             sym_key = f"custom_signal:{symbol_ccxt.replace('/', '_').replace(':', '_')}"
             await redis.set(sym_key, json.dumps(payload), ex=600)  # 10dk geçerli
 
@@ -355,6 +393,10 @@ async def tradingview_webhook(token: str, request: Request):
             hist_key = f"custom_signal_history:{symbol_ccxt.replace('/', '_').replace(':', '_')}"
             await redis.lpush(hist_key, json.dumps(payload))
             await redis.ltrim(hist_key, 0, 99)
+        elif symbol_ccxt and use_ai:
+            print(f"[TV Webhook] Sinyal AI doğrulamasına gönderiliyor: {symbol_ccxt} {sig_type}")
+            from services.ai_validator import process_webhook_with_ai
+            asyncio.create_task(process_webhook_with_ai(payload, token, profile_dict))
 
         # 3) Webhook geçmişi (son 100 istek — token bazlı)
         await redis.lpush(f"tv_webhook_history:{token}", json.dumps(payload))
@@ -555,6 +597,8 @@ class WebhookProfileData(BaseModel):
     sl_pct: float = 1.0
     leverage: int = 20
     enabled: bool = True
+    use_ai_validation: bool = False
+    ai_mode: str = "balanced"
 
 
 class WebhookProfileUpdate(BaseModel):
@@ -563,6 +607,8 @@ class WebhookProfileUpdate(BaseModel):
     sl_pct: float | None = None
     leverage: int | None = None
     enabled: bool | None = None
+    use_ai_validation: bool | None = None
+    ai_mode: str | None = None
 
 
 @router.get("/webhook-profiles")
@@ -584,6 +630,8 @@ async def list_webhook_profiles():
                 "sl_pct": p.sl_pct,
                 "leverage": p.leverage,
                 "enabled": p.enabled,
+                "use_ai_validation": p.use_ai_validation,
+                "ai_mode": p.ai_mode,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
             }
             for p in profiles
@@ -607,6 +655,8 @@ async def create_webhook_profile(data: WebhookProfileData):
             profile.sl_pct = data.sl_pct
             profile.leverage = data.leverage
             profile.enabled = data.enabled
+            profile.use_ai_validation = data.use_ai_validation
+            profile.ai_mode = data.ai_mode
         else:
             profile = WebhookProfile(
                 token=data.token,
@@ -615,6 +665,8 @@ async def create_webhook_profile(data: WebhookProfileData):
                 sl_pct=data.sl_pct,
                 leverage=data.leverage,
                 enabled=data.enabled,
+                use_ai_validation=data.use_ai_validation,
+                ai_mode=data.ai_mode,
             )
             session.add(profile)
         await session.commit()
@@ -628,6 +680,8 @@ async def create_webhook_profile(data: WebhookProfileData):
             "sl_pct": profile.sl_pct,
             "leverage": profile.leverage,
             "enabled": profile.enabled,
+            "use_ai_validation": profile.use_ai_validation,
+            "ai_mode": profile.ai_mode,
         }
 
 
@@ -654,6 +708,10 @@ async def update_webhook_profile(token: str, data: WebhookProfileUpdate):
             profile.leverage = data.leverage
         if data.enabled is not None:
             profile.enabled = data.enabled
+        if data.use_ai_validation is not None:
+            profile.use_ai_validation = data.use_ai_validation
+        if data.ai_mode is not None:
+            profile.ai_mode = data.ai_mode
         await session.commit()
         await session.refresh(profile)
         return {
@@ -664,6 +722,8 @@ async def update_webhook_profile(token: str, data: WebhookProfileUpdate):
             "sl_pct": profile.sl_pct,
             "leverage": profile.leverage,
             "enabled": profile.enabled,
+            "use_ai_validation": profile.use_ai_validation,
+            "ai_mode": profile.ai_mode,
         }
 
 

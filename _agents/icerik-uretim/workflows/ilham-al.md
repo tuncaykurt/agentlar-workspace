@@ -13,7 +13,7 @@ Rakip emlakçı videolarından ilham alarak orijinal script üretme adımları.
 - **Agent:** `_agents/icerik-uretim/AGENT.md`
 - **Config:** `_agents/icerik-uretim/config/ornek-marka.yaml`
 - **Skill:** `Projeler/Dubai Emlak İçerik Yazarı/skills/icerik-yazari/SKILL.md`
-- **Rakip Analiz Skill:** `_skills/rakip-analiz/SKILL.md`
+- **Rakip Analiz Skill:** `_skills/marketing/rakip-analiz/SKILL.md`
 - **Transcript Aracı:** `Projeler/Dubai Emlak İçerik Yazarı/tools/transcript.py` (Supadata API)
 - **Rakipler:** `Projeler/Dubai Emlak İçerik Yazarı/rakipler.md`
 

@@ -39,7 +39,7 @@ Bu agent, **herhangi bir hedef kitle** için müşteri kazanım sürecini uçtan
 
 ## 🔧 Kullandığı Skill'ler
 
-### 1. `_skills/lead-generation/` — Lead Bulma Motoru
+### 1. `_skills/marketing/lead-generation/` — Lead Bulma Motoru
 **Neden:** Apify merkezli mimariyle tek API anahtarından 20+ farklı aktörle her platformdan lead toplar. Hunter/Apollo sadece fallback olarak devreye girer.
 
 **Sağladığı yetenek:**
@@ -49,7 +49,7 @@ Bu agent, **herhangi bir hedef kitle** için müşteri kazanım sürecini uçtan
 - Web sitesinden e-posta/telefon çıkarma (`contact-info-scraper`)
 - Skool/topluluk üye tarama
 
-### 2. `_skills/eposta-gonderim/` — E-posta Gönderim Motoru
+### 2. `_skills/marketing/eposta-gonderim/` — E-posta Gönderim Motoru
 **Neden:** Gmail API üzerinden kişiselleştirilmiş e-posta gönderir ve durumu CSV'de takip eder. Rate limiting, hata yönetimi ve doğal kişiselleştirme kuralları yerleşik.
 
 **Sağladığı yetenek:**
@@ -177,8 +177,8 @@ _agents/musteri-kazanim/
 
 | Kaynak | Yol | Açıklama |
 |--------|-----|----------|
-| Lead Generation Skill | `_skills/lead-generation/SKILL.md` | Apify aktör kataloğu ve pipeline'lar |
-| Outreach Skill | `_skills/eposta-gonderim/SKILL.md` | Gmail API gönderim motoru |
+| Lead Generation Skill | `_skills/marketing/lead-generation/SKILL.md` | Apify aktör kataloğu ve pipeline'lar |
+| Outreach Skill | `_skills/marketing/eposta-gonderim/SKILL.md` | Gmail API gönderim motoru |
 | Lead Toplama Workflow | `_agents/workflows/lead-toplama.md` | Bağımsız kullanılabilir workflow |
 | Outreach Workflow | `_agents/workflows/mail-gonder.md` | Bağımsız kullanılabilir workflow |
 | Marka Outreach Workflow | `_agents/workflows/marka-outreach.md` | Marka iş birliği özel pipeline |
