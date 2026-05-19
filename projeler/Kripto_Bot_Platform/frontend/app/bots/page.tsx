@@ -2222,8 +2222,30 @@ export default function BotsPage() {
                       en iyi fırsatları seçerek işleme girer. Sembol seçmenize gerek yok.
                     </p>
                   </div>
+
+                  {/* Paper Trading */}
+                  <div className={`p-4 rounded-xl border transition-all ${
+                    form.paper_mode
+                      ? "border-emerald-500/30 bg-emerald-500/5"
+                      : "border-orange-500/30 bg-orange-500/5"
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      <Toggle checked={form.paper_mode} onChange={v => set("paper_mode", v)} />
+                      <div>
+                        <p className={`text-sm font-medium ${form.paper_mode ? "text-emerald-400" : "text-orange-400"}`}>
+                          {form.paper_mode ? "🛡 Paper Trading (Simülasyon)" : "⚡ Gerçek İşlem"}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {form.paper_mode
+                            ? "Gerçek para kullanılmaz. Stratejiyi güvenle test et."
+                            : `Gerçek işlem açılır. ${form.exchange.toUpperCase()} API bağlantısı gereklidir.`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
+
               {step === 1 && form.strategy !== "smart_scanner" && (
                 <div className="space-y-5">
                   <Field label="Borsa" description="Botun işlem yapacağı borsa">
