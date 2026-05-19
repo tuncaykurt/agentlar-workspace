@@ -2748,14 +2748,42 @@ class BotEngine:
 
         print(f"[SmartScanner {bot_name}] {len(coins)} coin analiz ediliyor (mod={mode})")
 
-        # ── 2. Açık pozisyonları kontrol et ──
-        active_positions = []
+        # ── 2. Açık pozisyonları kontrol et (borsadan doğrula) ──
+        saved_positions = []
         try:
             active_raw = await redis.get(f"bot:{bot_id}:active_positions")
             if active_raw:
-                active_positions = json.loads(active_raw)
+                saved_positions = json.loads(active_raw)
         except Exception:
             pass
+
+        # Borsadan gerçek açık pozisyonları al — kapanmış olanları temizle
+        active_positions = []
+        if saved_positions:
+            try:
+                exchange_positions = await asyncio.wait_for(
+                    self.exchange.exchange.fetch_positions(), timeout=15
+                )
+                open_symbols = set()
+                for pos in exchange_positions:
+                    size = float(pos.get("contracts", 0) or pos.get("contractSize", 0) or 0)
+                    if size > 0:
+                        base = (pos.get("symbol", "") or "").split("/")[0]
+                        open_symbols.add(base)
+
+                for coin in saved_positions:
+                    if coin in open_symbols:
+                        active_positions.append(coin)
+                    else:
+                        print(f"[SmartScanner {bot_name}] {coin} pozisyonu kapanmış — listeden çıkarıldı")
+
+                # Temizlenmiş listeyi Redis'e kaydet
+                if len(active_positions) != len(saved_positions):
+                    await redis.set(f"bot:{bot_id}:active_positions", json.dumps(active_positions), ex=86400)
+
+            except Exception as e:
+                print(f"[SmartScanner {bot_name}] Pozisyon kontrolü hatası: {e} — kayıtlı liste kullanılıyor")
+                active_positions = saved_positions
 
         if len(active_positions) >= max_positions:
             print(f"[SmartScanner {bot_name}] Max pozisyon ({max_positions}) doldu — bekleniyor")

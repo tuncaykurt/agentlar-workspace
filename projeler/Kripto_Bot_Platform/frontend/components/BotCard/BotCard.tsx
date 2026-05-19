@@ -724,6 +724,39 @@ export default function BotCard({
         </div>
       )}
 
+      {/* Smart Scanner Status */}
+      {status?.scanner && (
+        <div className="text-xs rounded-lg px-2.5 py-2 border border-slate-700 bg-slate-800/50 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400">Scanner ({status.scanner.mode === "ai" ? "AI" : "Manuel"})</span>
+            <span className="text-slate-500">{status.scanner.coins_total} coin</span>
+          </div>
+          {status.scanner.active_positions?.length > 0 && (
+            <div className="text-blue-400">
+              Aktif: {status.scanner.active_positions.join(", ")}
+            </div>
+          )}
+          {status.scanner.last_opened?.length > 0 && (
+            <div className="text-green-400">
+              Son acilan: {status.scanner.last_opened.join(", ")}
+            </div>
+          )}
+          {status.scanner.last_selections?.length > 0 && (
+            <div className="text-slate-300">
+              {status.scanner.last_selections.map((s: any, i: number) => (
+                <div key={i} className="truncate">{s.coin} {s.direction} — {s.reason?.slice(0, 60)}</div>
+              ))}
+            </div>
+          )}
+          {status.scanner.ai_error && (
+            <div className="text-red-400 break-all">AI: {status.scanner.ai_error}</div>
+          )}
+          {status.scanner.waiting && (
+            <div className="text-yellow-400">Max pozisyon doldu — bekleniyor</div>
+          )}
+        </div>
+      )}
+
       {/* Sinyal Performansı — her zaman göster */}
       {perf && (
         <div className="border-t border-slate-800 pt-2">
