@@ -376,7 +376,7 @@ class BotEngine:
         else:
             return generate_signal(ind)
 
-    async def _execute(self, side: str, price: float, qty: float, stop_loss: float, ai_result: dict):
+    async def _execute(self, side: str, price: float, qty: float, stop_loss: float, ai_result: dict, symbol_override: str = None):
         paper = self.config.get("paper_mode", True)
         mode = "📝 PAPER" if paper else "🟢 CANLI"
         bot_name = self.config['name']
@@ -402,7 +402,7 @@ class BotEngine:
             print(f"[Bot {bot_name}] 📝 PAPER trade: {side} {qty} @ {price} ({trade.get('pos_side')})")
             self.paper_trades.append(trade)
         else:
-            symbol = self.config["symbol"]
+            symbol = symbol_override or self.config["symbol"]
             
             # AI veya webhook'tan gelen dinamik kaldıracı kullan
             leverage = int(ai_result.get("dynamic_leverage") or self.risk.leverage)
@@ -1176,13 +1176,14 @@ class BotEngine:
         volatility_atr: float = None,
         ema200_dist: float = None,
         timeframe: str = None,
+        symbol_override: str = None,
     ):
         """Gelen sinyali DB'ye kaydet — işleme girsin girmesin"""
         try:
             async with async_session() as session:
                 log = SignalLog(
                     bot_id=self.config["id"],
-                    symbol=self.config["symbol"],
+                    symbol=symbol_override or self.config["symbol"],
                     signal_type=signal_type,
                     source=source or self.config.get("strategy", "unknown"),
                     price=price,
@@ -2764,11 +2765,44 @@ class BotEngine:
 
         # ── 3. Coin seçimi ──
         selections = []
+        ai_error = None
 
         if mode == "ai":
             # ══ AI KARAR MODU ══
             try:
-                prompt = build_ai_prompt(coins, active_positions)
+                # 222 coin prompt'a sığmaz — en ilgi çekici 40 coin'i ön-filtrele
+                # Skor: RSI aşırı bölge + yüksek hacim + güçlü trend + yüksek ATR
+                def _interest_score(c):
+                    s = 0
+                    rsi = c.get("rsi_14")
+                    if rsi and (rsi < 30 or rsi > 70):
+                        s += 20
+                    if rsi and (rsi < 20 or rsi > 80):
+                        s += 15  # çok aşırı
+                    adx = c.get("adx")
+                    if adx and adx > 25:
+                        s += 15
+                    vol = c.get("volume_ratio")
+                    if vol and vol > 2:
+                        s += 15
+                    if vol and vol > 3:
+                        s += 10
+                    atr = c.get("atr_pct")
+                    if atr and atr > 0.5:
+                        s += 10
+                    chg = c.get("price_change_24h")
+                    if chg and abs(chg) > 3:
+                        s += 10
+                    return s
+
+                # Açık pozisyondakileri çıkar, ilgi skoruna göre sırala
+                ai_candidates = [c for c in coins if c["base"] not in active_positions]
+                ai_candidates.sort(key=_interest_score, reverse=True)
+                ai_top = ai_candidates[:40]  # En ilgi çekici 40 coin
+
+                print(f"[SmartScanner {bot_name}] AI'ya {len(ai_top)}/{len(coins)} coin gönderiliyor")
+
+                prompt = build_ai_prompt(ai_top, active_positions)
                 model = settings.AI_DEEP_MODEL  # Claude ile en iyi analiz
                 ai_response = await _call(model, prompt, max_tokens=1500)
 
@@ -2776,18 +2810,30 @@ class BotEngine:
                 market_regime = ai_response.get("market_regime", "unknown")
                 market_analysis = ai_response.get("market_analysis", "")
 
-                print(f"[SmartScanner {bot_name}] AI: regime={market_regime}, {len(ai_selections)} seçim")
+                print(f"[SmartScanner {bot_name}] AI: regime={market_regime}, {len(ai_selections)} seçim, analiz={market_analysis[:100]}")
                 if ai_response.get("skipped_reason"):
                     print(f"[SmartScanner {bot_name}] AI pas geçti: {ai_response['skipped_reason']}")
+                    ai_error = f"AI pas geçti: {ai_response['skipped_reason']}"
 
                 for sel in ai_selections:
-                    if sel.get("coin") in active_positions:
+                    coin_name = sel.get("coin", "")
+                    if coin_name in active_positions:
                         continue
                     if sel.get("confidence", 0) < int(params.get("min_ai_confidence", 60)):
+                        print(f"[SmartScanner {bot_name}] {coin_name} confidence={sel.get('confidence')} < {params.get('min_ai_confidence', 60)}, atlanıyor")
                         continue
+                    # Symbol doğrulama — AI bazen yanlış format verebilir
+                    ai_symbol = sel.get("symbol", f"{coin_name}/USDT:USDT")
+                    if ":" not in ai_symbol:
+                        ai_symbol = f"{coin_name}/USDT:USDT"
+                    # coin_snapshots'daki symbol'le eşleştir
+                    matched = next((c for c in coins if c["base"] == coin_name), None)
+                    if matched:
+                        ai_symbol = matched["symbol"]
+
                     selections.append({
-                        "coin": sel["coin"],
-                        "symbol": sel.get("symbol", f"{sel['coin']}/USDT:USDT"),
+                        "coin": coin_name,
+                        "symbol": ai_symbol,
                         "direction": sel.get("direction", "long"),
                         "confidence": sel.get("confidence", 50),
                         "leverage": sel.get("leverage_suggestion", int(params.get("leverage", 5))),
@@ -2799,7 +2845,8 @@ class BotEngine:
                     })
 
             except Exception as e:
-                print(f"[SmartScanner {bot_name}] AI hatası: {e}")
+                ai_error = f"AI hatası: {str(e)[:200]}"
+                print(f"[SmartScanner {bot_name}] {ai_error}")
                 import traceback
                 traceback.print_exc()
 
@@ -2915,13 +2962,13 @@ class BotEngine:
                     pass
 
                 # İşlem aç
-                await self._execute(side, price, qty, sl_price, ai_result)
+                await self._execute(side, price, qty, sl_price, ai_result, symbol_override=symbol)
 
                 # Signal log
                 await self._log_signal(side, price, source=f"smart_scanner_{sel['source']}",
                     action="executed", confidence=sel.get("confidence"),
                     tp_price=tp_price, sl_price=sl_price,
-                    reject_reason=None)
+                    reject_reason=None, symbol_override=symbol)
 
                 opened.append(sel["coin"])
                 active_positions.append(sel["coin"])
@@ -2944,7 +2991,8 @@ class BotEngine:
         await self._write_scanner_status(redis, bot_id, bot_name,
             coins_total=len(coins), mode=mode,
             active=active_positions, opened=opened,
-            selections=[{k: v for k, v in s.items() if k != "market_regime"} for s in selections])
+            selections=[{k: v for k, v in s.items() if k != "market_regime"} for s in selections],
+            ai_error=ai_error)
 
     async def _write_scanner_status(self, redis, bot_id, bot_name, **kwargs):
         """Smart Scanner status bilgisini Redis'e yaz."""
@@ -2959,6 +3007,7 @@ class BotEngine:
                 "mode": kwargs.get("mode", "manual"),
                 "active_positions": kwargs.get("active", []),
                 "last_opened": kwargs.get("opened", []),
+                "ai_error": kwargs.get("ai_error"),
                 "last_selections": kwargs.get("selections", []),
                 "waiting": kwargs.get("waiting", False),
                 "error": kwargs.get("error"),
