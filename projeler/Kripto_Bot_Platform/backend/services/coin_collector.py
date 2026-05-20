@@ -42,12 +42,21 @@ async def _get_zero_fee_symbols(exchange_client) -> list[dict]:
 
     await exchange_client.load_markets()
     symbols = []
+    # STOCK tokenları filtrele — MEXC'de tokenized stock futures API ile trade edilemez
+    # Örnek: AAPLSTOCK/USDT:USDT, TSLASTOCK/USDT:USDT vb.
+    EXCLUDED_SUFFIXES = ("STOCK", "STOCKD")  # STOCK ve leveraged stock türevleri
+
     for symbol, market in exchange_client.markets.items():
         if not market.get("swap") and not market.get("future"):
             continue
         if not market.get("active", True):
             continue
         if market.get("settle") != "USDT" and market.get("quote") != "USDT":
+            continue
+
+        base = market.get("base", "")
+        # STOCK uzantılı tokenları atla
+        if any(base.upper().endswith(suffix) for suffix in EXCLUDED_SUFFIXES):
             continue
 
         taker_fee = market.get("taker", 0) or 0
@@ -65,7 +74,7 @@ async def _get_zero_fee_symbols(exchange_client) -> list[dict]:
 
         symbols.append({
             "symbol": symbol,
-            "base": market.get("base", ""),
+            "base": base,
             "taker_fee": round(taker_fee * 100, 4),
             "maker_fee": round(maker_fee * 100, 4),
             "zero_fee": True,

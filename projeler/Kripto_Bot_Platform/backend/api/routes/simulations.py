@@ -322,11 +322,14 @@ async def deploy_to_bot(data: dict = None):
     overrides = data or {}
 
     # Bot parametreleri — simulator ayarlarından oluştur
+    # Engine "selection_mode" bekler (mode değil), "min_ai_confidence" bekler (min_confidence değil)
     bot_params = {
-        "mode": sim_cfg.get("mode", "ai"),
-        "min_confidence": sim_cfg.get("min_confidence", 65),
+        "selection_mode": sim_cfg.get("mode", "ai"),  # engine: params.get("selection_mode")
+        "min_ai_confidence": sim_cfg.get("min_confidence", 65),  # engine: params.get("min_ai_confidence")
+        "leverage": sim_cfg.get("max_leverage", 75),  # default leverage for manual mode
         "min_leverage": sim_cfg.get("min_leverage", 3),
         "max_leverage": sim_cfg.get("max_leverage", 75),
+        "max_positions": sim_cfg.get("max_open", 5),
         "tp_pct": sim_cfg.get("tp_pct", 1.5),
         "sl_pct": sim_cfg.get("sl_pct", 0.8),
         "auto_scale_tp_sl": sim_cfg.get("auto_scale_tp_sl", True),

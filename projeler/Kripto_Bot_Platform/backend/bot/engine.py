@@ -2890,7 +2890,11 @@ class BotEngine:
 
                 print(f"[SmartScanner {bot_name}] AI'ya {len(ai_top)}/{len(coins)} coin gönderiliyor")
 
-                prompt = build_ai_prompt(ai_top, active_positions)
+                leverage_range = (
+                    int(params.get("min_leverage", 3)),
+                    int(params.get("max_leverage", 75)),
+                )
+                prompt = build_ai_prompt(ai_top, active_positions, leverage_range=leverage_range)
                 model = settings.AI_DEEP_MODEL
                 ai_response = await asyncio.wait_for(
                     _call(model, prompt, max_tokens=1200),
@@ -3074,6 +3078,72 @@ class BotEngine:
                 print(f"[SmartScanner {bot_name}] {sel['coin']} işlem hatası: {e}")
                 import traceback
                 traceback.print_exc()
+
+        # ── 5. Hedge işlemleri ──
+        hedge_enabled = params.get("hedge_enabled", False)
+        if hedge_enabled and len(active_positions) < max_positions - 1:
+            hedge_tp = float(params.get("hedge_tp_pct", 0.4))
+            hedge_sl = float(params.get("hedge_sl_pct", 0.1))
+            use_max_lev = params.get("hedge_use_max_leverage", True)
+
+            # Hedge için uygun coinleri filtrele — açık pozisyonu olmayan, yeterli volatilitesi olan
+            hedge_candidates = [
+                c for c in coins
+                if c["base"] not in active_positions
+                and c.get("atr_pct") and c["atr_pct"] > 0.3
+                and c.get("volume_ratio") and c["volume_ratio"] > 1.5
+            ]
+            hedge_candidates.sort(key=lambda c: (c.get("atr_pct") or 0) * (c.get("volume_ratio") or 0), reverse=True)
+
+            for hc in hedge_candidates[:2]:  # Max 2 hedge çifti
+                if len(active_positions) >= max_positions - 1:
+                    break
+                try:
+                    h_symbol = hc["symbol"]
+                    try:
+                        h_ticker = await asyncio.wait_for(
+                            self.exchange.exchange.fetch_ticker(h_symbol), timeout=10
+                        )
+                        h_price = float(h_ticker["last"])
+                    except Exception:
+                        continue
+
+                    coin_max_lev = hc.get("max_leverage") or 50
+                    h_lev = coin_max_lev if use_max_lev else int(params.get("leverage", 5))
+
+                    for h_dir in ["long", "short"]:
+                        h_side = "buy" if h_dir == "long" else "sell"
+                        if h_dir == "long":
+                            h_tp = round(h_price * (1 + hedge_tp / 100), 6)
+                            h_sl = round(h_price * (1 - hedge_sl / 100), 6)
+                        else:
+                            h_tp = round(h_price * (1 - hedge_tp / 100), 6)
+                            h_sl = round(h_price * (1 + hedge_sl / 100), 6)
+
+                        h_qty = self.risk.position_size(h_price, h_sl)
+                        if h_qty <= 0:
+                            continue
+
+                        h_ai_result = {
+                            "approved": True,
+                            "confidence": 70,
+                            "take_profit": h_tp,
+                            "stop_loss": h_sl,
+                            "analysis": f"HEDGE {h_dir.upper()} — ATR:{hc.get('atr_pct',0):.2f}% Vol:{hc.get('volume_ratio',0):.1f}x",
+                            "dynamic_leverage": h_lev,
+                            "tp_pct": hedge_tp,
+                            "sl_pct": hedge_sl,
+                        }
+
+                        await self._execute(h_side, h_price, h_qty, h_sl, h_ai_result, symbol_override=h_symbol)
+
+                    opened.append(f"{hc['base']}(H)")
+                    active_positions.append(hc["base"])
+                    print(f"[SmartScanner {bot_name}] 🔄 HEDGE {hc['base']} @ ${h_price:,.4f} "
+                          f"lev={h_lev}x TP={hedge_tp}% SL={hedge_sl}%")
+
+                except Exception as e:
+                    print(f"[SmartScanner {bot_name}] {hc['base']} hedge hatası: {e}")
 
         # Aktif pozisyonları Redis'e kaydet
         try:

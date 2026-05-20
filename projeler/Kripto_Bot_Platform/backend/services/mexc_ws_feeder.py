@@ -1,77 +1,48 @@
 """
-MEXC WebSocket Feeder — Zero-fee coinlerin anlık fiyatlarını Redis'e yazar.
+MEXC WebSocket Feeder — Tüm futures ticker'larını anlık olarak Redis'e yazar.
+
+MEXC WS API: wss://contract.mexc.com/edge
+- sub.tickers: Tek subscribe ile TÜM coinlerin fiyatını alır (2s'de bir push)
+- sub.ticker: Tek coin için (1s'de bir push, trade olduğunda)
 
 Akış:
-1. coin_snapshots'tan aktif zero-fee coinleri oku
-2. MEXC Futures WS'e bağlan → ticker aboneliği aç
-3. Gelen fiyatları Redis'e yaz: ticker:mexc:{symbol}
-4. Periyodik olarak coin listesini yenile (yeni coin eklendiyse)
+1. sub.tickers ile tüm coinlere abone ol (tek mesaj!)
+2. Gelen fiyatları Redis'e yaz: ticker:mexc:{CCXT_SYMBOL}
+3. Scanner simulator Redis'ten ~0ms'de fiyat okur
 
-Scanner simulator ve diğer servisler Redis'ten anlık fiyat okur.
-REST fetch_ticker() yerine ~0ms'de fiyat alır.
+Kaynak: https://www.mexc.com/api-docs/futures/websocket-api/tickers
 """
 import asyncio
 import json
 import websockets
-from sqlalchemy import text as sql_text
 
-from core.database import async_session
 from core.redis_client import get_redis
 
 MEXC_WS_URL = "wss://contract.mexc.com/edge"
-REFRESH_INTERVAL = 300  # Coin listesini 5dk'da bir yenile
-MAX_SUBS_PER_WS = 50    # Bir WS bağlantısında max abone sayısı
 
 
-async def _get_zero_fee_symbols() -> list[str]:
-    """DB'den zero-fee coin sembollerini oku."""
-    try:
-        async with async_session() as session:
-            result = await session.execute(sql_text("""
-                SELECT DISTINCT symbol FROM coin_snapshots
-                WHERE zero_fee = true AND price > 0
-            """))
-            return [row[0] for row in result.fetchall() if row[0]]
-    except Exception as e:
-        print(f"[MEXC-WS] Coin listesi hatası: {e}")
-        return []
-
-
-def _to_mexc_symbol(ccxt_symbol: str) -> str:
-    """BTC/USDT:USDT → BTC_USDT"""
-    try:
-        base = ccxt_symbol.split("/")[0]
-        quote = ccxt_symbol.split("/")[1].split(":")[0]
-        return f"{base}_{quote}"
-    except Exception:
-        return ""
+_EXCLUDED_SUFFIXES = ("STOCK", "STOCKD")
 
 
 def _to_ccxt_symbol(mexc_symbol: str) -> str:
-    """BTC_USDT → BTC/USDT:USDT"""
+    """BTC_USDT → BTC/USDT:USDT  (STOCK tokenları filtreler)"""
     try:
         parts = mexc_symbol.split("_")
-        return f"{parts[0]}/{parts[1]}:{parts[1]}"
+        if len(parts) != 2:
+            return ""
+        base = parts[0]
+        # STOCK uzantılı tokenları atla — API ile trade edilemez
+        if any(base.upper().endswith(s) for s in _EXCLUDED_SUFFIXES):
+            return ""
+        return f"{base}/{parts[1]}:{parts[1]}"
     except Exception:
         return ""
 
 
-async def _run_ws_feeder(symbols: list[str]):
-    """Bir WS bağlantısı üzerinden ticker verisi al → Redis'e yaz."""
+async def _run_ws_all_tickers():
+    """sub.tickers ile TÜM coinlerin fiyatını al → Redis'e yaz."""
     redis = get_redis()
     retry_count = 0
-
-    subscribe_msgs = []
-    for sym in symbols:
-        mexc_sym = _to_mexc_symbol(sym)
-        if mexc_sym:
-            subscribe_msgs.append({
-                "method": "sub.ticker",
-                "param": {"symbol": mexc_sym},
-            })
-
-    if not subscribe_msgs:
-        return
 
     while True:
         try:
@@ -83,23 +54,26 @@ async def _run_ws_feeder(symbols: list[str]):
             ) as ws:
                 retry_count = 0
 
-                # Abonelikleri gönder
-                for msg in subscribe_msgs:
-                    await ws.send(json.dumps(msg))
-                    await asyncio.sleep(0.05)  # Rate limit — MEXC bazen reddeder
-                print(f"[MEXC-WS] {len(subscribe_msgs)} ticker aboneliği gönderildi")
+                # Tek subscribe ile TÜM coinler — gzip false plaintext al
+                await ws.send(json.dumps({
+                    "method": "sub.tickers",
+                    "param": {},
+                    "gzip": False,
+                }))
+                print("[MEXC-WS] sub.tickers aboneliği gönderildi (TÜM coinler)")
 
-                # Keep-alive: 20s'de bir ping
+                # Keep-alive: 15s'de bir ping (MEXC 1dk sessizlikte koparır)
                 async def keep_alive():
                     while True:
-                        await asyncio.sleep(20)
+                        await asyncio.sleep(15)
                         try:
                             await ws.send(json.dumps({"method": "ping"}))
                         except Exception:
                             break
 
                 ping_task = asyncio.create_task(keep_alive())
-                msg_count = 0
+                push_count = 0
+                coin_count = 0
                 try:
                     async for raw in ws:
                         try:
@@ -108,50 +82,84 @@ async def _run_ws_feeder(symbols: list[str]):
                             continue
 
                         channel = data.get("channel", "")
-                        if channel == "pong" or data.get("method") == "pong":
+
+                        # Pong yanıtı
+                        if channel == "pong":
                             continue
 
-                        if channel != "push.ticker":
-                            continue
+                        # sub.tickers → push.tickers (array of all tickers)
+                        if channel == "push.tickers":
+                            tickers = data.get("data", [])
+                            if not isinstance(tickers, list):
+                                continue
 
-                        tick = data.get("data", {})
-                        if not tick:
-                            continue
+                            pipe = redis.pipeline()
+                            batch_count = 0
+                            for tick in tickers:
+                                raw_sym = tick.get("symbol", "")
+                                if not raw_sym:
+                                    continue
 
-                        raw_sym = data.get("symbol", "") or tick.get("symbol", "")
-                        if not raw_sym:
-                            continue
+                                last_price = tick.get("lastPrice")
+                                if not last_price:
+                                    continue
 
-                        ccxt_sym = _to_ccxt_symbol(raw_sym)
-                        if not ccxt_sym:
-                            continue
+                                ccxt_sym = _to_ccxt_symbol(raw_sym)
+                                if not ccxt_sym:
+                                    continue
 
-                        last_price = tick.get("lastPrice") or tick.get("last")
-                        if not last_price:
-                            continue
+                                ticker_data = json.dumps({
+                                    "symbol": ccxt_sym,
+                                    "last": float(last_price),
+                                    "bid": float(tick.get("maxBidPrice", last_price) or last_price),
+                                    "ask": float(tick.get("minAskPrice", last_price) or last_price),
+                                    "high24h": float(tick.get("high24Price", 0) or 0),
+                                    "low24h": float(tick.get("lower24Price", 0) or 0),
+                                    "volume24h": float(tick.get("volume24", 0) or 0),
+                                    "fairPrice": float(tick.get("fairPrice", 0) or 0),
+                                    "fundingRate": float(tick.get("fundingRate", 0) or 0),
+                                    "holdVol": float(tick.get("holdVol", 0) or 0),
+                                    "ts": tick.get("timestamp", 0),
+                                })
+                                pipe.set(f"ticker:mexc:{ccxt_sym}", ticker_data, ex=30)
+                                batch_count += 1
 
-                        ticker_data = {
-                            "symbol": ccxt_sym,
-                            "last": float(last_price),
-                            "bid": float(tick.get("bid1", last_price) or last_price),
-                            "ask": float(tick.get("ask1", last_price) or last_price),
-                            "high24h": float(tick.get("high24Price", 0) or 0),
-                            "low24h": float(tick.get("low24Price", 0) or 0),
-                            "volume24h": float(tick.get("volume24", 0) or 0),
-                            "ts": data.get("ts", 0),
-                        }
+                            if batch_count > 0:
+                                await pipe.execute()
 
-                        await redis.set(
-                            f"ticker:mexc:{ccxt_sym}",
-                            json.dumps(ticker_data),
-                            ex=120,
-                        )
+                            push_count += 1
+                            if push_count == 1:
+                                coin_count = batch_count
+                                print(f"[MEXC-WS] İlk push alındı: {batch_count} coin fiyatı Redis'e yazıldı")
+                            elif push_count % 500 == 0:
+                                print(f"[MEXC-WS] {push_count} push işlendi ({batch_count} coin)")
 
-                        msg_count += 1
-                        if msg_count == 1:
-                            print(f"[MEXC-WS] İlk ticker alındı: {ccxt_sym} = ${float(last_price):,.4f}")
-                        elif msg_count % 5000 == 0:
-                            print(f"[MEXC-WS] {msg_count} ticker mesajı işlendi")
+                        # sub.ticker → push.ticker (single coin — açık sim varsa ekstra)
+                        elif channel == "push.ticker":
+                            tick = data.get("data", {})
+                            raw_sym = data.get("symbol", "") or tick.get("symbol", "")
+                            if not raw_sym:
+                                continue
+                            last_price = tick.get("lastPrice")
+                            if not last_price:
+                                continue
+                            ccxt_sym = _to_ccxt_symbol(raw_sym)
+                            if not ccxt_sym:
+                                continue
+                            ticker_data = json.dumps({
+                                "symbol": ccxt_sym,
+                                "last": float(last_price),
+                                "bid": float(tick.get("bid1", last_price) or last_price),
+                                "ask": float(tick.get("ask1", last_price) or last_price),
+                                "high24h": float(tick.get("high24Price", 0) or 0),
+                                "low24h": float(tick.get("lower24Price", 0) or 0),
+                                "volume24h": float(tick.get("volume24", 0) or 0),
+                                "fairPrice": float(tick.get("fairPrice", 0) or 0),
+                                "fundingRate": float(tick.get("fundingRate", 0) or 0),
+                                "holdVol": float(tick.get("holdVol", 0) or 0),
+                                "ts": tick.get("timestamp", 0),
+                            })
+                            await redis.set(f"ticker:mexc:{ccxt_sym}", ticker_data, ex=30)
 
                 finally:
                     ping_task.cancel()
@@ -170,35 +178,7 @@ async def _run_ws_feeder(symbols: list[str]):
 
 async def start_mexc_ws_feeder():
     """Arka plan görevi: MEXC WebSocket üzerinden fiyat verisi topla."""
-    print("[MEXC-WS] Başlatılıyor...")
-    await asyncio.sleep(60)  # coin_collector'ın veri toplamasını bekle
+    print("[MEXC-WS] Başlatılıyor (sub.tickers — tüm coinler)...")
+    await asyncio.sleep(30)  # Başlangıçta biraz bekle
 
-    current_symbols: list[str] = []
-    ws_task: asyncio.Task | None = None
-
-    while True:
-        try:
-            # Coin listesini güncelle
-            new_symbols = await _get_zero_fee_symbols()
-            if not new_symbols:
-                print("[MEXC-WS] Henüz coin verisi yok — 30s bekleniyor")
-                await asyncio.sleep(30)
-                continue
-
-            # Coin listesi değiştiyse WS'i yeniden başlat
-            if set(new_symbols) != set(current_symbols) or ws_task is None or ws_task.done():
-                if ws_task and not ws_task.done():
-                    ws_task.cancel()
-                    try:
-                        await ws_task
-                    except (asyncio.CancelledError, Exception):
-                        pass
-
-                current_symbols = new_symbols
-                print(f"[MEXC-WS] {len(current_symbols)} coin için ticker aboneliği başlatılıyor")
-                ws_task = asyncio.create_task(_run_ws_feeder(current_symbols))
-
-        except Exception as e:
-            print(f"[MEXC-WS] Feeder yönetim hatası: {e}")
-
-        await asyncio.sleep(REFRESH_INTERVAL)
+    await _run_ws_all_tickers()
