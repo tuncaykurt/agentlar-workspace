@@ -239,7 +239,7 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None) -> st
             f"EMA200:{_v(c.get('ema200_dist')):>+7.2f}% | "
             f"MACD:{_v(c.get('macd_hist')):>+10.6f} | "
             f"BB:[{_v(c.get('bb_lower')):>.2f}-{_v(c.get('bb_upper')):>.2f}] | "
-            f"Fund:{_v(c.get('funding_rate'), '?'):>+.4f}% | "
+            f"Fund:{_v(c.get('funding_rate'), 0):>+.4f}% | "
             f"Lev:{c.get('max_leverage') or '?'}x"
         )
     coin_table = "\n".join(coin_rows)
