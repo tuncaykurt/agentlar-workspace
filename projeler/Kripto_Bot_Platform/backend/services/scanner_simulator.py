@@ -50,6 +50,11 @@ async def _get_sim_settings(redis) -> dict:
         "max_leverage": 75,
         "tp_pct": SIM_TP_PCT,
         "sl_pct": SIM_SL_PCT,
+        "auto_scale_tp_sl": True,       # Kaldıraca göre TP/SL otomatik ölçekle
+        "scale_base_leverage": 10,       # Baz kaldıraç (bu değerde TP/SL aynen kalır)
+        "trailing_enabled": False,       # Trailing stop aktif mi
+        "trailing_activate_pct": 0.3,    # Kâr bu %'ye ulaşınca trailing aktif
+        "trailing_callback_pct": 0.15,   # Zirveden bu % geri çekilince kapat
         "min_confidence": SIM_MIN_CONFIDENCE,
         "max_open": SIM_MAX_OPEN,
         "expiry_hours": SIM_EXPIRY_HOURS,
@@ -388,8 +393,9 @@ async def _save_simulation(sel: dict, price: float):
         await session.commit()
 
 
-async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS):
-    """Açık simülasyonları kontrol et: TP/SL hit mi? Expire mi?"""
+async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS,
+                                  trailing_cfg: dict = None):
+    """Açık simülasyonları kontrol et: TP/SL hit mi? Trailing stop? Expire mi?"""
     open_sims = await _get_open_sims()
     if not open_sims:
         return
@@ -453,13 +459,31 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
         new_max_fav = max(max_fav, favorable)
         new_max_adv = max(max_adv, adverse)
 
+        # Trailing Stop kontrolü
+        trailing_close = False
+        if trailing_cfg and trailing_cfg.get("enabled"):
+            activate_pct = trailing_cfg.get("activate_pct", 0.3)
+            callback_pct = trailing_cfg.get("callback_pct", 0.15)
+            # Trailing aktif mi? → max favorable activate_pct'yi geçmişse
+            if new_max_fav >= activate_pct:
+                # Zirveden geri çekilme = max_fav - current_favorable
+                pullback = new_max_fav - favorable
+                if pullback >= callback_pct:
+                    trailing_close = True
+
         # TP/SL kontrol
         hit_tp = (is_long and cur_price >= tp) or (not is_long and cur_price <= tp)
         hit_sl = (is_long and cur_price <= sl) or (not is_long and cur_price >= sl)
 
-        if hit_tp or hit_sl:
-            status = "win" if hit_tp else "loss"
-            exit_price = tp if hit_tp else sl
+        if hit_tp or hit_sl or trailing_close:
+            if trailing_close:
+                status = "win"
+                exit_price = cur_price
+                reason_tag = "TRAILING"
+            else:
+                status = "win" if hit_tp else "loss"
+                exit_price = tp if hit_tp else sl
+                reason_tag = "TP" if hit_tp else "SL"
             pnl_pct = ((exit_price - entry) / entry * 100) if is_long else ((entry - exit_price) / entry * 100)
             pnl_usdt = SIM_MARGIN * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
 
@@ -476,7 +500,7 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
                        "id": sim_id})
                 await session.commit()
             emoji = "✅" if status == "win" else "❌"
-            print(f"[SimScanner] {emoji} {sim['coin']} {direction} → {status} ({pnl_pct:+.2f}% / ${pnl_usdt:+.1f})")
+            print(f"[SimScanner] {emoji} {sim['coin']} {direction} → {status} [{reason_tag}] ({pnl_pct:+.2f}% / ${pnl_usdt:+.1f})")
         elif new_max_fav != max_fav or new_max_adv != max_adv:
             # Sadece max favorable/adverse güncelle
             async with async_session() as session:
@@ -504,7 +528,12 @@ async def run_simulator_cycle():
 
         # 1. Açık simülasyonları kontrol et
         expiry = cfg.get("expiry_hours", SIM_EXPIRY_HOURS)
-        await _check_open_simulations(exchange, expiry_hours=expiry)
+        trailing = {
+            "enabled": cfg.get("trailing_enabled", False),
+            "activate_pct": cfg.get("trailing_activate_pct", 0.3),
+            "callback_pct": cfg.get("trailing_callback_pct", 0.15),
+        }
+        await _check_open_simulations(exchange, expiry_hours=expiry, trailing_cfg=trailing)
 
         # 2. Yeni seçim yap
         open_sims = await _get_open_sims()
@@ -530,10 +559,20 @@ async def run_simulator_cycle():
         past_results = await _get_past_results(20)
         selections = await _run_selection(coins, cfg, open_sims, past_results)
 
-        # 3. Seçimleri kaydet
+        # 3. Kaldıraca göre TP/SL ölçekle + seçimleri kaydet
+        auto_scale = cfg.get("auto_scale_tp_sl", True)
+        base_lev = cfg.get("scale_base_leverage", 10)
+
         opened = []
         for sel in selections:
             try:
+                # Kaldıraca göre TP/SL otomatik ölçekleme
+                if auto_scale and sel.get("leverage", 10) > base_lev:
+                    lev = sel["leverage"]
+                    scale = base_lev / lev  # 10x=1.0, 50x=0.2, 100x=0.1
+                    sel["tp_pct"] = round(max(0.1, float(sel["tp_pct"]) * scale), 2)
+                    sel["sl_pct"] = round(max(0.05, float(sel["sl_pct"]) * scale), 2)
+
                 ticker = await asyncio.wait_for(
                     exchange.fetch_ticker(sel["symbol"]), timeout=8
                 )
@@ -542,7 +581,7 @@ async def run_simulator_cycle():
                 await _save_simulation(sel, price)
                 opened.append(sel["coin"])
                 print(f"[SimScanner] 📊 SIM {sel['direction'].upper()} {sel['coin']} @ ${price:,.4f} "
-                      f"conf={sel.get('confidence')}% TP={sel['tp_pct']}% SL={sel['sl_pct']}%")
+                      f"conf={sel.get('confidence')}% lev={sel.get('leverage')}x TP={sel['tp_pct']}% SL={sel['sl_pct']}%")
             except Exception as e:
                 print(f"[SimScanner] {sel['coin']} sim kayıt hatası: {e}")
 

@@ -173,31 +173,90 @@ export default function SimulationsPage() {
 
       {/* Ayarlar */}
       {tab === "settings" && (
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-4">
-          <h3 className="text-sm font-medium text-white">Simulasyon Ayarlari</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { key: "mode", label: "Mod", type: "select", options: [["ai","AI (Claude)"],["manual","Manuel"]] },
-              { key: "min_leverage", label: "Min Kaldirac", type: "number", min: 1, max: 200 },
-              { key: "max_leverage", label: "Max Kaldirac", type: "number", min: 1, max: 500 },
-              { key: "tp_pct", label: "TP %", type: "number", min: 0.1, max: 50, step: 0.1 },
-              { key: "sl_pct", label: "SL %", type: "number", min: 0.1, max: 50, step: 0.1 },
-              { key: "interval", label: "Aralik (sn)", type: "number", min: 60, max: 3600 },
-              { key: "min_confidence", label: "Min Guven", type: "number", min: 0, max: 100 },
-              { key: "max_open", label: "Max Acik", type: "number", min: 1, max: 20 },
-              { key: "expiry_hours", label: "Sure (saat)", type: "number", min: 1, max: 168 },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="text-xs text-slate-400 block mb-1">{f.label}</label>
-                {f.type === "select" ? (
-                  <select
-                    value={settings[f.key] || ""}
-                    onChange={e => toggleSetting(f.key, e.target.value)}
+        <div className="space-y-4">
+          {/* Genel Ayarlar */}
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-4">
+            <h3 className="text-sm font-medium text-white">Genel Ayarlar</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { key: "mode", label: "Mod", type: "select", options: [["ai","AI (Claude)"],["manual","Manuel"]] },
+                { key: "interval", label: "Aralik (sn)", type: "number", min: 60, max: 3600 },
+                { key: "min_confidence", label: "Min Guven %", type: "number", min: 0, max: 100 },
+                { key: "max_open", label: "Max Acik", type: "number", min: 1, max: 20 },
+                { key: "expiry_hours", label: "Sure Limiti (saat)", type: "number", min: 1, max: 168 },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="text-xs text-slate-400 block mb-1">{f.label}</label>
+                  {f.type === "select" ? (
+                    <select
+                      value={settings[f.key] || ""}
+                      onChange={e => toggleSetting(f.key, e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
+                    >
+                      {f.options?.map(([v,l]: string[]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type="number"
+                      value={settings[f.key] ?? ""}
+                      min={f.min} max={f.max} step={f.step || 1}
+                      onChange={e => toggleSetting(f.key, Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Kaldirac Ayarlari */}
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-4">
+            <h3 className="text-sm font-medium text-white">Kaldirac Ayarlari</h3>
+            <p className="text-xs text-slate-500">AI bu aralikta kaldirac secer. Coin&apos;in borsadaki max kaldiraci da dikkate alinir.</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { key: "min_leverage", label: "Min Kaldirac", type: "number", min: 1, max: 200 },
+                { key: "max_leverage", label: "Max Kaldirac", type: "number", min: 1, max: 500 },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="text-xs text-slate-400 block mb-1">{f.label}</label>
+                  <input
+                    type="number"
+                    value={settings[f.key] ?? ""}
+                    min={f.min} max={f.max}
+                    onChange={e => toggleSetting(f.key, Number(e.target.value))}
                     className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
-                  >
-                    {f.options?.map(([v,l]: string[]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                ) : (
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* TP/SL Ayarlari */}
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-white">TP / SL Ayarlari</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Baz degerler. Otomatik olcekleme aciksa kaldirac arttikca kucultulur.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Oto Olcekle</span>
+                <button
+                  onClick={() => toggleSetting("auto_scale_tp_sl", !settings.auto_scale_tp_sl)}
+                  className={`w-10 h-5 rounded-full transition-colors relative ${settings.auto_scale_tp_sl !== false ? "bg-green-500" : "bg-slate-700"}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.auto_scale_tp_sl !== false ? "left-5" : "left-0.5"}`} />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { key: "tp_pct", label: "Baz TP %", type: "number", min: 0.1, max: 50, step: 0.1 },
+                { key: "sl_pct", label: "Baz SL %", type: "number", min: 0.1, max: 50, step: 0.1 },
+                { key: "scale_base_leverage", label: "Baz Kaldirac", type: "number", min: 1, max: 100 },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="text-xs text-slate-400 block mb-1">{f.label}</label>
                   <input
                     type="number"
                     value={settings[f.key] ?? ""}
@@ -205,9 +264,73 @@ export default function SimulationsPage() {
                     onChange={e => toggleSetting(f.key, Number(e.target.value))}
                     className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
                   />
-                )}
+                </div>
+              ))}
+            </div>
+            {settings.auto_scale_tp_sl !== false && (
+              <div className="bg-slate-900/60 rounded-lg p-3 text-xs text-slate-400 space-y-1">
+                <div className="text-slate-300 font-medium mb-1">Ornek Olcekleme:</div>
+                <div>{settings.scale_base_leverage || 10}x kaldirac → TP: {settings.tp_pct || 1.5}% / SL: {settings.sl_pct || 0.8}% (baz deger)</div>
+                <div>25x kaldirac → TP: {((settings.tp_pct || 1.5) * (settings.scale_base_leverage || 10) / 25).toFixed(2)}% / SL: {((settings.sl_pct || 0.8) * (settings.scale_base_leverage || 10) / 25).toFixed(2)}%</div>
+                <div>50x kaldirac → TP: {((settings.tp_pct || 1.5) * (settings.scale_base_leverage || 10) / 50).toFixed(2)}% / SL: {((settings.sl_pct || 0.8) * (settings.scale_base_leverage || 10) / 50).toFixed(2)}%</div>
+                <div>100x kaldirac → TP: {((settings.tp_pct || 1.5) * (settings.scale_base_leverage || 10) / 100).toFixed(2)}% / SL: {((settings.sl_pct || 0.8) * (settings.scale_base_leverage || 10) / 100).toFixed(2)}%</div>
               </div>
-            ))}
+            )}
+          </div>
+
+          {/* Trailing Stop */}
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-white">Trailing Stop (Kar Koruma)</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Islem kara gecince aktif olur. Fiyat zirvesinden geri cekilince otomatik kapatir.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Trailing</span>
+                <button
+                  onClick={() => toggleSetting("trailing_enabled", !settings.trailing_enabled)}
+                  className={`w-10 h-5 rounded-full transition-colors relative ${settings.trailing_enabled ? "bg-green-500" : "bg-slate-700"}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.trailing_enabled ? "left-5" : "left-0.5"}`} />
+                </button>
+              </div>
+            </div>
+            {settings.trailing_enabled && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Aktivasyon % (kara gecis esigi)</label>
+                  <input
+                    type="number"
+                    value={settings.trailing_activate_pct ?? 0.3}
+                    min={0.05} max={10} step={0.05}
+                    onChange={e => toggleSetting("trailing_activate_pct", Number(e.target.value))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
+                  />
+                  <p className="text-[10px] text-slate-600 mt-0.5">Islem bu % kara gecince trailing baslar</p>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Geri Cekilme % (callback)</label>
+                  <input
+                    type="number"
+                    value={settings.trailing_callback_pct ?? 0.15}
+                    min={0.02} max={5} step={0.02}
+                    onChange={e => toggleSetting("trailing_callback_pct", Number(e.target.value))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
+                  />
+                  <p className="text-[10px] text-slate-600 mt-0.5">Zirveden bu % duserse kapat</p>
+                </div>
+              </div>
+            )}
+            {settings.trailing_enabled && (
+              <div className="bg-slate-900/60 rounded-lg p-3 text-xs text-slate-400">
+                <div className="text-slate-300 font-medium mb-1">Ornek Senaryo:</div>
+                <div>Giris: $100 | Fiyat $100.30&apos;a cikar → Trailing aktif (%{settings.trailing_activate_pct || 0.3} kar)</div>
+                <div>Fiyat $100.50&apos;ya cikar (zirve) → takip eder</div>
+                <div>Fiyat $100.35&apos;e duser → %{settings.trailing_callback_pct || 0.15} geri cekilme → KAPAT (+%0.35 kar)</div>
+              </div>
+            )}
           </div>
         </div>
       )}

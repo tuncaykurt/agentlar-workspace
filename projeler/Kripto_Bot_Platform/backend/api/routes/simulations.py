@@ -178,6 +178,9 @@ async def get_sim_settings():
         "enabled": True, "mode": "ai", "interval": 120,
         "leverage": 50, "min_leverage": 3, "max_leverage": 75,
         "tp_pct": 1.5, "sl_pct": 0.8,
+        "auto_scale_tp_sl": True, "scale_base_leverage": 10,
+        "trailing_enabled": False,
+        "trailing_activate_pct": 0.3, "trailing_callback_pct": 0.15,
         "min_confidence": 65, "max_open": 5,
         "expiry_hours": 24,
     }
