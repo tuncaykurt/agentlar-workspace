@@ -17,6 +17,7 @@ const LINKS = [
   { href: "/news",           label: "Haberler" },
   { href: "/freqtrade",      label: "Freqtrade" },
   { href: "/settings",      label: "Borsa Bağlantısı" },
+  { href: "/calculator",    label: "Hesaplama" },
 ]
 
 export default function NavClient() {
