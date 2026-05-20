@@ -433,6 +433,41 @@ export default function SimulationsPage() {
                           {sim.pnl_usdt > 0 ? "+" : ""}${sim.pnl_usdt.toFixed(1)}
                         </div>
                       )}
+                      {/* Cikis nedeni + sure */}
+                      {!isOpen && (
+                        <div className="flex items-center gap-1.5 justify-end mt-0.5">
+                          {sim.exit_reason && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                              sim.exit_reason === "TP" ? "bg-green-500/15 text-green-400" :
+                              sim.exit_reason === "SL" ? "bg-red-500/15 text-red-400" :
+                              sim.exit_reason === "TRAILING" ? "bg-purple-500/15 text-purple-400" :
+                              "bg-slate-700 text-slate-400"
+                            }`}>
+                              {sim.exit_reason}
+                            </span>
+                          )}
+                          {sim.duration_minutes != null && (
+                            <span className="text-[10px] text-slate-500">
+                              {sim.duration_minutes < 60
+                                ? `${sim.duration_minutes}dk`
+                                : sim.duration_minutes < 1440
+                                ? `${Math.floor(sim.duration_minutes / 60)}sa ${sim.duration_minutes % 60}dk`
+                                : `${Math.floor(sim.duration_minutes / 1440)}g ${Math.floor((sim.duration_minutes % 1440) / 60)}sa`
+                              }
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {/* Ilk hareket yonu */}
+                      {sim.first_move && (
+                        <div className={`text-[10px] mt-0.5 ${
+                          sim.first_move === "favorable" ? "text-green-500" : "text-red-500"
+                        }`}>
+                          {sim.first_move === "favorable" ? "↗ ilk lehte" : "↘ ilk aleyhte"}
+                          {sim.first_move_pct != null && ` (${sim.first_move_pct.toFixed(2)}%)`}
+                        </div>
+                      )}
+                      {/* Acik islem: max lehte/aleyhte */}
                       {isOpen && (
                         <div className="text-xs text-slate-400">
                           {sim.max_favorable_pct != null && (

@@ -45,7 +45,8 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
                    rsi_14, adx, volume_ratio, funding_rate, fear_greed, atr_pct, supertrend_dir,
                    status, exit_price, pnl_pct, pnl_usdt,
                    max_favorable_pct, max_adverse_pct,
-                   ai_review, created_at, closed_at{ai_log_col}
+                   ai_review, created_at, closed_at,
+                   exit_reason, duration_minutes, first_move, first_move_pct{ai_log_col}
             FROM scanner_simulations
             {where}
             ORDER BY created_at DESC
@@ -63,7 +64,8 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
             "rsi_14", "adx", "volume_ratio", "funding_rate", "fear_greed", "atr_pct", "supertrend_dir",
             "status", "exit_price", "pnl_pct", "pnl_usdt",
             "max_favorable_pct", "max_adverse_pct",
-            "ai_review", "created_at", "closed_at"]
+            "ai_review", "created_at", "closed_at",
+            "exit_reason", "duration_minutes", "first_move", "first_move_pct"]
     if has_ai_log:
         cols.append("ai_log")
 

@@ -99,10 +99,18 @@ async def _init_db():
             """))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sim_status ON scanner_simulations (status)"))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sim_created ON scanner_simulations (created_at)"))
-        # ai_log kolonu ekle (AI konuşma kaydı)
-            await conn.execute(text("""
-                ALTER TABLE scanner_simulations ADD COLUMN IF NOT EXISTS ai_log TEXT
-            """))
+        # Yeni kolonlar ekle
+            for col_def in [
+                "ai_log TEXT",
+                "exit_reason VARCHAR",           # TP, SL, TRAILING, EXPIRED
+                "duration_minutes INTEGER",       # İşlem süresi (dk)
+                "first_move VARCHAR",             # İlk hareket yönü: favorable / adverse
+                "first_move_pct FLOAT",           # İlk hareket yüzdesi
+            ]:
+                col_name = col_def.split()[0]
+                await conn.execute(text(
+                    f"ALTER TABLE scanner_simulations ADD COLUMN IF NOT EXISTS {col_def}"
+                ))
         # Mevcut NULL status kayıtları düzelt
             await conn.execute(text("""
                 UPDATE scanner_simulations SET status = 'open'

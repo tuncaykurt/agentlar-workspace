@@ -132,14 +132,14 @@ async def _get_open_sims() -> list[dict]:
     async with async_session() as session:
         result = await session.execute(sql_text("""
             SELECT id, coin, symbol, direction, entry_price, tp_price, sl_price,
-                   leverage, created_at, max_favorable_pct, max_adverse_pct
+                   leverage, created_at, max_favorable_pct, max_adverse_pct, first_move
             FROM scanner_simulations
             WHERE status = 'open'
             ORDER BY created_at DESC
         """))
         return [dict(zip(
             ["id", "coin", "symbol", "direction", "entry_price", "tp_price", "sl_price",
-             "leverage", "created_at", "max_favorable_pct", "max_adverse_pct"],
+             "leverage", "created_at", "max_favorable_pct", "max_adverse_pct", "first_move"],
             row
         )) for row in result.fetchall()]
 
@@ -150,7 +150,9 @@ async def _get_past_results(limit: int = 20) -> list[dict]:
         result = await session.execute(sql_text("""
             SELECT coin, direction, confidence, entry_price, exit_price,
                    pnl_pct, status, reason, ai_review,
-                   rsi_14, adx, funding_rate, fear_greed
+                   rsi_14, adx, funding_rate, fear_greed,
+                   exit_reason, duration_minutes, first_move, first_move_pct,
+                   leverage, max_favorable_pct, max_adverse_pct
             FROM scanner_simulations
             WHERE status IN ('win', 'loss')
             ORDER BY closed_at DESC
@@ -159,7 +161,9 @@ async def _get_past_results(limit: int = 20) -> list[dict]:
         return [dict(zip(
             ["coin", "direction", "confidence", "entry_price", "exit_price",
              "pnl_pct", "status", "reason", "ai_review",
-             "rsi_14", "adx", "funding_rate", "fear_greed"],
+             "rsi_14", "adx", "funding_rate", "fear_greed",
+             "exit_reason", "duration_minutes", "first_move", "first_move_pct",
+             "leverage", "max_favorable_pct", "max_adverse_pct"],
             row
         )) for row in result.fetchall()]
 
@@ -197,15 +201,58 @@ def _build_learning_context(past_results: list[dict]) -> str:
                          key=lambda x: x[1]["loss"] / max(1, x[1]["win"] + x[1]["loss"]),
                          reverse=True)[:3]
 
+    # İlk hareket analizi — fiyat giriş sonrası önce lehte mi aleyhte mi gitti?
+    first_move_data = [r for r in past_results if r.get("first_move")]
+    fm_favorable = [r for r in first_move_data if r["first_move"] == "favorable"]
+    fm_adverse = [r for r in first_move_data if r["first_move"] == "adverse"]
+    # İlk hareket lehte olanların kazanma oranı
+    fm_fav_wins = len([r for r in fm_favorable if r["status"] == "win"])
+    fm_adv_wins = len([r for r in fm_adverse if r["status"] == "win"])
+
+    # Kaldıraç bazlı analiz
+    high_lev = [r for r in past_results if (r.get("leverage") or 0) >= 30]
+    low_lev = [r for r in past_results if (r.get("leverage") or 0) < 30]
+    high_lev_wins = len([r for r in high_lev if r["status"] == "win"])
+    low_lev_wins = len([r for r in low_lev if r["status"] == "win"])
+
+    # Ortalama süre
+    durations = [r["duration_minutes"] for r in past_results if r.get("duration_minutes")]
+    avg_dur = sum(durations) / max(1, len(durations)) if durations else 0
+    win_durs = [r["duration_minutes"] for r in wins if r.get("duration_minutes")]
+    loss_durs = [r["duration_minutes"] for r in losses if r.get("duration_minutes")]
+    avg_win_dur = sum(win_durs) / max(1, len(win_durs)) if win_durs else 0
+    avg_loss_dur = sum(loss_durs) / max(1, len(loss_durs)) if loss_durs else 0
+
     # Son 5 işlem detayı
     recent_lines = []
     for r in past_results[:5]:
         emoji = "✅" if r["status"] == "win" else "❌"
         pnl = f"{r['pnl_pct']:+.2f}%" if r["pnl_pct"] else "?"
+        exit_r = r.get("exit_reason", "?")
+        dur = f"{r.get('duration_minutes', '?')}dk"
+        fm = "→lehte" if r.get("first_move") == "favorable" else "→aleyhte" if r.get("first_move") == "adverse" else ""
+        lev = f"{r.get('leverage', '?')}x"
         recent_lines.append(
-            f"  {emoji} {r['coin']} {r['direction'].upper()} → {r['status']} ({pnl}) "
-            f"RSI={r.get('rsi_14','?')} ADX={r.get('adx','?')} Fund={r.get('funding_rate','?')}"
+            f"  {emoji} {r['coin']} {r['direction'].upper()} {lev} → {r['status']}[{exit_r}] ({pnl}) "
+            f"[{dur}] {fm} RSI={r.get('rsi_14','?')} ADX={r.get('adx','?')}"
         )
+
+    first_move_section = ""
+    if first_move_data:
+        first_move_section = f"""
+İLK HAREKET ANALİZİ (Giriş sonrası fiyat ilk hangi yöne gitti?):
+  Lehte başlayan: {len(fm_favorable)} işlem → {fm_fav_wins}W ({round(fm_fav_wins/max(1,len(fm_favorable))*100)}% kazanma)
+  Aleyhte başlayan: {len(fm_adverse)} işlem → {fm_adv_wins}W ({round(fm_adv_wins/max(1,len(fm_adverse))*100)}% kazanma)
+  → {'Lehte başlayanlar daha başarılı!' if fm_fav_wins/max(1,len(fm_favorable)) > fm_adv_wins/max(1,len(fm_adverse)) else 'Aleyhte başlayanlar bile kazanabiliyor — sabır önemli'}
+"""
+
+    leverage_section = ""
+    if high_lev or low_lev:
+        leverage_section = f"""
+KALDIRAC BAZLI PERFORMANS:
+  Yüksek kaldıraç (≥30x): {len(high_lev)} işlem → {high_lev_wins}W ({round(high_lev_wins/max(1,len(high_lev))*100)}%)
+  Düşük kaldıraç (<30x): {len(low_lev)} işlem → {low_lev_wins}W ({round(low_lev_wins/max(1,len(low_lev))*100)}%)
+"""
 
     return f"""
 ═══════════════════════════════════════════════════════════════
@@ -217,14 +264,20 @@ Long: {long_wins}/{len(long_trades)} başarılı | Short: {short_wins}/{len(shor
 En İyi Coinler: {', '.join(f"{c[0]}({c[1]['win']}W)" for c in best_coins) if best_coins else 'Yeterli veri yok'}
 Kaçınılması Gereken: {', '.join(f"{c[0]}({c[1]['loss']}L)" for c in worst_coins) if worst_coins else '-'}
 
+SÜRE ANALİZİ:
+  Ort. işlem süresi: {avg_dur:.0f}dk | Kazançlar: {avg_win_dur:.0f}dk | Kayıplar: {avg_loss_dur:.0f}dk
+  → {'Kayıplar daha hızlı kapanıyor — SL iyi çalışıyor' if avg_loss_dur < avg_win_dur else 'Kayıplar daha uzun sürüyor — SL çok geniş olabilir'}
+{first_move_section}{leverage_section}
 Son 5 İşlem:
 {chr(10).join(recent_lines) if recent_lines else '  Henüz sonuç yok'}
 
 ÖNEMLİ: Bu geçmiş verilerden öğren!
+- İlk hareketi aleyhte olan işlemler başarısızsa, daha kesin girişler yap
+- Yüksek kaldıraçta başarı düşükse, kaldıracı düşür
 - Başarısız olduğun coinlerden/yönlerden kaçın
 - Başarılı olduğun pattern'leri tekrarla
 - Kazanma oranın düşükse daha seçici ol
-- Kayıp oranın yüksekse risk faktörlerini daha ciddiye al
+- Ortalama kayıp süresi çok kısaysa SL'leri biraz genişlet
 """
 
 
@@ -429,16 +482,18 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
                 pnl_pct = 0
                 pnl_usdt = 0
 
+            duration_min = int((now - created).total_seconds() / 60) if created else None
             async with async_session() as session:
                 await session.execute(sql_text("""
                     UPDATE scanner_simulations
                     SET status = 'expired', exit_price = :price, pnl_pct = :pnl,
-                        pnl_usdt = :pnl_usdt, closed_at = NOW()
+                        pnl_usdt = :pnl_usdt, exit_reason = 'EXPIRED',
+                        duration_minutes = :dur, closed_at = NOW()
                     WHERE id = :id
                 """), {"price": cur_price, "pnl": round(pnl_pct, 4),
-                       "pnl_usdt": round(pnl_usdt, 2), "id": sim_id})
+                       "pnl_usdt": round(pnl_usdt, 2), "dur": duration_min, "id": sim_id})
                 await session.commit()
-            print(f"[SimScanner] {sim['coin']} expired: {pnl_pct:+.2f}%")
+            print(f"[SimScanner] {sim['coin']} expired: {pnl_pct:+.2f}% [{duration_min}dk]")
             continue
 
         # Fiyat kontrolü
@@ -458,6 +513,18 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
 
         new_max_fav = max(max_fav, favorable)
         new_max_adv = max(max_adv, adverse)
+
+        # İlk hareket yönü takibi — sadece ilk kontrolde (first_move henüz set edilmemişse)
+        if not sim.get("first_move") and (favorable > 0.01 or adverse > 0.01):
+            first_move = "favorable" if favorable >= adverse else "adverse"
+            first_move_pct = round(favorable if first_move == "favorable" else adverse, 4)
+            async with async_session() as session:
+                await session.execute(sql_text("""
+                    UPDATE scanner_simulations
+                    SET first_move = :fm, first_move_pct = :fmp
+                    WHERE id = :id
+                """), {"fm": first_move, "fmp": first_move_pct, "id": sim_id})
+                await session.commit()
 
         # Trailing Stop kontrolü
         trailing_close = False
@@ -487,20 +554,28 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
             pnl_pct = ((exit_price - entry) / entry * 100) if is_long else ((entry - exit_price) / entry * 100)
             pnl_usdt = SIM_MARGIN * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
 
+            # Süre hesapla
+            duration_min = None
+            if created:
+                duration_min = int((now - created).total_seconds() / 60)
+
             async with async_session() as session:
                 await session.execute(sql_text("""
                     UPDATE scanner_simulations
                     SET status = :status, exit_price = :price, pnl_pct = :pnl,
                         pnl_usdt = :pnl_usdt, max_favorable_pct = :fav, max_adverse_pct = :adv,
+                        exit_reason = :reason, duration_minutes = :dur,
                         closed_at = NOW()
                     WHERE id = :id
                 """), {"status": status, "price": round(exit_price, 6),
                        "pnl": round(pnl_pct, 4), "pnl_usdt": round(pnl_usdt, 2),
                        "fav": round(new_max_fav, 4), "adv": round(new_max_adv, 4),
+                       "reason": reason_tag, "dur": duration_min,
                        "id": sim_id})
                 await session.commit()
             emoji = "✅" if status == "win" else "❌"
-            print(f"[SimScanner] {emoji} {sim['coin']} {direction} → {status} [{reason_tag}] ({pnl_pct:+.2f}% / ${pnl_usdt:+.1f})")
+            dur_str = f"{duration_min}dk" if duration_min else "?"
+            print(f"[SimScanner] {emoji} {sim['coin']} {direction} → {status} [{reason_tag}] ({pnl_pct:+.2f}% / ${pnl_usdt:+.1f}) [{dur_str}]")
         elif new_max_fav != max_fav or new_max_adv != max_adv:
             # Sadece max favorable/adverse güncelle
             async with async_session() as session:
