@@ -2711,18 +2711,37 @@ class BotEngine:
         paper = self.config.get("paper_mode", True)
 
         # ── 1. coin_snapshots'dan verileri çek ──
+        has_funding = False
         try:
             async with async_session() as session:
-                result = await session.execute(sql_text("""
-                    SELECT base, symbol, price, price_change_1h, price_change_24h,
-                           rsi_14, atr, atr_pct, ema200, ema200_dist,
-                           macd_hist, supertrend_dir, adx, volume_ratio,
-                           bb_upper, bb_lower, max_leverage, zero_fee, updated_at,
-                           funding_rate, fear_greed
-                    FROM coin_snapshots
-                    WHERE zero_fee = true AND price > 0
-                    ORDER BY updated_at DESC
-                """))
+                # funding_rate kolonu var mı kontrol et
+                try:
+                    await session.execute(sql_text("SELECT funding_rate FROM coin_snapshots LIMIT 1"))
+                    has_funding = True
+                except Exception:
+                    await session.rollback()
+
+                if has_funding:
+                    result = await session.execute(sql_text("""
+                        SELECT base, symbol, price, price_change_1h, price_change_24h,
+                               rsi_14, atr, atr_pct, ema200, ema200_dist,
+                               macd_hist, supertrend_dir, adx, volume_ratio,
+                               bb_upper, bb_lower, max_leverage, zero_fee, updated_at,
+                               funding_rate, fear_greed
+                        FROM coin_snapshots
+                        WHERE zero_fee = true AND price > 0
+                        ORDER BY updated_at DESC
+                    """))
+                else:
+                    result = await session.execute(sql_text("""
+                        SELECT base, symbol, price, price_change_1h, price_change_24h,
+                               rsi_14, atr, atr_pct, ema200, ema200_dist,
+                               macd_hist, supertrend_dir, adx, volume_ratio,
+                               bb_upper, bb_lower, max_leverage, zero_fee, updated_at
+                        FROM coin_snapshots
+                        WHERE zero_fee = true AND price > 0
+                        ORDER BY updated_at DESC
+                    """))
                 rows = result.fetchall()
         except Exception as e:
             print(f"[SmartScanner {bot_name}] DB hatası: {e}")
@@ -2736,7 +2755,7 @@ class BotEngine:
 
         coins = []
         for r in rows:
-            coins.append({
+            coin = {
                 "base": r[0], "symbol": r[1], "price": float(r[2] or 0),
                 "price_change_1h": float(r[3]) if r[3] else None,
                 "price_change_24h": float(r[4]) if r[4] else None,
@@ -2753,10 +2772,13 @@ class BotEngine:
                 "bb_lower": float(r[15]) if r[15] else None,
                 "max_leverage": int(r[16]) if r[16] else None,
                 "zero_fee": bool(r[17]),
-                # Yeni piyasa verileri (kolon 19-20, index 19-20)
-                "funding_rate": float(r[19]) if r[19] is not None else None,
-                "fear_greed": int(r[20]) if r[20] is not None else None,
-            })
+                "funding_rate": None,
+                "fear_greed": None,
+            }
+            if has_funding:
+                coin["funding_rate"] = float(r[19]) if r[19] is not None else None
+                coin["fear_greed"] = int(r[20]) if r[20] is not None else None
+            coins.append(coin)
 
         print(f"[SmartScanner {bot_name}] {len(coins)} coin analiz ediliyor (mod={mode})")
 

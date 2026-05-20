@@ -54,23 +54,45 @@ async def _get_sim_settings(redis) -> dict:
 
 
 async def _get_coins_from_db() -> list[dict]:
-    """coin_snapshots'tan tüm zero-fee coinleri oku."""
+    """coin_snapshots'tan tüm zero-fee coinleri oku. Yeni kolonlar yoksa da çalışır."""
     async with async_session() as session:
-        result = await session.execute(sql_text("""
-            SELECT base, symbol, price, price_change_1h, price_change_24h,
-                   rsi_14, atr, atr_pct, ema200, ema200_dist,
-                   macd_hist, supertrend_dir, adx, volume_ratio,
-                   bb_upper, bb_lower, max_leverage, zero_fee,
-                   funding_rate, fear_greed
-            FROM coin_snapshots
-            WHERE zero_fee = true AND price > 0
-            ORDER BY updated_at DESC
-        """))
+        # funding_rate/fear_greed kolonları henüz yoksa hata vermemesi için
+        # önce kolon varlığını kontrol et
+        has_funding = False
+        try:
+            test = await session.execute(sql_text(
+                "SELECT funding_rate FROM coin_snapshots LIMIT 1"
+            ))
+            has_funding = True
+        except Exception:
+            await session.rollback()
+
+        if has_funding:
+            result = await session.execute(sql_text("""
+                SELECT base, symbol, price, price_change_1h, price_change_24h,
+                       rsi_14, atr, atr_pct, ema200, ema200_dist,
+                       macd_hist, supertrend_dir, adx, volume_ratio,
+                       bb_upper, bb_lower, max_leverage, zero_fee,
+                       funding_rate, fear_greed
+                FROM coin_snapshots
+                WHERE zero_fee = true AND price > 0
+                ORDER BY updated_at DESC
+            """))
+        else:
+            result = await session.execute(sql_text("""
+                SELECT base, symbol, price, price_change_1h, price_change_24h,
+                       rsi_14, atr, atr_pct, ema200, ema200_dist,
+                       macd_hist, supertrend_dir, adx, volume_ratio,
+                       bb_upper, bb_lower, max_leverage, zero_fee
+                FROM coin_snapshots
+                WHERE zero_fee = true AND price > 0
+                ORDER BY updated_at DESC
+            """))
         rows = result.fetchall()
 
     coins = []
     for r in rows:
-        coins.append({
+        coin = {
             "base": r[0], "symbol": r[1], "price": float(r[2] or 0),
             "price_change_1h": float(r[3]) if r[3] else None,
             "price_change_24h": float(r[4]) if r[4] else None,
@@ -87,9 +109,13 @@ async def _get_coins_from_db() -> list[dict]:
             "bb_lower": float(r[15]) if r[15] else None,
             "max_leverage": int(r[16]) if r[16] else None,
             "zero_fee": bool(r[17]),
-            "funding_rate": float(r[18]) if r[18] is not None else None,
-            "fear_greed": int(r[19]) if r[19] is not None else None,
-        })
+            "funding_rate": None,
+            "fear_greed": None,
+        }
+        if has_funding:
+            coin["funding_rate"] = float(r[18]) if r[18] is not None else None
+            coin["fear_greed"] = int(r[19]) if r[19] is not None else None
+        coins.append(coin)
     return coins
 
 
@@ -453,6 +479,11 @@ async def run_simulator_cycle():
 
         coins = await _get_coins_from_db()
         if not coins:
+            print("[SimScanner] Coin verisi yok — collector bekleniyor")
+            await redis.set("scanner_sim:status", json.dumps({
+                "error": "Coin verisi yok",
+                "ts": datetime.utcnow().isoformat(),
+            }), ex=300)
             return
 
         past_results = await _get_past_results(20)
@@ -496,6 +527,13 @@ async def run_simulator_cycle():
         print(f"[SimScanner] Döngü hatası: {e}")
         import traceback
         traceback.print_exc()
+        try:
+            await redis.set("scanner_sim:status", json.dumps({
+                "error": str(e)[:300],
+                "ts": datetime.utcnow().isoformat(),
+            }), ex=300)
+        except Exception:
+            pass
     finally:
         try:
             await exchange.close()

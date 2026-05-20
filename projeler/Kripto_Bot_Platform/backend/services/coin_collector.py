@@ -193,54 +193,112 @@ async def _fetch_and_analyze(exchange_client, sym_info: dict, timeframe: str = "
     }
 
 
+_has_funding_col: bool | None = None  # Cache: funding_rate kolonu var mı
+
+
 async def _upsert_snapshot(data: dict):
-    """CoinSnapshot tablosuna UPSERT (varsa güncelle, yoksa ekle)."""
+    """CoinSnapshot tablosuna UPSERT (varsa güncelle, yoksa ekle). Yeni kolonlar yoksa da çalışır."""
+    global _has_funding_col
+
     async with async_session() as session:
-        await session.execute(text("""
-            INSERT INTO coin_snapshots (
-                exchange, symbol, base, timeframe, price,
-                price_change_1h, price_change_24h,
-                rsi_14, atr, atr_pct, ema200, ema200_dist,
-                macd_hist, supertrend_dir, adx, volume_ratio,
-                bb_upper, bb_lower,
-                funding_rate, fear_greed,
-                zero_fee, taker_fee, maker_fee, max_leverage,
-                updated_at
-            ) VALUES (
-                :exchange, :symbol, :base, :timeframe, :price,
-                :price_change_1h, :price_change_24h,
-                :rsi_14, :atr, :atr_pct, :ema200, :ema200_dist,
-                :macd_hist, :supertrend_dir, :adx, :volume_ratio,
-                :bb_upper, :bb_lower,
-                :funding_rate, :fear_greed,
-                :zero_fee, :taker_fee, :maker_fee, :max_leverage,
-                NOW()
-            )
-            ON CONFLICT ON CONSTRAINT uq_coin_snapshot
-            DO UPDATE SET
-                base = EXCLUDED.base,
-                price = EXCLUDED.price,
-                price_change_1h = EXCLUDED.price_change_1h,
-                price_change_24h = EXCLUDED.price_change_24h,
-                rsi_14 = EXCLUDED.rsi_14,
-                atr = EXCLUDED.atr,
-                atr_pct = EXCLUDED.atr_pct,
-                ema200 = EXCLUDED.ema200,
-                ema200_dist = EXCLUDED.ema200_dist,
-                macd_hist = EXCLUDED.macd_hist,
-                supertrend_dir = EXCLUDED.supertrend_dir,
-                adx = EXCLUDED.adx,
-                volume_ratio = EXCLUDED.volume_ratio,
-                bb_upper = EXCLUDED.bb_upper,
-                bb_lower = EXCLUDED.bb_lower,
-                funding_rate = EXCLUDED.funding_rate,
-                fear_greed = EXCLUDED.fear_greed,
-                zero_fee = EXCLUDED.zero_fee,
-                taker_fee = EXCLUDED.taker_fee,
-                maker_fee = EXCLUDED.maker_fee,
-                max_leverage = EXCLUDED.max_leverage,
-                updated_at = NOW()
-        """), data)
+        # İlk çağrıda kolon varlığını kontrol et, sonucu cache'le
+        if _has_funding_col is None:
+            try:
+                await session.execute(text("SELECT funding_rate FROM coin_snapshots LIMIT 1"))
+                _has_funding_col = True
+            except Exception:
+                _has_funding_col = False
+                await session.rollback()
+
+        if _has_funding_col:
+            await session.execute(text("""
+                INSERT INTO coin_snapshots (
+                    exchange, symbol, base, timeframe, price,
+                    price_change_1h, price_change_24h,
+                    rsi_14, atr, atr_pct, ema200, ema200_dist,
+                    macd_hist, supertrend_dir, adx, volume_ratio,
+                    bb_upper, bb_lower,
+                    funding_rate, fear_greed,
+                    zero_fee, taker_fee, maker_fee, max_leverage,
+                    updated_at
+                ) VALUES (
+                    :exchange, :symbol, :base, :timeframe, :price,
+                    :price_change_1h, :price_change_24h,
+                    :rsi_14, :atr, :atr_pct, :ema200, :ema200_dist,
+                    :macd_hist, :supertrend_dir, :adx, :volume_ratio,
+                    :bb_upper, :bb_lower,
+                    :funding_rate, :fear_greed,
+                    :zero_fee, :taker_fee, :maker_fee, :max_leverage,
+                    NOW()
+                )
+                ON CONFLICT ON CONSTRAINT uq_coin_snapshot
+                DO UPDATE SET
+                    base = EXCLUDED.base,
+                    price = EXCLUDED.price,
+                    price_change_1h = EXCLUDED.price_change_1h,
+                    price_change_24h = EXCLUDED.price_change_24h,
+                    rsi_14 = EXCLUDED.rsi_14,
+                    atr = EXCLUDED.atr,
+                    atr_pct = EXCLUDED.atr_pct,
+                    ema200 = EXCLUDED.ema200,
+                    ema200_dist = EXCLUDED.ema200_dist,
+                    macd_hist = EXCLUDED.macd_hist,
+                    supertrend_dir = EXCLUDED.supertrend_dir,
+                    adx = EXCLUDED.adx,
+                    volume_ratio = EXCLUDED.volume_ratio,
+                    bb_upper = EXCLUDED.bb_upper,
+                    bb_lower = EXCLUDED.bb_lower,
+                    funding_rate = EXCLUDED.funding_rate,
+                    fear_greed = EXCLUDED.fear_greed,
+                    zero_fee = EXCLUDED.zero_fee,
+                    taker_fee = EXCLUDED.taker_fee,
+                    maker_fee = EXCLUDED.maker_fee,
+                    max_leverage = EXCLUDED.max_leverage,
+                    updated_at = NOW()
+            """), data)
+        else:
+            # Eski şema — funding_rate/fear_greed kolonu yok
+            await session.execute(text("""
+                INSERT INTO coin_snapshots (
+                    exchange, symbol, base, timeframe, price,
+                    price_change_1h, price_change_24h,
+                    rsi_14, atr, atr_pct, ema200, ema200_dist,
+                    macd_hist, supertrend_dir, adx, volume_ratio,
+                    bb_upper, bb_lower,
+                    zero_fee, taker_fee, maker_fee, max_leverage,
+                    updated_at
+                ) VALUES (
+                    :exchange, :symbol, :base, :timeframe, :price,
+                    :price_change_1h, :price_change_24h,
+                    :rsi_14, :atr, :atr_pct, :ema200, :ema200_dist,
+                    :macd_hist, :supertrend_dir, :adx, :volume_ratio,
+                    :bb_upper, :bb_lower,
+                    :zero_fee, :taker_fee, :maker_fee, :max_leverage,
+                    NOW()
+                )
+                ON CONFLICT ON CONSTRAINT uq_coin_snapshot
+                DO UPDATE SET
+                    base = EXCLUDED.base,
+                    price = EXCLUDED.price,
+                    price_change_1h = EXCLUDED.price_change_1h,
+                    price_change_24h = EXCLUDED.price_change_24h,
+                    rsi_14 = EXCLUDED.rsi_14,
+                    atr = EXCLUDED.atr,
+                    atr_pct = EXCLUDED.atr_pct,
+                    ema200 = EXCLUDED.ema200,
+                    ema200_dist = EXCLUDED.ema200_dist,
+                    macd_hist = EXCLUDED.macd_hist,
+                    supertrend_dir = EXCLUDED.supertrend_dir,
+                    adx = EXCLUDED.adx,
+                    volume_ratio = EXCLUDED.volume_ratio,
+                    bb_upper = EXCLUDED.bb_upper,
+                    bb_lower = EXCLUDED.bb_lower,
+                    zero_fee = EXCLUDED.zero_fee,
+                    taker_fee = EXCLUDED.taker_fee,
+                    maker_fee = EXCLUDED.maker_fee,
+                    max_leverage = EXCLUDED.max_leverage,
+                    updated_at = NOW()
+            """), data)
         await session.commit()
 
 
