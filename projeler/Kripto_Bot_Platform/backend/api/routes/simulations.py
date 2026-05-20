@@ -278,17 +278,46 @@ async def trigger_simulation():
 
 @router.get("/portfolio")
 async def get_portfolio():
-    """Sanal portföy durumunu getir."""
+    """Sanal portföy durumunu getir + borsa bakiyesi."""
     from services.scanner_simulator import _get_portfolio
     redis = get_redis()
     portfolio = await _get_portfolio(redis)
     equity = portfolio["balance"] + portfolio["reserved"]
+
+    # Borsa bakiyesini Redis cache'ten oku
+    exchange_balance = None
+    try:
+        raw = await redis.get("exchange:mexc:balance")
+        if raw:
+            exchange_balance = json.loads(raw)
+    except Exception:
+        pass
+
     return {
         **portfolio,
         "equity": round(equity, 2),
         "roi": round((equity - portfolio["initial_balance"]) / max(1, portfolio["initial_balance"]) * 100, 2),
         "win_rate": round(portfolio["total_wins"] / max(1, portfolio["total_trades"]) * 100, 1),
+        "exchange_balance": exchange_balance,
     }
+
+
+@router.post("/portfolio/sync-exchange")
+async def sync_exchange_balance():
+    """Borsadaki gerçek bakiyeyi Redis'e cache'le."""
+    redis = get_redis()
+    raw_keys = await redis.get("exchange_keys:default:mexc")
+    if not raw_keys:
+        return {"error": "MEXC API key bulunamadı"}
+
+    keys = json.loads(raw_keys)
+    try:
+        from exchange.exchange_factory import fetch_balance_for
+        balance = await fetch_balance_for("mexc", keys["api_key"], keys["secret"], keys.get("passphrase", ""))
+        await redis.set("exchange:mexc:balance", json.dumps(balance), ex=120)
+        return balance
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @router.post("/portfolio/reset")
