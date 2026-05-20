@@ -21,20 +21,13 @@ from core.redis_client import get_redis
 MEXC_WS_URL = "wss://contract.mexc.com/edge"
 
 
-_EXCLUDED_SUFFIXES = ("STOCK", "STOCKD")
-
-
 def _to_ccxt_symbol(mexc_symbol: str) -> str:
-    """BTC_USDT → BTC/USDT:USDT  (STOCK tokenları filtreler)"""
+    """BTC_USDT → BTC/USDT:USDT"""
     try:
         parts = mexc_symbol.split("_")
         if len(parts) != 2:
             return ""
-        base = parts[0]
-        # STOCK uzantılı tokenları atla — API ile trade edilemez
-        if any(base.upper().endswith(s) for s in _EXCLUDED_SUFFIXES):
-            return ""
-        return f"{base}/{parts[1]}:{parts[1]}"
+        return f"{parts[0]}/{parts[1]}:{parts[1]}"
     except Exception:
         return ""
 
