@@ -46,7 +46,8 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
                    status, exit_price, pnl_pct, pnl_usdt,
                    max_favorable_pct, max_adverse_pct,
                    ai_review, created_at, closed_at,
-                   exit_reason, duration_minutes, first_move, first_move_pct{ai_log_col}
+                   exit_reason, duration_minutes, first_move, first_move_pct,
+                   COALESCE(is_hedge, false) as is_hedge, hedge_pair_id{ai_log_col}
             FROM scanner_simulations
             {where}
             ORDER BY created_at DESC
@@ -65,7 +66,8 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
             "status", "exit_price", "pnl_pct", "pnl_usdt",
             "max_favorable_pct", "max_adverse_pct",
             "ai_review", "created_at", "closed_at",
-            "exit_reason", "duration_minutes", "first_move", "first_move_pct"]
+            "exit_reason", "duration_minutes", "first_move", "first_move_pct",
+            "is_hedge", "hedge_pair_id"]
     if has_ai_log:
         cols.append("ai_log")
 
@@ -185,6 +187,10 @@ async def get_sim_settings():
         "trailing_activate_pct": 0.3, "trailing_callback_pct": 0.15,
         "min_confidence": 65, "max_open": 5,
         "expiry_hours": 24,
+        "hedge_enabled": False,
+        "hedge_tp_pct": 0.4, "hedge_sl_pct": 0.1,
+        "hedge_use_max_leverage": True,
+        "hedge_min_atr_pct": 0.3, "hedge_min_volume_ratio": 1.5,
     }
 
 

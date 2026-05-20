@@ -58,6 +58,13 @@ async def _get_sim_settings(redis) -> dict:
         "min_confidence": SIM_MIN_CONFIDENCE,
         "max_open": SIM_MAX_OPEN,
         "expiry_hours": SIM_EXPIRY_HOURS,
+        # Hedge modu
+        "hedge_enabled": False,          # Hedge modu aktif mi
+        "hedge_tp_pct": 0.4,             # Hedge TP %
+        "hedge_sl_pct": 0.1,             # Hedge SL %
+        "hedge_use_max_leverage": True,   # Coinin max kaldıracını kullan
+        "hedge_min_atr_pct": 0.3,        # Min volatilite (hedge için)
+        "hedge_min_volume_ratio": 1.5,    # Min hacim (likidite için)
     }
 
 
@@ -396,8 +403,113 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
     return selections
 
 
-async def _save_simulation(sel: dict, price: float):
-    """Yeni simülasyonu DB'ye kaydet."""
+async def _select_hedge_coins(coins: list[dict], cfg: dict, open_sims: list[dict]) -> list[dict]:
+    """Hedge modu: yüksek volatilite + yüksek likidite coinleri seç, çift yönlü pozisyon aç."""
+    from ai.openrouter import _call
+
+    active_coins = [s["coin"] for s in open_sims]
+    min_atr = cfg.get("hedge_min_atr_pct", 0.3)
+    min_vol = cfg.get("hedge_min_volume_ratio", 1.5)
+
+    # Hedge için uygun coinleri filtrele
+    candidates = []
+    for c in coins:
+        if c["base"] in active_coins:
+            continue
+        atr = c.get("atr_pct") or 0
+        vol = c.get("volume_ratio") or 0
+        max_lev = c.get("max_leverage") or 0
+        if atr >= min_atr and vol >= min_vol and max_lev >= 20:
+            # Hedge skoru: volatilite × hacim × kaldıraç
+            score = atr * vol * min(max_lev, 200) / 100
+            candidates.append((c, score))
+
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    top = candidates[:10]
+
+    if not top:
+        return []
+
+    # AI'ya hedge coin seçtir
+    coin_list = "\n".join(
+        f"  {c['base']:>10} | ATR:{c.get('atr_pct',0):.2f}% | Vol:{c.get('volume_ratio',0):.1f}x | "
+        f"MaxLev:{c.get('max_leverage','?')}x | RSI:{c.get('rsi_14',0):.0f} | ADX:{c.get('adx',0):.0f}"
+        for c, _ in top
+    )
+
+    prompt = f"""Sen bir hedge trading uzmanısın. Aşağıdaki coinlerden HEDGE İŞLEM için en uygun 1-2 coin seç.
+
+HEDGE STRATEJİSİ:
+- Aynı anda LONG + SHORT açılacak (aynı coin, aynı fiyat)
+- TP: %{cfg.get('hedge_tp_pct', 0.4)} | SL: %{cfg.get('hedge_sl_pct', 0.1)}
+- Fiyat bir yöne hareket edince bir taraf TP'ye ulaşır, diğeri SL'e
+- Net kâr = TP% - SL% = %{cfg.get('hedge_tp_pct', 0.4) - cfg.get('hedge_sl_pct', 0.1):.1f}
+- MAX kaldıraç kullanılacak → küçük % bile büyük kâr
+
+İDEAL HEDGE COİN:
+- Yüksek ATR% → fiyat hızlı hareket eder, TP'ye çabuk ulaşır
+- Yüksek hacim → likidite var, slippage düşük
+- Yüksek max kaldıraç → daha fazla kâr
+- RSI aşırı bölgelerde DEĞİL → yön belirsiz, hedge için ideal
+
+COIN VERİLERİ:
+{coin_list}
+
+JSON formatında yanıt ver:
+{{
+  "selections": [
+    {{
+      "coin": "COINNAME",
+      "reason": "Neden bu coin hedge için ideal",
+      "confidence": 80
+    }}
+  ]
+}}
+"""
+
+    try:
+        ai_resp = await asyncio.wait_for(
+            _call(settings.AI_DEEP_MODEL, prompt, max_tokens=500),
+            timeout=30,
+        )
+
+        results = []
+        for sel in ai_resp.get("selections", []):
+            coin_name = sel.get("coin", "")
+            matched = next((c for c, _ in top if c["base"] == coin_name), None)
+            if not matched:
+                continue
+            results.append({
+                "coin": coin_name,
+                "symbol": matched["symbol"],
+                "confidence": sel.get("confidence", 70),
+                "reason": sel.get("reason", "Hedge seçimi"),
+                "indicators": matched,
+                "ai_log": json.dumps({
+                    "model": settings.AI_DEEP_MODEL,
+                    "mode": "hedge",
+                    "ai_response": ai_resp,
+                }, ensure_ascii=False, default=str),
+            })
+        return results
+
+    except Exception as e:
+        print(f"[SimScanner] Hedge AI hatası: {e}")
+        # Fallback: en yüksek skorlu coini seç
+        if top:
+            c, _ = top[0]
+            return [{
+                "coin": c["base"],
+                "symbol": c["symbol"],
+                "confidence": 65,
+                "reason": f"Auto-hedge: ATR:{c.get('atr_pct',0):.2f}% Vol:{c.get('volume_ratio',0):.1f}x",
+                "indicators": c,
+            }]
+        return []
+
+
+async def _save_simulation(sel: dict, price: float) -> int | None:
+    """Yeni simülasyonu DB'ye kaydet. Dönen ID'yi döndürür."""
     tp_pct = float(sel["tp_pct"])
     sl_pct = float(sel["sl_pct"])
     is_long = sel["direction"] == "long"
@@ -405,32 +517,37 @@ async def _save_simulation(sel: dict, price: float):
     tp_price = round(price * (1 + tp_pct / 100), 6) if is_long else round(price * (1 - tp_pct / 100), 6)
     sl_price = round(price * (1 - sl_pct / 100), 6) if is_long else round(price * (1 + sl_pct / 100), 6)
     ind = sel.get("indicators", {})
+    is_hedge = sel.get("is_hedge", False)
+    hedge_pair_id = sel.get("hedge_pair_id")
 
-    # ai_log kolonu var mı kontrol et
-    ai_log_col = ""
-    ai_log_val = ""
-    ai_log_param = {}
-    try:
-        async with async_session() as sess:
-            await sess.execute(sql_text("SELECT ai_log FROM scanner_simulations LIMIT 0"))
-        ai_log_col = ", ai_log"
-        ai_log_val = ", :ai_log"
-        ai_log_param = {"ai_log": sel.get("ai_log")}
-    except Exception:
-        pass
+    # Ekstra kolonlar — varsa ekle
+    extra_cols = ""
+    extra_vals = ""
+    extra_params = {}
+    for col, val in [("ai_log", sel.get("ai_log")), ("is_hedge", is_hedge), ("hedge_pair_id", hedge_pair_id)]:
+        try:
+            async with async_session() as sess:
+                await sess.execute(sql_text(f"SELECT {col} FROM scanner_simulations LIMIT 0"))
+            extra_cols += f", {col}"
+            extra_vals += f", :{col}"
+            extra_params[col] = val
+        except Exception:
+            pass
 
+    sim_id = None
     async with async_session() as session:
-        await session.execute(sql_text(f"""
+        result = await session.execute(sql_text(f"""
             INSERT INTO scanner_simulations
                 (coin, symbol, direction, selection_mode, confidence, reason,
                  entry_price, tp_price, sl_price, tp_pct, sl_pct, leverage,
                  rsi_14, adx, volume_ratio, funding_rate, fear_greed, atr_pct, supertrend_dir,
-                 status{ai_log_col})
+                 status{extra_cols})
             VALUES
                 (:coin, :symbol, :direction, :mode, :confidence, :reason,
                  :entry, :tp, :sl, :tp_pct, :sl_pct, :lev,
                  :rsi, :adx, :vol, :fund, :fg, :atr, :st,
-                 'open'{ai_log_val})
+                 'open'{extra_vals})
+            RETURNING id
         """), {
             "coin": sel["coin"], "symbol": sel["symbol"],
             "direction": sel["direction"], "mode": sel.get("mode", "ai"),
@@ -441,9 +558,12 @@ async def _save_simulation(sel: dict, price: float):
             "vol": ind.get("volume_ratio"), "fund": ind.get("funding_rate"),
             "fg": ind.get("fear_greed"), "atr": ind.get("atr_pct"),
             "st": ind.get("supertrend_dir"),
-            **ai_log_param,
+            **extra_params,
         })
+        row = result.fetchone()
+        sim_id = row[0] if row else None
         await session.commit()
+    return sim_id
 
 
 async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS,
@@ -660,6 +780,69 @@ async def run_simulator_cycle():
             except Exception as e:
                 print(f"[SimScanner] {sel['coin']} sim kayıt hatası: {e}")
 
+        # 4. Hedge seçimleri
+        hedge_opened = []
+        if cfg.get("hedge_enabled", False):
+            open_sims_now = await _get_open_sims()
+            remaining_slots = cfg.get("max_open", SIM_MAX_OPEN) - len(open_sims_now)
+            if remaining_slots >= 2:  # Hedge en az 2 slot gerektirir
+                hedge_coins = await _select_hedge_coins(coins, cfg, open_sims_now)
+                hedge_tp = cfg.get("hedge_tp_pct", 0.4)
+                hedge_sl = cfg.get("hedge_sl_pct", 0.1)
+
+                for hc in hedge_coins:
+                    if remaining_slots < 2:
+                        break
+                    try:
+                        ticker = await asyncio.wait_for(
+                            exchange.fetch_ticker(hc["symbol"]), timeout=8
+                        )
+                        price = float(ticker["last"])
+                        coin_max_lev = hc["indicators"].get("max_leverage") or 50
+                        lev = coin_max_lev if cfg.get("hedge_use_max_leverage", True) else cfg.get("max_leverage", 75)
+
+                        # LONG taraf
+                        long_sel = {
+                            "coin": hc["coin"], "symbol": hc["symbol"],
+                            "direction": "long", "confidence": hc.get("confidence", 70),
+                            "reason": f"🔄 HEDGE LONG — {hc.get('reason', '')}",
+                            "tp_pct": hedge_tp, "sl_pct": hedge_sl,
+                            "leverage": lev, "mode": "hedge",
+                            "indicators": hc["indicators"],
+                            "is_hedge": True,
+                            "ai_log": hc.get("ai_log"),
+                        }
+                        long_id = await _save_simulation(long_sel, price)
+
+                        # SHORT taraf
+                        short_sel = {
+                            "coin": hc["coin"], "symbol": hc["symbol"],
+                            "direction": "short", "confidence": hc.get("confidence", 70),
+                            "reason": f"🔄 HEDGE SHORT — {hc.get('reason', '')}",
+                            "tp_pct": hedge_tp, "sl_pct": hedge_sl,
+                            "leverage": lev, "mode": "hedge",
+                            "indicators": hc["indicators"],
+                            "is_hedge": True,
+                            "hedge_pair_id": long_id,
+                            "ai_log": hc.get("ai_log"),
+                        }
+                        short_id = await _save_simulation(short_sel, price)
+
+                        # Long tarafına da pair_id set et
+                        if long_id and short_id:
+                            async with async_session() as session:
+                                await session.execute(sql_text(
+                                    "UPDATE scanner_simulations SET hedge_pair_id = :pair WHERE id = :id"
+                                ), {"pair": short_id, "id": long_id})
+                                await session.commit()
+
+                        hedge_opened.append(f"{hc['coin']}(H)")
+                        remaining_slots -= 2
+                        print(f"[SimScanner] 🔄 HEDGE {hc['coin']} @ ${price:,.4f} "
+                              f"lev={lev}x TP={hedge_tp}% SL={hedge_sl}%")
+                    except Exception as e:
+                        print(f"[SimScanner] {hc['coin']} hedge hatası: {e}")
+
         # Status güncelle
         past_stats = {}
         if past_results:
@@ -669,10 +852,12 @@ async def run_simulator_cycle():
 
         await redis.set("scanner_sim:status", json.dumps({
             "coins_total": len(coins),
-            "open_count": len(open_sims) + len(opened),
-            "opened": opened,
+            "open_count": len(open_sims) + len(opened) + len(hedge_opened) * 2,
+            "opened": opened + hedge_opened,
             "selections_count": len(selections),
+            "hedge_count": len(hedge_opened),
             "mode": cfg.get("mode", "ai"),
+            "hedge_enabled": cfg.get("hedge_enabled", False),
             "past_stats": past_stats,
             "waiting": False,
             "ts": datetime.now(timezone.utc).isoformat(),

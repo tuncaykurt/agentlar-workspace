@@ -332,6 +332,67 @@ export default function SimulationsPage() {
               </div>
             )}
           </div>
+
+          {/* Hedge Modu */}
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-white">Hedge Modu (Cift Yonlu Islem)</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Ayni coin&apos;de LONG + SHORT ayni anda acar. Fiyat bir yone hareket edince biri kazanir.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Hedge</span>
+                <button
+                  onClick={() => toggleSetting("hedge_enabled", !settings.hedge_enabled)}
+                  className={`w-10 h-5 rounded-full transition-colors relative ${settings.hedge_enabled ? "bg-purple-500" : "bg-slate-700"}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.hedge_enabled ? "left-5" : "left-0.5"}`} />
+                </button>
+              </div>
+            </div>
+            {settings.hedge_enabled && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { key: "hedge_tp_pct", label: "Hedge TP %", min: 0.05, max: 5, step: 0.05 },
+                    { key: "hedge_sl_pct", label: "Hedge SL %", min: 0.02, max: 2, step: 0.02 },
+                    { key: "hedge_min_atr_pct", label: "Min ATR %", min: 0.1, max: 5, step: 0.1 },
+                    { key: "hedge_min_volume_ratio", label: "Min Hacim", min: 0.5, max: 10, step: 0.1 },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="text-xs text-slate-400 block mb-1">{f.label}</label>
+                      <input
+                        type="number"
+                        value={settings[f.key] ?? ""}
+                        min={f.min} max={f.max} step={f.step}
+                        onChange={e => toggleSetting(f.key, Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.hedge_use_max_leverage !== false}
+                      onChange={e => toggleSetting("hedge_use_max_leverage", e.target.checked)}
+                      className="rounded bg-slate-900 border-slate-700"
+                    />
+                    <span className="text-xs text-slate-400">Coinin max kaldiracinir kullan</span>
+                  </label>
+                </div>
+                <div className="bg-slate-900/60 rounded-lg p-3 text-xs text-slate-400 space-y-1">
+                  <div className="text-slate-300 font-medium mb-1">Hedge Kar Hesabi:</div>
+                  <div>TP: %{settings.hedge_tp_pct || 0.4} | SL: %{settings.hedge_sl_pct || 0.1} | Net Kar: %{((settings.hedge_tp_pct || 0.4) - (settings.hedge_sl_pct || 0.1)).toFixed(2)}</div>
+                  <div>200x kaldirac ile $100 margin → Kazanc: ${(100 * 200 * ((settings.hedge_tp_pct || 0.4) - (settings.hedge_sl_pct || 0.1)) / 100).toFixed(0)} | Kayip: $0 (her iki yon acik)</div>
+                  <div className="text-amber-400 mt-1">Not: Spread, slippage ve likidite riski mevcuttur</div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -425,6 +486,11 @@ export default function SimulationsPage() {
                             {sim.direction.toUpperCase()}
                           </span>
                           <span className="text-xs text-slate-500 bg-slate-900/50 px-1.5 py-0.5 rounded">{sim.leverage}x</span>
+                          {sim.is_hedge && (
+                            <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                              HEDGE
+                            </span>
+                          )}
                           {sim.confidence && (
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
                               sim.confidence >= 80 ? "bg-green-500/15 text-green-400" :
