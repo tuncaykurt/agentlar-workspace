@@ -46,10 +46,13 @@ async def _get_sim_settings(redis) -> dict:
         "mode": SIM_MODE,
         "interval": SIM_INTERVAL,
         "leverage": SIM_LEVERAGE,
+        "min_leverage": 3,
+        "max_leverage": 75,
         "tp_pct": SIM_TP_PCT,
         "sl_pct": SIM_SL_PCT,
         "min_confidence": SIM_MIN_CONFIDENCE,
         "max_open": SIM_MAX_OPEN,
+        "expiry_hours": SIM_EXPIRY_HOURS,
     }
 
 
@@ -252,7 +255,8 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
         top = available[:20]
 
         # Prompt oluştur — öğrenme bağlamı ile zenginleştirilmiş
-        prompt = build_ai_prompt(top, active_coins)
+        lev_range = (cfg.get("min_leverage", 3), cfg.get("max_leverage", 75))
+        prompt = build_ai_prompt(top, active_coins, leverage_range=lev_range)
         learning = _build_learning_context(past_results)
         if learning:
             prompt = prompt + "\n" + learning
@@ -283,6 +287,13 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                 if not matched:
                     continue
 
+                # Kaldıraç: AI önerisini al, min/max aralığa ve coinin borsadaki max'ına sınırla
+                ai_lev = sel.get("leverage_suggestion", cfg.get("leverage", SIM_LEVERAGE))
+                coin_max_lev = matched.get("max_leverage") or 200
+                user_min = cfg.get("min_leverage", 3)
+                user_max = cfg.get("max_leverage", 75)
+                final_lev = max(user_min, min(ai_lev, user_max, coin_max_lev))
+
                 selections.append({
                     "coin": coin_name,
                     "symbol": matched["symbol"],
@@ -291,7 +302,7 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                     "reason": sel.get("entry_reason", "AI seçimi"),
                     "tp_pct": sel.get("tp_suggestion_pct", cfg.get("tp_pct", SIM_TP_PCT)),
                     "sl_pct": sel.get("sl_suggestion_pct", cfg.get("sl_pct", SIM_SL_PCT)),
-                    "leverage": sel.get("leverage_suggestion", cfg.get("leverage", SIM_LEVERAGE)),
+                    "leverage": final_lev,
                     "indicators": matched,
                     "ai_log": ai_log_text,
                 })
@@ -377,7 +388,7 @@ async def _save_simulation(sel: dict, price: float):
         await session.commit()
 
 
-async def _check_open_simulations(exchange):
+async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS):
     """Açık simülasyonları kontrol et: TP/SL hit mi? Expire mi?"""
     open_sims = await _get_open_sims()
     if not open_sims:
@@ -401,7 +412,7 @@ async def _check_open_simulations(exchange):
         max_adv = sim.get("max_adverse_pct") or 0
 
         # Zaman aşımı kontrolü
-        if created and (now - created).total_seconds() > SIM_EXPIRY_HOURS * 3600:
+        if created and (now - created).total_seconds() > expiry_hours * 3600:
             try:
                 ticker = await asyncio.wait_for(exchange.fetch_ticker(symbol), timeout=8)
                 cur_price = float(ticker["last"])
@@ -492,7 +503,8 @@ async def run_simulator_cycle():
         await exchange.load_markets()
 
         # 1. Açık simülasyonları kontrol et
-        await _check_open_simulations(exchange)
+        expiry = cfg.get("expiry_hours", SIM_EXPIRY_HOURS)
+        await _check_open_simulations(exchange, expiry_hours=expiry)
 
         # 2. Yeni seçim yap
         open_sims = await _get_open_sims()

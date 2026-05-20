@@ -213,12 +213,16 @@ def score_coin_manual(coin: dict, criteria: ManualCriteria) -> Optional[float]:
     return round(score, 2)
 
 
-def build_ai_prompt(coins: list[dict], active_positions: list[str] = None) -> str:
+def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
+                    leverage_range: tuple = None) -> str:
     """
     AI coin seçimi için kapsamlı prompt oluştur.
     Tüm coin verilerini analiz ederek en iyi fırsatları belirler.
+    leverage_range: (min, max) kaldıraç aralığı
     """
     active_str = ", ".join(active_positions) if active_positions else "Yok"
+    min_lev = leverage_range[0] if leverage_range else 3
+    max_lev = leverage_range[1] if leverage_range else 75
 
     # Coin verilerini tablo formatında hazırla
     def _v(val, default=0):
@@ -324,8 +328,11 @@ Mevcut Açık Pozisyonlar: {active_str}
    - Fear & Greed: >75 = Aşırı açgözlülük → risk yüksek, dikkatli ol
    - Funding + RSI birlikte değerlendir: negatif funding + oversold = güçlü long sinyal
 
-6. RİSK DEĞERLENDİRMESİ:
-   - Kaldıraç uygunluğu: Volatiliteye göre kaldıraç seç
+6. RİSK DEĞERLENDİRMESİ & KALDIRAC:
+   - Kaldıraç ARALIGI: Minimum {min_lev}x — Maksimum {max_lev}x
+   - ANCAK her coinin borsadaki max kaldıracını (Lev sütunu) AŞMA!
+   - Volatiliteye göre kaldıraç seç: Yüksek ATR% → düşük kaldıraç, düşük ATR% → yüksek kaldıraç
+   - ATR% > 2 → max {min(max_lev, 15)}x | ATR% 1-2 → max {min(max_lev, 30)}x | ATR% < 0.5 → {max_lev}x'e kadar
    - Kayıp senaryosu: SL nereye konulmalı, risk/ödül oranı ne?
    - Açık pozisyonlarla korelasyon: Aynı yönde çok pozisyon riskli
 
@@ -355,7 +362,7 @@ JSON formatında yanıt ver:
       "symbol": "BTC/USDT:USDT",
       "direction": "long|short",
       "confidence": 75,
-      "leverage_suggestion": 5,
+      "leverage_suggestion": 10,  // {min_lev}x ile {max_lev}x arası, coinin max kaldıracını aşma!
       "entry_reason": "Neden bu coin ve bu yön — teknik nedenler",
       "risk_factors": "Dikkat edilmesi gerekenler",
       "tp_suggestion_pct": 2.5,

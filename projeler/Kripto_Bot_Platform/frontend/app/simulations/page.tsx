@@ -178,12 +178,14 @@ export default function SimulationsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { key: "mode", label: "Mod", type: "select", options: [["ai","AI (Claude)"],["manual","Manuel"]] },
-              { key: "leverage", label: "Kaldirac", type: "number", min: 1, max: 500 },
+              { key: "min_leverage", label: "Min Kaldirac", type: "number", min: 1, max: 200 },
+              { key: "max_leverage", label: "Max Kaldirac", type: "number", min: 1, max: 500 },
               { key: "tp_pct", label: "TP %", type: "number", min: 0.1, max: 50, step: 0.1 },
               { key: "sl_pct", label: "SL %", type: "number", min: 0.1, max: 50, step: 0.1 },
               { key: "interval", label: "Aralik (sn)", type: "number", min: 60, max: 3600 },
               { key: "min_confidence", label: "Min Guven", type: "number", min: 0, max: 100 },
               { key: "max_open", label: "Max Acik", type: "number", min: 1, max: 20 },
+              { key: "expiry_hours", label: "Sure (saat)", type: "number", min: 1, max: 168 },
             ].map(f => (
               <div key={f.key}>
                 <label className="text-xs text-slate-400 block mb-1">{f.label}</label>

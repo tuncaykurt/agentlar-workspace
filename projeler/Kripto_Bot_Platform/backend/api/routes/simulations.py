@@ -176,8 +176,10 @@ async def get_sim_settings():
         return json.loads(raw)
     return {
         "enabled": True, "mode": "ai", "interval": 120,
-        "leverage": 50, "tp_pct": 1.5, "sl_pct": 0.8,
+        "leverage": 50, "min_leverage": 3, "max_leverage": 75,
+        "tp_pct": 1.5, "sl_pct": 0.8,
         "min_confidence": 65, "max_open": 5,
+        "expiry_hours": 24,
     }
 
 
