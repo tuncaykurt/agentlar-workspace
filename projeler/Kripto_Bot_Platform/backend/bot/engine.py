@@ -2716,7 +2716,8 @@ class BotEngine:
                     SELECT base, symbol, price, price_change_1h, price_change_24h,
                            rsi_14, atr, atr_pct, ema200, ema200_dist,
                            macd_hist, supertrend_dir, adx, volume_ratio,
-                           bb_upper, bb_lower, max_leverage, zero_fee, updated_at
+                           bb_upper, bb_lower, max_leverage, zero_fee, updated_at,
+                           funding_rate, fear_greed
                     FROM coin_snapshots
                     WHERE zero_fee = true AND price > 0
                     ORDER BY updated_at DESC
@@ -2751,6 +2752,9 @@ class BotEngine:
                 "bb_lower": float(r[15]) if r[15] else None,
                 "max_leverage": int(r[16]) if r[16] else None,
                 "zero_fee": bool(r[17]),
+                # Yeni piyasa verileri (kolon 19-20, index 19-20)
+                "funding_rate": float(r[19]) if r[19] is not None else None,
+                "fear_greed": int(r[20]) if r[20] is not None else None,
             })
 
         print(f"[SmartScanner {bot_name}] {len(coins)} coin analiz ediliyor (mod={mode})")

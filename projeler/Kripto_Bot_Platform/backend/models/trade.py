@@ -245,6 +245,12 @@ class CoinSnapshot(Base):
     bb_upper = Column(Float, nullable=True)
     bb_lower = Column(Float, nullable=True)
 
+    # Ek piyasa verileri
+    funding_rate = Column(Float, nullable=True)              # funding rate (%)
+    open_interest = Column(Float, nullable=True)             # açık pozisyon (USDT)
+    fear_greed = Column(Integer, nullable=True)              # korku/açgözlülük endeksi (0-100)
+    long_short_ratio = Column(Float, nullable=True)          # long/short oranı
+
     # Meta
     zero_fee = Column(Boolean, default=False)
     taker_fee = Column(Float, nullable=True)

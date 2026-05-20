@@ -194,6 +194,22 @@ def score_coin_manual(coin: dict, criteria: ManualCriteria) -> Optional[float]:
             if price > 0 and (bb_width / price * 100) < 1.0:
                 score += 7  # Bollinger squeeze
 
+    # Funding rate (negatif = short kalabalık → long fırsatı, pozitif = long kalabalık → short fırsatı)
+    funding = coin.get("funding_rate")
+    if funding is not None:
+        if abs(funding) > 0.05:
+            score += 10  # aşırı funding = yakında dönüş
+        elif abs(funding) > 0.02:
+            score += 5
+
+    # Fear & Greed endeksi (aşırı korku = alım, aşırı açgözlülük = satım fırsatı)
+    fg = coin.get("fear_greed")
+    if fg is not None:
+        if fg <= 20 or fg >= 80:
+            score += 8  # aşırı bölgeler
+        elif fg <= 30 or fg >= 70:
+            score += 4
+
     return round(score, 2)
 
 
@@ -223,6 +239,7 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None) -> st
             f"EMA200:{_v(c.get('ema200_dist')):>+7.2f}% | "
             f"MACD:{_v(c.get('macd_hist')):>+10.6f} | "
             f"BB:[{_v(c.get('bb_lower')):>.2f}-{_v(c.get('bb_upper')):>.2f}] | "
+            f"Fund:{_v(c.get('funding_rate'), '?'):>+.4f}% | "
             f"Lev:{c.get('max_leverage') or '?'}x"
         )
     coin_table = "\n".join(coin_rows)
@@ -237,6 +254,19 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None) -> st
     high_vol = [c["base"] for c in coins if c.get("volume_ratio") and c["volume_ratio"] > 2]
     strong_trend = [c["base"] for c in coins if c.get("adx") and c["adx"] > 30]
 
+    # Yeni metrikler
+    fear_greed = next((c["fear_greed"] for c in coins if c.get("fear_greed") is not None), None)
+    fg_label = "?"
+    if fear_greed is not None:
+        if fear_greed <= 25: fg_label = f"{fear_greed} (Aşırı Korku → ALIM fırsatı)"
+        elif fear_greed <= 45: fg_label = f"{fear_greed} (Korku)"
+        elif fear_greed <= 55: fg_label = f"{fear_greed} (Nötr)"
+        elif fear_greed <= 75: fg_label = f"{fear_greed} (Açgözlülük)"
+        else: fg_label = f"{fear_greed} (Aşırı Açgözlülük → SATIŞ sinyali)"
+
+    neg_funding = [c["base"] for c in coins if c.get("funding_rate") is not None and c["funding_rate"] < -0.02]
+    pos_funding = [c["base"] for c in coins if c.get("funding_rate") is not None and c["funding_rate"] > 0.05]
+
     return f"""Sen dünyanın en iyi kripto futures traderısın. Görevin: aşağıdaki tüm coinleri analiz ederek
 en yüksek kâr potansiyeline sahip 1-3 coin seç ve işlem yönü belirle.
 
@@ -246,16 +276,19 @@ en yüksek kâr potansiyeline sahip 1-3 coin seç ve işlem yönü belirle.
 Toplam Coin: {len(coins)}
 Bullish: {bullish_count} | Bearish: {bearish_count}
 Ortalama RSI: {avg_rsi:.1f}
+Fear & Greed Index: {fg_label}
 Aşırı Satım (RSI<30): {', '.join(oversold) if oversold else 'Yok'}
 Aşırı Alım (RSI>70): {', '.join(overbought) if overbought else 'Yok'}
 Yüksek Hacim (>2x): {', '.join(high_vol) if high_vol else 'Yok'}
 Güçlü Trend (ADX>30): {', '.join(strong_trend) if strong_trend else 'Yok'}
+Negatif Funding (short kalabalık): {', '.join(neg_funding) if neg_funding else 'Yok'}
+Yüksek Funding (long kalabalık): {', '.join(pos_funding) if pos_funding else 'Yok'}
 Mevcut Açık Pozisyonlar: {active_str}
 
 ═══════════════════════════════════════════════════════════════
                     TÜM COİN VERİLERİ
 ═══════════════════════════════════════════════════════════════
-     Coin |        Fiyat |   24h%  |  RSI  |  ATR%  |  ADX  | Trend | Hacim | EMA200 Mesafe | MACD Hist  | Bollinger Bandı | Kaldıraç
+     Coin |        Fiyat |   24h%  |  RSI  |  ATR%  |  ADX  | Trend | Hacim | EMA200 Mesafe | MACD Hist  | Bollinger Bandı | Funding | Kaldıraç
 {coin_table}
 
 ═══════════════════════════════════════════════════════════════
@@ -284,12 +317,19 @@ Mevcut Açık Pozisyonlar: {active_str}
    - Farklı yönde giden coinler → Coin-spesifik fırsat
    - Sektör bazlı hareket: DeFi, Layer1, Meme coinler ayrı analiz et
 
-5. RİSK DEĞERLENDİRMESİ:
+5. FUNDING RATE & SENTİMENT ANALİZİ:
+   - Funding Rate: Negatif = short kalabalık (long squeeze potansiyeli)
+   - Funding Rate: Pozitif ve yüksek (>0.05%) = long kalabalık (short squeeze potansiyeli)
+   - Fear & Greed: <25 = Aşırı korku → kontrarian alım fırsatı
+   - Fear & Greed: >75 = Aşırı açgözlülük → risk yüksek, dikkatli ol
+   - Funding + RSI birlikte değerlendir: negatif funding + oversold = güçlü long sinyal
+
+6. RİSK DEĞERLENDİRMESİ:
    - Kaldıraç uygunluğu: Volatiliteye göre kaldıraç seç
    - Kayıp senaryosu: SL nereye konulmalı, risk/ödül oranı ne?
    - Açık pozisyonlarla korelasyon: Aynı yönde çok pozisyon riskli
 
-6. ZAMANLAMA ANALİZİ:
+7. ZAMANLAMA ANALİZİ:
    - Momentum zirve/dip noktasında mı?
    - Hacim spike'ı var mı? (haber etkisi olabilir)
    - Trend başlangıcı mı yoksa sonu mu?
@@ -331,31 +371,46 @@ Eğer hiç güvenilir fırsat yoksa selections boş array olsun ve skipped_reaso
 
 
 def determine_trade_direction(coin: dict, criteria: ManualCriteria) -> str:
-    """Manuel modda işlem yönü belirle."""
+    """Manuel modda işlem yönü belirle — trend, RSI, EMA200 ve funding rate ile."""
     if criteria.trade_direction in ("long", "short"):
         return criteria.trade_direction
 
-    # auto: trende göre karar ver
+    # auto: çoklu sinyal ile karar ver
     trend = coin.get("supertrend_dir")
     rsi = coin.get("rsi_14", 50)
     ema_dist = coin.get("ema200_dist", 0)
+    funding = coin.get("funding_rate")
 
-    # Güçlü sinyaller
-    if trend == 1 and ema_dist and ema_dist > 0:
-        return "long"  # bullish trend + EMA200 üzerinde
-    if trend == -1 and ema_dist and ema_dist < 0:
-        return "short"  # bearish trend + EMA200 altında
+    # Puanlama sistemi: pozitif = long, negatif = short
+    direction_score = 0
 
-    # RSI bazlı
-    if rsi and rsi < 30:
-        return "long"   # oversold → long
-    if rsi and rsi > 70:
-        return "short"  # overbought → short
-
-    # Trend yönü
+    # Trend sinyali
     if trend == 1:
-        return "long"
-    if trend == -1:
-        return "short"
+        direction_score += 2
+    elif trend == -1:
+        direction_score -= 2
 
-    return "long"  # default
+    # EMA200 pozisyonu
+    if ema_dist and ema_dist > 0:
+        direction_score += 1
+    elif ema_dist and ema_dist < 0:
+        direction_score -= 1
+
+    # RSI aşırı bölgeleri
+    if rsi and rsi < 30:
+        direction_score += 2  # oversold → long fırsatı
+    elif rsi and rsi > 70:
+        direction_score -= 2  # overbought → short fırsatı
+
+    # Funding rate (kontrarian sinyal)
+    if funding is not None:
+        if funding < -0.03:
+            direction_score += 2  # aşırı negatif funding = short kalabalık → long squeeze potansiyeli
+        elif funding < -0.01:
+            direction_score += 1
+        elif funding > 0.05:
+            direction_score -= 2  # aşırı pozitif funding = long kalabalık → short squeeze potansiyeli
+        elif funding > 0.02:
+            direction_score -= 1
+
+    return "long" if direction_score >= 0 else "short"

@@ -19,6 +19,7 @@ from core.database import async_session
 from core.redis_client import get_redis
 from ai.indicators import calculate_all
 import json
+import httpx
 
 
 # Güncelleme aralığı (saniye)
@@ -27,6 +28,7 @@ BATCH_CONCURRENCY = 5       # aynı anda max kaç OHLCV isteği
 COIN_DELAY = 0.08           # istek sonrası bekleme (rate limit)
 COIN_DELAY_MAX = 3.0        # rate limit varsa maksimum bekleme
 SYMBOLS_CACHE_TTL = 3600    # 1 saat
+MARKET_DATA_CACHE_TTL = 300 # 5 dakika — funding rate, fear/greed vb.
 
 
 async def _get_zero_fee_symbols(exchange_client) -> list[dict]:
@@ -76,7 +78,50 @@ async def _get_zero_fee_symbols(exchange_client) -> list[dict]:
     return symbols
 
 
-async def _fetch_and_analyze(exchange_client, sym_info: dict, timeframe: str = "1h") -> dict | None:
+async def _fetch_market_data(exchange_client, redis) -> dict:
+    """
+    Piyasa geneli verileri çek (5 dk cache):
+    - Fear & Greed Index (alternative.me — ücretsiz, API key yok)
+    - Funding rate'ler (MEXC exchange API — CCXT ile)
+    """
+    cache_key = "coin_collector:market_data"
+    cached = await redis.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
+    data = {"fear_greed": None, "funding_rates": {}}
+
+    # ── Fear & Greed Index ──
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get("https://api.alternative.me/fng/?limit=1")
+            fg_data = r.json().get("data", [{}])[0]
+            data["fear_greed"] = int(fg_data.get("value", 50))
+    except Exception as e:
+        print(f"[CoinCollector] Fear&Greed hatası (devam): {e}")
+
+    # ── Funding Rates (toplu çek) ──
+    try:
+        funding_rates = await asyncio.wait_for(
+            exchange_client.fetch_funding_rates(), timeout=15
+        )
+        for symbol, fr_info in funding_rates.items():
+            rate = fr_info.get("fundingRate")
+            if rate is not None:
+                data["funding_rates"][symbol] = round(float(rate) * 100, 6)  # % olarak
+    except Exception as e:
+        # fetch_funding_rates desteklenmiyorsa sessizce geç
+        err_str = str(e).lower()
+        if "not support" not in err_str and "not available" not in err_str:
+            print(f"[CoinCollector] Funding rates hatası (devam): {e}")
+
+    await redis.set(cache_key, json.dumps(data), ex=MARKET_DATA_CACHE_TTL)
+    print(f"[CoinCollector] Market data güncellendi: F&G={data['fear_greed']}, funding={len(data['funding_rates'])} coin")
+    return data
+
+
+async def _fetch_and_analyze(exchange_client, sym_info: dict, timeframe: str = "1h",
+                              market_data: dict | None = None) -> dict | None:
     """Tek bir coin için OHLCV çek ve göstergeleri hesapla."""
     symbol = sym_info["symbol"]
     try:
@@ -115,6 +160,11 @@ async def _fetch_and_analyze(exchange_client, sym_info: dict, timeframe: str = "
         if close_24h_ago and close_24h_ago > 0:
             price_change_24h = round((price - close_24h_ago) / close_24h_ago * 100, 2)
 
+    # Ek piyasa verileri (market_data'dan)
+    md = market_data or {}
+    funding_rate = md.get("funding_rates", {}).get(symbol)
+    fear_greed = md.get("fear_greed")
+
     return {
         "exchange": "mexc",
         "symbol": symbol,
@@ -134,6 +184,8 @@ async def _fetch_and_analyze(exchange_client, sym_info: dict, timeframe: str = "
         "volume_ratio": ind.get("vol_ratio"),
         "bb_upper": ind.get("bb_upper"),
         "bb_lower": ind.get("bb_lower"),
+        "funding_rate": funding_rate,
+        "fear_greed": fear_greed,
         "zero_fee": sym_info.get("zero_fee", False),
         "taker_fee": sym_info.get("taker_fee"),
         "maker_fee": sym_info.get("maker_fee"),
@@ -151,6 +203,7 @@ async def _upsert_snapshot(data: dict):
                 rsi_14, atr, atr_pct, ema200, ema200_dist,
                 macd_hist, supertrend_dir, adx, volume_ratio,
                 bb_upper, bb_lower,
+                funding_rate, fear_greed,
                 zero_fee, taker_fee, maker_fee, max_leverage,
                 updated_at
             ) VALUES (
@@ -159,6 +212,7 @@ async def _upsert_snapshot(data: dict):
                 :rsi_14, :atr, :atr_pct, :ema200, :ema200_dist,
                 :macd_hist, :supertrend_dir, :adx, :volume_ratio,
                 :bb_upper, :bb_lower,
+                :funding_rate, :fear_greed,
                 :zero_fee, :taker_fee, :maker_fee, :max_leverage,
                 NOW()
             )
@@ -179,6 +233,8 @@ async def _upsert_snapshot(data: dict):
                 volume_ratio = EXCLUDED.volume_ratio,
                 bb_upper = EXCLUDED.bb_upper,
                 bb_lower = EXCLUDED.bb_lower,
+                funding_rate = EXCLUDED.funding_rate,
+                fear_greed = EXCLUDED.fear_greed,
                 zero_fee = EXCLUDED.zero_fee,
                 taker_fee = EXCLUDED.taker_fee,
                 maker_fee = EXCLUDED.maker_fee,
@@ -189,11 +245,11 @@ async def _upsert_snapshot(data: dict):
 
 
 async def _process_coin(exchange_client, sym_info: dict, semaphore: asyncio.Semaphore,
-                        delay: float, stats: dict):
+                        delay: float, stats: dict, market_data: dict | None = None):
     """Semaphore kontrollü tek coin işleme."""
     async with semaphore:
         try:
-            data = await _fetch_and_analyze(exchange_client, sym_info)
+            data = await _fetch_and_analyze(exchange_client, sym_info, market_data=market_data)
             if data:
                 await _upsert_snapshot(data)
                 stats["ok"] += 1
@@ -226,6 +282,10 @@ async def run_collection_cycle(current_delay: float = COIN_DELAY) -> float:
             print("[CoinCollector] Zero-fee sembol bulunamadı.")
             return current_delay
 
+        # Piyasa geneli verileri çek (5 dk cache — funding rate, fear/greed)
+        redis = get_redis()
+        market_data = await _fetch_market_data(exchange, redis)
+
         stats = {"ok": 0, "fail": 0, "rate_limited": 0}
         semaphore = asyncio.Semaphore(BATCH_CONCURRENCY)
         t0 = time.monotonic()
@@ -233,7 +293,8 @@ async def run_collection_cycle(current_delay: float = COIN_DELAY) -> float:
         # Tüm coinleri paralel çalıştır (semaphore ile kontrollü)
         tasks = [
             _process_coin(exchange_client=exchange, sym_info=sym,
-                          semaphore=semaphore, delay=current_delay, stats=stats)
+                          semaphore=semaphore, delay=current_delay, stats=stats,
+                          market_data=market_data)
             for sym in symbols
         ]
         await asyncio.gather(*tasks)

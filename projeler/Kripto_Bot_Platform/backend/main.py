@@ -62,6 +62,11 @@ async def _init_db():
         ("signal_logs", "tp_was_reachable", "BOOLEAN"),
         ("signal_logs", "sl_was_hit", "BOOLEAN"),
         ("signal_logs", "max_adverse_pct", "FLOAT"),
+        # Smart Scanner ek piyasa verileri
+        ("coin_snapshots", "funding_rate", "FLOAT"),
+        ("coin_snapshots", "open_interest", "FLOAT"),
+        ("coin_snapshots", "fear_greed", "INTEGER"),
+        ("coin_snapshots", "long_short_ratio", "FLOAT"),
     ]
     try:
         async with engine.begin() as conn:
