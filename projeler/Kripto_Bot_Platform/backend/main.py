@@ -128,6 +128,14 @@ async def _init_db():
                   AND duration_minutes IS NULL
                   AND closed_at IS NOT NULL AND created_at IS NOT NULL
             """))
+        # Açık işlemlerde NULL olan max_favorable/adverse değerlerini 0 yap
+            await conn.execute(text("""
+                UPDATE scanner_simulations
+                SET max_favorable_pct = COALESCE(max_favorable_pct, 0),
+                    max_adverse_pct = COALESCE(max_adverse_pct, 0)
+                WHERE status = 'open'
+                  AND (max_favorable_pct IS NULL OR max_adverse_pct IS NULL)
+            """))
         print("[Migration] scanner_simulations tablosu hazır.")
     except Exception as e:
         print(f"[Migration] scanner_simulations hatası (devam): {e}")

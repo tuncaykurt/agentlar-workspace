@@ -691,6 +691,22 @@ async def _save_simulation(sel: dict, price: float, margin: float = SIM_MARGIN) 
         except Exception:
             pass
 
+    # max_favorable_pct, max_adverse_pct, first_move → başlangıç değerleri set et
+    for col, val in [
+        ("max_favorable_pct", 0.0),
+        ("max_adverse_pct", 0.0),
+        ("first_move", None),
+        ("first_move_pct", None),
+    ]:
+        try:
+            async with async_session() as sess:
+                await sess.execute(sql_text(f"SELECT {col} FROM scanner_simulations LIMIT 0"))
+            extra_cols += f", {col}"
+            extra_vals += f", :{col}"
+            extra_params[col] = val
+        except Exception:
+            pass
+
     sim_id = None
     async with async_session() as session:
         result = await session.execute(sql_text(f"""
