@@ -206,10 +206,55 @@ async def update_sim_settings(data: dict):
 
 @router.get("/status")
 async def sim_status():
-    """Simülatörün anlık durumu."""
+    """Simülatörün anlık durumu + MEXC WS bilgisi."""
     redis = get_redis()
     raw = await redis.get("scanner_sim:status")
-    return json.loads(raw) if raw else {"running": False}
+    status = json.loads(raw) if raw else {"running": False}
+
+    # MEXC WebSocket durumunu ekle
+    try:
+        ws_keys = []
+        cursor = b"0"
+        while True:
+            cursor, keys = await redis.scan(cursor, match="ticker:mexc:*", count=200)
+            ws_keys.extend(keys)
+            if cursor == b"0" or cursor == 0:
+                break
+        status["mexc_ws"] = {
+            "active_tickers": len(ws_keys),
+            "connected": len(ws_keys) > 0,
+        }
+    except Exception:
+        status["mexc_ws"] = {"active_tickers": 0, "connected": False}
+
+    return status
+
+
+@router.get("/ws-prices")
+async def ws_prices():
+    """MEXC WebSocket'ten gelen anlık fiyatları göster (debug)."""
+    redis = get_redis()
+    prices = {}
+    try:
+        cursor = b"0"
+        keys = []
+        while True:
+            cursor, batch = await redis.scan(cursor, match="ticker:mexc:*", count=200)
+            keys.extend(batch)
+            if cursor == b"0" or cursor == 0:
+                break
+        for key in keys[:100]:
+            raw = await redis.get(key)
+            if raw:
+                data = json.loads(raw)
+                prices[data.get("symbol", str(key))] = {
+                    "last": data.get("last"),
+                    "bid": data.get("bid"),
+                    "ask": data.get("ask"),
+                }
+    except Exception as e:
+        return {"error": str(e)}
+    return {"count": len(prices), "prices": prices}
 
 
 @router.post("/trigger")

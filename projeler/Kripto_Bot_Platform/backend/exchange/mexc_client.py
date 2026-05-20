@@ -1,11 +1,16 @@
 """
 MEXC Exchange İstemcisi
 - CCXT ile REST işlemleri
+- WebSocket ile anlık fiyat verisi (futures ticker)
 - Bitget client ile aynı interface → bot engine değişiklik gerektirmez
 MEXC futures: USDT-M perpetual
 """
+import asyncio
+import json
+import websockets
 import ccxt.async_support as ccxt
 from core.config import settings
+from core.redis_client import get_redis
 
 
 class MEXCClient:
@@ -15,6 +20,129 @@ class MEXCClient:
             "secret": settings.MEXC_API_SECRET,
             "options": {"defaultType": "swap"},
         })
+        # MEXC Futures WebSocket
+        self.ws_url = "wss://contract.mexc.com/edge"
+        self._ws_subscribed: set[str] = set()  # Aktif abonelikler
+
+    # ─── WebSocket ────────────────────────────────────────────────────────────
+
+    async def _ws_connect(self, subscribe_msgs: list[dict], handler, label: str):
+        """WS bağlantı + ping + otomatik yeniden bağlanma (Bitget pattern)."""
+        retry_count = 0
+        while True:
+            try:
+                async with websockets.connect(
+                    self.ws_url,
+                    ping_interval=None,
+                    ping_timeout=None,
+                    close_timeout=10,
+                ) as ws:
+                    retry_count = 0
+                    # Abonelikleri gönder
+                    for msg in subscribe_msgs:
+                        await ws.send(json.dumps(msg))
+                    print(f"[MEXC WS] {label} — {len(subscribe_msgs)} kanal abone olundu")
+
+                    # MEXC 60s sessizlikte koparır — 20s'de ping at
+                    async def keep_alive():
+                        while True:
+                            await asyncio.sleep(20)
+                            try:
+                                await ws.send(json.dumps({"method": "ping"}))
+                            except Exception:
+                                break
+
+                    ping_task = asyncio.create_task(keep_alive())
+                    try:
+                        async for raw in ws:
+                            try:
+                                data = json.loads(raw)
+                            except (json.JSONDecodeError, TypeError):
+                                continue
+
+                            # Pong yanıtını yoksay
+                            channel = data.get("channel", "")
+                            if channel == "pong" or data.get("method") == "pong":
+                                continue
+
+                            if channel.startswith("push."):
+                                await handler(data)
+                    finally:
+                        ping_task.cancel()
+
+            except (websockets.ConnectionClosed, ConnectionError, OSError) as e:
+                retry_count += 1
+                delay = min(60, 5 * retry_count)
+                print(f"[MEXC WS] {label} koptu: {e} — {delay}s sonra tekrar (#{retry_count})")
+                await asyncio.sleep(delay)
+            except Exception as e:
+                retry_count += 1
+                delay = min(120, 10 * retry_count)
+                print(f"[MEXC WS] {label} hata: {e} — {delay}s sonra tekrar (#{retry_count})")
+                await asyncio.sleep(delay)
+
+    async def subscribe_tickers(self, symbols: list[str]):
+        """Birden fazla coin için anlık ticker verisi — Redis'e yaz.
+
+        symbols: ["BTC/USDT:USDT", "ETH/USDT:USDT", ...] formatında
+        """
+        redis = get_redis()
+        subscribe_msgs = []
+
+        for symbol in symbols:
+            # BTC/USDT:USDT → BTC_USDT
+            mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
+            subscribe_msgs.append({
+                "method": "sub.ticker",
+                "param": {"symbol": mexc_symbol},
+            })
+            self._ws_subscribed.add(symbol)
+
+        async def handler(data):
+            channel = data.get("channel", "")
+            if channel != "push.ticker":
+                return
+            tick = data.get("data", {})
+            if not tick:
+                return
+
+            # MEXC format: BTC_USDT → BTC/USDT:USDT
+            raw_sym = data.get("symbol", "") or tick.get("symbol", "")
+            if not raw_sym:
+                return
+            parts = raw_sym.split("_")
+            if len(parts) != 2:
+                return
+            ccxt_symbol = f"{parts[0]}/{parts[1]}:{parts[1]}"
+
+            last_price = tick.get("lastPrice") or tick.get("last")
+            if not last_price:
+                return
+
+            ticker_data = {
+                "symbol": ccxt_symbol,
+                "last": float(last_price),
+                "bid": float(tick.get("bid1", last_price)),
+                "ask": float(tick.get("ask1", last_price)),
+                "high24h": float(tick.get("high24Price", 0) or 0),
+                "low24h": float(tick.get("low24Price", 0) or 0),
+                "volume24h": float(tick.get("volume24", 0) or 0),
+                "ts": data.get("ts", 0),
+            }
+
+            # Redis'e kaydet — simulator ve diğer servisler buradan okur
+            await redis.set(
+                f"ticker:mexc:{ccxt_symbol}",
+                json.dumps(ticker_data),
+                ex=120,  # 2dk TTL — WS kesilirse eski veri kullanılmasın
+            )
+
+        label = f"ticker/{len(symbols)} coin"
+        await self._ws_connect(subscribe_msgs, handler, label)
+
+    async def subscribe_ticker(self, symbol: str):
+        """Tek coin için ticker aboneliği (Bitget uyumlu interface)."""
+        await self.subscribe_tickers([symbol])
 
     async def get_balance(self) -> dict:
         balance = await self.exchange.fetch_balance({"type": "swap"})

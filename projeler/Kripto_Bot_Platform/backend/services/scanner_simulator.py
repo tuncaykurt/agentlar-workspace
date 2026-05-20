@@ -24,6 +24,39 @@ from bot.strategies.smart_scanner import (
     ManualCriteria, score_coin_manual, build_ai_prompt, determine_trade_direction
 )
 
+
+async def _get_price_from_redis(symbol: str) -> float | None:
+    """Redis'ten MEXC WebSocket fiyatını oku. Yoksa None döner (REST fallback gerekir)."""
+    try:
+        redis = get_redis()
+        raw = await redis.get(f"ticker:mexc:{symbol}")
+        if raw:
+            data = json.loads(raw)
+            price = float(data.get("last", 0))
+            if price > 0:
+                return price
+    except Exception:
+        pass
+    return None
+
+
+async def _get_price(symbol: str, exchange=None) -> float | None:
+    """Önce Redis (WebSocket), yoksa REST fallback ile fiyat al."""
+    # 1. Redis (WebSocket-fed) — anlık, ~0ms
+    price = await _get_price_from_redis(symbol)
+    if price:
+        return price
+
+    # 2. REST fallback — yavaş (~1-3s)
+    if exchange:
+        try:
+            ticker = await asyncio.wait_for(exchange.fetch_ticker(symbol), timeout=8)
+            return float(ticker["last"])
+        except Exception:
+            pass
+    return None
+
+
 # Simülasyon ayarları
 SIM_INTERVAL = 120          # tarama aralığı (sn)
 SIM_MAX_OPEN = 5            # aynı anda max açık simülasyon
@@ -592,12 +625,11 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
 
         # Zaman aşımı kontrolü
         if created and (now - created).total_seconds() > expiry_hours * 3600:
-            try:
-                ticker = await asyncio.wait_for(exchange.fetch_ticker(symbol), timeout=8)
-                cur_price = float(ticker["last"])
+            cur_price = await _get_price(symbol, exchange)
+            if cur_price:
                 pnl_pct = ((cur_price - entry) / entry * 100) if is_long else ((entry - cur_price) / entry * 100)
                 pnl_usdt = SIM_MARGIN * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
-            except Exception:
+            else:
                 cur_price = entry
                 pnl_pct = 0
                 pnl_usdt = 0
@@ -616,11 +648,9 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
             print(f"[SimScanner] {sim['coin']} expired: {pnl_pct:+.2f}% [{duration_min}dk]")
             continue
 
-        # Fiyat kontrolü
-        try:
-            ticker = await asyncio.wait_for(exchange.fetch_ticker(symbol), timeout=8)
-            cur_price = float(ticker["last"])
-        except Exception:
+        # Fiyat kontrolü — önce Redis (WS), yoksa REST
+        cur_price = await _get_price(symbol, exchange)
+        if not cur_price:
             continue
 
         # Lehte/aleyhte hareket takibi
@@ -768,10 +798,10 @@ async def run_simulator_cycle():
                     sel["tp_pct"] = round(max(0.1, float(sel["tp_pct"]) * scale), 2)
                     sel["sl_pct"] = round(max(0.05, float(sel["sl_pct"]) * scale), 2)
 
-                ticker = await asyncio.wait_for(
-                    exchange.fetch_ticker(sel["symbol"]), timeout=8
-                )
-                price = float(ticker["last"])
+                price = await _get_price(sel["symbol"], exchange)
+                if not price:
+                    print(f"[SimScanner] {sel['coin']} fiyat alınamadı — atlanıyor")
+                    continue
                 sel["mode"] = cfg.get("mode", "ai")
                 await _save_simulation(sel, price)
                 opened.append(sel["coin"])
@@ -794,10 +824,10 @@ async def run_simulator_cycle():
                     if remaining_slots < 2:
                         break
                     try:
-                        ticker = await asyncio.wait_for(
-                            exchange.fetch_ticker(hc["symbol"]), timeout=8
-                        )
-                        price = float(ticker["last"])
+                        price = await _get_price(hc["symbol"], exchange)
+                        if not price:
+                            print(f"[SimScanner] {hc['coin']} hedge fiyat alınamadı — atlanıyor")
+                            continue
                         coin_max_lev = hc["indicators"].get("max_leverage") or 50
                         lev = coin_max_lev if cfg.get("hedge_use_max_leverage", True) else cfg.get("max_leverage", 75)
 

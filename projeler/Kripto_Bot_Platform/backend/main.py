@@ -16,6 +16,7 @@ from services.economic_calendar import start_calendar_sync
 from services.signal_tracker import start_signal_tracker
 from services.coin_collector import start_coin_collector
 from services.scanner_simulator import start_scanner_simulator
+from services.mexc_ws_feeder import start_mexc_ws_feeder
 
 
 async def _init_db():
@@ -225,11 +226,12 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"[Main] SignalTracker hatası (devam ediliyor): {e}")
 
-        # 6. Coin veri toplayıcı (zero-fee coinler)
+        # 6. Coin veri toplayıcı (zero-fee coinler) + MEXC WebSocket
         try:
             tasks.append(asyncio.create_task(start_coin_collector()))
             tasks.append(asyncio.create_task(start_scanner_simulator()))
-            print("[Main] Coin veri toplayıcı başlatıldı.")
+            tasks.append(asyncio.create_task(start_mexc_ws_feeder()))
+            print("[Main] Coin veri toplayıcı + MEXC WS başlatıldı.")
         except Exception as e:
             print(f"[Main] CoinCollector hatası (devam ediliyor): {e}")
 
