@@ -116,6 +116,14 @@ async def _init_db():
                 UPDATE scanner_simulations SET status = 'open'
                 WHERE status IS NULL AND exit_price IS NULL
             """))
+        # Kapalı işlemlerde duration_minutes retroaktif hesapla
+            await conn.execute(text("""
+                UPDATE scanner_simulations
+                SET duration_minutes = EXTRACT(EPOCH FROM (closed_at - created_at)) / 60
+                WHERE status IN ('win','loss','expired')
+                  AND duration_minutes IS NULL
+                  AND closed_at IS NOT NULL AND created_at IS NOT NULL
+            """))
         print("[Migration] scanner_simulations tablosu hazır.")
     except Exception as e:
         print(f"[Migration] scanner_simulations hatası (devam): {e}")

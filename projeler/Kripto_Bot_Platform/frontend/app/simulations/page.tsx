@@ -368,10 +368,21 @@ export default function SimulationsPage() {
             const isWin = sim.status === "win"
             const isExpanded = expandedId === sim.id
             const aiLog = parseAiLog(sim.ai_log)
-            const emoji = isOpen ? (isLong ? "🟢" : "🔴") : isWin ? "✅" : sim.status === "expired" ? "⏰" : "❌"
+
+            // Coin ikonu — STOCK coinleri icin hisse emoji, kripto icin logo
+            const coinBase = sim.coin?.replace("STOCK", "").replace("stock", "") || ""
+            const isStock = sim.coin?.includes("STOCK")
+            const coinIconUrl = isStock
+              ? null
+              : `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/${coinBase.toLowerCase()}.png`
+
+            // Status border color
+            const borderColor = isOpen
+              ? "border-blue-500/30"
+              : isWin ? "border-green-500/30" : sim.status === "expired" ? "border-slate-600" : "border-red-500/30"
 
             return (
-              <div key={sim.id} className="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden">
+              <div key={sim.id} className={`bg-slate-800/60 border ${borderColor} rounded-xl overflow-hidden`}>
                 {/* Ana kart */}
                 <div
                   className="p-4 cursor-pointer hover:bg-slate-800/80 transition-colors"
@@ -379,7 +390,32 @@ export default function SimulationsPage() {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <span className="text-xl">{emoji}</span>
+                      {/* Coin ikonu */}
+                      <div className="relative w-10 h-10 shrink-0">
+                        {isStock ? (
+                          <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-300">
+                            {coinBase.slice(0, 2)}
+                          </div>
+                        ) : (
+                          <img
+                            src={coinIconUrl!}
+                            alt={coinBase}
+                            className="w-10 h-10 rounded-full"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement
+                              target.style.display = "none"
+                              target.parentElement!.innerHTML = `<div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-300">${coinBase.slice(0, 2)}</div>`
+                            }}
+                          />
+                        )}
+                        {/* Status badge */}
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px] ${
+                          isOpen ? (isLong ? "bg-green-500" : "bg-red-500") :
+                          isWin ? "bg-green-500" : sim.status === "expired" ? "bg-slate-500" : "bg-red-500"
+                        }`}>
+                          {isOpen ? (isLong ? "↑" : "↓") : isWin ? "✓" : sim.status === "expired" ? "⏰" : "✗"}
+                        </div>
+                      </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-white text-lg">{sim.coin}</span>
