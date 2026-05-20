@@ -47,7 +47,8 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
                    max_favorable_pct, max_adverse_pct,
                    ai_review, created_at, closed_at,
                    exit_reason, duration_minutes, first_move, first_move_pct,
-                   COALESCE(is_hedge, false) as is_hedge, hedge_pair_id{ai_log_col}
+                   COALESCE(is_hedge, false) as is_hedge, hedge_pair_id,
+                   COALESCE(margin_usdt, 100) as margin_usdt{ai_log_col}
             FROM scanner_simulations
             {where}
             ORDER BY created_at DESC
@@ -67,7 +68,7 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
             "max_favorable_pct", "max_adverse_pct",
             "ai_review", "created_at", "closed_at",
             "exit_reason", "duration_minutes", "first_move", "first_move_pct",
-            "is_hedge", "hedge_pair_id"]
+            "is_hedge", "hedge_pair_id", "margin_usdt"]
     if has_ai_log:
         cols.append("ai_log")
 
@@ -191,6 +192,9 @@ async def get_sim_settings():
         "hedge_tp_pct": 0.4, "hedge_sl_pct": 0.1,
         "hedge_use_max_leverage": True,
         "hedge_min_atr_pct": 0.3, "hedge_min_volume_ratio": 1.5,
+        "portfolio_enabled": True,
+        "trade_size_mode": "fixed",
+        "trade_size_value": 100,
     }
 
 
@@ -270,6 +274,117 @@ async def trigger_simulation():
     except Exception as e:
         import traceback
         return {"triggered": False, "error": str(e), "traceback": traceback.format_exc()[-1000:]}
+
+
+@router.get("/portfolio")
+async def get_portfolio():
+    """Sanal portföy durumunu getir."""
+    from services.scanner_simulator import _get_portfolio
+    redis = get_redis()
+    portfolio = await _get_portfolio(redis)
+    equity = portfolio["balance"] + portfolio["reserved"]
+    return {
+        **portfolio,
+        "equity": round(equity, 2),
+        "roi": round((equity - portfolio["initial_balance"]) / max(1, portfolio["initial_balance"]) * 100, 2),
+        "win_rate": round(portfolio["total_wins"] / max(1, portfolio["total_trades"]) * 100, 1),
+    }
+
+
+@router.post("/portfolio/reset")
+async def reset_portfolio(data: dict = None):
+    """Portföyü sıfırla. Opsiyonel: initial_balance gönder."""
+    from services.scanner_simulator import _save_portfolio
+    redis = get_redis()
+    initial = float((data or {}).get("initial_balance", 1000))
+    portfolio = {
+        "initial_balance": initial,
+        "balance": initial,
+        "reserved": 0.0,
+        "total_pnl": 0.0,
+        "peak_equity": initial,
+        "max_drawdown": 0.0,
+        "total_trades": 0,
+        "total_wins": 0,
+    }
+    await _save_portfolio(redis, portfolio)
+    return portfolio
+
+
+@router.post("/deploy-to-bot")
+async def deploy_to_bot(data: dict = None):
+    """Simülasyon ayarlarını Smart Scanner botu olarak deploy et."""
+    from models.trade import Bot, BotStatus
+    from sqlalchemy import select
+
+    redis = get_redis()
+    sim_cfg = await get_sim_settings()
+    overrides = data or {}
+
+    # Bot parametreleri — simulator ayarlarından oluştur
+    bot_params = {
+        "mode": sim_cfg.get("mode", "ai"),
+        "min_confidence": sim_cfg.get("min_confidence", 65),
+        "min_leverage": sim_cfg.get("min_leverage", 3),
+        "max_leverage": sim_cfg.get("max_leverage", 75),
+        "tp_pct": sim_cfg.get("tp_pct", 1.5),
+        "sl_pct": sim_cfg.get("sl_pct", 0.8),
+        "auto_scale_tp_sl": sim_cfg.get("auto_scale_tp_sl", True),
+        "scale_base_leverage": sim_cfg.get("scale_base_leverage", 10),
+        "trailing_enabled": sim_cfg.get("trailing_enabled", False),
+        "trailing_activate_pct": sim_cfg.get("trailing_activate_pct", 0.3),
+        "trailing_callback_pct": sim_cfg.get("trailing_callback_pct", 0.15),
+        "hedge_enabled": sim_cfg.get("hedge_enabled", False),
+        "hedge_tp_pct": sim_cfg.get("hedge_tp_pct", 0.4),
+        "hedge_sl_pct": sim_cfg.get("hedge_sl_pct", 0.1),
+        "hedge_use_max_leverage": sim_cfg.get("hedge_use_max_leverage", True),
+        "trade_size_mode": sim_cfg.get("trade_size_mode", "fixed"),
+        "trade_size_value": sim_cfg.get("trade_size_value", 100),
+    }
+
+    # Performans verisi ekle
+    stats_data = await simulation_stats()
+
+    bot_name = overrides.get("name", "Smart Scanner Bot")
+    paper_mode = overrides.get("paper_mode", True)
+    exchange = overrides.get("exchange", "mexc")
+    leverage = sim_cfg.get("max_leverage", 75)
+    initial_balance = overrides.get("initial_balance", sim_cfg.get("trade_size_value", 100) * sim_cfg.get("max_open", 5))
+
+    async with async_session() as session:
+        bot = Bot(
+            name=bot_name,
+            symbol="MULTI",  # Çoklu coin — smart scanner
+            strategy="smart_scanner",
+            exchange=exchange,
+            status=BotStatus.STOPPED,
+            paper_mode=paper_mode,
+            leverage=leverage,
+            risk_per_trade=0.02,
+            max_daily_loss=0.10,
+            initial_balance=initial_balance,
+            params=json.dumps(bot_params),
+        )
+        session.add(bot)
+        await session.commit()
+        await session.refresh(bot)
+
+    return {
+        "bot_id": bot.id,
+        "name": bot_name,
+        "strategy": "smart_scanner",
+        "exchange": exchange,
+        "paper_mode": paper_mode,
+        "leverage": leverage,
+        "params": bot_params,
+        "sim_performance": {
+            "win_rate": stats_data.get("win_rate", 0),
+            "total_pnl": stats_data.get("total_pnl_usdt", 0),
+            "profit_factor": stats_data.get("profit_factor", 0),
+            "total_trades": stats_data.get("total", 0),
+        },
+        "message": f"Bot '{bot_name}' oluşturuldu! Bots sayfasından başlatabilirsiniz.",
+    }
 
 
 @router.delete("/{sim_id}")

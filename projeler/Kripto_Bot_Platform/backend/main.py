@@ -109,6 +109,7 @@ async def _init_db():
                 "first_move_pct FLOAT",           # İlk hareket yüzdesi
                 "is_hedge BOOLEAN DEFAULT FALSE", # Hedge işlemi mi
                 "hedge_pair_id BIGINT",           # Eşleşen hedge işleminin ID'si
+                "margin_usdt FLOAT",              # İşlem için kullanılan margin
             ]:
                 col_name = col_def.split()[0]
                 await conn.execute(text(

@@ -11,11 +11,15 @@ export default function SimulationsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("")
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [triggering, setTriggering] = useState(false)
+  const [deploying, setDeploying] = useState(false)
+  const [deployResult, setDeployResult] = useState<any>(null)
+  const [resetBalance, setResetBalance] = useState("1000")
 
   // Veri cek
   const { data: statsData } = useSWR("/simulations/stats", fetcher, { refreshInterval: 30000 })
   const { data: statusData } = useSWR("/simulations/status", fetcher, { refreshInterval: 10000 })
   const { data: settingsData, mutate: mutateSettings } = useSWR("/simulations/settings", fetcher)
+  const { data: portfolioData, mutate: mutatePortfolio } = useSWR("/simulations/portfolio", fetcher, { refreshInterval: 15000 })
 
   const queryStatus = tab === "open" ? "open" : statusFilter || undefined
   const { data: listData, mutate: mutateList } = useSWR(
@@ -27,6 +31,7 @@ export default function SimulationsPage() {
   const stats = statsData || {}
   const simStatus = statusData || {}
   const settings = settingsData || {}
+  const portfolio = portfolioData || {}
   const items: any[] = listData?.items || []
 
   const toggleSetting = async (key: string, value: any) => {
@@ -40,8 +45,27 @@ export default function SimulationsPage() {
     setTriggering(true)
     try {
       await api.post("/simulations/trigger")
-      setTimeout(() => { mutateList(); setTriggering(false) }, 3000)
+      setTimeout(() => { mutateList(); mutatePortfolio(); setTriggering(false) }, 3000)
     } catch { setTriggering(false) }
+  }
+
+  const resetPortfolio = async () => {
+    try {
+      await api.post("/simulations/portfolio/reset", { initial_balance: Number(resetBalance) })
+      mutatePortfolio()
+    } catch {}
+  }
+
+  const deployToBot = async () => {
+    setDeploying(true)
+    setDeployResult(null)
+    try {
+      const result = await api.post("/simulations/deploy-to-bot", { paper_mode: true })
+      setDeployResult(result)
+    } catch (e: any) {
+      setDeployResult({ error: e.message || "Hata olustu" })
+    }
+    setDeploying(false)
   }
 
   // AI log'u parse et
@@ -49,6 +73,9 @@ export default function SimulationsPage() {
     if (!logStr) return null
     try { return JSON.parse(logStr) } catch { return null }
   }
+
+  // Equity trend color
+  const equityColor = portfolio.roi > 0 ? "text-green-400" : portfolio.roi < 0 ? "text-red-400" : "text-white"
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
@@ -81,6 +108,77 @@ export default function SimulationsPage() {
           </span>
         </div>
       </div>
+
+      {/* Portfolyo Ozet */}
+      {settings.portfolio_enabled !== false && portfolio.equity != null && (
+        <div className="bg-gradient-to-r from-slate-800/80 to-slate-800/40 border border-slate-700/50 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-slate-300">Sanal Portfolyo</h3>
+            <div className="flex items-center gap-2">
+              {simStatus.mexc_ws?.connected && (
+                <span className="text-[10px] px-2 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
+                  WS Bagli ({simStatus.mexc_ws.active_tickers} coin)
+                </span>
+              )}
+              <span className="text-xs text-slate-500">
+                Baslangic: ${portfolio.initial_balance?.toLocaleString()}
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <div>
+              <div className="text-xs text-slate-500">Equity</div>
+              <div className={`text-2xl font-bold ${equityColor}`}>
+                ${portfolio.equity?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Kullanilabilir</div>
+              <div className="text-lg font-semibold text-white">
+                ${portfolio.balance?.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Islemlerde</div>
+              <div className="text-lg font-semibold text-yellow-400">
+                ${portfolio.reserved?.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">ROI</div>
+              <div className={`text-lg font-bold ${equityColor}`}>
+                {portfolio.roi > 0 ? "+" : ""}{portfolio.roi?.toFixed(2)}%
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Toplam P&L</div>
+              <div className={`text-lg font-semibold ${portfolio.total_pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                {portfolio.total_pnl > 0 ? "+" : ""}${portfolio.total_pnl?.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Max Drawdown</div>
+              <div className={`text-lg font-semibold ${portfolio.max_drawdown > 10 ? "text-red-400" : portfolio.max_drawdown > 5 ? "text-yellow-400" : "text-green-400"}`}>
+                -{portfolio.max_drawdown?.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+          {/* Equity bar */}
+          <div className="mt-3">
+            <div className="h-2 bg-slate-900/60 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${portfolio.roi >= 0 ? "bg-green-500" : "bg-red-500"}`}
+                style={{ width: `${Math.min(100, Math.max(5, (portfolio.equity || 0) / Math.max(1, portfolio.initial_balance || 1000) * 100))}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
+              <span>$0</span>
+              <span>Baslangic: ${portfolio.initial_balance?.toLocaleString()}</span>
+              <span>${((portfolio.initial_balance || 1000) * 2).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Ozet Kartlari */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -120,7 +218,7 @@ export default function SimulationsPage() {
             <div key={dir} className="bg-slate-800/40 border border-slate-700/30 rounded-lg p-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-white">
-                  {dir === "long" ? "📈 Long" : "📉 Short"}
+                  {dir === "long" ? "Long" : "Short"}
                 </span>
                 <span className={`text-sm font-bold ${s.win_rate >= 50 ? "text-green-400" : "text-red-400"}`}>
                   %{s.win_rate}
@@ -174,6 +272,92 @@ export default function SimulationsPage() {
       {/* Ayarlar */}
       {tab === "settings" && (
         <div className="space-y-4">
+
+          {/* Portfolyo & Pozisyon Buyuklugu */}
+          <div className="bg-gradient-to-r from-indigo-900/20 to-slate-800/60 border border-indigo-500/30 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-white">Portfolyo & Pozisyon Buyuklugu</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Gercek kasa yonetimi simule et. Bakiye yetmezse islem acilmaz.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Portfolyo</span>
+                <button
+                  onClick={() => toggleSetting("portfolio_enabled", !settings.portfolio_enabled)}
+                  className={`w-10 h-5 rounded-full transition-colors relative ${settings.portfolio_enabled !== false ? "bg-indigo-500" : "bg-slate-700"}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.portfolio_enabled !== false ? "left-5" : "left-0.5"}`} />
+                </button>
+              </div>
+            </div>
+
+            {settings.portfolio_enabled !== false && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Islem Miktari Modu</label>
+                    <select
+                      value={settings.trade_size_mode || "fixed"}
+                      onChange={e => toggleSetting("trade_size_mode", e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
+                    >
+                      <option value="fixed">Sabit Miktar ($)</option>
+                      <option value="percent">Bakiyenin %&apos;si</option>
+                      <option value="auto_exchange">Borsa Bakiyesinin %&apos;si</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">
+                      {settings.trade_size_mode === "percent" || settings.trade_size_mode === "auto_exchange"
+                        ? "Yuzde (%)"
+                        : "Miktar ($)"}
+                    </label>
+                    <input
+                      type="number"
+                      value={settings.trade_size_value ?? 100}
+                      min={1}
+                      max={settings.trade_size_mode === "percent" || settings.trade_size_mode === "auto_exchange" ? 100 : 100000}
+                      step={settings.trade_size_mode === "percent" || settings.trade_size_mode === "auto_exchange" ? 1 : 10}
+                      onChange={e => toggleSetting("trade_size_value", Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/60 rounded-lg p-3 text-xs text-slate-400 space-y-1">
+                  <div className="text-slate-300 font-medium mb-1">Islem Boyutu Hesabi:</div>
+                  {settings.trade_size_mode === "fixed" || !settings.trade_size_mode ? (
+                    <div>Her islemde sabit ${settings.trade_size_value || 100} margin kullanilir. {settings.max_leverage || 75}x kaldiracla pozisyon = ${((settings.trade_size_value || 100) * (settings.max_leverage || 75)).toLocaleString()}</div>
+                  ) : settings.trade_size_mode === "percent" ? (
+                    <div>Mevcut sanal bakiyenin %{settings.trade_size_value || 10}&apos;i margin olarak kullanilir. Bakiye: ${portfolio.balance?.toFixed(0) || "?"} → Margin: ${((portfolio.balance || 1000) * (settings.trade_size_value || 10) / 100).toFixed(0)}</div>
+                  ) : (
+                    <div>MEXC borsasindaki gercek bakiyenizin %{settings.trade_size_value || 10}&apos;i margin olarak kullanilir.</div>
+                  )}
+                </div>
+
+                {/* Portfolyo Sifirla */}
+                <div className="flex items-center gap-3 pt-2 border-t border-slate-700/30">
+                  <input
+                    type="number"
+                    value={resetBalance}
+                    onChange={e => setResetBalance(e.target.value)}
+                    className="w-32 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm text-white"
+                    placeholder="Baslangic $"
+                  />
+                  <button
+                    onClick={resetPortfolio}
+                    className="px-3 py-1 bg-amber-600/80 hover:bg-amber-600 text-white text-xs rounded transition-colors"
+                  >
+                    Portfolyoyu Sifirla
+                  </button>
+                  <span className="text-[10px] text-slate-600">Tum bakiye ve istatistikler sifirlanir</span>
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Genel Ayarlar */}
           <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-4">
             <h3 className="text-sm font-medium text-white">Genel Ayarlar</h3>
@@ -393,6 +577,70 @@ export default function SimulationsPage() {
               </>
             )}
           </div>
+
+          {/* Bot Deploy */}
+          <div className="bg-gradient-to-r from-emerald-900/20 to-slate-800/60 border border-emerald-500/30 rounded-xl p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-medium text-white">Smart Bot&apos;a Aktar</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Simulasyon ayarlarini otomatik olarak yeni bir Smart Scanner bota aktar.
+                Bot paper mode&apos;da olusturulur — Bots sayfasindan baslat.
+              </p>
+            </div>
+
+            {/* Performans Onizleme */}
+            {stats.total > 0 && (
+              <div className="bg-slate-900/60 rounded-lg p-3 text-xs space-y-2">
+                <div className="text-slate-300 font-medium">Simulasyon Performansi (Bot&apos;a aktarilacak ayarlar):</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <span className="text-slate-500">Basari:</span>{" "}
+                    <span className={stats.win_rate >= 50 ? "text-green-400" : "text-red-400"}>%{stats.win_rate}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">P&L:</span>{" "}
+                    <span className={stats.total_pnl_usdt >= 0 ? "text-green-400" : "text-red-400"}>${stats.total_pnl_usdt?.toFixed(0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">PF:</span>{" "}
+                    <span className={stats.profit_factor >= 1.5 ? "text-green-400" : "text-yellow-400"}>{stats.profit_factor?.toFixed(2)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Islem:</span>{" "}
+                    <span className="text-white">{stats.total}</span>
+                  </div>
+                </div>
+                <div className="text-slate-500 mt-1">
+                  Ayarlar: {settings.mode?.toUpperCase()} mod | {settings.min_leverage}-{settings.max_leverage}x kaldirac |
+                  TP:{settings.tp_pct}% SL:{settings.sl_pct}% |
+                  {settings.trailing_enabled ? " Trailing ON |" : ""}
+                  {settings.hedge_enabled ? " Hedge ON |" : ""}
+                  Margin: {settings.trade_size_mode === "percent" ? `%${settings.trade_size_value}` : `$${settings.trade_size_value}`}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={deployToBot}
+              disabled={deploying}
+              className="px-4 py-2 bg-emerald-600/80 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {deploying ? "Olusturuluyor..." : "Paper Bot Olustur (Simulasyon Ayarlariyla)"}
+            </button>
+
+            {deployResult && (
+              <div className={`rounded-lg p-3 text-xs ${deployResult.error ? "bg-red-500/10 border border-red-500/20 text-red-400" : "bg-green-500/10 border border-green-500/20 text-green-400"}`}>
+                {deployResult.error ? (
+                  <span>Hata: {deployResult.error}</span>
+                ) : (
+                  <div>
+                    <div className="font-medium mb-1">{deployResult.message}</div>
+                    <div className="text-slate-400">Bot ID: {deployResult.bot_id} | Strateji: {deployResult.strategy} | Borsa: {deployResult.exchange}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -429,8 +677,10 @@ export default function SimulationsPage() {
             const isWin = sim.status === "win"
             const isExpanded = expandedId === sim.id
             const aiLog = parseAiLog(sim.ai_log)
+            const simMargin = sim.margin_usdt || 100
+            const posSize = simMargin * (sim.leverage || 1)
 
-            // Coin ikonu — STOCK coinleri icin hisse emoji, kripto icin logo
+            // Coin ikonu
             const coinBase = sim.coin?.replace("STOCK", "").replace("stock", "") || ""
             const isStock = sim.coin?.includes("STOCK")
             const coinIconUrl = isStock
@@ -505,6 +755,10 @@ export default function SimulationsPage() {
                         <div className="text-xs text-slate-400 mt-1">
                           Giris: ${sim.entry_price?.toFixed(4)} | TP: ${sim.tp_price?.toFixed(4)} ({sim.tp_pct}%) | SL: ${sim.sl_price?.toFixed(4)} ({sim.sl_pct}%)
                         </div>
+                        {/* Margin & Pozisyon */}
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Margin: ${simMargin.toFixed(0)} | Pozisyon: ${posSize.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                        </div>
                         {/* Gostergeler */}
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {[
@@ -565,7 +819,7 @@ export default function SimulationsPage() {
                         <div className={`text-[10px] mt-0.5 ${
                           sim.first_move === "favorable" ? "text-green-500" : "text-red-500"
                         }`}>
-                          {sim.first_move === "favorable" ? "↗ ilk lehte" : "↘ ilk aleyhte"}
+                          {sim.first_move === "favorable" ? "ilk lehte" : "ilk aleyhte"}
                           {sim.first_move_pct != null && ` (${sim.first_move_pct.toFixed(2)}%)`}
                         </div>
                       )}
@@ -585,7 +839,7 @@ export default function SimulationsPage() {
                         {new Date(sim.created_at).toLocaleString("tr-TR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}
                       </div>
                       <div className="text-[10px] text-slate-700 mt-0.5">
-                        {isExpanded ? "▲ Kapat" : "▼ Detay"}
+                        {isExpanded ? "Kapat" : "Detay"}
                       </div>
                     </div>
                   </div>
@@ -597,11 +851,10 @@ export default function SimulationsPage() {
                     {/* AI Secim Gerekcelesi */}
                     <div className="p-4 space-y-3">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm">🤖</span>
                         <h4 className="text-sm font-semibold text-purple-400">AI Karar Analizi</h4>
                       </div>
 
-                      {/* Reason — ana gerekce */}
+                      {/* Reason */}
                       {sim.reason && (
                         <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-3">
                           <div className="text-[10px] text-purple-400/70 uppercase tracking-wider mb-1">Secim Gerekcelsi</div>
@@ -609,10 +862,9 @@ export default function SimulationsPage() {
                         </div>
                       )}
 
-                      {/* AI Yaniti — tam detay */}
+                      {/* AI Yaniti */}
                       {aiLog?.ai_response && (
                         <>
-                          {/* Piyasa Ozeti */}
                           {aiLog.ai_response.market_summary && (
                             <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
                               <div className="text-[10px] text-blue-400/70 uppercase tracking-wider mb-1">AI Piyasa Degerlendirmesi</div>
@@ -620,7 +872,6 @@ export default function SimulationsPage() {
                             </div>
                           )}
 
-                          {/* Tum AI Secimleri */}
                           {aiLog.ai_response.selections && aiLog.ai_response.selections.length > 0 && (
                             <div className="bg-slate-800/60 border border-slate-700/30 rounded-lg p-3">
                               <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">AI Tum Secimler (Bu Turda)</div>
@@ -640,27 +891,25 @@ export default function SimulationsPage() {
                                     <span className="text-blue-400">%{sel.confidence}</span>
                                     <span className="text-slate-500">{sel.leverage_suggestion}x</span>
                                     <span className="text-slate-400 flex-1 truncate">{sel.entry_reason}</span>
-                                    {sel.coin === sim.coin && <span className="text-purple-400 text-[10px]">← Bu islem</span>}
+                                    {sel.coin === sim.coin && <span className="text-purple-400 text-[10px]">Bu islem</span>}
                                   </div>
                                 ))}
                               </div>
                             </div>
                           )}
 
-                          {/* Model bilgisi */}
                           <div className="flex items-center gap-4 text-[10px] text-slate-600">
                             {aiLog.model && <span>Model: {aiLog.model}</span>}
                             <span>Mod: {sim.selection_mode === "ai" ? "AI" : "Manuel"}</span>
+                            <span>Margin: ${simMargin.toFixed(0)} | Poz: ${posSize.toLocaleString()}</span>
                           </div>
                         </>
                       )}
 
-                      {/* AI log yoksa sadece reason goster */}
                       {!aiLog && !sim.reason && (
                         <div className="text-xs text-slate-500 italic">AI log verisi mevcut degil</div>
                       )}
 
-                      {/* AI Review (kapanmis islemler icin) */}
                       {sim.ai_review && (
                         <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
                           <div className="text-[10px] text-amber-400/70 uppercase tracking-wider mb-1">AI Sonuc Degerlendirmesi</div>
@@ -698,12 +947,17 @@ export default function SimulationsPage() {
         <div className="text-xs text-slate-600 text-center space-y-0.5">
           <div>
             Son tarama: {new Date(simStatus.ts).toLocaleString("tr-TR")}
-            {simStatus.coins_total && ` | ${simStatus.coins_total} coin tarandı`}
+            {simStatus.coins_total && ` | ${simStatus.coins_total} coin tarandi`}
             {simStatus.selections_count != null && ` | ${simStatus.selections_count} secim`}
           </div>
           {simStatus.past_stats?.total > 0 && (
             <div>
               Gecmis: {simStatus.past_stats.total} islem | %{simStatus.past_stats.win_rate} basari
+            </div>
+          )}
+          {simStatus.portfolio && (
+            <div>
+              Kasa: ${simStatus.portfolio.equity?.toFixed(0)} | ROI: {simStatus.portfolio.roi > 0 ? "+" : ""}{simStatus.portfolio.roi}% | DD: -{simStatus.portfolio.max_drawdown}%
             </div>
           )}
           {simStatus.error && (

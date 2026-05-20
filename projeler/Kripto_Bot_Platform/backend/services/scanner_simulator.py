@@ -68,6 +68,99 @@ SIM_SL_PCT = 0.8
 SIM_MODE = "ai"             # "ai" veya "manual"
 SIM_MIN_CONFIDENCE = 65     # AI mod minimum güven
 
+# ─── Portföy Yönetimi ────────────────────────────────────────────────────
+
+PORTFOLIO_KEY = "scanner_sim:portfolio"
+
+
+async def _get_portfolio(redis) -> dict:
+    """Redis'ten sanal portföy durumunu oku."""
+    raw = await redis.get(PORTFOLIO_KEY)
+    if raw:
+        return json.loads(raw)
+    return {
+        "initial_balance": 1000.0,   # Başlangıç bakiyesi
+        "balance": 1000.0,           # Mevcut kullanılabilir bakiye
+        "reserved": 0.0,             # Açık işlemlerde bağlı margin
+        "total_pnl": 0.0,           # Toplam gerçekleşen PnL
+        "peak_equity": 1000.0,       # En yüksek equity (drawdown için)
+        "max_drawdown": 0.0,         # En büyük drawdown %
+        "total_trades": 0,
+        "total_wins": 0,
+    }
+
+
+async def _save_portfolio(redis, portfolio: dict):
+    """Portföy durumunu Redis'e kaydet."""
+    await redis.set(PORTFOLIO_KEY, json.dumps(portfolio))
+
+
+async def _calculate_margin(cfg: dict, portfolio: dict, leverage: int) -> float:
+    """İşlem için kullanılacak margin'i hesapla."""
+    mode = cfg.get("trade_size_mode", "fixed")  # fixed / percent / auto_exchange
+    value = cfg.get("trade_size_value", 100)     # $ veya %
+
+    if mode == "percent":
+        # Mevcut bakiyenin yüzdesi
+        equity = portfolio["balance"] + portfolio["reserved"]
+        margin = equity * value / 100
+    elif mode == "auto_exchange":
+        # Borsadan çekilen gerçek bakiyenin yüzdesi (Redis cache)
+        try:
+            from core.redis_client import get_redis
+            redis = get_redis()
+            raw = await redis.get("exchange:mexc:balance")
+            if raw:
+                ex_bal = json.loads(raw)
+                margin = float(ex_bal.get("free", 0)) * value / 100
+            else:
+                margin = value  # Fallback sabit
+        except Exception:
+            margin = value
+    else:
+        # Sabit miktar
+        margin = float(value)
+
+    # Bakiye kontrolü — yeterli yoksa küçült
+    available = portfolio["balance"]
+    if margin > available:
+        margin = available
+
+    return round(margin, 2)
+
+
+async def _reserve_margin(redis, margin: float) -> bool:
+    """Portföyden margin ayır. Yeterli bakiye yoksa False döner."""
+    portfolio = await _get_portfolio(redis)
+    if portfolio["balance"] < margin:
+        return False
+    portfolio["balance"] -= margin
+    portfolio["reserved"] += margin
+    await _save_portfolio(redis, portfolio)
+    return True
+
+
+async def _release_margin(redis, margin: float, pnl: float):
+    """İşlem kapanınca margin'i geri bırak + PnL uygula."""
+    portfolio = await _get_portfolio(redis)
+    portfolio["reserved"] = max(0, portfolio["reserved"] - margin)
+    portfolio["balance"] += margin + pnl
+    portfolio["total_pnl"] += pnl
+    portfolio["total_trades"] += 1
+    if pnl > 0:
+        portfolio["total_wins"] += 1
+
+    # Equity & drawdown takibi
+    equity = portfolio["balance"] + portfolio["reserved"]
+    if equity > portfolio["peak_equity"]:
+        portfolio["peak_equity"] = equity
+    if portfolio["peak_equity"] > 0:
+        dd = (portfolio["peak_equity"] - equity) / portfolio["peak_equity"] * 100
+        if dd > portfolio["max_drawdown"]:
+            portfolio["max_drawdown"] = round(dd, 2)
+
+    await _save_portfolio(redis, portfolio)
+
 
 async def _get_sim_settings(redis) -> dict:
     """Redis'ten simülasyon ayarlarını oku (frontend'den değiştirilebilir)."""
@@ -98,6 +191,10 @@ async def _get_sim_settings(redis) -> dict:
         "hedge_use_max_leverage": True,   # Coinin max kaldıracını kullan
         "hedge_min_atr_pct": 0.3,        # Min volatilite (hedge için)
         "hedge_min_volume_ratio": 1.5,    # Min hacim (likidite için)
+        # Portföy yönetimi
+        "portfolio_enabled": True,        # Portföy takibi aktif mi
+        "trade_size_mode": "fixed",       # fixed / percent / auto_exchange
+        "trade_size_value": 100,          # $ veya % (moda göre)
     }
 
 
@@ -169,19 +266,35 @@ async def _get_coins_from_db() -> list[dict]:
 
 async def _get_open_sims() -> list[dict]:
     """Açık simülasyonları getir."""
+    # margin_usdt kolonu var mı kontrol
+    has_margin = False
+    try:
+        async with async_session() as sess:
+            await sess.execute(sql_text("SELECT margin_usdt FROM scanner_simulations LIMIT 0"))
+            has_margin = True
+    except Exception:
+        pass
+
+    margin_col = ", margin_usdt" if has_margin else ""
     async with async_session() as session:
-        result = await session.execute(sql_text("""
+        result = await session.execute(sql_text(f"""
             SELECT id, coin, symbol, direction, entry_price, tp_price, sl_price,
-                   leverage, created_at, max_favorable_pct, max_adverse_pct, first_move
+                   leverage, created_at, max_favorable_pct, max_adverse_pct, first_move{margin_col}
             FROM scanner_simulations
             WHERE status = 'open'
             ORDER BY created_at DESC
         """))
-        return [dict(zip(
-            ["id", "coin", "symbol", "direction", "entry_price", "tp_price", "sl_price",
-             "leverage", "created_at", "max_favorable_pct", "max_adverse_pct", "first_move"],
-            row
-        )) for row in result.fetchall()]
+        cols = ["id", "coin", "symbol", "direction", "entry_price", "tp_price", "sl_price",
+                "leverage", "created_at", "max_favorable_pct", "max_adverse_pct", "first_move"]
+        if has_margin:
+            cols.append("margin_usdt")
+        rows = []
+        for row in result.fetchall():
+            d = dict(zip(cols, row))
+            if not has_margin:
+                d["margin_usdt"] = SIM_MARGIN
+            rows.append(d)
+        return rows
 
 
 async def _get_past_results(limit: int = 20) -> list[dict]:
@@ -541,7 +654,7 @@ JSON formatında yanıt ver:
         return []
 
 
-async def _save_simulation(sel: dict, price: float) -> int | None:
+async def _save_simulation(sel: dict, price: float, margin: float = SIM_MARGIN) -> int | None:
     """Yeni simülasyonu DB'ye kaydet. Dönen ID'yi döndürür."""
     tp_pct = float(sel["tp_pct"])
     sl_pct = float(sel["sl_pct"])
@@ -558,6 +671,17 @@ async def _save_simulation(sel: dict, price: float) -> int | None:
     extra_vals = ""
     extra_params = {}
     for col, val in [("ai_log", sel.get("ai_log")), ("is_hedge", is_hedge), ("hedge_pair_id", hedge_pair_id)]:
+        try:
+            async with async_session() as sess:
+                await sess.execute(sql_text(f"SELECT {col} FROM scanner_simulations LIMIT 0"))
+            extra_cols += f", {col}"
+            extra_vals += f", :{col}"
+            extra_params[col] = val
+        except Exception:
+            pass
+
+    # margin_usdt kolonu varsa ekle
+    for col, val in [("margin_usdt", margin)]:
         try:
             async with async_session() as sess:
                 await sess.execute(sql_text(f"SELECT {col} FROM scanner_simulations LIMIT 0"))
@@ -600,12 +724,13 @@ async def _save_simulation(sel: dict, price: float) -> int | None:
 
 
 async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS,
-                                  trailing_cfg: dict = None):
+                                  trailing_cfg: dict = None, portfolio_enabled: bool = False):
     """Açık simülasyonları kontrol et: TP/SL hit mi? Trailing stop? Expire mi?"""
     open_sims = await _get_open_sims()
     if not open_sims:
         return
 
+    redis = get_redis() if portfolio_enabled else None
     now = datetime.now(timezone.utc)
 
     for sim in open_sims:
@@ -625,10 +750,11 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
 
         # Zaman aşımı kontrolü
         if created and (now - created).total_seconds() > expiry_hours * 3600:
+            sim_margin = float(sim.get("margin_usdt") or SIM_MARGIN)
             cur_price = await _get_price(symbol, exchange)
             if cur_price:
                 pnl_pct = ((cur_price - entry) / entry * 100) if is_long else ((entry - cur_price) / entry * 100)
-                pnl_usdt = SIM_MARGIN * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
+                pnl_usdt = sim_margin * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
             else:
                 cur_price = entry
                 pnl_pct = 0
@@ -645,7 +771,12 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
                 """), {"price": cur_price, "pnl": round(pnl_pct, 4),
                        "pnl_usdt": round(pnl_usdt, 2), "dur": duration_min, "id": sim_id})
                 await session.commit()
-            print(f"[SimScanner] {sim['coin']} expired: {pnl_pct:+.2f}% [{duration_min}dk]")
+
+            # Portföy güncelle
+            if portfolio_enabled and redis:
+                await _release_margin(redis, sim_margin, round(pnl_usdt, 2))
+
+            print(f"[SimScanner] {sim['coin']} expired: {pnl_pct:+.2f}% (${pnl_usdt:+.1f}) [{duration_min}dk]")
             continue
 
         # Fiyat kontrolü — önce Redis (WS), yoksa REST
@@ -693,6 +824,7 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
         hit_sl = (is_long and cur_price <= sl) or (not is_long and cur_price >= sl)
 
         if hit_tp or hit_sl or trailing_close:
+            sim_margin = float(sim.get("margin_usdt") or SIM_MARGIN)
             if trailing_close:
                 status = "win"
                 exit_price = cur_price
@@ -702,7 +834,7 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
                 exit_price = tp if hit_tp else sl
                 reason_tag = "TP" if hit_tp else "SL"
             pnl_pct = ((exit_price - entry) / entry * 100) if is_long else ((entry - exit_price) / entry * 100)
-            pnl_usdt = SIM_MARGIN * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
+            pnl_usdt = sim_margin * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
 
             # Süre hesapla
             duration_min = None
@@ -723,6 +855,10 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
                        "reason": reason_tag, "dur": duration_min,
                        "id": sim_id})
                 await session.commit()
+            # Portföy güncelle
+            if portfolio_enabled and redis:
+                await _release_margin(redis, sim_margin, round(pnl_usdt, 2))
+
             emoji = "✅" if status == "win" else "❌"
             dur_str = f"{duration_min}dk" if duration_min else "?"
             print(f"[SimScanner] {emoji} {sim['coin']} {direction} → {status} [{reason_tag}] ({pnl_pct:+.2f}% / ${pnl_usdt:+.1f}) [{dur_str}]")
@@ -751,6 +887,9 @@ async def run_simulator_cycle():
     try:
         await exchange.load_markets()
 
+        # Portföy ayarları
+        portfolio_on = cfg.get("portfolio_enabled", True)
+
         # 1. Açık simülasyonları kontrol et
         expiry = cfg.get("expiry_hours", SIM_EXPIRY_HOURS)
         trailing = {
@@ -758,7 +897,8 @@ async def run_simulator_cycle():
             "activate_pct": cfg.get("trailing_activate_pct", 0.3),
             "callback_pct": cfg.get("trailing_callback_pct", 0.15),
         }
-        await _check_open_simulations(exchange, expiry_hours=expiry, trailing_cfg=trailing)
+        await _check_open_simulations(exchange, expiry_hours=expiry, trailing_cfg=trailing,
+                                      portfolio_enabled=portfolio_on)
 
         # 2. Yeni seçim yap
         open_sims = await _get_open_sims()
@@ -788,6 +928,9 @@ async def run_simulator_cycle():
         auto_scale = cfg.get("auto_scale_tp_sl", True)
         base_lev = cfg.get("scale_base_leverage", 10)
 
+        # Portföy
+        portfolio = await _get_portfolio(redis) if portfolio_on else None
+
         opened = []
         for sel in selections:
             try:
@@ -802,11 +945,28 @@ async def run_simulator_cycle():
                 if not price:
                     print(f"[SimScanner] {sel['coin']} fiyat alınamadı — atlanıyor")
                     continue
+
+                # Margin hesapla ve ayır
+                if portfolio_on and portfolio:
+                    margin = await _calculate_margin(cfg, portfolio, sel.get("leverage", SIM_LEVERAGE))
+                    if margin < 1:
+                        print(f"[SimScanner] Yetersiz bakiye — {sel['coin']} atlanıyor (bakiye: ${portfolio['balance']:.2f})")
+                        continue
+                    reserved = await _reserve_margin(redis, margin)
+                    if not reserved:
+                        print(f"[SimScanner] Margin ayrılamadı — {sel['coin']} atlanıyor")
+                        continue
+                    portfolio = await _get_portfolio(redis)  # Güncel bakiye
+                else:
+                    margin = SIM_MARGIN
+
                 sel["mode"] = cfg.get("mode", "ai")
-                await _save_simulation(sel, price)
+                await _save_simulation(sel, price, margin=margin)
                 opened.append(sel["coin"])
+                pos_size = margin * sel.get("leverage", SIM_LEVERAGE)
                 print(f"[SimScanner] 📊 SIM {sel['direction'].upper()} {sel['coin']} @ ${price:,.4f} "
-                      f"conf={sel.get('confidence')}% lev={sel.get('leverage')}x TP={sel['tp_pct']}% SL={sel['sl_pct']}%")
+                      f"conf={sel.get('confidence')}% lev={sel.get('leverage')}x TP={sel['tp_pct']}% SL={sel['sl_pct']}% "
+                      f"margin=${margin:.0f} pos=${pos_size:.0f}")
             except Exception as e:
                 print(f"[SimScanner] {sel['coin']} sim kayıt hatası: {e}")
 
@@ -828,6 +988,19 @@ async def run_simulator_cycle():
                         if not price:
                             print(f"[SimScanner] {hc['coin']} hedge fiyat alınamadı — atlanıyor")
                             continue
+
+                        # Hedge için 2x margin gerekli (long + short)
+                        if portfolio_on:
+                            portfolio = await _get_portfolio(redis)
+                            h_margin = await _calculate_margin(cfg, portfolio, 1)
+                            if h_margin * 2 > portfolio["balance"]:
+                                print(f"[SimScanner] Hedge için yetersiz bakiye — {hc['coin']} atlanıyor")
+                                continue
+                            await _reserve_margin(redis, h_margin)
+                            await _reserve_margin(redis, h_margin)
+                        else:
+                            h_margin = SIM_MARGIN
+
                         coin_max_lev = hc["indicators"].get("max_leverage") or 50
                         lev = coin_max_lev if cfg.get("hedge_use_max_leverage", True) else cfg.get("max_leverage", 75)
 
@@ -842,7 +1015,7 @@ async def run_simulator_cycle():
                             "is_hedge": True,
                             "ai_log": hc.get("ai_log"),
                         }
-                        long_id = await _save_simulation(long_sel, price)
+                        long_id = await _save_simulation(long_sel, price, margin=h_margin)
 
                         # SHORT taraf
                         short_sel = {
@@ -856,7 +1029,7 @@ async def run_simulator_cycle():
                             "hedge_pair_id": long_id,
                             "ai_log": hc.get("ai_log"),
                         }
-                        short_id = await _save_simulation(short_sel, price)
+                        short_id = await _save_simulation(short_sel, price, margin=h_margin)
 
                         # Long tarafına da pair_id set et
                         if long_id and short_id:
@@ -880,6 +1053,24 @@ async def run_simulator_cycle():
             total = len(past_results)
             past_stats = {"win_rate": round(wins / total * 100, 1), "total": total, "wins": wins}
 
+        # Portföy bilgisi ekle
+        portfolio_info = None
+        if portfolio_on:
+            portfolio = await _get_portfolio(redis)
+            portfolio_info = {
+                "balance": round(portfolio["balance"], 2),
+                "reserved": round(portfolio["reserved"], 2),
+                "equity": round(portfolio["balance"] + portfolio["reserved"], 2),
+                "initial": portfolio["initial_balance"],
+                "total_pnl": round(portfolio["total_pnl"], 2),
+                "peak_equity": round(portfolio["peak_equity"], 2),
+                "max_drawdown": portfolio["max_drawdown"],
+                "total_trades": portfolio["total_trades"],
+                "total_wins": portfolio["total_wins"],
+                "win_rate": round(portfolio["total_wins"] / max(1, portfolio["total_trades"]) * 100, 1),
+                "roi": round((portfolio["balance"] + portfolio["reserved"] - portfolio["initial_balance"]) / max(1, portfolio["initial_balance"]) * 100, 2),
+            }
+
         await redis.set("scanner_sim:status", json.dumps({
             "coins_total": len(coins),
             "open_count": len(open_sims) + len(opened) + len(hedge_opened) * 2,
@@ -889,6 +1080,7 @@ async def run_simulator_cycle():
             "mode": cfg.get("mode", "ai"),
             "hedge_enabled": cfg.get("hedge_enabled", False),
             "past_stats": past_stats,
+            "portfolio": portfolio_info,
             "waiting": False,
             "ts": datetime.now(timezone.utc).isoformat(),
         }), ex=300)
