@@ -1,277 +1,309 @@
 "use client"
+import { useState } from "react"
 
-import { useState, useCallback } from "react"
-
-/* ─── küçük yardımcılar ─── */
 const fmt = (n: number, d = 2) =>
   isNaN(n) || !isFinite(n) ? "—" : n.toLocaleString("tr-TR", { minimumFractionDigits: d, maximumFractionDigits: d })
-
-const pct = (n: number) => (isNaN(n) || !isFinite(n) ? "—" : (n >= 0 ? "+" : "") + fmt(n, 2) + "%")
+const clr = (n: number) => n >= 0 ? "text-emerald-400" : "text-red-400"
+const sign = (n: number) => n >= 0 ? "+" : ""
 
 function Card({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4">
-      <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-        <span className="text-lg">{icon}</span>{title}
-      </h2>
+      <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2"><span className="text-lg">{icon}</span>{title}</h2>
       {children}
     </div>
   )
 }
-
-function Row({ label, value, color = "text-white" }: { label: string; value: string; color?: string }) {
+function Row({ label, value, color = "text-white", sub }: { label: string; value: string; color?: string; sub?: string }) {
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-slate-800/60 last:border-0">
-      <span className="text-xs text-slate-500">{label}</span>
+      <div><span className="text-xs text-slate-500">{label}</span>{sub && <span className="text-xs text-slate-600 ml-1">({sub})</span>}</div>
       <span className={`text-sm font-semibold tabular-nums ${color}`}>{value}</span>
     </div>
   )
 }
-
-function Input({
-  label, value, onChange, suffix = "USDT", step = "0.01", min = "0"
-}: { label: string; value: string; onChange: (v: string) => void; suffix?: string; step?: string; min?: string }) {
+function Inp({ label, value, onChange, suffix = "USDT", step = "0.01", min = "0" }: {
+  label: string; value: string; onChange: (v: string) => void; suffix?: string; step?: string; min?: string
+}) {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs text-slate-500">{label}</label>
       <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        <input
-          type="number" value={value} onChange={e => onChange(e.target.value)}
-          step={step} min={min}
-          className="flex-1 bg-transparent px-3 py-2.5 text-sm text-white outline-none tabular-nums"
-        />
+        <input type="number" value={value} onChange={e => onChange(e.target.value)} step={step} min={min}
+          className="flex-1 bg-transparent px-3 py-2.5 text-sm text-white outline-none tabular-nums" />
         <span className="px-3 text-xs text-slate-500 shrink-0">{suffix}</span>
       </div>
     </div>
   )
 }
-
-function Select({ label, value, onChange, options }: {
-  label: string; value: string; onChange: (v: string) => void
-  options: { v: string; l: string }[]
+function Sel({ label, value, onChange, opts }: {
+  label: string; value: string; onChange: (v: string) => void; opts: { v: string; l: string }[]
 }) {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs text-slate-500">{label}</label>
-      <select
-        value={value} onChange={e => onChange(e.target.value)}
-        className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none"
-      >
-        {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+      <select value={value} onChange={e => onChange(e.target.value)}
+        className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none">
+        {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
       </select>
     </div>
   )
 }
+function PnlBox({ label, value, pct }: { label: string; value: number; pct: number }) {
+  const pos = value >= 0
+  return (
+    <div className={`rounded-xl p-3 border text-center ${pos ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"}`}>
+      <p className="text-xs text-slate-500 mb-0.5">{label}</p>
+      <p className={`text-xl font-bold tabular-nums ${pos ? "text-emerald-400" : "text-red-400"}`}>{sign(value)}{fmt(value)} USDT</p>
+      <p className={`text-xs mt-0.5 ${pos ? "text-emerald-600" : "text-red-600"}`}>ROE {sign(pct)}{fmt(pct)}%</p>
+    </div>
+  )
+}
 
-/* ══════════════════════════════════════════════════════
-   1. KALDIRAÇLI KAR / ZARAR HESAPLAYICI
-══════════════════════════════════════════════════════ */
+/* ══ 1. KALDIRAÇLI HESAPLAMA ══ */
 function LeverageCalc() {
-  const [margin, setMargin]     = useState("100")
-  const [leverage, setLeverage] = useState("10")
-  const [entry, setEntry]       = useState("50000")
-  const [exit, setExit]         = useState("51000")
+  const [margin, setMargin]     = useState("10")
+  const [lev, setLev]           = useState("500")
+  const [entry, setEntry]       = useState("2133")
   const [dir, setDir]           = useState("long")
-  const [fee, setFee]           = useState("0.05")
+  const [fee, setFee]           = useState("0.0")
+  const [tp, setTp]             = useState("0.4")
+  const [sl, setSl]             = useState("0.2")
 
-  const m = parseFloat(margin) || 0
-  const lev = parseFloat(leverage) || 1
+  const m  = parseFloat(margin) || 0
+  const lv = parseFloat(lev) || 1
   const ep = parseFloat(entry) || 1
-  const xp = parseFloat(exit) || 1
-  const f = parseFloat(fee) / 100 || 0
+  const f  = parseFloat(fee) / 100
+  const tpP = parseFloat(tp) / 100
+  const slP = parseFloat(sl) / 100
 
-  const notional = m * lev
-  const qty = notional / ep
-  const priceDiff = dir === "long" ? xp - ep : ep - xp
-  const rawPnl = qty * priceDiff
-  const feeCost = notional * f * 2 // açılış + kapanış
-  const netPnl = rawPnl - feeCost
-  const roePct = (netPnl / m) * 100
-  const liqPct = dir === "long" ? -(100 / lev) : 100 / lev
-  const liqPrice = dir === "long"
-    ? ep * (1 + liqPct / 100)
-    : ep * (1 - liqPct / 100)
+  const notional  = m * lv
+  const qty       = notional / ep
+  const feeCost   = notional * f * 2
 
-  const isProfit = netPnl >= 0
+  // TP/SL fiyatları
+  const tpPrice = dir === "long" ? ep * (1 + tpP) : ep * (1 - tpP)
+  const slPrice = dir === "long" ? ep * (1 - slP) : ep * (1 + slP)
+
+  // PnL
+  const tpRaw  = qty * Math.abs(tpPrice - ep)
+  const slRaw  = qty * Math.abs(slPrice - ep)
+  const tpNet  = tpRaw - feeCost
+  const slNet  = -(slRaw + feeCost)
+  const tpRoe  = (tpNet / m) * 100
+  const slRoe  = (slNet / m) * 100
+
+  // Break-even
+  const beMovePct = f * 2 * 100
+  const bePrice   = dir === "long" ? ep * (1 + f * 2) : ep * (1 - f * 2)
+  const liqPct    = 100 / lv
+  const liqPrice  = dir === "long" ? ep * (1 - liqPct / 100) : ep * (1 + liqPct / 100)
 
   return (
     <Card title="Kaldıraçlı İşlem Hesaplama" icon="📊">
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Teminat (Margin)" value={margin} onChange={setMargin} />
-        <Input label="Kaldıraç" value={leverage} onChange={setLeverage} suffix="x" step="1" min="1" />
-        <Input label="Giriş Fiyatı" value={entry} onChange={setEntry} />
-        <Input label="Çıkış Fiyatı" value={exit} onChange={setExit} />
-        <Input label="İşlem Ücreti" value={fee} onChange={setFee} suffix="%" step="0.01" />
-        <Select label="Yön" value={dir} onChange={setDir}
-          options={[{ v: "long", l: "📈 Long" }, { v: "short", l: "📉 Short" }]} />
+      {/* Açıklama kutusu */}
+      <div className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-3 text-xs text-slate-400 leading-relaxed">
+        <span className="text-blue-300 font-semibold">Break-Even nedir? </span>
+        İşlemi açıp kapattığında ödediğin komisyonları tam olarak karşılayan fiyat noktasıdır.
+        Bu noktanın altında (long için) zarar edersin. Komisyon sıfırsa break-even = giriş fiyatıdır.
       </div>
 
-      <div className={`rounded-xl p-4 border ${isProfit ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"}`}>
-        <p className="text-xs text-slate-500 mb-1">Net Kar / Zarar</p>
-        <p className={`text-3xl font-bold tabular-nums ${isProfit ? "text-emerald-400" : "text-red-400"}`}>
-          {isProfit ? "+" : ""}{fmt(netPnl)} USDT
-        </p>
-        <p className={`text-sm mt-0.5 ${isProfit ? "text-emerald-500" : "text-red-500"}`}>ROE {pct(roePct)}</p>
+      <div className="grid grid-cols-2 gap-3">
+        <Inp label="Teminat (Margin)" value={margin} onChange={setMargin} />
+        <Inp label="Kaldıraç" value={lev} onChange={setLev} suffix="x" step="1" min="1" />
+        <Inp label="Giriş Fiyatı" value={entry} onChange={setEntry} />
+        <Sel label="Yön" value={dir} onChange={setDir} opts={[{ v: "long", l: "📈 Long" }, { v: "short", l: "📉 Short" }]} />
+        <Inp label="TP %" value={tp} onChange={setTp} suffix="%" step="0.01" />
+        <Inp label="SL %" value={sl} onChange={setSl} suffix="%" step="0.01" />
+        <Inp label="İşlem Ücreti (Taker)" value={fee} onChange={setFee} suffix="%" step="0.01" />
+      </div>
+
+      {/* TP / SL sonuç kutuları */}
+      <div className="grid grid-cols-2 gap-3">
+        <PnlBox label={`🎯 TP Karı (%${tp} hareket)`} value={tpNet} pct={tpRoe} />
+        <PnlBox label={`🛑 SL Zararı (%${sl} hareket)`} value={slNet} pct={slRoe} />
       </div>
 
       <div className="space-y-0">
-        <Row label="Pozisyon Büyüklüğü (Notional)" value={`${fmt(notional)} USDT`} />
+        <Row label="Pozisyon Büyüklüğü" value={`${fmt(notional)} USDT`} />
         <Row label="Miktar (Qty)" value={fmt(qty, 6)} />
-        <Row label="Ham Kar/Zarar" value={`${rawPnl >= 0 ? "+" : ""}${fmt(rawPnl)} USDT`} color={rawPnl >= 0 ? "text-emerald-400" : "text-red-400"} />
-        <Row label="Toplam Komisyon (x2)" value={`-${fmt(feeCost)} USDT`} color="text-orange-400" />
-        <Row label="Tasfiye Fiyatı (≈)" value={`${fmt(liqPrice)} USDT`} color="text-red-400" />
-        <Row label="Fiyat Değişimi" value={pct(((xp - ep) / ep) * 100)} />
+        <Row label="TP Fiyatı" value={`${fmt(tpPrice)} USDT`} color="text-emerald-400" sub={`+%${tp}`} />
+        <Row label="SL Fiyatı" value={`${fmt(slPrice)} USDT`} color="text-red-400" sub={`-%${sl}`} />
+        <Row label="Break-Even Fiyatı" value={`${fmt(bePrice)} USDT`} color="text-blue-300" sub={`%${fmt(beMovePct, 3)} hareket`} />
+        <Row label="Tasfiye (Likidite) Fiyatı" value={`${fmt(liqPrice)} USDT`} color="text-red-500" sub={`-%${fmt(liqPct, 1)} teminattan`} />
+        <Row label="Toplam Komisyon" value={`-${fmt(feeCost)} USDT`} color="text-orange-400" />
+        <Row label="Risk/Ödül Oranı (R:R)" value={tpRaw > 0 && slRaw > 0 ? `1 : ${fmt(tpRaw / slRaw)}` : "—"} />
       </div>
     </Card>
   )
 }
 
-/* ══════════════════════════════════════════════════════
-   2. HEDGE MOD HESAPLAYICI
-══════════════════════════════════════════════════════ */
+/* ══ 2. HEDGE MOD HESAPLAYICI ══ */
 function HedgeCalc() {
-  const [longEntry, setLongEntry]   = useState("50000")
-  const [longSize, setLongSize]     = useState("100")
-  const [longLev, setLongLev]       = useState("10")
-  const [shortEntry, setShortEntry] = useState("50500")
-  const [shortSize, setShortSize]   = useState("100")
-  const [shortLev, setShortLev]     = useState("10")
-  const [closePrice, setClosePrice] = useState("51000")
-  const [fee, setFee]               = useState("0.05")
+  const [entry, setEntry]       = useState("2133")
+  const [margin, setMargin]     = useState("10")
+  const [lev, setLev]           = useState("500")
+  const [fee, setFee]           = useState("0.0")
+  const [ltp, setLtp]           = useState("0.4")
+  const [lsl, setLsl]           = useState("0.2")
+  const [stp, setStp]           = useState("0.4")
+  const [ssl, setSsl]           = useState("0.2")
+  const [scenario, setScenario] = useState("both_tp")
 
-  const f = parseFloat(fee) / 100 || 0
-  const cp = parseFloat(closePrice) || 0
+  const ep  = parseFloat(entry) || 1
+  const m   = parseFloat(margin) || 0
+  const lv  = parseFloat(lev) || 1
+  const f   = parseFloat(fee) / 100
 
-  const lEp = parseFloat(longEntry) || 1
-  const lSz = parseFloat(longSize) || 0
-  const lLv = parseFloat(longLev) || 1
-  const sEp = parseFloat(shortEntry) || 1
-  const sSz = parseFloat(shortSize) || 0
-  const sLv = parseFloat(shortLev) || 1
+  // Her iki taraf aynı notional
+  const notional  = m * lv
+  const qty       = notional / ep
+  const feeEach   = notional * f * 2 // açılış + kapanış
 
-  const lNotional = lSz * lLv
-  const sNotional = sSz * sLv
-  const lQty = lNotional / lEp
-  const sQty = sNotional / sEp
+  const ltpP = parseFloat(ltp) / 100
+  const lslP = parseFloat(lsl) / 100
+  const stpP = parseFloat(stp) / 100
+  const sslP = parseFloat(ssl) / 100
 
-  const longPnl  = lQty * (cp - lEp) - (lNotional * f * 2)
-  const shortPnl = sQty * (sEp - cp) - (sNotional * f * 2)
-  const totalPnl = longPnl + shortPnl
-  const totalMargin = lSz + sSz
+  // Fiyatlar
+  const lTpPrice = ep * (1 + ltpP)
+  const lSlPrice = ep * (1 - lslP)
+  const sTpPrice = ep * (1 - stpP)
+  const sSlPrice = ep * (1 + sslP)
+
+  // Ham PnL
+  const longTpPnl  = qty * (lTpPrice - ep) - feeEach
+  const longSlPnl  = -(qty * (ep - lSlPrice) + feeEach)
+  const shortTpPnl = qty * (ep - sTpPrice) - feeEach
+  const shortSlPnl = -(qty * (sSlPrice - ep) + feeEach)
+
+  const scenarios: Record<string, { label: string; longPnl: number; shortPnl: number }> = {
+    both_tp:    { label: "İkisi de TP'ye ulaştı",         longPnl: longTpPnl,  shortPnl: shortTpPnl },
+    both_sl:    { label: "İkisi de SL'ye ulaştı",         longPnl: longSlPnl,  shortPnl: shortSlPnl },
+    long_tp_short_sl: { label: "Long TP / Short SL",      longPnl: longTpPnl,  shortPnl: shortSlPnl },
+    long_sl_short_tp: { label: "Long SL / Short TP",      longPnl: longSlPnl,  shortPnl: shortTpPnl },
+  }
+
+  const cur = scenarios[scenario]
+  const totalPnl   = cur.longPnl + cur.shortPnl
+  const totalMargin = m * 2
 
   return (
     <Card title="Hedge Modu Hesaplama" icon="🔀">
-      <div className="grid grid-cols-1 gap-3">
-        <p className="text-xs text-slate-500 -mb-1 font-semibold uppercase tracking-wider text-emerald-400">📈 Long Pozisyon</p>
-        <div className="grid grid-cols-3 gap-3">
-          <Input label="Giriş" value={longEntry} onChange={setLongEntry} />
-          <Input label="Teminat" value={longSize} onChange={setLongSize} />
-          <Input label="Kaldıraç" value={longLev} onChange={setLongLev} suffix="x" step="1" />
-        </div>
-        <p className="text-xs text-slate-500 -mb-1 font-semibold uppercase tracking-wider text-red-400">📉 Short Pozisyon</p>
-        <div className="grid grid-cols-3 gap-3">
-          <Input label="Giriş" value={shortEntry} onChange={setShortEntry} />
-          <Input label="Teminat" value={shortSize} onChange={setShortSize} />
-          <Input label="Kaldıraç" value={shortLev} onChange={setShortLev} suffix="x" step="1" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Kapanış Fiyatı" value={closePrice} onChange={setClosePrice} />
-          <Input label="İşlem Ücreti" value={fee} onChange={setFee} suffix="%" step="0.01" />
+      <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-3 text-xs text-slate-400 leading-relaxed">
+        <span className="text-yellow-300 font-semibold">Hedge Modu: </span>
+        Aynı anda hem Long hem Short pozisyon açarak fiyat hareketinden her iki yönde de yararlanırsın.
+        Toplam teminat 2x olur. Senaryo seçerek olası sonuçları hesapla.
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Inp label="Ortak Giriş Fiyatı" value={entry} onChange={setEntry} />
+        <Inp label="Teminat (her pozisyon)" value={margin} onChange={setMargin} />
+        <Inp label="Kaldıraç" value={lev} onChange={setLev} suffix="x" step="1" />
+        <Inp label="İşlem Ücreti" value={fee} onChange={setFee} suffix="%" step="0.01" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 border border-emerald-500/20 rounded-xl p-3 bg-emerald-500/3">
+        <p className="col-span-2 text-xs font-semibold text-emerald-400">📈 Long Pozisyon</p>
+        <Inp label="Long TP %" value={ltp} onChange={setLtp} suffix="%" step="0.01" />
+        <Inp label="Long SL %" value={lsl} onChange={setLsl} suffix="%" step="0.01" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 border border-red-500/20 rounded-xl p-3 bg-red-500/3">
+        <p className="col-span-2 text-xs font-semibold text-red-400">📉 Short Pozisyon</p>
+        <Inp label="Short TP %" value={stp} onChange={setStp} suffix="%" step="0.01" />
+        <Inp label="Short SL %" value={ssl} onChange={setSsl} suffix="%" step="0.01" />
+      </div>
+
+      {/* Senaryo seçici */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-slate-500">Senaryo</label>
+        <div className="grid grid-cols-2 gap-1.5">
+          {Object.entries(scenarios).map(([k, v]) => (
+            <button key={k} onClick={() => setScenario(k)}
+              className={`py-2 px-3 rounded-lg text-xs font-medium border transition-all text-left ${
+                scenario === k ? "border-blue-500/60 bg-blue-500/10 text-blue-300" : "border-slate-700 text-slate-400 hover:border-slate-600"
+              }`}>{v.label}</button>
+          ))}
         </div>
       </div>
 
+      {/* Sonuçlar */}
       <div className={`rounded-xl p-4 border ${totalPnl >= 0 ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"}`}>
-        <p className="text-xs text-slate-500 mb-1">Toplam Net PnL</p>
-        <p className={`text-3xl font-bold tabular-nums ${totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-          {totalPnl >= 0 ? "+" : ""}{fmt(totalPnl)} USDT
-        </p>
-        <p className="text-sm text-slate-500 mt-0.5">Toplam teminat: {fmt(totalMargin)} USDT</p>
+        <p className="text-xs text-slate-500 mb-1">Toplam Net PnL — {cur.label}</p>
+        <p className={`text-3xl font-bold tabular-nums ${clr(totalPnl)}`}>{sign(totalPnl)}{fmt(totalPnl)} USDT</p>
+        <p className="text-xs text-slate-500 mt-0.5">Toplam teminat: {fmt(totalMargin)} USDT · ROE {sign(totalPnl / totalMargin * 100)}{fmt(totalPnl / totalMargin * 100)}%</p>
       </div>
 
       <div className="space-y-0">
-        <Row label="Long PnL" value={`${longPnl >= 0 ? "+" : ""}${fmt(longPnl)} USDT`} color={longPnl >= 0 ? "text-emerald-400" : "text-red-400"} />
-        <Row label="Short PnL" value={`${shortPnl >= 0 ? "+" : ""}${fmt(shortPnl)} USDT`} color={shortPnl >= 0 ? "text-emerald-400" : "text-red-400"} />
-        <Row label="Long Notional" value={`${fmt(lNotional)} USDT`} />
-        <Row label="Short Notional" value={`${fmt(sNotional)} USDT`} />
-        <Row label="Hedge Farkı (spread)" value={`${fmt(Math.abs(lEp - sEp))} USDT`} />
+        <Row label="Long PnL" value={`${sign(cur.longPnl)}${fmt(cur.longPnl)} USDT`} color={clr(cur.longPnl)} />
+        <Row label="Short PnL" value={`${sign(cur.shortPnl)}${fmt(cur.shortPnl)} USDT`} color={clr(cur.shortPnl)} />
+        <Row label="Long TP Fiyatı" value={`${fmt(lTpPrice)}`} color="text-emerald-400" sub={`+%${ltp}`} />
+        <Row label="Long SL Fiyatı" value={`${fmt(lSlPrice)}`} color="text-red-400" sub={`-%${lsl}`} />
+        <Row label="Short TP Fiyatı" value={`${fmt(sTpPrice)}`} color="text-emerald-400" sub={`-%${stp}`} />
+        <Row label="Short SL Fiyatı" value={`${fmt(sSlPrice)}`} color="text-red-400" sub={`+%${ssl}`} />
+        <Row label="Notional (her taraf)" value={`${fmt(notional)} USDT`} />
+        <Row label="Komisyon (her taraf)" value={`-${fmt(feeEach)} USDT`} color="text-orange-400" />
       </div>
     </Card>
   )
 }
 
-/* ══════════════════════════════════════════════════════
-   3. KOMİSYON HESAPLAYICI
-══════════════════════════════════════════════════════ */
+/* ══ 3. KOMİSYON HESAPLAYICI ══ */
 const EXCHANGES = [
-  { name: "MEXC",    maker: 0, taker: 0,    zero: true  },
-  { name: "Bitget",  maker: 0.02, taker: 0.06, zero: false },
-  { name: "Binance", maker: 0.02, taker: 0.04, zero: false },
-  { name: "Bybit",   maker: 0.01, taker: 0.06, zero: false },
-  { name: "OKX",     maker: 0.02, taker: 0.05, zero: false },
-  { name: "Özel",    maker: 0.02, taker: 0.05, zero: false },
+  { name: "MEXC",    maker: 0,    taker: 0    },
+  { name: "Bitget",  maker: 0.02, taker: 0.06 },
+  { name: "Binance", maker: 0.02, taker: 0.04 },
+  { name: "Bybit",   maker: 0.01, taker: 0.06 },
+  { name: "OKX",     maker: 0.02, taker: 0.05 },
 ]
 
 function CommissionCalc() {
   const [notional, setNotional] = useState("10000")
   const [selEx, setSelEx]       = useState("MEXC")
-  const [customMaker, setCustomMaker] = useState("0.02")
-  const [customTaker, setCustomTaker] = useState("0.05")
   const [orderType, setOrderType] = useState("taker")
 
-  const ex = EXCHANGES.find(e => e.name === selEx) || EXCHANGES[0]
-  const makerRate = selEx === "Özel" ? parseFloat(customMaker) / 100 : ex.maker / 100
-  const takerRate = selEx === "Özel" ? parseFloat(customTaker) / 100 : ex.taker / 100
-  const n = parseFloat(notional) || 0
-  const rate = orderType === "maker" ? makerRate : takerRate
-
-  const oneWay = n * rate
+  const ex   = EXCHANGES.find(e => e.name === selEx) || EXCHANGES[0]
+  const rate = orderType === "maker" ? ex.maker / 100 : ex.taker / 100
+  const n    = parseFloat(notional) || 0
+  const oneWay    = n * rate
   const roundTrip = oneWay * 2
-  const dailyTrades = [1, 5, 10, 20, 50]
 
   return (
-    <Card title="Borsa Komisyon Hesaplama" icon="💸">
+    <Card title="Borsa Komisyon Karşılaştırması" icon="💸">
       <div className="grid grid-cols-2 gap-3">
-        <Input label="İşlem Hacmi (Notional)" value={notional} onChange={setNotional} />
-        <Select label="Borsa" value={selEx} onChange={setSelEx}
-          options={EXCHANGES.map(e => ({ v: e.name, l: e.zero ? `${e.name} ⭐ Sıfır Fee` : e.name }))} />
-        <Select label="Emir Tipi" value={orderType} onChange={setOrderType}
-          options={[{ v: "taker", l: "Taker (Market)" }, { v: "maker", l: "Maker (Limit)" }]} />
-        {selEx === "Özel" && <>
-          <Input label="Maker Fee" value={customMaker} onChange={setCustomMaker} suffix="%" step="0.001" />
-          <Input label="Taker Fee" value={customTaker} onChange={setCustomTaker} suffix="%" step="0.001" />
-        </>}
+        <Inp label="İşlem Hacmi (Notional)" value={notional} onChange={setNotional} />
+        <Sel label="Emir Tipi" value={orderType} onChange={setOrderType}
+          opts={[{ v: "taker", l: "Taker (Market)" }, { v: "maker", l: "Maker (Limit)" }]} />
       </div>
-
-      {/* Borsa karşılaştırması */}
       <div className="rounded-xl border border-slate-800 overflow-hidden">
         <div className="grid grid-cols-4 text-xs text-slate-500 px-3 py-2 bg-slate-800/40">
           <span>Borsa</span><span className="text-right">Maker</span><span className="text-right">Taker</span><span className="text-right">Round-trip</span>
         </div>
-        {EXCHANGES.filter(e => e.name !== "Özel").map(e => {
-          const rt = n * (e.taker / 100) * 2
+        {EXCHANGES.map(e => {
+          const r  = orderType === "maker" ? e.maker / 100 : e.taker / 100
+          const rt = n * r * 2
+          const isZero = e.taker === 0
           return (
-            <div key={e.name}
-              className={`grid grid-cols-4 text-xs px-3 py-2.5 border-t border-slate-800/40 transition-colors cursor-pointer ${selEx === e.name ? "bg-blue-500/10" : "hover:bg-slate-800/30"}`}
-              onClick={() => setSelEx(e.name)}>
-              <span className={`font-medium ${e.zero ? "text-emerald-400" : "text-white"}`}>{e.name}{e.zero ? " ⭐" : ""}</span>
+            <div key={e.name} onClick={() => setSelEx(e.name)}
+              className={`grid grid-cols-4 text-xs px-3 py-2.5 border-t border-slate-800/40 cursor-pointer transition-colors ${selEx === e.name ? "bg-blue-500/10" : "hover:bg-slate-800/30"}`}>
+              <span className={`font-medium ${isZero ? "text-emerald-400" : "text-white"}`}>{e.name}{isZero ? " ⭐" : ""}</span>
               <span className="text-right text-slate-400">{e.maker === 0 ? "Ücretsiz" : `%${e.maker}`}</span>
               <span className="text-right text-slate-400">{e.taker === 0 ? "Ücretsiz" : `%${e.taker}`}</span>
-              <span className={`text-right font-semibold tabular-nums ${e.zero ? "text-emerald-400" : "text-orange-400"}`}>{e.zero ? "0 USDT" : `${fmt(rt)} USDT`}</span>
+              <span className={`text-right font-semibold tabular-nums ${isZero ? "text-emerald-400" : "text-orange-400"}`}>{isZero ? "0 USDT" : `${fmt(rt)} USDT`}</span>
             </div>
           )
         })}
       </div>
-
       <div className="space-y-0">
-        <Row label={`Tek yön (${selEx})`} value={`${fmt(oneWay)} USDT`} color="text-orange-400" />
-        <Row label="Round-trip (açılış+kapanış)" value={`${fmt(roundTrip)} USDT`} color="text-orange-400" />
-        <Row label={`Oran (%${(rate * 100).toFixed(3)})`} value={`${(rate * 100).toFixed(3)}%`} />
+        <Row label="Tek yön" value={`${fmt(oneWay)} USDT`} color="text-orange-400" />
+        <Row label="Round-trip" value={`${fmt(roundTrip)} USDT`} color="text-orange-400" />
+        <Row label="Oran" value={`%${(rate * 100).toFixed(3)}`} />
       </div>
-
       <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 p-3">
         <p className="text-xs text-slate-500 mb-2 font-semibold">Günlük İşlem Maliyeti</p>
         <div className="grid grid-cols-5 gap-2">
-          {dailyTrades.map(t => (
+          {[1,5,10,20,50].map(t => (
             <div key={t} className="text-center bg-slate-800 rounded-lg p-2">
               <p className="text-xs text-slate-500">{t}x</p>
               <p className="text-xs font-bold text-orange-400 tabular-nums">{fmt(roundTrip * t)}</p>
@@ -283,111 +315,34 @@ function CommissionCalc() {
   )
 }
 
-/* ══════════════════════════════════════════════════════
-   4. BREAK-EVEN HESAPLAYICI
-══════════════════════════════════════════════════════ */
-function BreakEvenCalc() {
-  const [entry, setEntry]     = useState("50000")
-  const [fee, setFee]         = useState("0.05")
-  const [leverage, setLeverage] = useState("10")
-  const [dir, setDir]         = useState("long")
-
-  const ep = parseFloat(entry) || 0
-  const f = parseFloat(fee) / 100 || 0
-  const lev = parseFloat(leverage) || 1
-
-  // Break-even = giriş fiyatı + 2 * taker_fee * entry (kaldıraçsız)
-  // Kaldıraçlı: break-even hareket = 2*f / 1 (notional üzerinden)
-  const beMove = (2 * f) // % cinsinden
-  const beLong  = ep * (1 + beMove)
-  const beShort = ep * (1 - beMove)
-  const bePrice = dir === "long" ? beLong : beShort
-  const beMovePts = Math.abs(bePrice - ep)
-
-  const tpTargets = [0.5, 1, 2, 3, 5]
-
-  return (
-    <Card title="Break-Even & TP Hesaplama" icon="🎯">
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Giriş Fiyatı" value={entry} onChange={setEntry} />
-        <Input label="Kaldıraç" value={leverage} onChange={setLeverage} suffix="x" step="1" />
-        <Input label="Taker Fee" value={fee} onChange={setFee} suffix="%" step="0.01" />
-        <Select label="Yön" value={dir} onChange={setDir}
-          options={[{ v: "long", l: "📈 Long" }, { v: "short", l: "📉 Short" }]} />
-      </div>
-
-      <div className="rounded-xl bg-blue-500/5 border border-blue-500/20 p-4">
-        <p className="text-xs text-slate-500 mb-1">Break-Even Fiyatı</p>
-        <p className="text-2xl font-bold text-blue-300 tabular-nums">{fmt(bePrice)} USDT</p>
-        <p className="text-xs text-slate-500 mt-0.5">{fmt(beMovePts)} USDT hareket ({(beMove * 100).toFixed(3)}%)</p>
-      </div>
-
-      <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 p-3">
-        <p className="text-xs text-slate-500 mb-2 font-semibold">Kaldıraçlı ROE Hedefleri</p>
-        <div className="space-y-0">
-          {tpTargets.map(t => {
-            const priceMoveDir = dir === "long" ? ep * (1 + t / 100) : ep * (1 - t / 100)
-            const roe = t * lev
-            return (
-              <div key={t} className="flex items-center justify-between py-1.5 border-b border-slate-700/40 last:border-0">
-                <span className="text-xs text-slate-400">%{t} fiyat hareketi → {fmt(priceMoveDir)} USDT</span>
-                <span className="text-sm font-bold text-emerald-400">ROE %{fmt(roe, 1)}</span>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-/* ══════════════════════════════════════════════════════
-   ANA SAYFA
-══════════════════════════════════════════════════════ */
-type Tab = "leverage" | "hedge" | "commission" | "breakeven"
-
+/* ══ ANA SAYFA ══ */
+type Tab = "leverage" | "hedge" | "commission"
 const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "leverage",   label: "Kaldıraç",   icon: "📊" },
-  { id: "hedge",      label: "Hedge",      icon: "🔀" },
-  { id: "commission", label: "Komisyon",   icon: "💸" },
-  { id: "breakeven",  label: "Break-Even", icon: "🎯" },
+  { id: "leverage",   label: "Kaldıraç",  icon: "📊" },
+  { id: "hedge",      label: "Hedge",     icon: "🔀" },
+  { id: "commission", label: "Komisyon",  icon: "💸" },
 ]
 
 export default function CalculatorPage() {
   const [tab, setTab] = useState<Tab>("leverage")
-
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 pb-20">
-      {/* Header */}
       <div className="mb-6">
         <h1 className="text-xl font-bold text-white">🧮 İşlem Hesaplama</h1>
-        <p className="text-sm text-slate-500 mt-1">Kaldıraç, hedge, komisyon ve break-even hesapla</p>
+        <p className="text-sm text-slate-500 mt-1">Kaldıraç, hedge ve komisyon hesapla</p>
       </div>
-
-      {/* Tab bar */}
       <div className="flex gap-1.5 mb-6 bg-slate-900 p-1 rounded-xl border border-slate-800">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
-              tab === t.id
-                ? "bg-blue-600 text-white shadow"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
-            }`}>
+            className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${tab === t.id ? "bg-blue-600 text-white shadow" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}>
             {t.icon} {t.label}
           </button>
         ))}
       </div>
-
-      {/* İçerik */}
       {tab === "leverage"   && <LeverageCalc />}
       {tab === "hedge"      && <HedgeCalc />}
       {tab === "commission" && <CommissionCalc />}
-      {tab === "breakeven"  && <BreakEvenCalc />}
-
-      {/* Uyarı */}
-      <p className="mt-6 text-xs text-slate-600 text-center">
-        ⚠ Hesaplamalar tahminidir. Gerçek borsa sonuçlarından farklı olabilir.
-      </p>
+      <p className="mt-6 text-xs text-slate-600 text-center">⚠ Hesaplamalar tahminidir. Gerçek borsa sonuçlarından farklı olabilir.</p>
     </div>
   )
 }
