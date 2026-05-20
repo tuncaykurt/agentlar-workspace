@@ -264,6 +264,15 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                 timeout=45,
             )
 
+            # AI konuşma logunu hazırla (kısaltılmış prompt + tam yanıt)
+            prompt_summary = prompt[:1500] + "\n...(kısaltıldı)" if len(prompt) > 1500 else prompt
+            ai_log_text = json.dumps({
+                "model": model,
+                "prompt_summary": prompt_summary,
+                "ai_response": ai_resp,
+                "market_summary": ai_resp.get("market_summary", ""),
+            }, ensure_ascii=False, default=str)
+
             for sel in ai_resp.get("selections", []):
                 coin_name = sel.get("coin", "")
                 if coin_name in active_coins:
@@ -284,6 +293,7 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                     "sl_pct": sel.get("sl_suggestion_pct", cfg.get("sl_pct", SIM_SL_PCT)),
                     "leverage": sel.get("leverage_suggestion", cfg.get("leverage", SIM_LEVERAGE)),
                     "indicators": matched,
+                    "ai_log": ai_log_text,
                 })
 
         except Exception as e:
@@ -332,11 +342,13 @@ async def _save_simulation(sel: dict, price: float):
             INSERT INTO scanner_simulations
                 (coin, symbol, direction, selection_mode, confidence, reason,
                  entry_price, tp_price, sl_price, tp_pct, sl_pct, leverage,
-                 rsi_14, adx, volume_ratio, funding_rate, fear_greed, atr_pct, supertrend_dir)
+                 rsi_14, adx, volume_ratio, funding_rate, fear_greed, atr_pct, supertrend_dir,
+                 status, ai_log)
             VALUES
                 (:coin, :symbol, :direction, :mode, :confidence, :reason,
                  :entry, :tp, :sl, :tp_pct, :sl_pct, :lev,
-                 :rsi, :adx, :vol, :fund, :fg, :atr, :st)
+                 :rsi, :adx, :vol, :fund, :fg, :atr, :st,
+                 'open', :ai_log)
         """), {
             "coin": sel["coin"], "symbol": sel["symbol"],
             "direction": sel["direction"], "mode": sel.get("mode", "ai"),
@@ -347,6 +359,7 @@ async def _save_simulation(sel: dict, price: float):
             "vol": ind.get("volume_ratio"), "fund": ind.get("funding_rate"),
             "fg": ind.get("fear_greed"), "atr": ind.get("atr_pct"),
             "st": ind.get("supertrend_dir"),
+            "ai_log": sel.get("ai_log"),
         })
         await session.commit()
 

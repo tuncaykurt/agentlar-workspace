@@ -99,6 +99,15 @@ async def _init_db():
             """))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sim_status ON scanner_simulations (status)"))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sim_created ON scanner_simulations (created_at)"))
+        # ai_log kolonu ekle (AI konuşma kaydı)
+            await conn.execute(text("""
+                ALTER TABLE scanner_simulations ADD COLUMN IF NOT EXISTS ai_log TEXT
+            """))
+        # Mevcut NULL status kayıtları düzelt
+            await conn.execute(text("""
+                UPDATE scanner_simulations SET status = 'open'
+                WHERE status IS NULL AND exit_price IS NULL
+            """))
         print("[Migration] scanner_simulations tablosu hazır.")
     except Exception as e:
         print(f"[Migration] scanner_simulations hatası (devam): {e}")

@@ -26,7 +26,7 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
                    rsi_14, adx, volume_ratio, funding_rate, fear_greed, atr_pct, supertrend_dir,
                    status, exit_price, pnl_pct, pnl_usdt,
                    max_favorable_pct, max_adverse_pct,
-                   ai_review, created_at, closed_at
+                   ai_review, created_at, closed_at, ai_log
             FROM scanner_simulations
             {where}
             ORDER BY created_at DESC
@@ -44,7 +44,7 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
             "rsi_14", "adx", "volume_ratio", "funding_rate", "fear_greed", "atr_pct", "supertrend_dir",
             "status", "exit_price", "pnl_pct", "pnl_usdt",
             "max_favorable_pct", "max_adverse_pct",
-            "ai_review", "created_at", "closed_at"]
+            "ai_review", "created_at", "closed_at", "ai_log"]
 
     items = []
     for row in rows:
