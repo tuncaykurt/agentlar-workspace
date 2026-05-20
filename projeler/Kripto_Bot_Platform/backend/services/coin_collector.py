@@ -42,9 +42,14 @@ async def _get_zero_fee_symbols(exchange_client) -> list[dict]:
 
     await exchange_client.load_markets()
     symbols = []
-    # STOCK tokenları filtrele — MEXC'de tokenized stock futures API ile trade edilemez
-    # Örnek: AAPLSTOCK/USDT:USDT, TSLASTOCK/USDT:USDT vb.
-    EXCLUDED_SUFFIXES = ("STOCK", "STOCKD")  # STOCK ve leveraged stock türevleri
+    # STOCK tokenları ve API ile trade edilemeyen contractları filtrele
+    # MEXC typeLabel: 0=crypto, 2=stock, 4=commodity
+    EXCLUDED_SUFFIXES = ("STOCK", "STOCKD")  # AAPLSTOCK, AMDSTOCK vb.
+    # Bilinen stock/index/commodity tokenları (STOCK suffix olmadan listelenebilir)
+    EXCLUDED_BASES = frozenset({
+        "TESLA", "NVIDIA", "COINBASE", "SPX500", "NAS100", "DJI30",
+        "FTSE100", "DAX40", "NIKKEI", "XAUUSD", "XAGUSD", "WTIUSD",
+    })
 
     for symbol, market in exchange_client.markets.items():
         if not market.get("swap") and not market.get("future"):
@@ -58,6 +63,21 @@ async def _get_zero_fee_symbols(exchange_client) -> list[dict]:
         # STOCK uzantılı tokenları atla
         if any(base.upper().endswith(suffix) for suffix in EXCLUDED_SUFFIXES):
             continue
+        # Bilinen stock/index/commodity tokenlarını atla
+        if base.upper() in EXCLUDED_BASES:
+            continue
+
+        # MEXC info'dan apiAllowed ve typeLabel kontrol et
+        info = market.get("info", {})
+        if isinstance(info, dict):
+            # apiAllowed=false ise API ile trade edilemez
+            api_allowed = info.get("apiAllowed")
+            if api_allowed is not None and not api_allowed and str(api_allowed).lower() != "true":
+                continue
+            # typeLabel: 0=crypto, 2=stock, 4=commodity — sadece crypto al
+            type_label = info.get("typeLabel")
+            if type_label is not None and str(type_label) not in ("0", ""):
+                continue
 
         taker_fee = market.get("taker", 0) or 0
         maker_fee = market.get("maker", 0) or 0
