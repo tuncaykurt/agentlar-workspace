@@ -266,6 +266,68 @@ class CoinSnapshot(Base):
     )
 
 
+class SimStatus(str, enum.Enum):
+    OPEN = "open"
+    WIN = "win"
+    LOSS = "loss"
+    EXPIRED = "expired"
+
+
+class ScannerSimulation(Base):
+    """
+    Smart Scanner simülasyon kayıtları.
+    Bot açmadan AI/Manuel seçimlerini kaydeder ve sonucunu takip eder.
+    """
+    __tablename__ = "scanner_simulations"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    # Seçim bilgileri
+    coin = Column(String, nullable=False)                    # BTC
+    symbol = Column(String, nullable=False)                  # BTC/USDT:USDT
+    direction = Column(String, nullable=False)               # long / short
+    selection_mode = Column(String, nullable=False)           # ai / manual
+    confidence = Column(Integer, nullable=True)              # AI güven skoru
+    reason = Column(Text, nullable=True)                     # Seçim nedeni
+
+    # Fiyat bilgileri
+    entry_price = Column(Float, nullable=False)
+    tp_price = Column(Float, nullable=True)
+    sl_price = Column(Float, nullable=True)
+    tp_pct = Column(Float, nullable=True)
+    sl_pct = Column(Float, nullable=True)
+    leverage = Column(Integer, default=50)
+
+    # Göstergeler (seçim anında)
+    rsi_14 = Column(Float, nullable=True)
+    adx = Column(Float, nullable=True)
+    volume_ratio = Column(Float, nullable=True)
+    funding_rate = Column(Float, nullable=True)
+    fear_greed = Column(Integer, nullable=True)
+    atr_pct = Column(Float, nullable=True)
+    supertrend_dir = Column(Integer, nullable=True)
+
+    # Sonuç
+    status = Column(String, default="open")                  # open, win, loss, expired
+    exit_price = Column(Float, nullable=True)
+    pnl_pct = Column(Float, nullable=True)                   # % kâr/zarar
+    pnl_usdt = Column(Float, nullable=True)                  # simüle USDT kâr/zarar
+    max_favorable_pct = Column(Float, nullable=True)         # en yüksek lehte hareket %
+    max_adverse_pct = Column(Float, nullable=True)           # en yüksek aleyhte hareket %
+    closed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # AI öğrenme
+    ai_review = Column(Text, nullable=True)                  # AI kendi işlemini yorumlar
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_sim_status", "status"),
+        Index("ix_sim_created", "created_at"),
+        Index("ix_sim_coin", "coin", "status"),
+    )
+
+
 class Liquidation(Base):
     """
     Gerçek zamanlı likidasyon emirleri.

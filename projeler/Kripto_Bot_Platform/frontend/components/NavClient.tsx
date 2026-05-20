@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/strategy-view", label: "Strateji" },
   { href: "/analytics",     label: "Analiz" },
   { href: "/scanner",       label: "Tarayıcı" },
+  { href: "/simulations",   label: "Simülasyon" },
   { href: "/ai-chat",       label: "AI Chat" },
   { href: "/news",           label: "Haberler" },
   { href: "/freqtrade",      label: "Freqtrade" },

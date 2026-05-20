@@ -15,6 +15,7 @@ from services.liquidation_collector import start_liquidation_collector
 from services.economic_calendar import start_calendar_sync
 from services.signal_tracker import start_signal_tracker
 from services.coin_collector import start_coin_collector
+from services.scanner_simulator import start_scanner_simulator
 
 
 async def _init_db():
@@ -68,6 +69,39 @@ async def _init_db():
         ("coin_snapshots", "fear_greed", "INTEGER"),
         ("coin_snapshots", "long_short_ratio", "FLOAT"),
     ]
+
+    # scanner_simulations tablosu (CREATE IF NOT EXISTS)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS scanner_simulations (
+                    id BIGSERIAL PRIMARY KEY,
+                    coin VARCHAR NOT NULL,
+                    symbol VARCHAR NOT NULL,
+                    direction VARCHAR NOT NULL,
+                    selection_mode VARCHAR NOT NULL,
+                    confidence INTEGER,
+                    reason TEXT,
+                    entry_price FLOAT NOT NULL,
+                    tp_price FLOAT, sl_price FLOAT,
+                    tp_pct FLOAT, sl_pct FLOAT,
+                    leverage INTEGER DEFAULT 50,
+                    rsi_14 FLOAT, adx FLOAT, volume_ratio FLOAT,
+                    funding_rate FLOAT, fear_greed INTEGER,
+                    atr_pct FLOAT, supertrend_dir INTEGER,
+                    status VARCHAR DEFAULT 'open',
+                    exit_price FLOAT, pnl_pct FLOAT, pnl_usdt FLOAT,
+                    max_favorable_pct FLOAT, max_adverse_pct FLOAT,
+                    closed_at TIMESTAMPTZ,
+                    ai_review TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sim_status ON scanner_simulations (status)"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sim_created ON scanner_simulations (created_at)"))
+        print("[Migration] scanner_simulations tablosu hazır.")
+    except Exception as e:
+        print(f"[Migration] scanner_simulations hatası (devam): {e}")
     try:
         async with engine.begin() as conn:
             for table, column, col_type in _migrations:
@@ -167,6 +201,7 @@ async def lifespan(app: FastAPI):
         # 6. Coin veri toplayıcı (zero-fee coinler)
         try:
             tasks.append(asyncio.create_task(start_coin_collector()))
+            tasks.append(asyncio.create_task(start_scanner_simulator()))
             print("[Main] Coin veri toplayıcı başlatıldı.")
         except Exception as e:
             print(f"[Main] CoinCollector hatası (devam ediliyor): {e}")
@@ -288,6 +323,9 @@ for _prefix in ["/api", "/api/api"]:
     app.include_router(trades.router, prefix=_prefix)
     app.include_router(ai_chat.router, prefix=_prefix)
     app.include_router(coins.router, prefix=_prefix)
+
+    from api.routes import simulations
+    app.include_router(simulations.router, prefix=_prefix)
 
 
 # WebSocket routes
