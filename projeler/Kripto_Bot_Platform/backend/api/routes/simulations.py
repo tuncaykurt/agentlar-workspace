@@ -176,6 +176,21 @@ async def sim_status():
     return json.loads(raw) if raw else {"running": False}
 
 
+@router.post("/trigger")
+async def trigger_simulation():
+    """Simülasyonu manuel tetikle — debug ve test için."""
+    from services.scanner_simulator import run_simulator_cycle
+    try:
+        await run_simulator_cycle()
+        redis = get_redis()
+        raw = await redis.get("scanner_sim:status")
+        status = json.loads(raw) if raw else {}
+        return {"triggered": True, "status": status}
+    except Exception as e:
+        import traceback
+        return {"triggered": False, "error": str(e), "traceback": traceback.format_exc()[-1000:]}
+
+
 @router.delete("/{sim_id}")
 async def delete_simulation(sim_id: int):
     """Tek bir simülasyonu sil."""
