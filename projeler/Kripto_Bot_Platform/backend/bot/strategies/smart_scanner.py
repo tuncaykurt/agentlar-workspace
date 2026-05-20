@@ -162,6 +162,38 @@ def score_coin_manual(coin: dict, criteria: ManualCriteria) -> Optional[float]:
         elif abs_dist < 1:
             score += 8  # EMA200'e yakın = potansiyel dönüş
 
+    # MACD histogram (momentum değişimi)
+    macd_hist = coin.get("macd_hist")
+    if macd_hist is not None:
+        if abs(macd_hist) > 0:
+            # Histogram yönü trend ile uyumlu → ekstra skor
+            if macd_hist > 0 and coin.get("supertrend_dir") == 1:
+                score += 8  # bullish momentum + bullish trend
+            elif macd_hist < 0 and coin.get("supertrend_dir") == -1:
+                score += 8  # bearish momentum + bearish trend
+            elif abs(macd_hist) > 0:
+                score += 3  # en azından momentum var
+
+    # Bollinger Band pozisyonu (fiyat banda yakınsa fırsat)
+    bb_upper = coin.get("bb_upper")
+    bb_lower = coin.get("bb_lower")
+    price = coin.get("price", 0)
+    if bb_upper and bb_lower and price > 0:
+        bb_width = bb_upper - bb_lower
+        if bb_width > 0:
+            bb_pct = (price - bb_lower) / bb_width  # 0=alt band, 1=üst band
+            if bb_pct < 0.1:
+                score += 10  # Alt banda çok yakın → long fırsatı
+            elif bb_pct < 0.2:
+                score += 5
+            elif bb_pct > 0.9:
+                score += 10  # Üst banda çok yakın → short fırsatı
+            elif bb_pct > 0.8:
+                score += 5
+            # Squeeze tespiti (dar band = patlama potansiyeli)
+            if price > 0 and (bb_width / price * 100) < 1.0:
+                score += 7  # Bollinger squeeze
+
     return round(score, 2)
 
 

@@ -473,6 +473,10 @@ class BotEngine:
             else:
                 print(f"[Bot {bot_name}] İşlem açılıyor: {side} {amount} {symbol} type={order_type} TP={tp_price} SL={sl_price} pos_side={trade.get('pos_side')}")
 
+            # TP/SL yüzdeleri — MEXC fill price'tan recalc için
+            order_tp_pct = ai_result.get("tp_pct") if ai_result else None
+            order_sl_pct = ai_result.get("sl_pct") if ai_result else None
+
             try:
                 order = await self.exchange.place_order(
                     symbol, side, amount, order_type,
@@ -481,6 +485,7 @@ class BotEngine:
                     pos_side=trade.get("pos_side"),
                     trailing_callback_rate=trailing_callback_rate if trailing_callback_rate > 0 else None,
                     trailing_active_price=trailing_active_price,
+                    tp_pct=order_tp_pct, sl_pct=order_sl_pct,
                 )
                 print(f"[Bot {bot_name}] ✓ İşlem başarılı: order_id={order.get('id', 'N/A')}")
             except RuntimeError as tpsl_err:
@@ -2812,6 +2817,8 @@ class BotEngine:
                     adx = c.get("adx")
                     if adx and adx > 25:
                         s += 15
+                    if adx and adx > 40:
+                        s += 10  # çok güçlü trend
                     vol = c.get("volume_ratio")
                     if vol and vol > 2:
                         s += 15
@@ -2823,6 +2830,30 @@ class BotEngine:
                     chg = c.get("price_change_24h")
                     if chg and abs(chg) > 3:
                         s += 10
+                    # MACD momentum değişimi
+                    macd = c.get("macd_hist")
+                    if macd is not None and abs(macd) > 0:
+                        trend = c.get("supertrend_dir")
+                        if (macd > 0 and trend == 1) or (macd < 0 and trend == -1):
+                            s += 12  # momentum + trend uyumu
+                        else:
+                            s += 5   # divergence potansiyeli
+                    # Bollinger squeeze (patlama potansiyeli)
+                    bb_u = c.get("bb_upper")
+                    bb_l = c.get("bb_lower")
+                    px = c.get("price", 0)
+                    if bb_u and bb_l and px > 0:
+                        bb_w = bb_u - bb_l
+                        if bb_w > 0:
+                            if (bb_w / px * 100) < 1.0:
+                                s += 15  # squeeze = yakında patlama
+                            bb_pos = (px - bb_l) / bb_w
+                            if bb_pos < 0.1 or bb_pos > 0.9:
+                                s += 10  # banda yapışmış = fırsat
+                    # EMA200'e yakınlık (dönüş fırsatı)
+                    ema_d = c.get("ema200_dist")
+                    if ema_d is not None and abs(ema_d) < 1.0:
+                        s += 8  # EMA200 cross potansiyeli
                     return s
 
                 # Açık pozisyondakileri çıkar, ilgi skoruna göre sırala
@@ -2944,6 +2975,10 @@ class BotEngine:
             print(f"[SmartScanner {bot_name}] Manuel: {len(scored)} coin geçti, {len(selections)} seçildi")
 
         # ── 4. İşlem aç ──
+        if not selections:
+            reason = ai_error or "Kriterlere uyan coin bulunamadı"
+            print(f"[SmartScanner {bot_name}] Seçim yok — {reason}")
+
         opened = []
         for sel in selections:
             try:
@@ -2979,20 +3014,19 @@ class BotEngine:
                     print(f"[SmartScanner {bot_name}] {sel['coin']} — pozisyon büyüklüğü 0, atlanıyor")
                     continue
 
-                # AI result formatında
+                # AI result formatında — dynamic_leverage ile _execute doğru leverage kullanır
                 ai_result = {
                     "approved": True,
                     "confidence": sel.get("confidence", 50),
                     "take_profit": tp_price,
                     "stop_loss": sl_price,
                     "analysis": sel.get("reason", "Smart Scanner seçimi"),
+                    "dynamic_leverage": leverage,  # Scanner/AI leverage → _execute'a geçir
+                    "tp_pct": tp_pct,              # MEXC fill price recalc için
+                    "sl_pct": sl_pct,              # MEXC fill price recalc için
                 }
 
-                # Leverage ayarla
-                try:
-                    await self.exchange.set_leverage(symbol, leverage)
-                except Exception:
-                    pass
+                # NOT: set_leverage burada çağrılmıyor — _execute içinde dynamic_leverage ile yapılıyor
 
                 # İşlem aç
                 await self._execute(side, price, qty, sl_price, ai_result, symbol_override=symbol)
