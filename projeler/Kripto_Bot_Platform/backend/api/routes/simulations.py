@@ -9,10 +9,29 @@ import json
 
 router = APIRouter(prefix="/simulations", tags=["simulations"])
 
+# ai_log kolonu var mı cache'le
+_has_ai_log_col = None
+
+
+async def _check_ai_log_col() -> bool:
+    global _has_ai_log_col
+    if _has_ai_log_col is not None:
+        return _has_ai_log_col
+    try:
+        async with async_session() as session:
+            await session.execute(text("SELECT ai_log FROM scanner_simulations LIMIT 1"))
+            _has_ai_log_col = True
+    except Exception:
+        _has_ai_log_col = False
+    return _has_ai_log_col
+
 
 @router.get("")
 async def list_simulations(status: str = None, limit: int = 50, offset: int = 0):
     """Simülasyonları listele. ?status=open|win|loss|expired ile filtrele."""
+    has_ai_log = await _check_ai_log_col()
+    ai_log_col = ", ai_log" if has_ai_log else ""
+
     async with async_session() as session:
         where = "WHERE 1=1"
         params = {"limit": limit, "offset": offset}
@@ -26,7 +45,7 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
                    rsi_14, adx, volume_ratio, funding_rate, fear_greed, atr_pct, supertrend_dir,
                    status, exit_price, pnl_pct, pnl_usdt,
                    max_favorable_pct, max_adverse_pct,
-                   ai_review, created_at, closed_at, ai_log
+                   ai_review, created_at, closed_at{ai_log_col}
             FROM scanner_simulations
             {where}
             ORDER BY created_at DESC
@@ -44,13 +63,17 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
             "rsi_14", "adx", "volume_ratio", "funding_rate", "fear_greed", "atr_pct", "supertrend_dir",
             "status", "exit_price", "pnl_pct", "pnl_usdt",
             "max_favorable_pct", "max_adverse_pct",
-            "ai_review", "created_at", "closed_at", "ai_log"]
+            "ai_review", "created_at", "closed_at"]
+    if has_ai_log:
+        cols.append("ai_log")
 
     items = []
     for row in rows:
         d = dict(zip(cols, row))
         d["created_at"] = d["created_at"].isoformat() if d["created_at"] else None
         d["closed_at"] = d["closed_at"].isoformat() if d["closed_at"] else None
+        if not has_ai_log:
+            d["ai_log"] = None
         items.append(d)
 
     return {"items": items, "total": total}

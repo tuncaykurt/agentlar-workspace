@@ -337,18 +337,31 @@ async def _save_simulation(sel: dict, price: float):
     sl_price = round(price * (1 - sl_pct / 100), 6) if is_long else round(price * (1 + sl_pct / 100), 6)
     ind = sel.get("indicators", {})
 
+    # ai_log kolonu var mı kontrol et
+    ai_log_col = ""
+    ai_log_val = ""
+    ai_log_param = {}
+    try:
+        async with async_session() as sess:
+            await sess.execute(sql_text("SELECT ai_log FROM scanner_simulations LIMIT 0"))
+        ai_log_col = ", ai_log"
+        ai_log_val = ", :ai_log"
+        ai_log_param = {"ai_log": sel.get("ai_log")}
+    except Exception:
+        pass
+
     async with async_session() as session:
-        await session.execute(sql_text("""
+        await session.execute(sql_text(f"""
             INSERT INTO scanner_simulations
                 (coin, symbol, direction, selection_mode, confidence, reason,
                  entry_price, tp_price, sl_price, tp_pct, sl_pct, leverage,
                  rsi_14, adx, volume_ratio, funding_rate, fear_greed, atr_pct, supertrend_dir,
-                 status, ai_log)
+                 status{ai_log_col})
             VALUES
                 (:coin, :symbol, :direction, :mode, :confidence, :reason,
                  :entry, :tp, :sl, :tp_pct, :sl_pct, :lev,
                  :rsi, :adx, :vol, :fund, :fg, :atr, :st,
-                 'open', :ai_log)
+                 'open'{ai_log_val})
         """), {
             "coin": sel["coin"], "symbol": sel["symbol"],
             "direction": sel["direction"], "mode": sel.get("mode", "ai"),
@@ -359,7 +372,7 @@ async def _save_simulation(sel: dict, price: float):
             "vol": ind.get("volume_ratio"), "fund": ind.get("funding_rate"),
             "fg": ind.get("fear_greed"), "atr": ind.get("atr_pct"),
             "st": ind.get("supertrend_dir"),
-            "ai_log": sel.get("ai_log"),
+            **ai_log_param,
         })
         await session.commit()
 
@@ -381,6 +394,9 @@ async def _check_open_simulations(exchange):
         direction = sim["direction"]
         is_long = direction == "long"
         created = sim["created_at"]
+        # Naive datetime ise UTC olarak işaretle
+        if created and created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
         max_fav = sim.get("max_favorable_pct") or 0
         max_adv = sim.get("max_adverse_pct") or 0
 
