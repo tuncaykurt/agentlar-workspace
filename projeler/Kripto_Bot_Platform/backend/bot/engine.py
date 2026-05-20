@@ -46,7 +46,8 @@ class BotEngine:
     def __init__(self, bot_config: dict, exchange_client):
         self.config = bot_config
         self.exchange = exchange_client
-        self.data_fetcher = DataFetcher(exchange_client)
+        self.data_fetcher = DataFetcher(exchange_client,
+                                        exchange_name=getattr(exchange_client, '_exchange_name', None))
         self.running = False
         self.paper_trades: list = []
         self.signal_history: list = []

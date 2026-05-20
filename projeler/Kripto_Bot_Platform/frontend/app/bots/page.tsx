@@ -358,17 +358,17 @@ const STRATEGIES: Strategy[] = [
     description: "Tüm zero-fee coinleri otomatik tarar, en iyi fırsatları seçer ve işleme girer. Manuel Kriter veya AI Karar modu ile çalışır.",
     signals: ["Otomatik coin seçimi", "Çoklu pozisyon yönetimi", "AI analiz"],
     params: [
-      { key: "selection_mode", label: "Seçim Modu", type: "select", default: "manual", description: "Manuel: kendi kriterleriniz | AI: yapay zeka coin seçer",
+      { key: "selection_mode", label: "Seçim Modu", type: "select", default: "ai", description: "Manuel: kendi kriterleriniz | AI: yapay zeka coin seçer",
         options: [
           { value: "manual", label: "Manuel Kriter" },
           { value: "ai",     label: "AI Karar (Claude)" },
         ],
       },
-      { key: "scan_interval", label: "Tarama Aralığı (sn)", type: "number", min: 30, max: 3600, step: 10, default: 120, description: "Kaç saniyede bir tüm coinleri tara" },
-      { key: "max_positions", label: "Max Pozisyon", type: "number", min: 1, max: 10, step: 1, default: 3, description: "Aynı anda max kaç coin'de pozisyon açılsın" },
-      { key: "leverage",      label: "Kaldıraç",     type: "number", min: 1, max: 500, step: 1, default: 5, description: "Varsayılan kaldıraç (AI modunda AI önerebilir)" },
-      { key: "tp_pct",        label: "Take Profit %", type: "number", min: 0.1, max: 100, step: 0.1, default: 2, description: "Kâr al yüzdesi (AI modunda AI önerebilir)" },
-      { key: "sl_pct",        label: "Stop Loss %",   type: "number", min: 0.1, max: 100, step: 0.1, default: 1, description: "Zarar durdur yüzdesi (AI modunda AI önerebilir)" },
+      { key: "scan_interval", label: "Tarama Aralığı (sn)", type: "number", min: 30, max: 3600, step: 10, default: 90, description: "Kaç saniyede bir tüm coinleri tara (AI modu min 60sn)" },
+      { key: "max_positions", label: "Max Pozisyon", type: "number", min: 1, max: 10, step: 1, default: 2, description: "Aynı anda max kaç coin'de pozisyon açılsın" },
+      { key: "leverage",      label: "Kaldıraç",     type: "number", min: 1, max: 500, step: 1, default: 50, description: "Varsayılan kaldıraç — 20-100x önerilen (AI modunda AI önerebilir)" },
+      { key: "tp_pct",        label: "Take Profit %", type: "number", min: 0.1, max: 100, step: 0.1, default: 1.5, description: "Kâr al yüzdesi — yüksek kaldıraçta düşük % yeterli" },
+      { key: "sl_pct",        label: "Stop Loss %",   type: "number", min: 0.1, max: 100, step: 0.1, default: 0.8, description: "Zarar durdur yüzdesi — yüksek kaldıraçta dar SL önemli" },
 
       // ─── Manuel Kriter Parametreleri ───
       { key: "trend_filter", label: "Trend Filtresi", type: "select", default: "any", description: "Sadece belirli trend yönündeki coinleri seç",
@@ -378,7 +378,7 @@ const STRATEGIES: Strategy[] = [
           { value: "bearish", label: "Sadece Bearish (Düşen)" },
         ],
       },
-      { key: "min_adx", label: "Min ADX (Trend Gücü)", type: "number", min: 0, max: 100, step: 1, default: 0, description: "0 = kapalı. 25+ güçlü trend, 40+ çok güçlü" },
+      { key: "min_adx", label: "Min ADX (Trend Gücü)", type: "number", min: 0, max: 100, step: 1, default: 20, description: "0 = kapalı. 25+ güçlü trend, 40+ çok güçlü. Yüksek kaldıraçta trend gücü kritik" },
       { key: "ema200_position", label: "EMA200 Pozisyonu", type: "select", default: "any", description: "Fiyatın EMA200'e göre konumu",
         options: [
           { value: "any",   label: "Farketmez" },
@@ -396,12 +396,12 @@ const STRATEGIES: Strategy[] = [
       },
       { key: "rsi_min", label: "Min RSI", type: "number", min: 0, max: 100, step: 1, default: 0, description: "Minimum RSI değeri (0 = kapalı)" },
       { key: "rsi_max", label: "Max RSI", type: "number", min: 0, max: 100, step: 1, default: 100, description: "Maksimum RSI değeri (100 = kapalı)" },
-      { key: "min_atr_pct", label: "Min ATR%", type: "number", min: 0, max: 50, step: 0.01, default: 0, description: "Minimum volatilite (ATR/Fiyat %). 0 = kapalı" },
-      { key: "max_atr_pct", label: "Max ATR%", type: "number", min: 0, max: 50, step: 0.01, default: 100, description: "Maksimum volatilite. 100 = kapalı" },
-      { key: "min_volume_ratio", label: "Min Hacim Oranı", type: "number", min: 0, max: 50, step: 0.1, default: 0, description: "Minimum hacim spike (0 = kapalı, 2+ = ortalamanın 2 katı)" },
+      { key: "min_atr_pct", label: "Min ATR%", type: "number", min: 0, max: 50, step: 0.01, default: 0.3, description: "Minimum volatilite — yüksek kaldıraçta min hareket gerekli" },
+      { key: "max_atr_pct", label: "Max ATR%", type: "number", min: 0, max: 50, step: 0.01, default: 5, description: "Maksimum volatilite — çok volatil coinler yüksek kaldıraçta tehlikeli" },
+      { key: "min_volume_ratio", label: "Min Hacim Oranı", type: "number", min: 0, max: 50, step: 0.1, default: 1.2, description: "Hacim spike filtresi (1.2 = ortalamanın %20 üstü)" },
       { key: "min_price_change_24h", label: "Min 24h Değişim %", type: "number", min: -100, max: 100, step: 0.5, default: -100, description: "Son 24 saatteki minimum değişim yüzdesi" },
       { key: "max_price_change_24h", label: "Max 24h Değişim %", type: "number", min: -100, max: 100, step: 0.5, default: 100, description: "Son 24 saatteki maksimum değişim yüzdesi" },
-      { key: "min_leverage", label: "Min Kaldıraç", type: "number", min: 0, max: 200, step: 1, default: 0, description: "Coin'in desteklediği minimum kaldıraç (0 = kapalı)" },
+      { key: "min_leverage", label: "Min Kaldıraç Desteği", type: "number", min: 0, max: 200, step: 1, default: 20, description: "Coin en az bu kadar kaldıraç desteklemeli" },
       { key: "trade_direction", label: "İşlem Yönü", type: "select", default: "auto", description: "Hangi yönde işlem açılsın",
         options: [
           { value: "auto",  label: "Otomatik (Trende göre)" },
@@ -419,10 +419,10 @@ const STRATEGIES: Strategy[] = [
           { value: "price_change_24h", label: "24h Değişim %" },
         ],
       },
-      { key: "max_coins", label: "Max Seçim", type: "number", min: 1, max: 10, step: 1, default: 3, description: "Her taramada max kaç coin seçilsin" },
+      { key: "max_coins", label: "Max Seçim", type: "number", min: 1, max: 10, step: 1, default: 2, description: "Her taramada max kaç coin seçilsin (yüksek kaldıraçta 1-2 önerilen)" },
 
       // ─── AI Modu Parametreleri ───
-      { key: "min_ai_confidence", label: "Min AI Güven Skoru", type: "number", min: 0, max: 100, step: 5, default: 60, description: "AI'ın coin seçimi için minimum güven skoru (sadece AI modunda)" },
+      { key: "min_ai_confidence", label: "Min AI Güven Skoru", type: "number", min: 0, max: 100, step: 5, default: 70, description: "AI'ın coin seçimi için minimum güven skoru — yüksek kaldıraçta yüksek güven önemli" },
     ],
   },
 ]

@@ -51,9 +51,15 @@ CACHE_TTL = {
 
 
 class DataFetcher:
-    def __init__(self, exchange_client):
+    def __init__(self, exchange_client, exchange_name: str = None):
         self.exchange = exchange_client
-        self.exchange_name = "bitget"
+        # Exchange adını client'tan al — hardcoded "bitget" yerine gerçek borsa adı
+        if exchange_name:
+            self.exchange_name = exchange_name.lower()
+        else:
+            self.exchange_name = getattr(exchange_client, '_exchange_name', None) \
+                or getattr(getattr(exchange_client, 'exchange', None), 'id', 'bitget')
+            self.exchange_name = self.exchange_name.lower()
 
     # ─── Geçmiş Veri Doldurma ────────────────────────────────────────────────
 
