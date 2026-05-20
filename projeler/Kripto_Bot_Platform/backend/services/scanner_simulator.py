@@ -12,7 +12,7 @@ Bot açmadan çalışır, sadece gözlem ve öğrenme amaçlıdır.
 """
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import ccxt.async_support as ccxt
 from sqlalchemy import text as sql_text
@@ -370,7 +370,7 @@ async def _check_open_simulations(exchange):
     if not open_sims:
         return
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     for sim in open_sims:
         sim_id = sim["id"]
@@ -486,7 +486,7 @@ async def run_simulator_cycle():
             await redis.set("scanner_sim:status", json.dumps({
                 "open_count": len(open_sims),
                 "waiting": True,
-                "ts": datetime.utcnow().isoformat(),
+                "ts": datetime.now(timezone.utc).isoformat(),
             }), ex=300)
             return
 
@@ -495,7 +495,7 @@ async def run_simulator_cycle():
             print("[SimScanner] Coin verisi yok — collector bekleniyor")
             await redis.set("scanner_sim:status", json.dumps({
                 "error": "Coin verisi yok",
-                "ts": datetime.utcnow().isoformat(),
+                "ts": datetime.now(timezone.utc).isoformat(),
             }), ex=300)
             return
 
@@ -533,7 +533,7 @@ async def run_simulator_cycle():
             "mode": cfg.get("mode", "ai"),
             "past_stats": past_stats,
             "waiting": False,
-            "ts": datetime.utcnow().isoformat(),
+            "ts": datetime.now(timezone.utc).isoformat(),
         }), ex=300)
 
     except Exception as e:
@@ -543,7 +543,7 @@ async def run_simulator_cycle():
         try:
             await redis.set("scanner_sim:status", json.dumps({
                 "error": str(e)[:300],
-                "ts": datetime.utcnow().isoformat(),
+                "ts": datetime.now(timezone.utc).isoformat(),
             }), ex=300)
         except Exception:
             pass
