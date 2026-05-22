@@ -758,14 +758,14 @@ async def test_cycle(bot_id: int):
 
     # load_markets
     try:
-        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=30)
+        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=15)
         steps.append(f"3. load_markets OK — {len(ex_client.exchange.markets)} market")
     except Exception as e:
         steps.append(f"3. load_markets HATASI: {e}")
 
     # fetch_ticker
     try:
-        ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(bot.symbol), timeout=15)
+        ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(bot.symbol), timeout=10)
         cur_price = float(ticker.get("last", 0))
         steps.append(f"4. fetch_ticker OK — price={cur_price}")
     except Exception as e:
@@ -843,8 +843,8 @@ async def test_tpsl_methods(data: TestOrderRequest):
     m = data.method if data.method is not None else 1
     try:
         ex_client = await _get_exchange_client(data.exchange, margin_type=data.margin_type)
-        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=30)
-        ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(data.symbol), timeout=15)
+        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=15)
+        ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(data.symbol), timeout=10)
         price = float(ticker["last"])
         test_lev = min(data.leverage, 20)
         await ex_client.set_leverage(data.symbol, test_lev)

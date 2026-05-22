@@ -1,7 +1,9 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from sqlalchemy import select, text
 from core.config import settings
@@ -344,6 +346,19 @@ async def _auto_start_bots(tasks: list):
     print(f"[Main] {len(running_bots)} bot otomatik olarak yeniden başlatıldı.")
 
 
+class TimeoutMiddleware(BaseHTTPMiddleware):
+    """Her isteğe 25 saniye global timeout koy — Gateway Timeout'u önler."""
+    async def dispatch(self, request: Request, call_next):
+        try:
+            response = await asyncio.wait_for(call_next(request), timeout=25)
+            return response
+        except asyncio.TimeoutError:
+            return JSONResponse(
+                status_code=504,
+                content={"detail": "İstek zaman aşımına uğradı (25s). Lütfen tekrar deneyin."}
+            )
+
+
 app = FastAPI(
     redirect_slashes=False,
     title="Kripto Bot Platform API",
@@ -366,6 +381,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(TimeoutMiddleware)
 
 # REST routes — /api ve /api/api prefix'leri (frontend double-prefix workaround)
 for _prefix in ["/api", "/api/api"]:
