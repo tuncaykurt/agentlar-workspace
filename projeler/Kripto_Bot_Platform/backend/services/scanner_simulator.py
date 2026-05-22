@@ -469,7 +469,40 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
         lev_range = (cfg.get("min_leverage", 3), cfg.get("max_leverage", 75))
         max_open = cfg.get("max_open", SIM_MAX_OPEN)
         remaining_slots = max_open - len(active_coins)
-        prompt = build_ai_prompt(top, active_coins, leverage_range=lev_range, max_selections=remaining_slots)
+        # past_performance dict oluştur (prompt'un kendi bölümünde kullanacak)
+        _sim_perf = None
+        if past_results:
+            _wins = [r for r in past_results if r["status"] == "win"]
+            _losses = [r for r in past_results if r["status"] == "loss"]
+            _strat_map = {}
+            for r in past_results:
+                er = r.get("exit_reason", "") or ""
+                cat = "trailing" if "TRAILING" in er.upper() else "hedge" if "HEDGE" in er.upper() else "normal_tp_sl"
+                _strat_map.setdefault(cat, []).append(float(r.get("pnl_pct") or 0))
+            _by_strat = {}
+            for cat, pnls in _strat_map.items():
+                wc = sum(1 for p in pnls if p > 0)
+                _by_strat[cat] = {"count": len(pnls), "win_rate": wc / len(pnls) * 100, "avg_pnl": sum(pnls) / len(pnls)}
+            _sim_perf = {
+                "total": len(past_results), "wins": len(_wins), "losses": len(_losses),
+                "win_rate": len(_wins) / len(past_results) * 100,
+                "avg_win_pct": sum(r.get("pnl_pct", 0) or 0 for r in _wins) / max(1, len(_wins)),
+                "avg_loss_pct": sum(r.get("pnl_pct", 0) or 0 for r in _losses) / max(1, len(_losses)),
+                "total_pnl_pct": sum(r.get("pnl_pct", 0) or 0 for r in past_results),
+                "by_strategy": _by_strat,
+                "recent_trades": [
+                    {"coin": r["coin"], "direction": r["direction"], "leverage": r.get("leverage"),
+                     "pnl_pct": r.get("pnl_pct", 0), "exit_reason": r.get("exit_reason", "?"),
+                     "strategy": "trailing" if "TRAILING" in (r.get("exit_reason") or "").upper()
+                                 else "hedge" if "HEDGE" in (r.get("exit_reason") or "").upper()
+                                 else "normal_tp_sl"}
+                    for r in past_results[:10]
+                ],
+                "best_coins": [], "worst_coins": [],
+            }
+
+        prompt = build_ai_prompt(top, active_coins, leverage_range=lev_range,
+                                  max_selections=remaining_slots, past_performance=_sim_perf)
         learning = _build_learning_context(past_results)
         if learning:
             prompt = prompt + "\n" + learning
@@ -507,6 +540,11 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                 user_max = cfg.get("max_leverage", 75)
                 final_lev = max(user_min, min(ai_lev, user_max, coin_max_lev))
 
+                # AI exit_strategy kararı
+                ai_exit_strategy = sel.get("exit_strategy", "normal_tp_sl")
+                if ai_exit_strategy not in ("trailing", "normal_tp_sl", "hedge"):
+                    ai_exit_strategy = "normal_tp_sl"
+
                 selections.append({
                     "coin": coin_name,
                     "symbol": matched["symbol"],
@@ -518,6 +556,8 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                     "leverage": final_lev,
                     "indicators": matched,
                     "ai_log": ai_log_text,
+                    "exit_strategy": ai_exit_strategy,
+                    "trailing_callback_pct": float(sel.get("trailing_callback_pct") or cfg.get("trailing_callback_pct", 0.1)),
                 })
 
         except Exception as e:

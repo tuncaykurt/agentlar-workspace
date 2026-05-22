@@ -214,7 +214,8 @@ def score_coin_manual(coin: dict, criteria: ManualCriteria) -> Optional[float]:
 
 
 def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
-                    leverage_range: tuple = None, max_selections: int = 3) -> str:
+                    leverage_range: tuple = None, max_selections: int = 3,
+                    past_performance: dict = None) -> str:
     """
     AI coin seçimi için kapsamlı prompt oluştur.
     Tüm coin verilerini analiz ederek en iyi fırsatları belirler.
@@ -271,8 +272,71 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
     neg_funding = [c["base"] for c in coins if c.get("funding_rate") is not None and c["funding_rate"] < -0.02]
     pos_funding = [c["base"] for c in coins if c.get("funding_rate") is not None and c["funding_rate"] > 0.05]
 
+    # ── Geçmiş performans özeti ──
+    perf_section = ""
+    if past_performance:
+        total = past_performance.get("total", 0)
+        wins = past_performance.get("wins", 0)
+        losses = past_performance.get("losses", 0)
+        win_rate = past_performance.get("win_rate", 0)
+        avg_win = past_performance.get("avg_win_pct", 0)
+        avg_loss = past_performance.get("avg_loss_pct", 0)
+        total_pnl = past_performance.get("total_pnl_pct", 0)
+
+        # Strateji bazlı performans
+        strat_perf = past_performance.get("by_strategy", {})
+        strat_lines = []
+        for strat_name, sp in strat_perf.items():
+            strat_lines.append(
+                f"  {strat_name}: {sp.get('count', 0)} işlem, "
+                f"Kazanma: %{sp.get('win_rate', 0):.0f}, "
+                f"Ort Kâr: %{sp.get('avg_pnl', 0):+.2f}"
+            )
+
+        # Son kapanan işlemler (öğrenme)
+        recent_lines = []
+        for rt in past_performance.get("recent_trades", []):
+            result_emoji = "+" if rt.get("pnl_pct", 0) >= 0 else ""
+            recent_lines.append(
+                f"  {rt.get('coin','?')} {rt.get('direction','?').upper()} "
+                f"Lev:{rt.get('leverage','?')}x → {result_emoji}{rt.get('pnl_pct', 0):.2f}% "
+                f"({rt.get('exit_reason','?')}) Strateji:{rt.get('strategy','?')}"
+            )
+
+        # En çok kazandıran/kaybettiren coinler
+        best_coins = past_performance.get("best_coins", [])
+        worst_coins = past_performance.get("worst_coins", [])
+
+        perf_section = f"""
+═══════════════════════════════════════════════════════════════
+              GEÇMİŞ İŞLEM PERFORMANSI (ÖĞRENİM VERİSİ)
+═══════════════════════════════════════════════════════════════
+Toplam: {total} işlem | Kazanma: {wins} | Kayıp: {losses} | Oran: %{win_rate:.0f}
+Ort Kazanç: %{avg_win:+.2f} | Ort Kayıp: %{avg_loss:+.2f} | Net PnL: %{total_pnl:+.2f}
+
+Çıkış Stratejisi Bazlı Performans:
+{chr(10).join(strat_lines) if strat_lines else '  Henüz veri yok'}
+
+En İyi Coinler: {', '.join(best_coins) if best_coins else 'Henüz veri yok'}
+En Kötü Coinler: {', '.join(worst_coins) if worst_coins else 'Henüz veri yok'}
+
+Son Kapanan İşlemler:
+{chr(10).join(recent_lines) if recent_lines else '  Henüz veri yok'}
+
+⚠️ GEÇMİŞTEN ÖĞREN:
+- Hangi exit stratejisi (trailing/normal_tp_sl/hedge) hangi piyasa koşulunda daha iyi performans gösterdi?
+- Kaybedilen işlemlerde ortak patern ne? Aynı hatayı tekrarlama!
+- Kazanan coinleri benzer koşullarda tekrar değerlendir
+- Trailing stop güçlü trendlerde, normal TP/SL yatay piyasalarda daha iyi çalışır
+"""
+
     return f"""Sen dünyanın en iyi kripto futures traderısın. Görevin: aşağıdaki tüm coinleri analiz ederek
 en yüksek kâr potansiyeline sahip EN FAZLA {max_selections} coin seç ve işlem yönü belirle. {max_selections}'den fazla seçme!
+
+Her seçim için ÇIKIŞ STRATEJİSİ de belirle:
+- "trailing": Güçlü trend + yüksek ADX (>30) + yüksek hacim → trailing stop ile kârı maksimize et
+- "normal_tp_sl": Yatay piyasa, düşük ADX (<25), belirsiz yön → sabit TP/SL ile riski sınırla
+- "hedge": Çok volatil, yön belirsiz ama hareket kesin (squeeze, BB sıkışma) → çift yönlü hedge
 
 ═══════════════════════════════════════════════════════════════
                     PIYASA GENEL DURUMU
@@ -288,7 +352,7 @@ Güçlü Trend (ADX>30): {', '.join(strong_trend) if strong_trend else 'Yok'}
 Negatif Funding (short kalabalık): {', '.join(neg_funding) if neg_funding else 'Yok'}
 Yüksek Funding (long kalabalık): {', '.join(pos_funding) if pos_funding else 'Yok'}
 Mevcut Açık Pozisyonlar: {active_str}
-
+{perf_section}
 ═══════════════════════════════════════════════════════════════
                     TÜM COİN VERİLERİ
 ═══════════════════════════════════════════════════════════════
@@ -336,7 +400,13 @@ Mevcut Açık Pozisyonlar: {active_str}
    - Kayıp senaryosu: SL nereye konulmalı, risk/ödül oranı ne?
    - Açık pozisyonlarla korelasyon: Aynı yönde çok pozisyon riskli
 
-7. ZAMANLAMA ANALİZİ:
+7. ÇIKIŞ STRATEJİSİ SEÇİMİ:
+   - "trailing": ADX > 30 + net trend + yüksek hacim → fiyat koşarken kârı maksimize et
+   - "normal_tp_sl": ADX < 25 veya yatay piyasa → sabit TP/SL ile disiplinli çık
+   - "hedge": BB squeeze + yüksek ATR + funding aşırı → yön belirsiz ama büyük hareket bekleniyor
+   - Geçmiş performanstan öğren: hangi strateji hangi koşulda daha başarılı oldu?
+
+8. ZAMANLAMA ANALİZİ:
    - Momentum zirve/dip noktasında mı?
    - Hacim spike'ı var mı? (haber etkisi olabilir)
    - Trend başlangıcı mı yoksa sonu mu?
@@ -350,7 +420,9 @@ Kurallar:
 - Sadece güçlü, net fırsatları seç (emin değilsen "seçim yok" de)
 - Risk/ödül oranı minimum 1.5:1 olmalı
 - En az 2 farklı analiz katmanı aynı yönü desteklemeli
-- Max 3 coin seç (kalite > miktar)
+- Max {max_selections} coin seç (kalite > miktar)
+- HER İŞLEM İÇİN exit_strategy BELİRLE (trailing / normal_tp_sl / hedge)
+- Hedge seçersen: aynı coin üzerinde hem long hem short açılacak, TP/SL hedge'e uygun olsun
 
 JSON formatında yanıt ver:
 {{
@@ -362,11 +434,14 @@ JSON formatında yanıt ver:
       "symbol": "BTC/USDT:USDT",
       "direction": "long|short",
       "confidence": 75,
-      "leverage_suggestion": 10,  // {min_lev}x ile {max_lev}x arası, coinin max kaldıracını aşma!
+      "leverage_suggestion": 10,
       "entry_reason": "Neden bu coin ve bu yön — teknik nedenler",
       "risk_factors": "Dikkat edilmesi gerekenler",
       "tp_suggestion_pct": 2.5,
       "sl_suggestion_pct": 1.0,
+      "exit_strategy": "trailing|normal_tp_sl|hedge",
+      "exit_reason": "Bu çıkış stratejisini neden seçtin — 1 cümle",
+      "trailing_callback_pct": 0.1,
       "priority": 1
     }}
   ],

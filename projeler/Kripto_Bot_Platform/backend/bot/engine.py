@@ -2709,6 +2709,98 @@ class BotEngine:
     #  SMART SCANNER BOT — Otomatik coin seçimi + işlem açma
     # ══════════════════════════════════════════════════════════════════════
 
+    async def _collect_past_performance(self, bot_id: int) -> dict:
+        """Geçmiş işlem performansını topla — AI'nın öğrenmesi için."""
+        from sqlalchemy import text as sql_text
+
+        result = {
+            "total": 0, "wins": 0, "losses": 0, "win_rate": 0,
+            "avg_win_pct": 0, "avg_loss_pct": 0, "total_pnl_pct": 0,
+            "by_strategy": {}, "recent_trades": [],
+            "best_coins": [], "worst_coins": [],
+        }
+
+        try:
+            async with async_session() as session:
+                # scanner_simulations tablosundan son 100 kapalı işlemi al
+                rows = await session.execute(sql_text("""
+                    SELECT coin, direction, leverage, pnl_pct, exit_reason, status,
+                           tp_pct, sl_pct, created_at, closed_at
+                    FROM scanner_simulations
+                    WHERE status IN ('win', 'loss')
+                    ORDER BY closed_at DESC NULLS LAST
+                    LIMIT 100
+                """))
+                trades = rows.fetchall()
+
+                if not trades:
+                    return result
+
+                wins = [t for t in trades if t[3] and t[3] > 0]
+                losses = [t for t in trades if t[3] and t[3] <= 0]
+                result["total"] = len(trades)
+                result["wins"] = len(wins)
+                result["losses"] = len(losses)
+                result["win_rate"] = (len(wins) / len(trades) * 100) if trades else 0
+                result["avg_win_pct"] = sum(t[3] for t in wins) / max(1, len(wins)) if wins else 0
+                result["avg_loss_pct"] = sum(t[3] for t in losses) / max(1, len(losses)) if losses else 0
+                result["total_pnl_pct"] = sum(t[3] for t in trades if t[3])
+
+                # Çıkış stratejisi bazlı performans
+                strat_map = {}  # exit_reason → list of pnl
+                for t in trades:
+                    reason = t[4] or "unknown"
+                    # Trailing / TP / SL / EXPIRED → strateji kategorisi
+                    if "TRAILING" in reason.upper():
+                        cat = "trailing"
+                    elif "HEDGE" in reason.upper():
+                        cat = "hedge"
+                    else:
+                        cat = "normal_tp_sl"
+                    if cat not in strat_map:
+                        strat_map[cat] = []
+                    strat_map[cat].append(float(t[3]) if t[3] else 0)
+
+                for cat, pnls in strat_map.items():
+                    win_count = sum(1 for p in pnls if p > 0)
+                    result["by_strategy"][cat] = {
+                        "count": len(pnls),
+                        "win_rate": (win_count / len(pnls) * 100) if pnls else 0,
+                        "avg_pnl": sum(pnls) / max(1, len(pnls)),
+                    }
+
+                # Son 10 işlem (detaylı)
+                for t in trades[:10]:
+                    result["recent_trades"].append({
+                        "coin": t[0],
+                        "direction": t[1],
+                        "leverage": t[2],
+                        "pnl_pct": float(t[3]) if t[3] else 0,
+                        "exit_reason": t[4] or "?",
+                        "strategy": "trailing" if t[4] and "TRAILING" in (t[4] or "").upper()
+                                    else "hedge" if t[4] and "HEDGE" in (t[4] or "").upper()
+                                    else "normal_tp_sl",
+                    })
+
+                # En iyi/kötü coinler
+                coin_pnl = {}
+                for t in trades:
+                    coin = t[0]
+                    if coin not in coin_pnl:
+                        coin_pnl[coin] = []
+                    coin_pnl[coin].append(float(t[3]) if t[3] else 0)
+
+                coin_avg = {c: sum(ps) / len(ps) for c, ps in coin_pnl.items() if len(ps) >= 2}
+                if coin_avg:
+                    sorted_coins = sorted(coin_avg.items(), key=lambda x: x[1], reverse=True)
+                    result["best_coins"] = [f"{c}(%{p:+.1f})" for c, p in sorted_coins[:3] if p > 0]
+                    result["worst_coins"] = [f"{c}(%{p:+.1f})" for c, p in sorted_coins[-3:] if p < 0]
+
+        except Exception as e:
+            print(f"[PerfCollector] Hata: {e}")
+
+        return result
+
     async def _run_smart_scanner_cycle(self, redis):
         """
         Smart Scanner döngüsü:
@@ -2925,7 +3017,16 @@ class BotEngine:
                     int(params.get("max_leverage", 75)),
                 )
                 remaining = max_positions - len(active_positions)
-                prompt = build_ai_prompt(ai_top, active_positions, leverage_range=leverage_range, max_selections=remaining)
+
+                # ── Geçmiş performans verisi topla (AI öğrensin) ──
+                past_performance = None
+                try:
+                    past_performance = await self._collect_past_performance(bot_id)
+                except Exception as perf_err:
+                    print(f"[SmartScanner {bot_name}] Performans verisi alınamadı: {perf_err}")
+
+                prompt = build_ai_prompt(ai_top, active_positions, leverage_range=leverage_range,
+                                         max_selections=remaining, past_performance=past_performance)
                 model = settings.AI_DEEP_MODEL
                 ai_response = await asyncio.wait_for(
                     _call(model, prompt, max_tokens=1200),
@@ -2944,7 +3045,6 @@ class BotEngine:
                 for sel in ai_selections:
                     coin_name = sel.get("coin", "")
                     if coin_name in active_positions:
-                        continue
                         continue
                     if sel.get("confidence", 0) < int(params.get("min_ai_confidence", 60)):
                         print(f"[SmartScanner {bot_name}] {coin_name} confidence={sel.get('confidence')} < {params.get('min_ai_confidence', 60)}, atlanıyor")
@@ -2976,6 +3076,15 @@ class BotEngine:
                         print(f"[SmartScanner {bot_name}] SL clamp: AI={ai_sl}% → {min_sl}% (lev={clamped_lev}x, tasfiye={100/clamped_lev:.1f}%)")
                         ai_sl = min_sl
 
+                    # AI'ın çıkış stratejisi kararı
+                    ai_exit_strategy = sel.get("exit_strategy", "normal_tp_sl")
+                    if ai_exit_strategy not in ("trailing", "normal_tp_sl", "hedge"):
+                        ai_exit_strategy = "normal_tp_sl"
+                    ai_trailing_cb = float(sel.get("trailing_callback_pct") or params.get("trailing_callback_pct", 0.1))
+
+                    print(f"[SmartScanner {bot_name}] {coin_name}: exit_strategy={ai_exit_strategy}, "
+                          f"reason={sel.get('exit_reason', 'N/A')}")
+
                     selections.append({
                         "coin": coin_name,
                         "symbol": ai_symbol,
@@ -2987,6 +3096,8 @@ class BotEngine:
                         "reason": sel.get("entry_reason", "AI seçimi"),
                         "source": "ai",
                         "market_regime": market_regime,
+                        "exit_strategy": ai_exit_strategy,
+                        "trailing_callback_pct": ai_trailing_cb,
                     })
 
             except Exception as e:
@@ -3147,6 +3258,9 @@ class BotEngine:
                     print(f"[SmartScanner {bot_name}] {sel['coin']} — pozisyon büyüklüğü 0, atlanıyor")
                     continue
 
+                # ── AI exit_strategy kararına göre parametreleri ayarla ──
+                exit_strategy = sel.get("exit_strategy", "normal_tp_sl")
+
                 # AI result formatında — dynamic_leverage ile _execute doğru leverage kullanır
                 ai_result = {
                     "approved": True,
@@ -3162,29 +3276,81 @@ class BotEngine:
 
                 # NOT: set_leverage burada çağrılmıyor — _execute içinde dynamic_leverage ile yapılıyor
 
-                # İşlem aç
-                await self._execute(side, price, qty, sl_price, ai_result, symbol_override=symbol)
+                if exit_strategy == "hedge":
+                    # ── HEDGE: aynı coin üzerinde hem long hem short aç ──
+                    if len(active_positions) >= max_positions - 1:
+                        print(f"[SmartScanner {bot_name}] {sel['coin']} hedge için 2 slot gerek ama {max_positions - len(active_positions)} kaldı — normal işleme düşüyor")
+                        exit_strategy = "normal_tp_sl"
 
-                # Signal log
-                await self._log_signal(side, price, source=f"smart_scanner_{sel['source']}",
-                    action="executed", confidence=sel.get("confidence"),
-                    tp_price=tp_price, sl_price=sl_price,
-                    reject_reason=None, symbol_override=symbol)
+                if exit_strategy == "hedge":
+                    # Hedge işlemlerinde trailing KAPALI — normal TP/SL kullan
+                    params["trailing_enabled"] = False
+                    params.pop("trailing_callback_pct", None)
+
+                    hedge_tp = float(params.get("hedge_tp_pct", tp_pct))
+                    hedge_sl = float(params.get("hedge_sl_pct", sl_pct))
+                    for h_dir in ["long", "short"]:
+                        h_side = "buy" if h_dir == "long" else "sell"
+                        if h_dir == "long":
+                            h_tp = round(price * (1 + hedge_tp / 100), 6)
+                            h_sl = round(price * (1 - hedge_sl / 100), 6)
+                        else:
+                            h_tp = round(price * (1 - hedge_tp / 100), 6)
+                            h_sl = round(price * (1 + hedge_sl / 100), 6)
+
+                        h_ai_result = {
+                            **ai_result,
+                            "take_profit": h_tp,
+                            "stop_loss": h_sl,
+                            "tp_pct": hedge_tp,
+                            "sl_pct": hedge_sl,
+                            "analysis": f"HEDGE {h_dir.upper()} (AI karar) — {sel.get('reason', '')}",
+                        }
+                        await self._execute(h_side, price, qty, h_sl, h_ai_result, symbol_override=symbol)
+
+                    await self._log_signal(side, price, source="smart_scanner_ai_hedge",
+                        action="executed", confidence=sel.get("confidence"),
+                        tp_price=tp_price, sl_price=sl_price,
+                        reject_reason=None, symbol_override=symbol)
+
+                    print(f"[SmartScanner {bot_name}] ✅ HEDGE {sel['coin']} @ ${price:,.4f} "
+                          f"TP={hedge_tp}% SL={hedge_sl}% Lev={leverage}x (AI karar)")
+
+                else:
+                    # Trailing: AI trailing seçtiyse params'a trailing ekle, yoksa normal TP/SL
+                    if exit_strategy == "trailing":
+                        trailing_cb = sel.get("trailing_callback_pct", float(params.get("trailing_callback_pct", 0.1)))
+                        # params'a trailing bilgisini geçici ekle — _execute okuyacak
+                        params["trailing_enabled"] = True
+                        params["trailing_callback_pct"] = trailing_cb
+                    else:
+                        # Normal TP/SL — trailing kapalı
+                        params["trailing_enabled"] = False
+                        params.pop("trailing_callback_pct", None)
+
+                    await self._execute(side, price, qty, sl_price, ai_result, symbol_override=symbol)
+
+                    # Trailing durumunu logdan sonra geri al (sonraki işlem için)
+                    await self._log_signal(side, price, source=f"smart_scanner_{sel['source']}",
+                        action="executed", confidence=sel.get("confidence"),
+                        tp_price=tp_price, sl_price=sl_price,
+                        reject_reason=None, symbol_override=symbol)
+
+                    strategy_label = f"TRAILING({sel.get('trailing_callback_pct', '?')}%)" if exit_strategy == "trailing" else "TP/SL"
+                    print(f"[SmartScanner {bot_name}] ✅ {sel['direction'].upper()} {sel['coin']} @ ${price:,.4f} "
+                          f"TP={tp_pct}% SL={sl_pct}% Lev={leverage}x [{strategy_label}] Conf={sel.get('confidence')}%")
 
                 opened.append(sel["coin"])
                 active_positions.append(sel["coin"])
-
-                print(f"[SmartScanner {bot_name}] ✅ {sel['direction'].upper()} {sel['coin']} @ ${price:,.4f} "
-                      f"TP={tp_pct}% SL={sl_pct}% Lev={leverage}x Conf={sel.get('confidence')}%")
 
             except Exception as e:
                 print(f"[SmartScanner {bot_name}] {sel['coin']} işlem hatası: {e}")
                 import traceback
                 traceback.print_exc()
 
-        # ── 5. Hedge işlemleri ──
+        # ── 5. Hedge işlemleri (sadece MANUEL modda — AI modunda AI karar veriyor) ──
         hedge_enabled = params.get("hedge_enabled", False)
-        if hedge_enabled and len(active_positions) < max_positions - 1:
+        if hedge_enabled and mode != "ai" and len(active_positions) < max_positions - 1:
             hedge_tp = float(params.get("hedge_tp_pct", 0.4))
             hedge_sl = float(params.get("hedge_sl_pct", 0.1))
             use_max_lev = params.get("hedge_use_max_leverage", True)
