@@ -44,9 +44,10 @@ class _ExClient:
     async def set_leverage(self, symbol, leverage):
         # Zaten aynı leverage + margin_type set edilmişse API çağrısı yapma
         cache_key = f"{symbol}:{leverage}:{self._margin_type}"
-        if self._leverage_cache.get(symbol) == cache_key:
+        if self._leverage_cache.get(f"{symbol}:key") == cache_key:
             return
-        self._leverage_cache[symbol] = cache_key
+        self._leverage_cache[f"{symbol}:key"] = cache_key
+        self._leverage_cache[symbol] = int(leverage)
         try:
             if self._exchange_name == "mexc":
                 # MEXC: openType=1/2 (isolated/cross), positionType=1 (long) ve 2 (short)
