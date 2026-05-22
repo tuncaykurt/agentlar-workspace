@@ -1648,41 +1648,57 @@ async def get_live_trades(bot_id: int):
     except Exception:
         pass
 
-    # 2. Borsadaki gercek acik pozisyonlari cek
+    # 2. Borsadaki gercek acik pozisyonlari cek (MEXC native API — daha guvenilir)
     engine = _running_bots.get(bot_id)
     exchange_positions = []
     if engine and hasattr(engine, "exchange"):
         try:
-            positions = await asyncio.wait_for(
-                engine.exchange.exchange.fetch_positions(), timeout=10
+            # MEXC native: contractPrivateGetPositionOpenPositions (gercek acik pozisyonlar)
+            raw_resp = await asyncio.wait_for(
+                engine.exchange.exchange.contractPrivateGetPositionOpenPositions(),
+                timeout=10
             )
-            for pos in positions:
-                size = float(pos.get("contracts", 0) or pos.get("contractSize", 0) or 0)
-                if size <= 0:
+            pos_list = raw_resp.get("data", []) if isinstance(raw_resp, dict) else raw_resp or []
+            for p in pos_list:
+                hold_vol = float(p.get("holdVol", 0) or 0)
+                if hold_vol <= 0:
                     continue
-                sym = pos.get("symbol", "")
-                base = sym.split("/")[0] if "/" in sym else sym
-                side_str = pos.get("side", "long")
-                entry = float(pos.get("entryPrice", 0) or 0)
-                mark = float(pos.get("markPrice", 0) or 0)
-                lev = int(pos.get("leverage", 1) or 1)
-                margin_type = pos.get("marginMode", "isolated")
-                notional = float(pos.get("notional", 0) or 0)
-                margin_val = abs(notional / lev) if lev > 0 else 0
-                unrealized_pnl = float(pos.get("unrealizedPnl", 0) or 0)
+                mexc_sym = p.get("symbol", "")  # BTC_USDT
+                parts = mexc_sym.split("_")
+                base = parts[0] if parts else mexc_sym
+                ccxt_sym = f"{parts[0]}/{parts[1]}:{parts[1]}" if len(parts) == 2 else mexc_sym
+                pos_type = int(p.get("positionType", 1))  # 1=long, 2=short
+                side_str = "long" if pos_type == 1 else "short"
+                entry = float(p.get("openAvg", 0) or p.get("openAvgPrice", 0) or 0)
+                lev = int(p.get("leverage", 1) or 1)
+                open_type = int(p.get("openType", 1) or 1)  # 1=isolated, 2=cross
+                margin_type = "cross" if open_type == 2 else "isolated"
+                margin_val = float(p.get("im", 0) or p.get("initialMargin", 0) or 0)
+                unrealized_pnl = float(p.get("unrealisedPnl", 0) or p.get("unrealizedPnl", 0) or 0)
+                liq_price = float(p.get("liquidatePrice", 0) or p.get("liquidationPrice", 0) or 0)
+                # Mark price — ticker'dan al
+                mark = entry  # fallback
+                try:
+                    ticker_raw = await engine.exchange.exchange.contractPublicGetTicker({"symbol": mexc_sym})
+                    tick_data = ticker_raw.get("data", ticker_raw) if isinstance(ticker_raw, dict) else {}
+                    mark = float(tick_data.get("lastPrice", 0) or tick_data.get("last", 0) or entry)
+                except Exception:
+                    pass
+                notional = hold_vol * mark  # kontrat * fiyat (basit hesap)
+                if margin_val <= 0:
+                    margin_val = notional / lev if lev > 0 else 0
                 pnl_pct = (unrealized_pnl / margin_val * 100) if margin_val > 0 else 0
-                liq_price = float(pos.get("liquidationPrice", 0) or 0)
 
                 exchange_positions.append({
                     "coin": base,
-                    "symbol": sym,
+                    "symbol": ccxt_sym,
                     "direction": side_str,
                     "entry_price": entry,
                     "mark_price": mark,
                     "leverage": lev,
                     "margin_type": margin_type,
-                    "size": size,
-                    "notional": abs(notional),
+                    "size": hold_vol,
+                    "notional": round(abs(notional), 2),
                     "margin_usdt": round(margin_val, 2),
                     "unrealized_pnl": round(unrealized_pnl, 2),
                     "pnl_pct": round(pnl_pct, 2),
@@ -1690,6 +1706,8 @@ async def get_live_trades(bot_id: int):
                 })
         except Exception as e:
             print(f"[LiveTrades] Borsa pozisyon hatası: {e}")
+            import traceback
+            traceback.print_exc()
 
     # 3. Signal log'lardan TP/SL, confidence, reason bilgilerini al
     signal_map = {}
