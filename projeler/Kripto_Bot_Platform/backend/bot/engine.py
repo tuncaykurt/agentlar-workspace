@@ -407,9 +407,17 @@ class BotEngine:
         else:
             symbol = symbol_override or self.config["symbol"]
             
-            # AI veya webhook'tan gelen dinamik kaldıracı kullan
+            # AI veya webhook'tan gelen dinamik kaldıracı kullan + min/max sınırla
             leverage = int(ai_result.get("dynamic_leverage") or self.risk.leverage)
-            
+            min_lev = int(params.get("min_leverage", 0))
+            max_lev = int(params.get("max_leverage", 0))
+            if min_lev > 0 and leverage < min_lev:
+                print(f"[Bot {bot_name}] Leverage {leverage}x < min {min_lev}x → {min_lev}x")
+                leverage = min_lev
+            if max_lev > 0 and leverage > max_lev:
+                print(f"[Bot {bot_name}] Leverage {leverage}x > max {max_lev}x → {max_lev}x")
+                leverage = max_lev
+
             try:
                 await self.exchange.set_leverage(symbol, leverage)
                 print(f"[Bot {bot_name}] Leverage {leverage}x ayarlandı")
@@ -2926,14 +2934,32 @@ class BotEngine:
                     if matched:
                         ai_symbol = matched["symbol"]
 
+                    # Leverage: AI önerisini min/max aralığına ve coin max'ına sınırla
+                    ai_lev = int(sel.get("leverage_suggestion") or params.get("leverage", 5))
+                    min_lev = int(params.get("min_leverage", 3))
+                    max_lev = int(params.get("max_leverage", 75))
+                    coin_max_lev = (matched.get("max_leverage") or 200) if matched else 200
+                    clamped_lev = max(min_lev, min(max_lev, ai_lev, coin_max_lev))
+                    if clamped_lev != ai_lev:
+                        print(f"[SmartScanner {bot_name}] Leverage clamp: AI={ai_lev}x → {clamped_lev}x (aralık {min_lev}-{max_lev}, coin_max={coin_max_lev})")
+
+                    # TP/SL: AI önerisini minimum değerlere sınırla (çok düşük TP/SL tehlikeli)
+                    ai_tp = float(sel.get("tp_suggestion_pct") or params.get("tp_pct", 2))
+                    ai_sl = float(sel.get("sl_suggestion_pct") or params.get("sl_pct", 1))
+                    # Yüksek kaldıraçta min TP/SL = 100/leverage * 0.5 (tasfiye mesafesinin yarısı)
+                    min_sl = max(0.05, round(100 / clamped_lev * 0.3, 2))
+                    if ai_sl < min_sl:
+                        print(f"[SmartScanner {bot_name}] SL clamp: AI={ai_sl}% → {min_sl}% (lev={clamped_lev}x, tasfiye={100/clamped_lev:.1f}%)")
+                        ai_sl = min_sl
+
                     selections.append({
                         "coin": coin_name,
                         "symbol": ai_symbol,
                         "direction": sel.get("direction", "long"),
                         "confidence": sel.get("confidence", 50),
-                        "leverage": sel.get("leverage_suggestion", int(params.get("leverage", 5))),
-                        "tp_pct": sel.get("tp_suggestion_pct", float(params.get("tp_pct", 2))),
-                        "sl_pct": sel.get("sl_suggestion_pct", float(params.get("sl_pct", 1))),
+                        "leverage": clamped_lev,
+                        "tp_pct": ai_tp,
+                        "sl_pct": ai_sl,
                         "reason": sel.get("entry_reason", "AI seçimi"),
                         "source": "ai",
                         "market_regime": market_regime,
@@ -2990,12 +3016,18 @@ class BotEngine:
 
             for coin, sc in top:
                 direction = determine_trade_direction(coin, criteria)
+                # Coin'in borsa max kaldıracını aşma
+                target_lev = int(params.get("leverage", 5))
+                coin_max_lev = coin.get("max_leverage") or 200
+                safe_lev = min(target_lev, coin_max_lev)
+                if safe_lev != target_lev:
+                    print(f"[SmartScanner {bot_name}] {coin['base']} leverage {target_lev}x → {safe_lev}x (coin max={coin_max_lev})")
                 selections.append({
                     "coin": coin["base"],
                     "symbol": coin["symbol"],
                     "direction": direction,
                     "confidence": int(min(sc, 100)),
-                    "leverage": int(params.get("leverage", 5)),
+                    "leverage": safe_lev,
                     "tp_pct": float(params.get("tp_pct", 2)),
                     "sl_pct": float(params.get("sl_pct", 1)),
                     "reason": f"Skor: {sc:.0f} | RSI:{coin.get('rsi_14','?')} ADX:{coin.get('adx','?')} Vol:{coin.get('volume_ratio','?')}x",

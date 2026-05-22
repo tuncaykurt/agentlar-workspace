@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir fastapi==0.111.0 uvicorn[standard]==0.29.0
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN echo "cache-bust-v39"
+RUN echo "cache-bust-v40"
 COPY . .
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
