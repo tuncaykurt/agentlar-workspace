@@ -13,6 +13,7 @@ export default function SimulationsPage() {
   const [triggering, setTriggering] = useState(false)
   const [deploying, setDeploying] = useState(false)
   const [deployResult, setDeployResult] = useState<any>(null)
+  const [deployPaperMode, setDeployPaperMode] = useState(false)
   const [resetBalance, setResetBalance] = useState("1000")
 
   // Veri cek
@@ -60,7 +61,7 @@ export default function SimulationsPage() {
     setDeploying(true)
     setDeployResult(null)
     try {
-      const result = await api.post("/simulations/deploy-to-bot", { paper_mode: true })
+      const result = await api.post("/simulations/deploy-to-bot", { paper_mode: deployPaperMode })
       setDeployResult(result)
     } catch (e: any) {
       setDeployResult({ error: e.message || "Hata olustu" })
@@ -645,7 +646,7 @@ export default function SimulationsPage() {
               <h3 className="text-sm font-medium text-white">Smart Bot&apos;a Aktar</h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Simulasyon ayarlarini otomatik olarak yeni bir Smart Scanner bota aktar.
-                Bot paper mode&apos;da olusturulur — Bots sayfasindan baslat.
+                Paper veya Gercek mod secebilirsiniz — Bots sayfasindan baslat.
               </p>
             </div>
 
@@ -681,13 +682,29 @@ export default function SimulationsPage() {
               </div>
             )}
 
-            <button
-              onClick={deployToBot}
-              disabled={deploying}
-              className="px-4 py-2 bg-emerald-600/80 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-            >
-              {deploying ? "Olusturuluyor..." : "Paper Bot Olustur (Simulasyon Ayarlariyla)"}
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-slate-800/60 rounded-lg p-1">
+                <button
+                  onClick={() => setDeployPaperMode(true)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${deployPaperMode ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" : "text-slate-400 hover:text-white"}`}
+                >
+                  Paper
+                </button>
+                <button
+                  onClick={() => setDeployPaperMode(false)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${!deployPaperMode ? "bg-orange-500/20 text-orange-400 border border-orange-500/30" : "text-slate-400 hover:text-white"}`}
+                >
+                  Gercek
+                </button>
+              </div>
+              <button
+                onClick={deployToBot}
+                disabled={deploying}
+                className={`px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${deployPaperMode ? "bg-emerald-600/80 hover:bg-emerald-600" : "bg-orange-600/80 hover:bg-orange-600"}`}
+              >
+                {deploying ? "Olusturuluyor..." : `${deployPaperMode ? "Paper" : "Gercek"} Bot Olustur`}
+              </button>
+            </div>
 
             {deployResult && (
               <div className={`rounded-lg p-3 text-xs ${deployResult.error ? "bg-red-500/10 border border-red-500/20 text-red-400" : "bg-green-500/10 border border-green-500/20 text-green-400"}`}>

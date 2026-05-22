@@ -372,6 +372,7 @@ async def deploy_to_bot(data: dict = None):
         "hedge_use_max_leverage": sim_cfg.get("hedge_use_max_leverage", True),
         "trade_size_mode": sim_cfg.get("trade_size_mode", "fixed"),
         "trade_size_value": sim_cfg.get("trade_size_value", 100),
+        "margin_type": sim_cfg.get("margin_type", "cross"),
     }
 
     # Performans verisi ekle
