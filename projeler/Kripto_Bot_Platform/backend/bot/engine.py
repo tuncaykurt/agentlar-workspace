@@ -2830,7 +2830,16 @@ class BotEngine:
                     if coin in open_symbols:
                         active_positions.append(coin)
                     else:
-                        print(f"[SmartScanner {bot_name}] {coin} pozisyonu kapanmış — listeden çıkarıldı")
+                        print(f"[SmartScanner {bot_name}] {coin} pozisyonu kapanmış — listeden çıkarıldı, cooldown ekleniyor")
+                        # Kapanan coini cooldown'a ekle — aynı sinyal tekrar açılmasın
+                        try:
+                            cooldown_key = f"bot:{bot_id}:cooldown:{coin}"
+                            scan_interval = int(params.get("scan_interval", 120))
+                            cooldown_secs = max(scan_interval * 3, 300)  # En az 5dk veya 3 cycle
+                            await redis.set(cooldown_key, "1", ex=cooldown_secs)
+                            print(f"[SmartScanner {bot_name}] {coin} cooldown: {cooldown_secs}s")
+                        except Exception:
+                            pass
 
                 # Temizlenmiş listeyi Redis'e kaydet
                 if len(active_positions) != len(saved_positions):
@@ -2935,6 +2944,7 @@ class BotEngine:
                 for sel in ai_selections:
                     coin_name = sel.get("coin", "")
                     if coin_name in active_positions:
+                        continue
                         continue
                     if sel.get("confidence", 0) < int(params.get("min_ai_confidence", 60)):
                         print(f"[SmartScanner {bot_name}] {coin_name} confidence={sel.get('confidence')} < {params.get('min_ai_confidence', 60)}, atlanıyor")
@@ -3065,6 +3075,15 @@ class BotEngine:
         opened = []
         for sel in selections:
             try:
+                # Cooldown kontrolü — yakın zamanda kapanan coin tekrar açılmasın
+                coin_name = sel.get("coin", "")
+                try:
+                    if await redis.exists(f"bot:{bot_id}:cooldown:{coin_name}"):
+                        print(f"[SmartScanner {bot_name}] {coin_name} cooldown'da — atlanıyor")
+                        continue
+                except Exception:
+                    pass
+
                 symbol = sel["symbol"]
                 side = "buy" if sel["direction"] == "long" else "sell"
                 leverage = sel.get("leverage", int(params.get("leverage", 5)))
