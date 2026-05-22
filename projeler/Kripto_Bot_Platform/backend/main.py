@@ -1,9 +1,9 @@
 import asyncio
+import time as _time_mod
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from sqlalchemy import select, text
 from core.config import settings
@@ -346,17 +346,23 @@ async def _auto_start_bots(tasks: list):
     print(f"[Main] {len(running_bots)} bot otomatik olarak yeniden başlatıldı.")
 
 
-class TimeoutMiddleware(BaseHTTPMiddleware):
-    """Her isteğe 25 saniye global timeout koy — Gateway Timeout'u önler."""
-    async def dispatch(self, request: Request, call_next):
+class TimeoutMiddleware:
+    """ASGI middleware — her isteğe 25 saniye global timeout."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
         try:
-            response = await asyncio.wait_for(call_next(request), timeout=25)
-            return response
+            await asyncio.wait_for(self.app(scope, receive, send), timeout=25)
         except asyncio.TimeoutError:
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=504,
                 content={"detail": "İstek zaman aşımına uğradı (25s). Lütfen tekrar deneyin."}
             )
+            await response(scope, receive, send)
 
 
 app = FastAPI(
@@ -381,7 +387,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(TimeoutMiddleware)
+app.add_middleware(TimeoutMiddleware)  # ASGI raw middleware — 25s global timeout
 
 # REST routes — /api ve /api/api prefix'leri (frontend double-prefix workaround)
 for _prefix in ["/api", "/api/api"]:
