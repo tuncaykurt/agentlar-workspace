@@ -2917,7 +2917,7 @@ class BotEngine:
                     mexc_sym = pos.get("symbol", "")  # BTC_USDT
                     base = mexc_sym.split("_")[0] if "_" in mexc_sym else mexc_sym
                     open_symbols.add(base)
-                    exchange_position_count += 1  # Her pozisyonu say (long+short ayrı)
+            exchange_position_count = len(open_symbols)  # Coin bazlı say (hedge long+short = 1)
 
             # Borsadaki gerçek pozisyon sayısı max_positions'ı aşıyorsa dur
             if exchange_position_count >= max_positions:
@@ -3290,10 +3290,10 @@ class BotEngine:
                 # NOT: set_leverage burada çağrılmıyor — _execute içinde dynamic_leverage ile yapılıyor
 
                 if exit_strategy == "hedge":
-                    # ── HEDGE: aynı coin üzerinde hem long hem short aç ──
-                    if len(active_positions) >= max_positions - 1:
-                        print(f"[SmartScanner {bot_name}] {sel['coin']} hedge için 2 slot gerek ama {max_positions - len(active_positions)} kaldı — normal işleme düşüyor")
-                        exit_strategy = "normal_tp_sl"
+                    # ── HEDGE: aynı coin üzerinde hem long hem short aç (1 pozisyon olarak sayılır) ──
+                    if len(active_positions) >= max_positions:
+                        print(f"[SmartScanner {bot_name}] {sel['coin']} hedge için slot yok — atlanıyor")
+                        continue
 
                 if exit_strategy == "hedge":
                     # Hedge işlemlerinde trailing KAPALI — normal TP/SL kullan
@@ -3328,11 +3328,6 @@ class BotEngine:
 
                     print(f"[SmartScanner {bot_name}] ✅ HEDGE {sel['coin']} @ ${price:,.4f} "
                           f"TP={hedge_tp}% SL={hedge_sl}% Lev={leverage}x (AI karar)")
-
-                    # Hedge = 2 pozisyon açıldı, ekstra slot say
-                    opened.append(f"{sel['coin']}(H)")
-                    active_positions.append(f"{sel['coin']}_HEDGE")  # Hedge 2. slot olarak say
-                    # İlk slot aşağıda opened/active'e ekleniyor
 
                 else:
                     # Trailing: AI trailing seçtiyse params'a trailing ekle, yoksa normal TP/SL
