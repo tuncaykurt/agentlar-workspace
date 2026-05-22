@@ -214,7 +214,7 @@ def score_coin_manual(coin: dict, criteria: ManualCriteria) -> Optional[float]:
 
 
 def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
-                    leverage_range: tuple = None) -> str:
+                    leverage_range: tuple = None, max_selections: int = 3) -> str:
     """
     AI coin seçimi için kapsamlı prompt oluştur.
     Tüm coin verilerini analiz ederek en iyi fırsatları belirler.
@@ -272,7 +272,7 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
     pos_funding = [c["base"] for c in coins if c.get("funding_rate") is not None and c["funding_rate"] > 0.05]
 
     return f"""Sen dünyanın en iyi kripto futures traderısın. Görevin: aşağıdaki tüm coinleri analiz ederek
-en yüksek kâr potansiyeline sahip 1-3 coin seç ve işlem yönü belirle.
+en yüksek kâr potansiyeline sahip EN FAZLA {max_selections} coin seç ve işlem yönü belirle. {max_selections}'den fazla seçme!
 
 ═══════════════════════════════════════════════════════════════
                     PIYASA GENEL DURUMU

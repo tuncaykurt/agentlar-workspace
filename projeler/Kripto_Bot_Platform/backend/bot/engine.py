@@ -2909,7 +2909,8 @@ class BotEngine:
                     int(params.get("min_leverage", 3)),
                     int(params.get("max_leverage", 75)),
                 )
-                prompt = build_ai_prompt(ai_top, active_positions, leverage_range=leverage_range)
+                remaining = max_positions - len(active_positions)
+                prompt = build_ai_prompt(ai_top, active_positions, leverage_range=leverage_range, max_selections=remaining)
                 model = settings.AI_DEEP_MODEL
                 ai_response = await asyncio.wait_for(
                     _call(model, prompt, max_tokens=1200),
@@ -3045,6 +3046,12 @@ class BotEngine:
             print(f"[SmartScanner {bot_name}] Manuel: {len(scored)} coin geçti, {len(selections)} seçildi")
 
         # ── 4. İşlem aç ──
+        # Kalan slot kadar seçim yap — max_positions'ı aşma
+        remaining_slots = max_positions - len(active_positions)
+        if len(selections) > remaining_slots:
+            print(f"[SmartScanner {bot_name}] {len(selections)} seçim → {remaining_slots} slot kaldı, kırpılıyor")
+            selections = selections[:remaining_slots]
+
         if not selections:
             reason = ai_error or "Kriterlere uyan coin bulunamadı"
             print(f"[SmartScanner {bot_name}] Seçim yok — {reason}")
