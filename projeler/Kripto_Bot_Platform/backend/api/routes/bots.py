@@ -144,11 +144,21 @@ class _ExClient:
                 # ── SL her zaman stoporder/place ile konur ──
                 if sl_price:
                     _sl = round(float(sl_price), 2)
+                    # MEXC trend parametreleri: Long TP yukarı/SL aşağı, Short TP aşağı/SL yukarı
+                    # profitTrend: 1=fiyat>=TP tetikle, 2=fiyat<=TP tetikle
+                    # lossTrend:   1=fiyat>=SL tetikle, 2=fiyat<=SL tetikle
+                    if is_long:
+                        profit_trend = 1  # Long TP: fiyat yükselince tetikle
+                        loss_trend = 2    # Long SL: fiyat düşünce tetikle
+                    else:
+                        profit_trend = 2  # Short TP: fiyat düşünce tetikle
+                        loss_trend = 1    # Short SL: fiyat yükselince tetikle
+
                     sl_body = {
                         "positionId": pos_id,
                         "vol": pos_vol,
-                        "profitTrend": 1,
-                        "lossTrend": 1,
+                        "profitTrend": profit_trend,
+                        "lossTrend": loss_trend,
                         "stopLossType": 0,
                         "takeProfitType": 0,
                         "stopLossOrderPrice": 0,
@@ -183,6 +193,37 @@ class _ExClient:
                     if not sl_ok:
                         print(f"[ExClient] ⚠ MEXC SL 2 denemede de başarısız! posId={pos_id} — POZİSYON KORUMASIZ")
                         raise RuntimeError(f"TP/SL ATANAMADI: SL {sl_price} konulamadı (posId={pos_id}). Pozisyon korumasız!")
+
+                    # ── TP/SL doğrulama — borsadan teyit et ──
+                    try:
+                        await asyncio.sleep(0.5)
+                        verify_resp = await self.exchange.contractPrivateGetStoporderListStopOrders({
+                            "symbol": mexc_symbol,
+                            "is_finished": 0,  # Açık emirler
+                            "page_num": 1,
+                            "page_size": 20,
+                        })
+                        verify_data = verify_resp.get("data", []) if isinstance(verify_resp, dict) else []
+                        has_sl = False
+                        has_tp = False
+                        for so in (verify_data if isinstance(verify_data, list) else verify_data.get("data", []) if isinstance(verify_data, dict) else []):
+                            if int(so.get("positionId", 0)) == pos_id:
+                                if float(so.get("stopLossPrice", 0) or 0) > 0:
+                                    has_sl = True
+                                if float(so.get("takeProfitPrice", 0) or 0) > 0:
+                                    has_tp = True
+                        tp_status = "TP=✓" if has_tp else ("TP=trailing" if use_trailing else "TP=✗")
+                        sl_status = "SL=✓" if has_sl else "SL=✗"
+                        print(f"[ExClient] DOĞRULAMA: posId={pos_id} {sl_status} {tp_status}")
+                        if not has_sl and sl_ok:
+                            print(f"[ExClient] ⚠ SL konuldu dendi ama borsada bulunamadı! Tekrar deneniyor...")
+                            try:
+                                await self.exchange.contractPrivatePostStoporderPlace(sl_body)
+                                print(f"[ExClient] ✓ SL tekrar konuldu (doğrulama sonrası)")
+                            except Exception as re_err:
+                                print(f"[ExClient] ⚠ SL tekrar konamadı: {re_err}")
+                    except Exception as verify_err:
+                        print(f"[ExClient] Doğrulama sorgusu hatası (devam): {verify_err}")
 
                 # ── Trailing Stop: trackorder/place ile ──
                 if use_trailing:
@@ -232,8 +273,8 @@ class _ExClient:
                             fallback_body = {
                                 "positionId": pos_id,
                                 "vol": pos_vol,
-                                "profitTrend": 1,
-                                "lossTrend": 1,
+                                "profitTrend": profit_trend,
+                                "lossTrend": loss_trend,
                                 "stopLossType": 0,
                                 "takeProfitType": 0,
                                 "stopLossOrderPrice": 0,
@@ -251,7 +292,11 @@ class _ExClient:
                                     if fb_attempt < 2:
                                         await asyncio.sleep(1)
                         if not fallback_ok:
-                            print(f"[ExClient] ⚠ Trailing + Fallback TP başarısız — pozisyon sadece SL ile korunuyor")
+                            if sl_ok:
+                                print(f"[ExClient] ⚠ Trailing + Fallback TP başarısız — pozisyon sadece SL ile korunuyor")
+                            else:
+                                print(f"[ExClient] ⚠ KRİTİK: Trailing + Fallback TP + SL hepsi başarısız — pozisyon KORUMASIZ!")
+                                raise RuntimeError(f"TP/SL ATANAMADI: trailing+fallback+SL hepsi başarısız (posId={pos_id})")
 
                 elif not sl_price and tp_price:
                     # Sadece TP varsa (SL yoksa) — ayrı stoporder ile koy
@@ -259,8 +304,8 @@ class _ExClient:
                     tp_only_body = {
                         "positionId": pos_id,
                         "vol": pos_vol,
-                        "profitTrend": 1,
-                        "lossTrend": 1,
+                        "profitTrend": profit_trend,
+                        "lossTrend": loss_trend,
                         "stopLossType": 0,
                         "takeProfitType": 0,
                         "stopLossOrderPrice": 0,
