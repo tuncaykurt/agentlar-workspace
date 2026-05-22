@@ -649,6 +649,15 @@ async def debug_bot(bot_id: int):
             hist_key = f"custom_signal_history:{bot.symbol.replace('/', '_').replace(':', '_')}"
             hist_len = await redis.llen(hist_key)
             result["signal_history_count"] = hist_len
+
+            # Smart Scanner: aktif pozisyonlar + scanner status + engine paper_mode
+            active_raw = await redis.get(f"bot:{bot_id}:active_positions")
+            result["active_positions"] = json.loads(active_raw) if active_raw else []
+            if bot_id in _running_bots:
+                eng = _running_bots[bot_id]
+                result["engine_paper_mode"] = eng.config.get("paper_mode")
+                result["engine_paper_trades_count"] = len(eng.paper_trades)
+                result["engine_config_keys"] = list(eng.config.keys())
         except Exception as e:
             result["redis_error"] = str(e)
 
