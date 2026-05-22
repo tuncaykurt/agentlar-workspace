@@ -43,17 +43,33 @@ class _ExClient:
 
     async def set_leverage(self, symbol, leverage):
         # Zaten aynı leverage set edilmişse API çağrısı yapma
-        if self._leverage_cache.get(symbol) == leverage:
+        cache_key = f"{symbol}:{leverage}:{self._margin_type}"
+        if self._leverage_cache.get(symbol) == cache_key:
             return
-        self._leverage_cache[symbol] = leverage
+        self._leverage_cache[symbol] = cache_key
         try:
             if self._exchange_name == "mexc":
-                # MEXC: openType=1/2 (isolated/cross), positionType=1 (long) ve 2 (short)
+                mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
+                # 1. Önce margin mode'u açıkça set et (isolated=1, cross=2)
+                try:
+                    await self.exchange.contractPrivatePostPositionChangeMargin({
+                        "symbol": mexc_symbol,
+                        "positionId": 0,  # tüm pozisyonlar için
+                        "openType": self._open_type,
+                    })
+                    print(f"[ExClient] Margin mode set: {self._margin_type} (openType={self._open_type}) for {symbol}")
+                except Exception as margin_err:
+                    # "no need to change" hatası normaldir
+                    err_str = str(margin_err).lower()
+                    if "no need" not in err_str and "same" not in err_str and "already" not in err_str:
+                        print(f"[ExClient] Margin mode uyarısı: {margin_err}")
+                # 2. Leverage'ı set et (long + short pozisyon tipleri için)
                 await asyncio.gather(
                     self.exchange.set_leverage(leverage, symbol, params={"openType": self._open_type, "positionType": 1}),
                     self.exchange.set_leverage(leverage, symbol, params={"openType": self._open_type, "positionType": 2}),
                     return_exceptions=True
                 )
+                print(f"[ExClient] Leverage {leverage}x ({self._margin_type}) set for {symbol}")
             else:
                 await self.exchange.set_leverage(leverage, symbol)
         except Exception as e:

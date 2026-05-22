@@ -316,8 +316,17 @@ class MEXCClient:
         close_side = "sell" if side == "buy" else "buy"
         return await self.place_order(symbol, close_side, amount, pos_side=pos_side)
 
-    async def set_leverage(self, symbol: str, leverage: int):
-        await self.exchange.set_leverage(leverage, symbol)
+    async def set_leverage(self, symbol: str, leverage: int, margin_type: str = "isolated"):
+        """MEXC leverage + margin mode set (long & short)."""
+        open_type = 1 if margin_type == "isolated" else 2
+        try:
+            await asyncio.gather(
+                self.exchange.set_leverage(leverage, symbol, params={"openType": open_type, "positionType": 1}),
+                self.exchange.set_leverage(leverage, symbol, params={"openType": open_type, "positionType": 2}),
+                return_exceptions=True,
+            )
+        except Exception as e:
+            print(f"[MEXCClient] set_leverage uyarısı: {e}")
 
     async def get_positions(self, symbol: str = None) -> list:
         params = {}
