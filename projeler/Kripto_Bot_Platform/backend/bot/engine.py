@@ -425,9 +425,11 @@ class BotEngine:
                 print(f"[Bot {bot_name}] Leverage ayar hatası (devam): {e}")
 
             # Eski stop/trailing emirleri temizle (yeni işlem açılacak, birikme olmasın)
+            # Hedge modda sadece kendi yönünün emirlerini sil, karşı yönün TP/SL'ine dokunma!
+            cancel_pos_side = "long" if side.lower() == "buy" else "short"
             try:
-                await self._cancel_existing_stop_orders(symbol)
-                await self._cancel_existing_trailing_orders(symbol)
+                await self._cancel_existing_stop_orders(symbol, pos_side=cancel_pos_side)
+                await self._cancel_existing_trailing_orders(symbol, pos_side=cancel_pos_side)
             except Exception as e:
                 print(f"[Bot {bot_name}] Eski emirleri temizleme hatası (devam): {e}")
 
@@ -1311,14 +1313,23 @@ class BotEngine:
         except Exception as e:
             print(f"[{bot_name}] Stop order sorgu/iptal hatası: {e}")
 
-    async def _cancel_existing_trailing_orders(self, symbol: str):
-        """MEXC'deki mevcut trailing stop emirlerini iptal et."""
+    async def _cancel_existing_trailing_orders(self, symbol: str, pos_side: str = None):
+        """MEXC'deki mevcut trailing stop emirlerini iptal et.
+        pos_side: 'long' veya 'short' — None ise tüm trailing emirler iptal edilir.
+        """
         exchange_name = getattr(self.exchange, '_exchange_name', '')
         if exchange_name != "mexc":
             return
 
         mexc_symbol = symbol.split("/")[0] + "_" + symbol.split("/")[1].split(":")[0]
         bot_name = self.config.get("name", "?")
+
+        # pos_side filtresi: 1=long, 2=short
+        target_type = None
+        if pos_side == "long":
+            target_type = 1
+        elif pos_side == "short":
+            target_type = 2
 
         try:
             resp = await self.exchange.exchange.contractPrivateGetTrackorderListOrders({
@@ -1327,7 +1338,11 @@ class BotEngine:
             })
             orders = (resp.get("data", []) if isinstance(resp, dict) else []) or []
 
+            cancelled = 0
             for o in orders:
+                # pos_side filtresi — hedge modda sadece kendi yönünü iptal et
+                if target_type and int(o.get("positionType", 0)) != target_type:
+                    continue
                 track_id = o.get("trackOrderId") or o.get("id")
                 if track_id:
                     try:
@@ -1335,11 +1350,12 @@ class BotEngine:
                             "symbol": mexc_symbol,
                             "trackOrderId": int(track_id),
                         })
+                        cancelled += 1
                     except Exception as e:
                         print(f"[{bot_name}] Trailing iptal hatası (id={track_id}): {e}")
 
-            if orders:
-                print(f"[{bot_name}] {len(orders)} eski trailing emri iptal edildi — {symbol}")
+            if cancelled:
+                print(f"[{bot_name}] {cancelled} eski trailing emri iptal edildi ({pos_side or 'all'}) — {symbol}")
 
         except Exception as e:
             print(f"[{bot_name}] Trailing sorgu/iptal hatası: {e}")
