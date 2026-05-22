@@ -200,12 +200,70 @@ async def get_sim_settings():
 
 @router.post("/settings")
 async def update_sim_settings(data: dict):
-    """Simülasyon ayarlarını güncelle."""
+    """Simülasyon ayarlarını güncelle + aktif smart_scanner botları senkronize et."""
     redis = get_redis()
     current = await get_sim_settings()
     current.update(data)
     await redis.set("scanner_sim:settings", json.dumps(current))
+
+    # Aktif smart_scanner botlarının params'ını da güncelle (sync)
+    try:
+        await _sync_sim_settings_to_bots(current)
+    except Exception as e:
+        print(f"[SimSettings] Bot sync hatası: {e}")
+
     return current
+
+
+async def _sync_sim_settings_to_bots(sim_cfg: dict):
+    """Simülasyon ayarlarını tüm smart_scanner botlarına senkronize et."""
+    from models.trade import Bot
+    from sqlalchemy import select, update
+
+    # Sim → Bot param mapping
+    sync_fields = {
+        "mode": "selection_mode",
+        "min_confidence": "min_ai_confidence",
+        "min_leverage": "min_leverage",
+        "max_leverage": "max_leverage",
+        "max_open": "max_positions",
+        "tp_pct": "tp_pct",
+        "sl_pct": "sl_pct",
+        "auto_scale_tp_sl": "auto_scale_tp_sl",
+        "scale_base_leverage": "scale_base_leverage",
+        "trailing_enabled": "trailing_enabled",
+        "trailing_activate_pct": "trailing_activate_pct",
+        "trailing_callback_pct": "trailing_callback_pct",
+        "hedge_enabled": "hedge_enabled",
+        "hedge_tp_pct": "hedge_tp_pct",
+        "hedge_sl_pct": "hedge_sl_pct",
+        "hedge_use_max_leverage": "hedge_use_max_leverage",
+        "trade_size_mode": "trade_size_mode",
+        "trade_size_value": "trade_size_value",
+    }
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(Bot).where(Bot.strategy == "smart_scanner")
+        )
+        bots = result.scalars().all()
+        for bot in bots:
+            bot_params = json.loads(bot.params) if bot.params else {}
+            changed = False
+            for sim_key, bot_key in sync_fields.items():
+                if sim_key in sim_cfg:
+                    new_val = sim_cfg[sim_key]
+                    if bot_params.get(bot_key) != new_val:
+                        bot_params[bot_key] = new_val
+                        changed = True
+            if changed:
+                await session.execute(
+                    update(Bot).where(Bot.id == bot.id).values(
+                        params=json.dumps(bot_params)
+                    )
+                )
+                print(f"[SimSettings] Bot #{bot.id} '{bot.name}' params senkronize edildi")
+        await session.commit()
 
 
 @router.get("/status")

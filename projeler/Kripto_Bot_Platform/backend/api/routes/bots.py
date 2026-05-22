@@ -400,6 +400,47 @@ async def _get_exchange_client(exchange: str, margin_type: str = "isolated"):
         return _ExClient(ex, exchange_name=exchange, margin_type=margin_type)
     raise HTTPException(400, f"{exchange} için API key bulunamadı. Önce Borsa Ayarları'ndan key girin.")
 
+async def _sync_bot_params_to_sim(bot_params: dict):
+    """Smart scanner bot params → simülasyon ayarlarına senkronize et."""
+    from core.redis_client import get_redis
+    redis = get_redis()
+
+    # Bot → Sim param mapping (ters yönde)
+    bot_to_sim = {
+        "selection_mode": "mode",
+        "min_ai_confidence": "min_confidence",
+        "min_leverage": "min_leverage",
+        "max_leverage": "max_leverage",
+        "max_positions": "max_open",
+        "tp_pct": "tp_pct",
+        "sl_pct": "sl_pct",
+        "auto_scale_tp_sl": "auto_scale_tp_sl",
+        "scale_base_leverage": "scale_base_leverage",
+        "trailing_enabled": "trailing_enabled",
+        "trailing_activate_pct": "trailing_activate_pct",
+        "trailing_callback_pct": "trailing_callback_pct",
+        "hedge_enabled": "hedge_enabled",
+        "hedge_tp_pct": "hedge_tp_pct",
+        "hedge_sl_pct": "hedge_sl_pct",
+        "hedge_use_max_leverage": "hedge_use_max_leverage",
+        "trade_size_mode": "trade_size_mode",
+        "trade_size_value": "trade_size_value",
+    }
+
+    raw = await redis.get("scanner_sim:settings")
+    sim_cfg = json.loads(raw) if raw else {}
+    changed = False
+    for bot_key, sim_key in bot_to_sim.items():
+        if bot_key in bot_params:
+            new_val = bot_params[bot_key]
+            if sim_cfg.get(sim_key) != new_val:
+                sim_cfg[sim_key] = new_val
+                changed = True
+    if changed:
+        await redis.set("scanner_sim:settings", json.dumps(sim_cfg))
+        print(f"[BotSync] Simülasyon ayarları bot'tan güncellendi")
+
+
 router = APIRouter(prefix="/bots", tags=["bots"])
 
 # Çalışan bot instance'ları (memory — sadece aktif engine'ler)
@@ -1389,6 +1430,13 @@ async def update_bot(bot_id: int, data: BotCreate):
         )
         await session.commit()
         print(f"[Bot Updated] ID:{bot_id} Name:{data.name} Strategy:{strategy} Exchange:{data.exchange} Params:{effective_params}")
+
+    # Smart scanner botu güncellendiyse simülasyon ayarlarını da senkronize et
+    if strategy == "smart_scanner":
+        try:
+            await _sync_bot_params_to_sim(effective_params)
+        except Exception as e:
+            print(f"[Bot Update] Sim sync hatası: {e}")
 
     return {
         "id": bot_id,
