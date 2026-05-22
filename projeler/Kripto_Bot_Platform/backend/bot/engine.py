@@ -474,14 +474,22 @@ class BotEngine:
             tp_price = round(take_profit, 2) if take_profit else None
             sl_price = round(stop_loss, 2) if stop_loss else None
 
-            # Trailing stop parametreleri — simülasyondaki ayarları da destekle
+            # GÜVENLİK: TP ve SL ikisi de yoksa işlem açma
+            if not tp_price and not sl_price:
+                print(f"[Bot {bot_name}] ✗ TP ve SL ikisi de None — işlem açılmıyor (güvenlik)")
+                return
+
+            # Trailing stop parametreleri — trailing_enabled=False ise kesinlikle trailing yok
             trailing_enabled = params.get("trailing_enabled", False)
-            trailing_callback_rate = float(
-                params.get("trailing_callback_rate")
-                or params.get("trailing_stop_pct")
-                or (params.get("trailing_callback_pct") if trailing_enabled else 0)
-                or 0
-            )
+            if trailing_enabled:
+                trailing_callback_rate = float(
+                    params.get("trailing_callback_rate")
+                    or params.get("trailing_stop_pct")
+                    or params.get("trailing_callback_pct")
+                    or 0
+                )
+            else:
+                trailing_callback_rate = 0  # Trailing kapalıysa kesinlikle 0
             trailing_active_price = tp_price if trailing_callback_rate > 0 else None
 
             if trailing_callback_rate > 0:
@@ -3392,6 +3400,11 @@ class BotEngine:
         # ── 5. Hedge işlemleri (sadece MANUEL modda — AI modunda AI karar veriyor) ──
         hedge_enabled = params.get("hedge_enabled", False)
         if hedge_enabled and mode != "ai" and len(active_positions) < max_positions - 1:
+            # Hedge'de trailing KAPALI — normal TP/SL kullan
+            params["trailing_enabled"] = False
+            params.pop("trailing_callback_pct", None)
+            params.pop("trailing_callback_rate", None)
+
             hedge_tp = float(params.get("hedge_tp_pct", 0.4))
             hedge_sl = float(params.get("hedge_sl_pct", 0.1))
             use_max_lev = params.get("hedge_use_max_leverage", True)
