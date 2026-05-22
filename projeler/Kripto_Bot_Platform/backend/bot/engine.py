@@ -444,16 +444,19 @@ class BotEngine:
                     print(f"[Bot {bot_name}] Explicit amount kullanılıyor: {amount}")
                 elif exchange_name == "mexc" and contract_size > 0:
                     # MEXC: notional = margin * leverage, kontrat = notional / (fiyat * contractSize)
-                    params_cfg = self.config.get("params", {})
-                    risk_mode = params_cfg.get("risk_mode", "pct")
-                    risk_val = self.risk.risk_per_trade
-                    margin_usdt = risk_val if risk_val > 1.0 else self.risk.current_balance * risk_val
-                    
-                    ai_modifier = float(ai_result.get("ai_modifier", 1.0))
-                    if ai_modifier != 1.0:
-                        margin_usdt *= ai_modifier
-                        print(f"[Bot {bot_name}] AI modifier uygulandı: {ai_modifier:.2f}x -> margin_usdt: ${margin_usdt:.2f}")
-                        
+                    # Smart Scanner margin_usdt'yi ai_result içinde gönderir — onu kullan
+                    if ai_result.get("margin_usdt") and float(ai_result["margin_usdt"]) > 0:
+                        margin_usdt = float(ai_result["margin_usdt"])
+                        print(f"[Bot {bot_name}] Scanner margin kullanılıyor: ${margin_usdt:.2f}")
+                    else:
+                        params_cfg = self.config.get("params", {})
+                        risk_val = self.risk.risk_per_trade
+                        margin_usdt = risk_val if risk_val > 1.0 else self.risk.current_balance * risk_val
+                        ai_modifier = float(ai_result.get("ai_modifier", 1.0))
+                        if ai_modifier != 1.0:
+                            margin_usdt *= ai_modifier
+                            print(f"[Bot {bot_name}] AI modifier uygulandı: {ai_modifier:.2f}x -> margin_usdt: ${margin_usdt:.2f}")
+
                     notional = margin_usdt * leverage
                     amount = max(1, int(notional / (price * contract_size)))
                     print(f"[Bot {bot_name}] MEXC Kontrat: margin=${margin_usdt:.2f} × {leverage}x = ${notional:.2f} → {amount} kontrat @ ${price} (contractSize={contract_size})")
