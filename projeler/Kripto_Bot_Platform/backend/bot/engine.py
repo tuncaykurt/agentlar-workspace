@@ -2902,44 +2902,51 @@ class BotEngine:
 
         # Borsadan gerçek açık pozisyonları al — kapanmış olanları temizle
         active_positions = []
-        if saved_positions:
-            try:
-                # MEXC native API — daha güvenilir (CCXT fetch_positions sorunlu)
-                raw_resp = await asyncio.wait_for(
-                    self.exchange.exchange.contractPrivateGetPositionOpenPositions(),
-                    timeout=8
-                )
-                pos_list = raw_resp.get("data", []) if isinstance(raw_resp, dict) else raw_resp or []
-                open_symbols = set()
-                for pos in pos_list:
-                    hold_vol = float(pos.get("holdVol", 0) or 0)
-                    if hold_vol > 0:
-                        mexc_sym = pos.get("symbol", "")  # BTC_USDT
-                        base = mexc_sym.split("_")[0] if "_" in mexc_sym else mexc_sym
-                        open_symbols.add(base)
+        exchange_position_count = 0  # Borsadaki gerçek pozisyon sayısı
+        try:
+            # MEXC native API — daha güvenilir (CCXT fetch_positions sorunlu)
+            raw_resp = await asyncio.wait_for(
+                self.exchange.exchange.contractPrivateGetPositionOpenPositions(),
+                timeout=8
+            )
+            pos_list = raw_resp.get("data", []) if isinstance(raw_resp, dict) else raw_resp or []
+            open_symbols = set()
+            for pos in pos_list:
+                hold_vol = float(pos.get("holdVol", 0) or 0)
+                if hold_vol > 0:
+                    mexc_sym = pos.get("symbol", "")  # BTC_USDT
+                    base = mexc_sym.split("_")[0] if "_" in mexc_sym else mexc_sym
+                    open_symbols.add(base)
+                    exchange_position_count += 1  # Her pozisyonu say (long+short ayrı)
 
+            # Borsadaki gerçek pozisyon sayısı max_positions'ı aşıyorsa dur
+            if exchange_position_count >= max_positions:
+                print(f"[SmartScanner {bot_name}] Borsada {exchange_position_count} pozisyon var (max={max_positions}) — yeni işlem açılmayacak")
+                await self._write_scanner_status(redis, bot_id, bot_name,
+                    coins_total=len(coins), active=list(open_symbols), mode=mode, waiting=True)
+                return
+
+            if saved_positions:
                 for coin in saved_positions:
                     if coin in open_symbols:
                         active_positions.append(coin)
                     else:
                         print(f"[SmartScanner {bot_name}] {coin} pozisyonu kapanmış — listeden çıkarıldı, cooldown ekleniyor")
-                        # Kapanan coini cooldown'a ekle — aynı sinyal tekrar açılmasın
                         try:
                             cooldown_key = f"bot:{bot_id}:cooldown:{coin}"
                             scan_interval = int(params.get("scan_interval", 120))
-                            cooldown_secs = max(scan_interval * 3, 300)  # En az 5dk veya 3 cycle
+                            cooldown_secs = max(scan_interval * 3, 300)
                             await redis.set(cooldown_key, "1", ex=cooldown_secs)
                             print(f"[SmartScanner {bot_name}] {coin} cooldown: {cooldown_secs}s")
                         except Exception:
                             pass
 
-                # Temizlenmiş listeyi Redis'e kaydet
                 if len(active_positions) != len(saved_positions):
                     await redis.set(f"bot:{bot_id}:active_positions", json.dumps(active_positions), ex=86400)
 
-            except Exception as e:
-                print(f"[SmartScanner {bot_name}] Pozisyon kontrolü hatası: {e} — kayıtlı liste kullanılıyor")
-                active_positions = saved_positions
+        except Exception as e:
+            print(f"[SmartScanner {bot_name}] Pozisyon kontrolü hatası: {e} — kayıtlı liste kullanılıyor")
+            active_positions = saved_positions or []
 
         if len(active_positions) >= max_positions:
             print(f"[SmartScanner {bot_name}] Max pozisyon ({max_positions}) doldu — bekleniyor")
@@ -3185,6 +3192,12 @@ class BotEngine:
 
         opened = []
         for sel in selections:
+            # ── Her işlem öncesi kalan slot kontrolü ──
+            current_open = len(active_positions)
+            if current_open >= max_positions:
+                print(f"[SmartScanner {bot_name}] Max pozisyon ({max_positions}) doldu — kalan seçimler atlanıyor")
+                break
+
             try:
                 # Cooldown kontrolü — yakın zamanda kapanan coin tekrar açılmasın
                 coin_name = sel.get("coin", "")
@@ -3315,6 +3328,11 @@ class BotEngine:
 
                     print(f"[SmartScanner {bot_name}] ✅ HEDGE {sel['coin']} @ ${price:,.4f} "
                           f"TP={hedge_tp}% SL={hedge_sl}% Lev={leverage}x (AI karar)")
+
+                    # Hedge = 2 pozisyon açıldı, ekstra slot say
+                    opened.append(f"{sel['coin']}(H)")
+                    active_positions.append(f"{sel['coin']}_HEDGE")  # Hedge 2. slot olarak say
+                    # İlk slot aşağıda opened/active'e ekleniyor
 
                 else:
                     # Trailing: AI trailing seçtiyse params'a trailing ekle, yoksa normal TP/SL
