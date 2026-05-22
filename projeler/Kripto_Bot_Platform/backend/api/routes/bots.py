@@ -672,16 +672,20 @@ async def debug_bot(bot_id: int):
         except Exception as e:
             result["redis_error"] = str(e)
 
-        # Exchange testi
-        try:
-            ex_client = await _get_exchange_client(bot.exchange or "bitget")
-            await ex_client.exchange.load_markets()
-            ticker = await ex_client.exchange.fetch_ticker(bot.symbol)
+        # Exchange testi — smart_scanner (AUTO) için skip, timeout 5s
+        if bot.symbol and bot.symbol not in ("AUTO", "MULTI"):
+            try:
+                ex_client = await _get_exchange_client(bot.exchange or "bitget")
+                ticker = await asyncio.wait_for(
+                    ex_client.exchange.fetch_ticker(bot.symbol), timeout=5
+                )
+                result["exchange_ok"] = True
+                result["exchange_ticker"] = float(ticker.get("last", 0))
+            except Exception as e:
+                result["exchange_error"] = str(e)
+        else:
             result["exchange_ok"] = True
-            result["exchange_ticker"] = float(ticker.get("last", 0))
-            await ex_client.close()
-        except Exception as e:
-            result["exchange_error"] = str(e)
+            result["exchange_note"] = "AUTO/MULTI symbol — ticker skip"
 
     return result
 
@@ -1087,15 +1091,19 @@ async def get_bot_position(bot_id: int):
     if not bot:
         raise HTTPException(404, "Bot bulunamadı")
 
+    # Smart Scanner (AUTO/MULTI) için position endpoint'i live-trades kullanır
+    if bot.symbol in ("AUTO", "MULTI"):
+        return {"symbol": bot.symbol, "price": 0, "position": None, "note": "Use /live-trades for smart_scanner"}
+
     ex_client = None
     try:
         ex_client = await _get_exchange_client(bot.exchange or "bitget")
-        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=15)
+        await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=10)
 
         # Fiyat
         cur_price = 0
         try:
-            ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(bot.symbol), timeout=10)
+            ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(bot.symbol), timeout=5)
             cur_price = float(ticker.get("last", 0))
         except Exception as e:
             print(f"[Position API] fetch_ticker hatası: {e}")

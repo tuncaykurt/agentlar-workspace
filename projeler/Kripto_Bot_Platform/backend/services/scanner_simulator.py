@@ -660,6 +660,14 @@ async def _save_simulation(sel: dict, price: float, margin: float = SIM_MARGIN) 
     sl_pct = float(sel["sl_pct"])
     is_long = sel["direction"] == "long"
 
+    # Gerçekçi slippage simülasyonu: market order giriş fiyatı %0.03-0.05 kayabilir
+    # Long'da fiyat yukarı kayar (aleyhte), short'ta aşağı kayar (aleyhte)
+    slippage_pct = 0.03  # %0.03 ortalama slippage
+    if is_long:
+        price = round(price * (1 + slippage_pct / 100), 6)  # Long: daha pahalıya girer
+    else:
+        price = round(price * (1 - slippage_pct / 100), 6)  # Short: daha ucuza girer
+
     tp_price = round(price * (1 + tp_pct / 100), 6) if is_long else round(price * (1 - tp_pct / 100), 6)
     sl_price = round(price * (1 - sl_pct / 100), 6) if is_long else round(price * (1 + sl_pct / 100), 6)
     ind = sel.get("indicators", {})
@@ -845,11 +853,25 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
                 status = "win"
                 exit_price = cur_price
                 reason_tag = "TRAILING"
+            elif hit_tp and hit_sl:
+                # İkisi de aynı anda hit ise (büyük mum) — SL öncelikli (gerçekçi)
+                status = "loss"
+                exit_price = sl
+                reason_tag = "SL"
             else:
                 status = "win" if hit_tp else "loss"
-                exit_price = tp if hit_tp else sl
-                reason_tag = "TP" if hit_tp else "SL"
-            pnl_pct = ((exit_price - entry) / entry * 100) if is_long else ((entry - exit_price) / entry * 100)
+                # Gerçekçi exit: TP/SL hedef fiyatı yerine gerçek fiyatı kullan
+                # Borsada slippage olur — fiyat tam TP/SL'de durmaz
+                if hit_tp:
+                    exit_price = cur_price  # Gerçek fiyat TP'yi geçmiş olabilir
+                    reason_tag = "TP"
+                else:
+                    exit_price = cur_price  # Gerçek fiyat SL'yi geçmiş olabilir
+                    reason_tag = "SL"
+            raw_pnl_pct = ((exit_price - entry) / entry * 100) if is_long else ((entry - exit_price) / entry * 100)
+            # Komisyon düşümü: MEXC futures açma %0.02 + kapama %0.02 = %0.04 (zero-fee coinler için 0)
+            fee_pct = 0.04  # toplam giriş+çıkış fee oranı (pozisyon büyüklüğüne göre)
+            pnl_pct = raw_pnl_pct - fee_pct
             pnl_usdt = sim_margin * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
 
             # Süre hesapla
