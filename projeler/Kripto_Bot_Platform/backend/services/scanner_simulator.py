@@ -467,7 +467,9 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
 
         # Prompt oluştur — öğrenme bağlamı ile zenginleştirilmiş
         lev_range = (cfg.get("min_leverage", 3), cfg.get("max_leverage", 75))
-        prompt = build_ai_prompt(top, active_coins, leverage_range=lev_range)
+        max_open = cfg.get("max_open", SIM_MAX_OPEN)
+        remaining_slots = max_open - len(active_coins)
+        prompt = build_ai_prompt(top, active_coins, leverage_range=lev_range, max_selections=remaining_slots)
         learning = _build_learning_context(past_results)
         if learning:
             prompt = prompt + "\n" + learning
@@ -961,6 +963,13 @@ async def run_simulator_cycle():
 
         past_results = await _get_past_results(20)
         selections = await _run_selection(coins, cfg, open_sims, past_results)
+
+        # Kalan slot kadar seçim — max_open aşılmasın
+        max_open = cfg.get("max_open", SIM_MAX_OPEN)
+        remaining_slots = max_open - len(open_sims)
+        if len(selections) > remaining_slots:
+            print(f"[SimScanner] {len(selections)} seçim → {remaining_slots} slot kaldı, kırpılıyor")
+            selections = selections[:remaining_slots]
 
         # 3. Kaldıraca göre TP/SL ölçekle + seçimleri kaydet
         auto_scale = cfg.get("auto_scale_tp_sl", True)
