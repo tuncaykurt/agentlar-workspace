@@ -474,8 +474,14 @@ class BotEngine:
             tp_price = round(take_profit, 2) if take_profit else None
             sl_price = round(stop_loss, 2) if stop_loss else None
 
-            # Trailing stop parametreleri
-            trailing_callback_rate = float(params.get("trailing_callback_rate") or params.get("trailing_stop_pct") or 0)
+            # Trailing stop parametreleri — simülasyondaki ayarları da destekle
+            trailing_enabled = params.get("trailing_enabled", False)
+            trailing_callback_rate = float(
+                params.get("trailing_callback_rate")
+                or params.get("trailing_stop_pct")
+                or (params.get("trailing_callback_pct") if trailing_enabled else 0)
+                or 0
+            )
             trailing_active_price = tp_price if trailing_callback_rate > 0 else None
 
             if trailing_callback_rate > 0:

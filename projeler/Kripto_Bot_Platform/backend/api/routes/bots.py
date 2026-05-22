@@ -181,7 +181,8 @@ class _ExClient:
                             await asyncio.sleep(1.5)
 
                     if not sl_ok:
-                        print(f"[ExClient] ⚠ MEXC SL 2 denemede de başarısız! posId={pos_id}")
+                        print(f"[ExClient] ⚠ MEXC SL 2 denemede de başarısız! posId={pos_id} — POZİSYON KORUMASIZ")
+                        raise RuntimeError(f"TP/SL ATANAMADI: SL {sl_price} konulamadı (posId={pos_id}). Pozisyon korumasız!")
 
                 # ── Trailing Stop: trackorder/place ile ──
                 if use_trailing:
@@ -226,6 +227,7 @@ class _ExClient:
                     if not trail_ok:
                         print(f"[ExClient] ⚠ MEXC Trailing 2 denemede de başarısız — TP fallback olarak konuluyor")
                         # Fallback: trailing başarısızsa klasik TP koy
+                        fallback_ok = False
                         if tp_price:
                             fallback_body = {
                                 "positionId": pos_id,
@@ -238,11 +240,18 @@ class _ExClient:
                                 "takeProfitOrderPrice": 0,
                                 "takeProfitPrice": round(float(tp_price), 2),
                             }
-                            try:
-                                await self.exchange.contractPrivatePostStoporderPlace(fallback_body)
-                                print(f"[ExClient] ✓ Fallback TP konuldu: {round(float(tp_price), 2)}")
-                            except Exception as e:
-                                print(f"[ExClient] ⚠ Fallback TP de başarısız: {e}")
+                            for fb_attempt in range(1, 3):
+                                try:
+                                    await self.exchange.contractPrivatePostStoporderPlace(fallback_body)
+                                    print(f"[ExClient] ✓ Fallback TP konuldu: {round(float(tp_price), 2)}")
+                                    fallback_ok = True
+                                    break
+                                except Exception as e:
+                                    print(f"[ExClient] ⚠ Fallback TP hatası (attempt {fb_attempt}): {e}")
+                                    if fb_attempt < 2:
+                                        await asyncio.sleep(1)
+                        if not fallback_ok:
+                            print(f"[ExClient] ⚠ Trailing + Fallback TP başarısız — pozisyon sadece SL ile korunuyor")
 
                 elif not sl_price and tp_price:
                     # Sadece TP varsa (SL yoksa) — ayrı stoporder ile koy
@@ -265,6 +274,7 @@ class _ExClient:
                         print(f"[ExClient] ⚠ MEXC TP HATASI: {e}")
             else:
                 print(f"[ExClient] ⚠ MEXC TP/SL/Trailing ATANAMADI: positionId bulunamadı! (3 deneme sonrası)")
+                raise RuntimeError(f"TP/SL ATANAMADI: positionId bulunamadı — pozisyon korumasız!")
 
         return {"id": order_id, "status": "open", "info": resp}
 
