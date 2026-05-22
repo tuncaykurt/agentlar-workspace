@@ -1629,6 +1629,161 @@ async def bot_performance(bot_id: int):
     }
 
 
+@router.get("/{bot_id}/live-trades")
+async def get_live_trades(bot_id: int):
+    """Bot'un canli borsa pozisyonlarini + signal log'larini birlestirir.
+    Simulasyon sayfasindaki gibi detayli trade karti gosterir."""
+    from models.trade import SignalLog, Trade
+    from core.redis_client import get_redis
+
+    redis = get_redis()
+    result = {"open": [], "closed": [], "stats": {}}
+
+    # 1. Redis'ten bot status (aktif coinler)
+    active_coins = []
+    try:
+        raw_pos = await redis.get(f"bot:{bot_id}:active_positions")
+        if raw_pos:
+            active_coins = json.loads(raw_pos)
+    except Exception:
+        pass
+
+    # 2. Borsadaki gercek acik pozisyonlari cek
+    engine = _running_bots.get(bot_id)
+    exchange_positions = []
+    if engine and hasattr(engine, "exchange"):
+        try:
+            positions = await asyncio.wait_for(
+                engine.exchange.exchange.fetch_positions(), timeout=10
+            )
+            for pos in positions:
+                size = float(pos.get("contracts", 0) or pos.get("contractSize", 0) or 0)
+                if size <= 0:
+                    continue
+                sym = pos.get("symbol", "")
+                base = sym.split("/")[0] if "/" in sym else sym
+                side_str = pos.get("side", "long")
+                entry = float(pos.get("entryPrice", 0) or 0)
+                mark = float(pos.get("markPrice", 0) or 0)
+                lev = int(pos.get("leverage", 1) or 1)
+                margin_type = pos.get("marginMode", "isolated")
+                notional = float(pos.get("notional", 0) or 0)
+                margin_val = abs(notional / lev) if lev > 0 else 0
+                unrealized_pnl = float(pos.get("unrealizedPnl", 0) or 0)
+                pnl_pct = (unrealized_pnl / margin_val * 100) if margin_val > 0 else 0
+                liq_price = float(pos.get("liquidationPrice", 0) or 0)
+
+                exchange_positions.append({
+                    "coin": base,
+                    "symbol": sym,
+                    "direction": side_str,
+                    "entry_price": entry,
+                    "mark_price": mark,
+                    "leverage": lev,
+                    "margin_type": margin_type,
+                    "size": size,
+                    "notional": abs(notional),
+                    "margin_usdt": round(margin_val, 2),
+                    "unrealized_pnl": round(unrealized_pnl, 2),
+                    "pnl_pct": round(pnl_pct, 2),
+                    "liquidation_price": liq_price,
+                })
+        except Exception as e:
+            print(f"[LiveTrades] Borsa pozisyon hatası: {e}")
+
+    # 3. Signal log'lardan TP/SL, confidence, reason bilgilerini al
+    signal_map = {}
+    try:
+        async with async_session() as session:
+            sig_result = await session.execute(
+                select(SignalLog).where(
+                    SignalLog.bot_id == bot_id,
+                    SignalLog.action == "executed",
+                ).order_by(SignalLog.created_at.desc()).limit(50)
+            )
+            for s in sig_result.scalars().all():
+                sym = s.symbol or ""
+                base = sym.split("/")[0] if "/" in sym else sym
+                if base not in signal_map:
+                    signal_map[base] = {
+                        "confidence": s.confidence,
+                        "tp_price": s.tp_price,
+                        "sl_price": s.sl_price,
+                        "source": s.source,
+                        "reason": s.reason,
+                        "created_at": s.created_at.isoformat() if s.created_at else None,
+                    }
+    except Exception as e:
+        print(f"[LiveTrades] Signal log hatası: {e}")
+
+    # 4. Birleştir: borsa pozisyonu + signal log bilgileri
+    for pos in exchange_positions:
+        sig = signal_map.get(pos["coin"], {})
+        pos["confidence"] = sig.get("confidence")
+        pos["tp_price"] = sig.get("tp_price")
+        pos["sl_price"] = sig.get("sl_price")
+        pos["source"] = sig.get("source", "")
+        pos["reason"] = sig.get("reason", "")
+        pos["opened_at"] = sig.get("created_at")
+        # TP/SL yüzdeleri hesapla
+        if pos["entry_price"] and pos["tp_price"]:
+            if pos["direction"] == "long":
+                pos["tp_pct"] = round((pos["tp_price"] - pos["entry_price"]) / pos["entry_price"] * 100, 2)
+            else:
+                pos["tp_pct"] = round((pos["entry_price"] - pos["tp_price"]) / pos["entry_price"] * 100, 2)
+        if pos["entry_price"] and pos["sl_price"]:
+            if pos["direction"] == "long":
+                pos["sl_pct"] = round((pos["entry_price"] - pos["sl_price"]) / pos["entry_price"] * 100, 2)
+            else:
+                pos["sl_pct"] = round((pos["sl_price"] - pos["entry_price"]) / pos["entry_price"] * 100, 2)
+        result["open"].append(pos)
+
+    # 5. Kapali trade'ler (Trade tablosundan)
+    try:
+        async with async_session() as session:
+            trade_result = await session.execute(
+                select(Trade).where(Trade.bot_id == bot_id).order_by(Trade.opened_at.desc()).limit(30)
+            )
+            for t in trade_result.scalars().all():
+                status_val = t.status.value if t.status else "unknown"
+                if status_val == "open":
+                    continue
+                sym = t.symbol or ""
+                base = sym.split("/")[0] if "/" in sym else sym
+                result["closed"].append({
+                    "coin": base,
+                    "symbol": sym,
+                    "direction": t.side,
+                    "entry_price": t.entry_price,
+                    "exit_price": t.exit_price,
+                    "leverage": t.leverage_used,
+                    "pnl_usdt": t.pnl,
+                    "pnl_pct": t.pnl_pct,
+                    "exit_reason": t.exit_reason,
+                    "duration_minutes": t.duration_minutes,
+                    "opened_at": t.opened_at.isoformat() if t.opened_at else None,
+                    "closed_at": t.closed_at.isoformat() if t.closed_at else None,
+                })
+    except Exception:
+        pass
+
+    # 6. İstatistikler
+    total_pnl = sum(t.get("pnl_usdt", 0) or 0 for t in result["closed"])
+    wins = sum(1 for t in result["closed"] if (t.get("pnl_usdt") or 0) > 0)
+    losses = sum(1 for t in result["closed"] if (t.get("pnl_usdt") or 0) < 0)
+    result["stats"] = {
+        "open_count": len(result["open"]),
+        "closed_count": len(result["closed"]),
+        "total_pnl": round(total_pnl, 2),
+        "wins": wins,
+        "losses": losses,
+        "win_rate": round(wins / (wins + losses) * 100, 1) if (wins + losses) > 0 else 0,
+        "unrealized_pnl": round(sum(p.get("unrealized_pnl", 0) for p in result["open"]), 2),
+    }
+
+    return result
+
+
 @router.patch("/{bot_id}/filters")
 async def update_filters(bot_id: int, data: FilterUpdate):
     from models.trade import BotFilter

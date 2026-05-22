@@ -118,6 +118,9 @@ export default function BotCard({
   })
   const [showFilters, setShowFilters] = useState(false)
   const [showTrades, setShowTrades] = useState(false)
+  const [showLiveTrades, setShowLiveTrades] = useState(false)
+  const [liveTrades, setLiveTrades] = useState<any>(null)
+  const [liveTradesLoading, setLiveTradesLoading] = useState(false)
   const [filterStats, setFilterStats] = useState<Record<string, any>>({})
   const [showPerf, setShowPerf] = useState(false)
   const [perf, setPerf] = useState<{
@@ -209,6 +212,22 @@ export default function BotCard({
     } catch { /* WS bağlantı hatası — sessizce geç */ }
     return () => { try { ws?.close() } catch {} }
   }, [bot.id, running])
+
+  // Canlı işlemleri periyodik çek
+  useEffect(() => {
+    if (!showLiveTrades || !running) return
+    let cancelled = false
+    const fetchLive = () => {
+      setLiveTradesLoading(true)
+      api.get(`/bots/${bot.id}/live-trades`)
+        .then((data: any) => { if (!cancelled) setLiveTrades(data) })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setLiveTradesLoading(false) })
+    }
+    fetchLive()
+    const iv = setInterval(fetchLive, 10000)
+    return () => { cancelled = true; clearInterval(iv) }
+  }, [bot.id, showLiveTrades, running])
 
   // Borsa bakiyesini çek (mount'ta bir kez)
   useEffect(() => {
@@ -753,6 +772,152 @@ export default function BotCard({
           )}
           {status.scanner.waiting && (
             <div className="text-yellow-400">Max pozisyon doldu — bekleniyor</div>
+          )}
+        </div>
+      )}
+
+      {/* Canlı İşlemler Paneli */}
+      {running && (
+        <div className="border-t border-slate-800 pt-2">
+          <button
+            onClick={() => setShowLiveTrades(p => !p)}
+            className="flex items-center justify-between w-full text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+              Canli Islemler
+              {liveTrades?.stats && (
+                <span className={clsx(
+                  "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                  (liveTrades.stats.unrealized_pnl || 0) >= 0 ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                )}>
+                  {liveTrades.stats.open_count} acik
+                  {liveTrades.stats.unrealized_pnl !== 0 && ` | ${liveTrades.stats.unrealized_pnl > 0 ? "+" : ""}$${liveTrades.stats.unrealized_pnl.toFixed(2)}`}
+                </span>
+              )}
+            </span>
+            <svg className={clsx("w-3.5 h-3.5 transition-transform", showLiveTrades && "rotate-180")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showLiveTrades && (
+            <div className="mt-2 space-y-2">
+              {liveTradesLoading && !liveTrades && <div className="text-center text-slate-500 text-xs py-4">Yukleniyor...</div>}
+
+              {/* İstatistik kutuları */}
+              {liveTrades?.stats && (
+                <div className="grid grid-cols-4 gap-1.5">
+                  <div className="bg-blue-500/5 rounded-lg p-1.5 text-center border border-blue-500/20">
+                    <p className="text-[9px] text-blue-400/70">Acik</p>
+                    <p className="text-xs font-bold text-blue-400">{liveTrades.stats.open_count}</p>
+                  </div>
+                  <div className="bg-green-500/5 rounded-lg p-1.5 text-center border border-green-500/20">
+                    <p className="text-[9px] text-green-400/70">Kazanan</p>
+                    <p className="text-xs font-bold text-green-400">{liveTrades.stats.wins}</p>
+                  </div>
+                  <div className="bg-red-500/5 rounded-lg p-1.5 text-center border border-red-500/20">
+                    <p className="text-[9px] text-red-400/70">Kaybeden</p>
+                    <p className="text-xs font-bold text-red-400">{liveTrades.stats.losses}</p>
+                  </div>
+                  <div className="bg-slate-900/60 rounded-lg p-1.5 text-center border border-slate-800">
+                    <p className="text-[9px] text-slate-500">Toplam PnL</p>
+                    <p className={clsx("text-xs font-bold", liveTrades.stats.total_pnl >= 0 ? "text-green-400" : "text-red-400")}>
+                      {liveTrades.stats.total_pnl > 0 ? "+" : ""}${liveTrades.stats.total_pnl.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Açık Pozisyonlar */}
+              {liveTrades?.open?.map((pos: any, i: number) => {
+                const isLong = pos.direction === "long"
+                const coinBase = pos.coin?.replace("STOCK", "") || ""
+                const coinIconUrl = `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/${coinBase.toLowerCase()}.png`
+                return (
+                  <div key={i} className={clsx("bg-slate-800/60 border rounded-xl p-3", pos.pnl_pct >= 0 ? "border-green-500/20" : "border-red-500/20")}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="relative w-8 h-8 shrink-0">
+                          <img src={coinIconUrl} alt={coinBase} className="w-8 h-8 rounded-full"
+                            onError={(e) => { const t = e.target as HTMLImageElement; t.style.display = "none"; t.parentElement!.innerHTML = `<div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300">${coinBase.slice(0,3)}</div>` }} />
+                          <div className={clsx("absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px]", isLong ? "bg-green-500" : "bg-red-500")}>
+                            {isLong ? "↑" : "↓"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-white text-sm">{pos.coin}</span>
+                            <span className={clsx("text-[10px] font-medium px-1 py-0.5 rounded", isLong ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400")}>{pos.direction.toUpperCase()}</span>
+                            <span className="text-[10px] text-slate-500 bg-slate-900/50 px-1 py-0.5 rounded">{pos.leverage}x</span>
+                            <span className="text-[10px] text-slate-600">{pos.margin_type}</span>
+                            {pos.confidence && <span className={clsx("text-[10px] px-1 py-0.5 rounded", pos.confidence >= 75 ? "bg-green-500/15 text-green-400" : "bg-blue-500/15 text-blue-400")}>%{pos.confidence}</span>}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            Giris: ${pos.entry_price?.toFixed(4)} | Mark: ${pos.mark_price?.toFixed(4)}
+                          </div>
+                          {pos.tp_price && pos.sl_price && (
+                            <div className="text-[10px] text-slate-500">
+                              TP: ${pos.tp_price.toFixed(4)} ({pos.tp_pct}%) | SL: ${pos.sl_price.toFixed(4)} ({pos.sl_pct}%)
+                            </div>
+                          )}
+                          <div className="text-[10px] text-slate-500">
+                            Margin: ${pos.margin_usdt} | Pozisyon: ${pos.notional?.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                          </div>
+                          {pos.reason && <div className="text-[10px] text-purple-400/80 mt-0.5 truncate max-w-[260px]">{pos.reason}</div>}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 ml-2 min-w-[80px]">
+                        <div className={clsx("text-lg font-bold", pos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                          {pos.pnl_pct > 0 ? "+" : ""}{pos.pnl_pct.toFixed(2)}%
+                        </div>
+                        <div className={clsx("text-xs", pos.unrealized_pnl >= 0 ? "text-green-500" : "text-red-500")}>
+                          {pos.unrealized_pnl > 0 ? "+" : ""}${pos.unrealized_pnl.toFixed(2)}
+                        </div>
+                        {pos.liquidation_price > 0 && (
+                          <div className="text-[9px] text-red-400/60 mt-0.5">Liq: ${pos.liquidation_price.toFixed(2)}</div>
+                        )}
+                        {pos.opened_at && (() => {
+                          const mins = Math.floor((Date.now() - new Date(pos.opened_at).getTime()) / 60000)
+                          return <div className="text-[9px] text-slate-500 mt-0.5">{mins < 60 ? `${mins}dk` : mins < 1440 ? `${Math.floor(mins/60)}sa ${mins%60}dk` : `${Math.floor(mins/1440)}g`}</div>
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {liveTrades?.open?.length === 0 && !liveTradesLoading && (
+                <div className="text-center text-slate-500 text-xs py-3">Acik pozisyon yok</div>
+              )}
+
+              {/* Kapalı İşlemler */}
+              {liveTrades?.closed?.length > 0 && (
+                <>
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider pt-2">Kapali Islemler</div>
+                  {liveTrades.closed.slice(0, 10).map((t: any, i: number) => (
+                    <div key={i} className={clsx("flex items-center justify-between px-3 py-2 rounded-lg text-xs", (t.pnl_usdt || 0) >= 0 ? "bg-green-500/5 border border-green-500/10" : "bg-red-500/5 border border-red-500/10")}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-white">{t.coin}</span>
+                        <span className={clsx("text-[10px]", t.direction === "long" ? "text-green-400" : "text-red-400")}>{t.direction?.toUpperCase()}</span>
+                        <span className="text-slate-500">{t.leverage}x</span>
+                        {t.exit_reason && (
+                          <span className={clsx("text-[9px] px-1 py-0.5 rounded", t.exit_reason === "TP" ? "bg-green-500/15 text-green-400" : t.exit_reason === "SL" ? "bg-red-500/15 text-red-400" : "bg-slate-700 text-slate-400")}>{t.exit_reason}</span>
+                        )}
+                        {t.duration_minutes != null && (
+                          <span className="text-[10px] text-slate-600">{t.duration_minutes < 60 ? `${t.duration_minutes}dk` : `${Math.floor(t.duration_minutes/60)}sa`}</span>
+                        )}
+                      </div>
+                      <div className={clsx("font-bold", (t.pnl_usdt || 0) >= 0 ? "text-green-400" : "text-red-400")}>
+                        {(t.pnl_pct || 0) > 0 ? "+" : ""}{(t.pnl_pct || 0).toFixed(2)}% (${(t.pnl_usdt || 0).toFixed(2)})
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
           )}
         </div>
       )}
