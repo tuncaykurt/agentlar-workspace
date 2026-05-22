@@ -2605,6 +2605,60 @@ export default function BotsPage() {
                         </Field>
                       </div>
                     </>
+                  ) : form.strategy === "smart_scanner" && (form.strategy_params.selection_mode || "ai") === "ai" ? (
+                    <>
+                      {/* Smart Scanner AI Modu — sadece marjin tipi ve bakiye */}
+                      <div className="p-4 rounded-xl border border-purple-500/20 bg-purple-500/5 space-y-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🤖</span>
+                          <p className="text-sm font-medium text-purple-300">AI Karar Modu</p>
+                        </div>
+                        <p className="text-xs text-slate-400">Kaldıraç, risk oranı, TP/SL ve günlük limit yapay zeka tarafından piyasa koşullarına göre dinamik olarak belirlenir.</p>
+                        <div className="grid grid-cols-3 gap-3 text-center">
+                          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                            <p className="text-[10px] text-slate-500">Kaldıraç</p>
+                            <p className="text-sm font-bold text-purple-400 mt-0.5">AI Belirler</p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                            <p className="text-[10px] text-slate-500">TP / SL</p>
+                            <p className="text-sm font-bold text-purple-400 mt-0.5">AI Belirler</p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                            <p className="text-[10px] text-slate-500">Risk Yönetimi</p>
+                            <p className="text-sm font-bold text-purple-400 mt-0.5">AI Belirler</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Marjin Tipi seçimi */}
+                      <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 space-y-3">
+                        <p className="text-sm font-medium text-slate-300">Marjin Tipi</p>
+                        <div className="flex rounded-lg overflow-hidden border border-slate-700 text-xs">
+                          <button
+                            onClick={() => set("margin_type", "isolated" as "isolated" | "cross")}
+                            className={`flex-1 px-3 py-2 transition-colors ${form.margin_type === "isolated" ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-400 hover:text-white"}`}
+                          >Isolated</button>
+                          <button
+                            onClick={() => set("margin_type", "cross" as "isolated" | "cross")}
+                            className={`flex-1 px-3 py-2 transition-colors ${form.margin_type === "cross" ? "bg-orange-600 text-white" : "bg-slate-900 text-slate-400 hover:text-white"}`}
+                          >Cross</button>
+                        </div>
+                        {form.margin_type === "cross" && (
+                          <p className="text-[10px] text-orange-400/80">⚠ Cross marjin: tüm bakiye teminat olarak kullanılır, tasfiye riski yüksektir.</p>
+                        )}
+                      </div>
+
+                      {/* Başlangıç bakiyesi */}
+                      <div className="grid grid-cols-1 gap-5">
+                        <Field label="Başlangıç Bakiyesi" description={
+                          exchangeBalance != null
+                            ? `${form.exchange.toUpperCase()} bakiyesi: $${exchangeBalance.toLocaleString("tr-TR", {maximumFractionDigits: 2})} USDT`
+                            : balanceLoading ? "Bakiye sorgulanıyor..." : "Bot için ayrılan USDT miktarı"
+                        }>
+                          <NumInput value={form.initial_balance} onChange={v => set("initial_balance", v)} min={10} prefix="$" suffix="USDT" />
+                        </Field>
+                      </div>
+                    </>
                   ) : (
                     <>
                       {/* Kaldıraç & Marjin Tipi */}
