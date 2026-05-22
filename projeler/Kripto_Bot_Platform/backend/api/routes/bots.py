@@ -1651,7 +1651,7 @@ async def get_live_trades(bot_id: int):
     # 2. Borsadaki gercek acik pozisyonlari cek (MEXC native API — daha guvenilir)
     engine = _running_bots.get(bot_id)
     exchange_positions = []
-    if engine and hasattr(engine, "exchange"):
+    if engine and hasattr(engine, "exchange") and engine.exchange:
         try:
             # MEXC native: contractPrivateGetPositionOpenPositions (gercek acik pozisyonlar)
             raw_resp = await asyncio.wait_for(
@@ -1659,6 +1659,9 @@ async def get_live_trades(bot_id: int):
                 timeout=10
             )
             pos_list = raw_resp.get("data", []) if isinstance(raw_resp, dict) else raw_resp or []
+            # Önce pozisyonları parse et, sonra ticker'ları toplu çek
+            parsed_positions = []
+            ticker_symbols = set()
             for p in pos_list:
                 hold_vol = float(p.get("holdVol", 0) or 0)
                 if hold_vol <= 0:
@@ -1676,33 +1679,52 @@ async def get_live_trades(bot_id: int):
                 margin_val = float(p.get("im", 0) or p.get("initialMargin", 0) or 0)
                 unrealized_pnl = float(p.get("unrealisedPnl", 0) or p.get("unrealizedPnl", 0) or 0)
                 liq_price = float(p.get("liquidatePrice", 0) or p.get("liquidationPrice", 0) or 0)
-                # Mark price — ticker'dan al
-                mark = entry  # fallback
-                try:
-                    ticker_raw = await engine.exchange.exchange.contractPublicGetTicker({"symbol": mexc_sym})
-                    tick_data = ticker_raw.get("data", ticker_raw) if isinstance(ticker_raw, dict) else {}
-                    mark = float(tick_data.get("lastPrice", 0) or tick_data.get("last", 0) or entry)
-                except Exception:
-                    pass
-                notional = hold_vol * mark  # kontrat * fiyat (basit hesap)
-                if margin_val <= 0:
-                    margin_val = notional / lev if lev > 0 else 0
-                pnl_pct = (unrealized_pnl / margin_val * 100) if margin_val > 0 else 0
+                ticker_symbols.add(mexc_sym)
+                parsed_positions.append({
+                    "mexc_sym": mexc_sym, "base": base, "ccxt_sym": ccxt_sym,
+                    "side_str": side_str, "entry": entry, "lev": lev,
+                    "margin_type": margin_type, "margin_val": margin_val,
+                    "unrealized_pnl": unrealized_pnl, "liq_price": liq_price,
+                    "hold_vol": hold_vol,
+                })
 
+            # Ticker'ları paralel çek (tek tek değil toplu)
+            mark_prices = {}
+            async def _fetch_mark(sym):
+                try:
+                    tr = await asyncio.wait_for(
+                        engine.exchange.exchange.contractPublicGetTicker({"symbol": sym}),
+                        timeout=5
+                    )
+                    td = tr.get("data", tr) if isinstance(tr, dict) else {}
+                    return sym, float(td.get("lastPrice", 0) or td.get("last", 0) or 0)
+                except Exception:
+                    return sym, 0
+            if ticker_symbols:
+                ticker_results = await asyncio.gather(*[_fetch_mark(s) for s in ticker_symbols])
+                mark_prices = dict(ticker_results)
+
+            for pp in parsed_positions:
+                mark = mark_prices.get(pp["mexc_sym"]) or pp["entry"]
+                notional = pp["hold_vol"] * mark
+                margin_val = pp["margin_val"]
+                if margin_val <= 0:
+                    margin_val = notional / pp["lev"] if pp["lev"] > 0 else 0
+                pnl_pct = (pp["unrealized_pnl"] / margin_val * 100) if margin_val > 0 else 0
                 exchange_positions.append({
-                    "coin": base,
-                    "symbol": ccxt_sym,
-                    "direction": side_str,
-                    "entry_price": entry,
+                    "coin": pp["base"],
+                    "symbol": pp["ccxt_sym"],
+                    "direction": pp["side_str"],
+                    "entry_price": pp["entry"],
                     "mark_price": mark,
-                    "leverage": lev,
-                    "margin_type": margin_type,
-                    "size": hold_vol,
+                    "leverage": pp["lev"],
+                    "margin_type": pp["margin_type"],
+                    "size": pp["hold_vol"],
                     "notional": round(abs(notional), 2),
                     "margin_usdt": round(margin_val, 2),
-                    "unrealized_pnl": round(unrealized_pnl, 2),
+                    "unrealized_pnl": round(pp["unrealized_pnl"], 2),
                     "pnl_pct": round(pnl_pct, 2),
-                    "liquidation_price": liq_price,
+                    "liquidation_price": pp["liq_price"],
                 })
         except Exception as e:
             print(f"[LiveTrades] Borsa pozisyon hatası: {e}")
