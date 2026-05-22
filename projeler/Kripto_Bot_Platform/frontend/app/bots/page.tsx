@@ -1494,22 +1494,46 @@ export default function BotsPage() {
   const buildPayload = (f: FormState) => {
     // Smart Scanner: symbol AUTO, tüm params strategy_params'ta
     if (f.strategy === "smart_scanner") {
+      const isAi = (f.strategy_params.selection_mode || "ai") === "ai"
+      const tsMode = f.strategy_params.trade_size_mode || "fixed"
+      const tsValue = Number(f.strategy_params.trade_size_value ?? 100)
+
+      // AI modunda trade_size_mode/value → risk_per_trade dönüşümü
+      let riskPerTrade: number
+      if (isAi) {
+        if (tsMode === "fixed") {
+          // Sabit $ — bakiyeye oran olarak gönder
+          riskPerTrade = tsValue / f.initial_balance
+        } else {
+          // percent veya auto_exchange — yüzde olarak gönder
+          riskPerTrade = tsValue / 100
+        }
+      } else {
+        riskPerTrade = f.risk_mode === "pct"
+          ? f.risk_per_trade / 100
+          : f.risk_per_trade / f.initial_balance
+      }
+
       return {
         name: f.name,
         symbol: "AUTO",
         strategy: "smart_scanner",
         exchange: f.exchange,
         paper_mode: f.paper_mode,
-        leverage: f.leverage,
-        risk_per_trade: f.risk_mode === "pct"
-          ? f.risk_per_trade / 100
-          : f.risk_per_trade / f.initial_balance,
-        max_daily_loss: f.max_daily_loss / 100,
+        leverage: isAi ? 1 : f.leverage,  // AI modunda leverage AI belirler, placeholder 1
+        risk_per_trade: riskPerTrade,
+        max_daily_loss: isAi ? 0.10 : f.max_daily_loss / 100,  // AI: %10 default
         initial_balance: f.initial_balance,
         tp_pct: Number(f.strategy_params.tp_pct ?? 2),
         sl_pct: Number(f.strategy_params.sl_pct ?? 1),
         trailing_sl: false,
-        params: { ...f.strategy_params, leverage: f.leverage },
+        params: {
+          ...f.strategy_params,
+          leverage: isAi ? 1 : f.leverage,
+          margin_type: f.margin_type,
+          trade_size_mode: tsMode,
+          trade_size_value: tsValue,
+        },
       }
     }
 

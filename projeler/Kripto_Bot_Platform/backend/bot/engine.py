@@ -3037,10 +3037,41 @@ class BotEngine:
                     tp_price = round(price * (1 - tp_pct / 100), 6)
                     sl_price = round(price * (1 + sl_pct / 100), 6)
 
-                # Pozisyon büyüklüğü
-                risk_per_trade = self.risk.risk_per_trade
-                qty = self.risk.position_size(price, sl_price)
+                # Pozisyon büyüklüğü — trade_size_mode/trade_size_value kullan
+                trade_size_mode = params.get("trade_size_mode", "fixed")
+                trade_size_value = float(params.get("trade_size_value", 0))
 
+                if trade_size_mode == "fixed" and trade_size_value > 0:
+                    # Sabit USDT margin
+                    margin_usdt = trade_size_value
+                elif trade_size_mode == "percent" and trade_size_value > 0:
+                    # Bakiyenin %'si
+                    margin_usdt = self.risk.current_balance * (trade_size_value / 100)
+                elif trade_size_mode == "auto_exchange" and trade_size_value > 0:
+                    # Borsa bakiyesinin %'si — Redis'ten al
+                    try:
+                        import json as _json
+                        _bal_raw = await redis.get("exchange:mexc:balance")
+                        if _bal_raw:
+                            _bal = _json.loads(_bal_raw)
+                            margin_usdt = float(_bal.get("free", 0)) * (trade_size_value / 100)
+                        else:
+                            margin_usdt = self.risk.current_balance * (trade_size_value / 100)
+                    except Exception:
+                        margin_usdt = self.risk.current_balance * (trade_size_value / 100)
+                else:
+                    # Fallback: risk_per_trade kullan
+                    rpt = self.risk.risk_per_trade
+                    margin_usdt = rpt if rpt > 1.0 else self.risk.current_balance * rpt
+
+                print(f"[SmartScanner {bot_name}] {sel['coin']} margin hesabı: mode={trade_size_mode} value={trade_size_value} → ${margin_usdt:.2f}")
+
+                if margin_usdt < 1:
+                    print(f"[SmartScanner {bot_name}] {sel['coin']} — margin ${margin_usdt:.2f} çok düşük, atlanıyor")
+                    continue
+
+                # qty hesabı — _execute içinde MEXC kontrat hesabı yapılacak
+                qty = (margin_usdt * leverage) / price
                 if qty <= 0:
                     print(f"[SmartScanner {bot_name}] {sel['coin']} — pozisyon büyüklüğü 0, atlanıyor")
                     continue
@@ -3055,6 +3086,7 @@ class BotEngine:
                     "dynamic_leverage": leverage,  # Scanner/AI leverage → _execute'a geçir
                     "tp_pct": tp_pct,              # MEXC fill price recalc için
                     "sl_pct": sl_pct,              # MEXC fill price recalc için
+                    "margin_usdt": margin_usdt,    # Gerçek margin — loglama için
                 }
 
                 # NOT: set_leverage burada çağrılmıyor — _execute içinde dynamic_leverage ile yapılıyor
