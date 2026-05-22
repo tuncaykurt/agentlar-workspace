@@ -2806,14 +2806,18 @@ class BotEngine:
         active_positions = []
         if saved_positions:
             try:
-                exchange_positions = await asyncio.wait_for(
-                    self.exchange.exchange.fetch_positions(), timeout=8
+                # MEXC native API — daha güvenilir (CCXT fetch_positions sorunlu)
+                raw_resp = await asyncio.wait_for(
+                    self.exchange.exchange.contractPrivateGetPositionOpenPositions(),
+                    timeout=8
                 )
+                pos_list = raw_resp.get("data", []) if isinstance(raw_resp, dict) else raw_resp or []
                 open_symbols = set()
-                for pos in exchange_positions:
-                    size = float(pos.get("contracts", 0) or pos.get("contractSize", 0) or 0)
-                    if size > 0:
-                        base = (pos.get("symbol", "") or "").split("/")[0]
+                for pos in pos_list:
+                    hold_vol = float(pos.get("holdVol", 0) or 0)
+                    if hold_vol > 0:
+                        mexc_sym = pos.get("symbol", "")  # BTC_USDT
+                        base = mexc_sym.split("_")[0] if "_" in mexc_sym else mexc_sym
                         open_symbols.add(base)
 
                 for coin in saved_positions:
