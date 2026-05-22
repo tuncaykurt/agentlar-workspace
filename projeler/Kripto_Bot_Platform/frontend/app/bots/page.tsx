@@ -2097,8 +2097,8 @@ export default function BotsPage() {
                     />
                   )}
 
-                  {/* ── Kar / Zarar (Grid/Hedge Bot kendi param'larında yönetir) ── */}
-                  {form.strategy !== "grid_bot" && form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/30 space-y-4">
+                  {/* ── Kar / Zarar (Grid/Hedge Bot ve Smart Scanner AI modunda gizle) ── */}
+                  {form.strategy !== "grid_bot" && form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && !(form.strategy === "smart_scanner" && (form.strategy_params.selection_mode || "ai") === "ai") && <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/30 space-y-4">
                     {/* Başlık + Manuel / AI toggle */}
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-semibold text-slate-300">📊 Kar / Zarar Ayarları</p>
