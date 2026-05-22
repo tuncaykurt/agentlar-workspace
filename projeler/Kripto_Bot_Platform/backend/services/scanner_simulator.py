@@ -545,14 +545,34 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                 if ai_exit_strategy not in ("trailing", "normal_tp_sl", "hedge"):
                     ai_exit_strategy = "normal_tp_sl"
 
+                # ── Kaldıraca göre TP/SL zorunlu sınırlama ──
+                ai_tp = float(sel.get("tp_suggestion_pct") or cfg.get("tp_pct", SIM_TP_PCT))
+                ai_sl = float(sel.get("sl_suggestion_pct") or cfg.get("sl_pct", SIM_SL_PCT))
+                liq_dist = 100.0 / max(1, final_lev)
+                max_sl = round(liq_dist * 0.50, 4)
+                min_sl = max(0.05, round(liq_dist * 0.15, 4))
+                max_tp = round(liq_dist * 0.80, 4)
+                min_tp = max(0.08, round(liq_dist * 0.20, 4))
+
+                if ai_sl > max_sl:
+                    ai_sl = max_sl
+                elif ai_sl < min_sl:
+                    ai_sl = min_sl
+                if ai_tp > max_tp:
+                    ai_tp = max_tp
+                elif ai_tp < min_tp:
+                    ai_tp = min_tp
+                if ai_tp <= ai_sl:
+                    ai_tp = round(ai_sl * 1.5, 4)
+
                 selections.append({
                     "coin": coin_name,
                     "symbol": matched["symbol"],
                     "direction": sel.get("direction", "long"),
                     "confidence": sel.get("confidence", 50),
                     "reason": sel.get("entry_reason", "AI seçimi"),
-                    "tp_pct": sel.get("tp_suggestion_pct", cfg.get("tp_pct", SIM_TP_PCT)),
-                    "sl_pct": sel.get("sl_suggestion_pct", cfg.get("sl_pct", SIM_SL_PCT)),
+                    "tp_pct": ai_tp,
+                    "sl_pct": ai_sl,
                     "leverage": final_lev,
                     "indicators": matched,
                     "ai_log": ai_log_text,

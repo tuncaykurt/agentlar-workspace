@@ -3077,11 +3077,39 @@ class BotEngine:
                     # TP/SL: AI önerisini minimum değerlere sınırla (çok düşük TP/SL tehlikeli)
                     ai_tp = float(sel.get("tp_suggestion_pct") or params.get("tp_pct", 2))
                     ai_sl = float(sel.get("sl_suggestion_pct") or params.get("sl_pct", 1))
-                    # Yüksek kaldıraçta min TP/SL = 100/leverage * 0.5 (tasfiye mesafesinin yarısı)
-                    min_sl = max(0.05, round(100 / clamped_lev * 0.3, 2))
-                    if ai_sl < min_sl:
-                        print(f"[SmartScanner {bot_name}] SL clamp: AI={ai_sl}% → {min_sl}% (lev={clamped_lev}x, tasfiye={100/clamped_lev:.1f}%)")
+
+                    # ── Kaldıraca göre TP/SL zorunlu sınırlama ──
+                    # Tasfiye mesafesi = 100 / kaldıraç
+                    liquidation_dist = 100.0 / clamped_lev
+                    # SL: tasfiye mesafesinin max %50'si (güvenli), min %15'i (çok yakın olmasın)
+                    max_sl = round(liquidation_dist * 0.50, 4)
+                    min_sl = max(0.05, round(liquidation_dist * 0.15, 4))
+                    # TP: tasfiye mesafesinin max %80'i, min %20'si
+                    max_tp = round(liquidation_dist * 0.80, 4)
+                    min_tp = max(0.08, round(liquidation_dist * 0.20, 4))
+
+                    old_tp, old_sl = ai_tp, ai_sl
+
+                    # SL clamp
+                    if ai_sl > max_sl:
+                        ai_sl = max_sl
+                    elif ai_sl < min_sl:
                         ai_sl = min_sl
+
+                    # TP clamp
+                    if ai_tp > max_tp:
+                        ai_tp = max_tp
+                    elif ai_tp < min_tp:
+                        ai_tp = min_tp
+
+                    # TP her zaman SL'den büyük olmalı (risk/ödül > 1)
+                    if ai_tp <= ai_sl:
+                        ai_tp = round(ai_sl * 1.5, 4)
+
+                    if old_tp != ai_tp or old_sl != ai_sl:
+                        print(f"[SmartScanner {bot_name}] TP/SL clamp (lev={clamped_lev}x, tasfiye={liquidation_dist:.2f}%): "
+                              f"TP {old_tp}%→{ai_tp}% (aralık {min_tp}-{max_tp}%) | "
+                              f"SL {old_sl}%→{ai_sl}% (aralık {min_sl}-{max_sl}%)")
 
                     # AI'ın çıkış stratejisi kararı
                     ai_exit_strategy = sel.get("exit_strategy", "normal_tp_sl")

@@ -400,6 +400,23 @@ Mevcut Açık Pozisyonlar: {active_str}
    - Kayıp senaryosu: SL nereye konulmalı, risk/ödül oranı ne?
    - Açık pozisyonlarla korelasyon: Aynı yönde çok pozisyon riskli
 
+   ⚠️ KRİTİK — KALDIRAC ve TP/SL İLİŞKİSİ:
+   Tasfiye mesafesi = 100 / kaldıraç. SL tasfiye mesafesinin YARISI kadar olmalı!
+   TP/SL MUTLAKA kaldıraca orantılı olsun, aşağıdaki tabloyu KESİNLİKLE uygula:
+
+   | Kaldıraç  | Max TP%   | Max SL%   | Tasfiye   | Örnek              |
+   |-----------|-----------|-----------|-----------|---------------------|
+   | 5-10x     | 3.0-5.0%  | 1.5-3.0%  | 10-20%    | TP=4%, SL=2%       |
+   | 10-25x    | 1.5-3.0%  | 0.8-1.5%  | 4-10%     | TP=2%, SL=1%       |
+   | 25-50x    | 0.8-1.5%  | 0.4-0.8%  | 2-4%      | TP=1%, SL=0.5%     |
+   | 50-100x   | 0.4-0.8%  | 0.2-0.4%  | 1-2%      | TP=0.5%, SL=0.3%   |
+   | 100-200x  | 0.2-0.4%  | 0.1-0.2%  | 0.5-1%    | TP=0.3%, SL=0.15%  |
+   | 200x+     | 0.1-0.2%  | 0.05-0.1% | <0.5%     | TP=0.15%, SL=0.08% |
+
+   FORMÜL: tp_suggestion_pct ≈ (100 / kaldıraç) × 0.3
+           sl_suggestion_pct ≈ (100 / kaldıraç) × 0.15
+   Yüksek kaldıraçta BÜYÜK TP/SL KOYMA — tasfiye olursun!
+
 7. ÇIKIŞ STRATEJİSİ SEÇİMİ:
    - "trailing": ADX > 30 + net trend + yüksek hacim → fiyat koşarken kârı maksimize et
    - "normal_tp_sl": ADX < 25 veya yatay piyasa → sabit TP/SL ile disiplinli çık
