@@ -73,6 +73,7 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
         cols.append("ai_log")
 
     items = []
+    open_symbols = set()
     for row in rows:
         d = dict(zip(cols, row))
         d["created_at"] = d["created_at"].isoformat() if d["created_at"] else None
@@ -80,6 +81,36 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
         if not has_ai_log:
             d["ai_log"] = None
         items.append(d)
+        if d["status"] == "open" and d.get("symbol"):
+            open_symbols.add(d["symbol"])
+
+    # Açık sim'ler için Redis'ten anlık fiyat çek → current_price, current_pnl ekle
+    if open_symbols:
+        redis = get_redis()
+        live_prices = {}
+        for sym in open_symbols:
+            try:
+                raw = await redis.get(f"ticker:mexc:{sym}")
+                if raw:
+                    data = json.loads(raw)
+                    p = float(data.get("last", 0))
+                    if p > 0:
+                        live_prices[sym] = p
+            except Exception:
+                pass
+
+        for d in items:
+            if d["status"] == "open" and d.get("symbol") in live_prices:
+                cur = live_prices[d["symbol"]]
+                entry = d["entry_price"]
+                is_long = d["direction"] == "long"
+                pnl_pct = ((cur - entry) / entry * 100) if is_long else ((entry - cur) / entry * 100)
+                margin = d.get("margin_usdt") or 100
+                lev = d.get("leverage") or 50
+                pnl_usdt = margin * lev * pnl_pct / 100
+                d["current_price"] = round(cur, 6)
+                d["current_pnl_pct"] = round(pnl_pct, 4)
+                d["current_pnl_usdt"] = round(pnl_usdt, 2)
 
     return {"items": items, "total": total}
 

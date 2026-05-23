@@ -902,9 +902,19 @@ export default function SimulationsPage() {
                           {sim.first_move_pct != null && ` (${sim.first_move_pct.toFixed(2)}%)`}
                         </div>
                       )}
-                      {/* Acik islem: max lehte/aleyhte + gecen sure */}
+                      {/* Acik islem: canli fiyat + PnL + max lehte/aleyhte + gecen sure */}
                       {isOpen && (
                         <>
+                          {/* Canli PnL */}
+                          {sim.current_price ? (
+                            <div className="text-xs font-medium">
+                              <span className={sim.current_pnl_pct >= 0 ? "text-green-400" : "text-red-400"}>
+                                {sim.current_pnl_pct >= 0 ? "+" : ""}{sim.current_pnl_pct.toFixed(2)}%
+                                {" "}(${sim.current_pnl_usdt >= 0 ? "+" : ""}{sim.current_pnl_usdt.toFixed(1)})
+                              </span>
+                              <span className="text-slate-500 ml-1 text-[10px]">${sim.current_price.toFixed(4)}</span>
+                            </div>
+                          ) : null}
                           <div className="text-xs text-slate-400">
                             {sim.max_favorable_pct != null ? (
                               <>
