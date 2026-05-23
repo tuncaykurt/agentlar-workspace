@@ -381,6 +381,20 @@ const STRATEGIES: Strategy[] = [
       },
       { key: "trade_size_value", label: "Miktar / Yüzde", type: "number", min: 1, max: 100000, step: 1, default: 100, mode: "ai" as const, description: "Sabit modda $ tutarı, yüzde modlarında % değeri" },
 
+      // ─── TP / SL Ayarları (AI modu) ───
+      { key: "tp_pct", label: "Take Profit %", type: "number", min: 0.05, max: 50, step: 0.05, default: 1.5, mode: "ai" as const, description: "AI bu değeri max TP olarak kullanır — kaldıraca göre otomatik daraltılır" },
+      { key: "sl_pct", label: "Stop Loss %", type: "number", min: 0.05, max: 50, step: 0.05, default: 0.8, mode: "ai" as const, description: "AI bu değeri max SL olarak kullanır — kaldıraca göre otomatik daraltılır" },
+
+      // ─── Hedge Ayarları (AI modu) ───
+      { key: "hedge_enabled", label: "Hedge İşlem Aç", type: "boolean", default: false, mode: "ai" as const, description: "AI'ın hedge (çift yönlü) işlem açmasına izin ver" },
+      { key: "hedge_tp_pct", label: "Hedge TP %", type: "number", min: 0.05, max: 20, step: 0.05, default: 0.4, mode: "ai" as const, description: "Hedge işlemlerde TP hedefi (her iki yön için)" },
+      { key: "hedge_sl_pct", label: "Hedge SL %", type: "number", min: 0.05, max: 20, step: 0.05, default: 0.2, mode: "ai" as const, description: "Hedge işlemlerde SL hedefi (her iki yön için)" },
+
+      // ─── Trailing Stop Ayarları (AI modu) ───
+      { key: "trailing_enabled", label: "Trailing Stop", type: "boolean", default: false, mode: "ai" as const, description: "AI'ın trailing stop kullanmasına izin ver" },
+      { key: "trailing_activate_pct", label: "Trailing Aktivasyon %", type: "number", min: 0.05, max: 10, step: 0.05, default: 0.3, mode: "ai" as const, description: "Kâr bu yüzdeye ulaşınca trailing stop devreye girer" },
+      { key: "trailing_callback_pct", label: "Trailing Geri Çekilme %", type: "number", min: 0.01, max: 5, step: 0.01, default: 0.15, mode: "ai" as const, description: "Kâr bu kadar geri çekilirse pozisyon kapanır" },
+
       // ─── Manuel Kriter Parametreleri (mode: "manual") ───
       { key: "leverage",      label: "Kaldıraç",     type: "number", min: 1, max: 500, step: 1, default: 50, mode: "manual" as const, description: "Varsayılan kaldıraç — 20-100x önerilen" },
       { key: "tp_pct",        label: "Take Profit %", type: "number", min: 0.1, max: 100, step: 0.1, default: 1.5, mode: "manual" as const, description: "Kâr al yüzdesi — yüksek kaldıraçta düşük % yeterli" },
@@ -2042,6 +2056,10 @@ export default function BotsPage() {
                                   const pMode = (param as any).mode
                                   const selMode = form.strategy_params.selection_mode || "ai"
                                   if (pMode !== "both" && pMode !== selMode) return false
+                                  // Smart Scanner: Hedge alt ayarları sadece hedge_enabled açıkken
+                                  if ((param.key === "hedge_tp_pct" || param.key === "hedge_sl_pct") && !form.strategy_params.hedge_enabled) return false
+                                  // Smart Scanner: Trailing alt ayarları sadece trailing_enabled açıkken
+                                  if ((param.key === "trailing_activate_pct" || param.key === "trailing_callback_pct") && !form.strategy_params.trailing_enabled) return false
                                 }
                                 const isHedge = form.strategy === "hedge_bot" || form.strategy === "dual_hedge"
                                 if (!isHedge) return true

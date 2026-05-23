@@ -3057,7 +3057,8 @@ class BotEngine:
                     print(f"[SmartScanner {bot_name}] Performans verisi alınamadı: {perf_err}")
 
                 prompt = build_ai_prompt(ai_top, active_positions, leverage_range=leverage_range,
-                                         max_selections=remaining, past_performance=past_performance)
+                                         max_selections=remaining, past_performance=past_performance,
+                                         bot_config=params)
                 model = settings.AI_DEEP_MODEL
                 ai_response = await asyncio.wait_for(
                     _call(model, prompt, max_tokens=1200),
@@ -3326,6 +3327,17 @@ class BotEngine:
                 # ── AI exit_strategy kararına göre parametreleri ayarla ──
                 exit_strategy = sel.get("exit_strategy", "normal_tp_sl")
 
+                # Bot config'den izin kontrolü — toggle kapalıysa AI kararını override et
+                hedge_allowed = bool(params.get("hedge_enabled", False))
+                trailing_allowed = bool(params.get("trailing_enabled", False))
+
+                if exit_strategy == "hedge" and not hedge_allowed:
+                    print(f"[SmartScanner {bot_name}] {sel['coin']} AI hedge istedi ama hedge_enabled=False — normal_tp_sl'e düşürüldü")
+                    exit_strategy = "normal_tp_sl"
+                if exit_strategy == "trailing" and not trailing_allowed:
+                    print(f"[SmartScanner {bot_name}] {sel['coin']} AI trailing istedi ama trailing_enabled=False — normal_tp_sl'e düşürüldü")
+                    exit_strategy = "normal_tp_sl"
+
                 # AI result formatında — dynamic_leverage ile _execute doğru leverage kullanır
                 ai_result = {
                     "approved": True,
@@ -3347,13 +3359,28 @@ class BotEngine:
                         print(f"[SmartScanner {bot_name}] {sel['coin']} hedge için slot yok — atlanıyor")
                         continue
 
-                if exit_strategy == "hedge":
                     # Hedge işlemlerinde trailing KAPALI — normal TP/SL kullan
                     params["trailing_enabled"] = False
                     params.pop("trailing_callback_pct", None)
+                    params.pop("trailing_callback_rate", None)
 
-                    hedge_tp = float(params.get("hedge_tp_pct", tp_pct))
-                    hedge_sl = float(params.get("hedge_sl_pct", sl_pct))
+                    # Hedge TP/SL: bot ayarlarından oku (kullanıcının girdiği değerler)
+                    hedge_tp = float(params.get("hedge_tp_pct") or tp_pct)
+                    hedge_sl = float(params.get("hedge_sl_pct") or sl_pct)
+
+                    # Kaldıraca göre hedge TP/SL clamp (tasfiye koruması)
+                    h_liq_dist = 100.0 / leverage
+                    h_max_sl = round(h_liq_dist * 0.50, 4)
+                    h_max_tp = round(h_liq_dist * 0.80, 4)
+                    if hedge_sl > h_max_sl:
+                        print(f"[SmartScanner {bot_name}] Hedge SL clamp: {hedge_sl}% → {h_max_sl}% (lev={leverage}x)")
+                        hedge_sl = h_max_sl
+                    if hedge_tp > h_max_tp:
+                        print(f"[SmartScanner {bot_name}] Hedge TP clamp: {hedge_tp}% → {h_max_tp}% (lev={leverage}x)")
+                        hedge_tp = h_max_tp
+
+                    print(f"[SmartScanner {bot_name}] HEDGE {sel['coin']}: TP={hedge_tp}% SL={hedge_sl}% Lev={leverage}x (her iki yön aynı)")
+
                     for h_dir in ["long", "short"]:
                         h_side = "buy" if h_dir == "long" else "sell"
                         if h_dir == "long":
@@ -3369,9 +3396,13 @@ class BotEngine:
                             "stop_loss": h_sl,
                             "tp_pct": hedge_tp,
                             "sl_pct": hedge_sl,
+                            "dynamic_leverage": leverage,  # Her iki yön AYNI kaldıraç
                             "analysis": f"HEDGE {h_dir.upper()} (AI karar) — {sel.get('reason', '')}",
                         }
                         await self._execute(h_side, price, qty, h_sl, h_ai_result, symbol_override=symbol)
+                        # İkinci yönden önce kısa bekleme — borsanın emirleri işlemesi için
+                        if h_dir == "long":
+                            await asyncio.sleep(1.5)
 
                     await self._log_signal(side, price, source="smart_scanner_ai_hedge",
                         action="executed", confidence=sel.get("confidence"),
@@ -3384,18 +3415,19 @@ class BotEngine:
                 else:
                     # Trailing: AI trailing seçtiyse params'a trailing ekle, yoksa normal TP/SL
                     if exit_strategy == "trailing":
-                        trailing_cb = sel.get("trailing_callback_pct", float(params.get("trailing_callback_pct", 0.1)))
+                        trailing_cb = sel.get("trailing_callback_pct", float(params.get("trailing_callback_pct", 0.15)))
                         # params'a trailing bilgisini geçici ekle — _execute okuyacak
                         params["trailing_enabled"] = True
                         params["trailing_callback_pct"] = trailing_cb
+                        params["trailing_callback_rate"] = trailing_cb
                     else:
                         # Normal TP/SL — trailing kapalı
                         params["trailing_enabled"] = False
                         params.pop("trailing_callback_pct", None)
+                        params.pop("trailing_callback_rate", None)
 
                     await self._execute(side, price, qty, sl_price, ai_result, symbol_override=symbol)
 
-                    # Trailing durumunu logdan sonra geri al (sonraki işlem için)
                     await self._log_signal(side, price, source=f"smart_scanner_{sel['source']}",
                         action="executed", confidence=sel.get("confidence"),
                         tp_price=tp_price, sl_price=sl_price,
@@ -3475,6 +3507,9 @@ class BotEngine:
                         }
 
                         await self._execute(h_side, h_price, h_qty, h_sl, h_ai_result, symbol_override=h_symbol)
+                        # İkinci yönden önce kısa bekleme — borsanın TP/SL emirlerini işlemesi için
+                        if h_dir == "long":
+                            await asyncio.sleep(1.5)
 
                     opened.append(f"{hc['base']}(H)")
                     active_positions.append(hc["base"])

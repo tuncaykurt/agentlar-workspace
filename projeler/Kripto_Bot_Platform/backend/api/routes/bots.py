@@ -1373,18 +1373,58 @@ async def stop_bot(bot_id: int):
     if bot_id not in _running_bots:
         raise HTTPException(400, "Bot çalışmıyor")
 
-    _running_bots[bot_id].stop()
-    _bot_tasks[bot_id].cancel()
-    del _running_bots[bot_id]
-    del _bot_tasks[bot_id]
+    # Önce engine'i durdur ve task'ı iptal et (anında)
+    try:
+        _running_bots[bot_id].stop()
+    except Exception:
+        pass
+    try:
+        _bot_tasks[bot_id].cancel()
+    except Exception:
+        pass
+    _running_bots.pop(bot_id, None)
+    _bot_tasks.pop(bot_id, None)
 
-    async with async_session() as session:
-        await session.execute(
-            update(Bot).where(Bot.id == bot_id).values(status=BotStatus.STOPPED)
-        )
-        await session.commit()
+    # DB güncelle — timeout ile (Gateway Timeout önlenir)
+    try:
+        async with async_session() as session:
+            await asyncio.wait_for(
+                _update_bot_status(session, bot_id, BotStatus.STOPPED),
+                timeout=10
+            )
+    except asyncio.TimeoutError:
+        print(f"[BotStop] Bot #{bot_id} DB güncelleme timeout — arka planda tekrar denenecek")
+        asyncio.create_task(_retry_bot_status_update(bot_id, BotStatus.STOPPED))
+    except Exception as e:
+        print(f"[BotStop] Bot #{bot_id} DB hatası: {e}")
+        asyncio.create_task(_retry_bot_status_update(bot_id, BotStatus.STOPPED))
 
     return {"status": "stopped", "bot_id": bot_id}
+
+
+async def _update_bot_status(session, bot_id: int, status):
+    """Bot status güncelle — ayrı fonksiyon (timeout ile kullanılabilsin)."""
+    await session.execute(
+        update(Bot).where(Bot.id == bot_id).values(status=status)
+    )
+    await session.commit()
+
+
+async def _retry_bot_status_update(bot_id: int, status, retries: int = 3):
+    """Arka planda DB güncelleme tekrar dene."""
+    for i in range(retries):
+        try:
+            await asyncio.sleep(2 * (i + 1))
+            async with async_session() as session:
+                await session.execute(
+                    update(Bot).where(Bot.id == bot_id).values(status=status)
+                )
+                await session.commit()
+            print(f"[BotStop] Bot #{bot_id} DB güncelleme başarılı (retry {i+1})")
+            return
+        except Exception as e:
+            print(f"[BotStop] Bot #{bot_id} DB retry {i+1} hatası: {e}")
+    print(f"[BotStop] Bot #{bot_id} DB güncelleme {retries} denemede de başarısız!")
 
 
 @router.delete("/{bot_id}")

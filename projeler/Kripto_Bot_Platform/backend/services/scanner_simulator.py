@@ -502,7 +502,8 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
             }
 
         prompt = build_ai_prompt(top, active_coins, leverage_range=lev_range,
-                                  max_selections=remaining_slots, past_performance=_sim_perf)
+                                  max_selections=remaining_slots, past_performance=_sim_perf,
+                                  bot_config=cfg)
         learning = _build_learning_context(past_results)
         if learning:
             prompt = prompt + "\n" + learning

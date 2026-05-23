@@ -213,9 +213,42 @@ def score_coin_manual(coin: dict, criteria: ManualCriteria) -> Optional[float]:
     return round(score, 2)
 
 
+def _build_exit_strategy_section(bot_config: dict = None) -> str:
+    """Bot ayarlarına göre AI'a hangi exit stratejilerini kullanabileceğini bildir."""
+    cfg = bot_config or {}
+    hedge_on = cfg.get("hedge_enabled", False)
+    trailing_on = cfg.get("trailing_enabled", False)
+
+    lines = ["Her seçim için ÇIKIŞ STRATEJİSİ belirle:"]
+    lines.append('- "normal_tp_sl": Sabit TP/SL ile riski sınırla (HER ZAMAN kullanılabilir)')
+
+    if trailing_on:
+        activate = cfg.get("trailing_activate_pct", 0.3)
+        callback = cfg.get("trailing_callback_pct", 0.15)
+        lines.append(f'- "trailing": Güçlü trend + yüksek ADX (>30) → trailing stop (aktivasyon: %{activate}, geri çekilme: %{callback})')
+    else:
+        lines.append('- "trailing": ❌ KAPALI — kullanıcı trailing stop\'u devre dışı bıraktı, BU STRATEJİYİ SEÇME!')
+
+    if hedge_on:
+        h_tp = cfg.get("hedge_tp_pct", 0.4)
+        h_sl = cfg.get("hedge_sl_pct", 0.2)
+        lines.append(f'- "hedge": Çift yönlü hedge (TP: %{h_tp}, SL: %{h_sl}) — yön belirsiz ama hareket kesin olduğunda')
+    else:
+        lines.append('- "hedge": ❌ KAPALI — kullanıcı hedge işlemi devre dışı bıraktı, BU STRATEJİYİ SEÇME!')
+
+    # TP/SL sınırları
+    tp_pct = cfg.get("tp_pct", 1.5)
+    sl_pct = cfg.get("sl_pct", 0.8)
+    lines.append(f'\nKullanıcı TP/SL ayarları: Max TP=%{tp_pct}, Max SL=%{sl_pct}')
+    lines.append('Bu değerleri AŞMA — kaldıraca göre daha da daraltılabilir.')
+
+    return "\n".join(lines)
+
+
 def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
                     leverage_range: tuple = None, max_selections: int = 3,
-                    past_performance: dict = None) -> str:
+                    past_performance: dict = None,
+                    bot_config: dict = None) -> str:
     """
     AI coin seçimi için kapsamlı prompt oluştur.
     Tüm coin verilerini analiz ederek en iyi fırsatları belirler.
@@ -333,10 +366,7 @@ Son Kapanan İşlemler:
     return f"""Sen dünyanın en iyi kripto futures traderısın. Görevin: aşağıdaki tüm coinleri analiz ederek
 en yüksek kâr potansiyeline sahip EN FAZLA {max_selections} coin seç ve işlem yönü belirle. {max_selections}'den fazla seçme!
 
-Her seçim için ÇIKIŞ STRATEJİSİ de belirle:
-- "trailing": Güçlü trend + yüksek ADX (>30) + yüksek hacim → trailing stop ile kârı maksimize et
-- "normal_tp_sl": Yatay piyasa, düşük ADX (<25), belirsiz yön → sabit TP/SL ile riski sınırla
-- "hedge": Çok volatil, yön belirsiz ama hareket kesin (squeeze, BB sıkışma) → çift yönlü hedge
+{_build_exit_strategy_section(bot_config)}
 
 ═══════════════════════════════════════════════════════════════
                     PIYASA GENEL DURUMU
@@ -418,9 +448,10 @@ Mevcut Açık Pozisyonlar: {active_str}
    Yüksek kaldıraçta BÜYÜK TP/SL KOYMA — tasfiye olursun!
 
 7. ÇIKIŞ STRATEJİSİ SEÇİMİ:
-   - "trailing": ADX > 30 + net trend + yüksek hacim → fiyat koşarken kârı maksimize et
-   - "normal_tp_sl": ADX < 25 veya yatay piyasa → sabit TP/SL ile disiplinli çık
-   - "hedge": BB squeeze + yüksek ATR + funding aşırı → yön belirsiz ama büyük hareket bekleniyor
+   - "normal_tp_sl": ADX < 25 veya yatay piyasa → sabit TP/SL ile disiplinli çık (her zaman kullanılabilir)
+   - "trailing": ADX > 30 + net trend + yüksek hacim → fiyat koşarken kârı maksimize et (SADECE trailing izin verildiyse!)
+   - "hedge": BB squeeze + yüksek ATR + funding aşırı → yön belirsiz ama büyük hareket bekleniyor (SADECE hedge izin verildiyse!)
+   - ⚠️ Yukarıda KAPALI olarak işaretlenen stratejileri KESİNLİKLE SEÇME!
    - Geçmiş performanstan öğren: hangi strateji hangi koşulda daha başarılı oldu?
 
 8. ZAMANLAMA ANALİZİ:
