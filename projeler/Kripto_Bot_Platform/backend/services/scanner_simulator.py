@@ -981,17 +981,10 @@ async def run_simulator_cycle():
         # Portföy ayarları
         portfolio_on = cfg.get("portfolio_enabled", True)
 
-        # 1. Açık simülasyonları kontrol et
-        expiry = cfg.get("expiry_hours", SIM_EXPIRY_HOURS)
-        trailing = {
-            "enabled": cfg.get("trailing_enabled", False),
-            "activate_pct": cfg.get("trailing_activate_pct", 0.3),
-            "callback_pct": cfg.get("trailing_callback_pct", 0.15),
-        }
-        await _check_open_simulations(exchange, expiry_hours=expiry, trailing_cfg=trailing,
-                                      portfolio_enabled=portfolio_on)
+        # Fiyat kontrolü artık _fast_price_monitor() tarafından 3s'de bir yapılıyor.
+        # Bu döngü sadece yeni seçim yapar.
 
-        # 2. Yeni seçim yap
+        # Yeni seçim yap
         open_sims = await _get_open_sims()
         if len(open_sims) >= cfg.get("max_open", SIM_MAX_OPEN):
             print(f"[SimScanner] Max açık sim ({len(open_sims)}/{cfg.get('max_open', SIM_MAX_OPEN)}) — bekleniyor")
@@ -1191,10 +1184,200 @@ async def run_simulator_cycle():
             pass
 
 
+async def _fast_price_monitor():
+    """
+    Hızlı fiyat izleme döngüsü — 3 saniyede bir açık sim'lerin TP/SL kontrolü.
+
+    Sadece Redis'ten fiyat okur (WebSocket-fed, ~0ms).
+    DB sorgusu yok (açık sim cache'i 15s'de bir yenilenir).
+    DB write sadece TP/SL hit olduğunda.
+    Sistem yükü: minimal — Redis GET + basit karşılaştırma.
+    """
+    print("[SimMonitor] Hızlı fiyat izleme başladı (3s aralık)")
+    await asyncio.sleep(100)  # Diğer servisler hazır olsun
+
+    # Açık sim cache — DB'ye her 3s'de sormamak için
+    _cached_sims: list[dict] = []
+    _cache_ts: float = 0
+    CACHE_TTL = 15  # 15 saniyede bir DB'den yenile
+    CHECK_INTERVAL = 3  # 3 saniyede bir fiyat kontrol
+
+    while True:
+        try:
+            now_ts = asyncio.get_event_loop().time()
+            redis = get_redis()
+
+            # Ayarları kontrol et
+            cfg = await _get_sim_settings(redis)
+            if not cfg.get("enabled", True):
+                await asyncio.sleep(30)
+                continue
+
+            trailing_cfg = {
+                "enabled": cfg.get("trailing_enabled", False),
+                "activate_pct": cfg.get("trailing_activate_pct", 0.3),
+                "callback_pct": cfg.get("trailing_callback_pct", 0.15),
+            }
+            portfolio_on = cfg.get("portfolio_enabled", True)
+
+            # Cache yenile (15s'de bir DB query)
+            if now_ts - _cache_ts > CACHE_TTL:
+                _cached_sims = await _get_open_sims()
+                _cache_ts = now_ts
+
+            if not _cached_sims:
+                await asyncio.sleep(CHECK_INTERVAL)
+                continue
+
+            now = datetime.now(timezone.utc)
+            expiry_hours = cfg.get("expiry_hours", SIM_EXPIRY_HOURS)
+            closed_ids = []  # Bu tick'te kapanan sim ID'leri — cache'ten çıkar
+
+            for sim in _cached_sims:
+                sim_id = sim["id"]
+                symbol = sim["symbol"]
+                entry = sim["entry_price"]
+                tp = sim["tp_price"]
+                sl = sim["sl_price"]
+                is_long = sim["direction"] == "long"
+                created = sim["created_at"]
+                if created and created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
+                max_fav = sim.get("max_favorable_pct") or 0
+                max_adv = sim.get("max_adverse_pct") or 0
+
+                # Expire kontrolü
+                if created and (now - created).total_seconds() > expiry_hours * 3600:
+                    sim_margin = float(sim.get("margin_usdt") or SIM_MARGIN)
+                    cur_price = await _get_price_from_redis(symbol)
+                    if cur_price:
+                        pnl_pct = ((cur_price - entry) / entry * 100) if is_long else ((entry - cur_price) / entry * 100)
+                        pnl_usdt = sim_margin * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
+                    else:
+                        cur_price, pnl_pct, pnl_usdt = entry, 0, 0
+                    duration_min = int((now - created).total_seconds() / 60) if created else None
+                    async with async_session() as session:
+                        await session.execute(sql_text("""
+                            UPDATE scanner_simulations
+                            SET status = 'expired', exit_price = :price, pnl_pct = :pnl,
+                                pnl_usdt = :pnl_usdt, exit_reason = 'EXPIRED',
+                                duration_minutes = :dur, closed_at = NOW()
+                            WHERE id = :id AND status = 'open'
+                        """), {"price": cur_price, "pnl": round(pnl_pct, 4),
+                               "pnl_usdt": round(pnl_usdt, 2), "dur": duration_min, "id": sim_id})
+                        await session.commit()
+                    if portfolio_on:
+                        await _release_margin(redis, sim_margin, round(pnl_usdt, 2))
+                    print(f"[SimMonitor] {sim['coin']} expired: {pnl_pct:+.2f}% (${pnl_usdt:+.1f}) [{duration_min}dk]")
+                    closed_ids.append(sim_id)
+                    continue
+
+                # Fiyat: SADECE Redis (WebSocket) — REST yok, 0ms
+                cur_price = await _get_price_from_redis(symbol)
+                if not cur_price:
+                    continue
+
+                # Lehte/aleyhte hareket
+                if is_long:
+                    favorable = max(0, (cur_price - entry) / entry * 100)
+                    adverse = max(0, (entry - cur_price) / entry * 100)
+                else:
+                    favorable = max(0, (entry - cur_price) / entry * 100)
+                    adverse = max(0, (cur_price - entry) / entry * 100)
+
+                new_max_fav = max(max_fav, favorable)
+                new_max_adv = max(max_adv, adverse)
+
+                # İlk hareket yönü (sadece bir kez set edilir)
+                if not sim.get("first_move") and (favorable > 0.01 or adverse > 0.01):
+                    first_move = "favorable" if favorable >= adverse else "adverse"
+                    first_move_pct = round(favorable if first_move == "favorable" else adverse, 4)
+                    sim["first_move"] = first_move  # Cache güncelle
+                    async with async_session() as session:
+                        await session.execute(sql_text("""
+                            UPDATE scanner_simulations SET first_move = :fm, first_move_pct = :fmp WHERE id = :id
+                        """), {"fm": first_move, "fmp": first_move_pct, "id": sim_id})
+                        await session.commit()
+
+                # Trailing stop
+                trailing_close = False
+                if trailing_cfg.get("enabled") and new_max_fav >= trailing_cfg.get("activate_pct", 0.3):
+                    pullback = new_max_fav - favorable
+                    if pullback >= trailing_cfg.get("callback_pct", 0.15):
+                        trailing_close = True
+
+                # TP/SL check
+                hit_tp = (is_long and cur_price >= tp) or (not is_long and cur_price <= tp)
+                hit_sl = (is_long and cur_price <= sl) or (not is_long and cur_price >= sl)
+
+                if hit_tp or hit_sl or trailing_close:
+                    sim_margin = float(sim.get("margin_usdt") or SIM_MARGIN)
+                    if trailing_close:
+                        status, exit_price, reason_tag = "win", cur_price, "TRAILING"
+                    elif hit_tp and hit_sl:
+                        status, exit_price, reason_tag = "loss", sl, "SL"
+                    elif hit_tp:
+                        status, exit_price, reason_tag = "win", cur_price, "TP"
+                    else:
+                        status, exit_price, reason_tag = "loss", cur_price, "SL"
+
+                    raw_pnl_pct = ((exit_price - entry) / entry * 100) if is_long else ((entry - exit_price) / entry * 100)
+                    pnl_pct = raw_pnl_pct - 0.04  # komisyon
+                    pnl_usdt = sim_margin * sim.get("leverage", SIM_LEVERAGE) * pnl_pct / 100
+                    duration_min = int((now - created).total_seconds() / 60) if created else None
+
+                    async with async_session() as session:
+                        await session.execute(sql_text("""
+                            UPDATE scanner_simulations
+                            SET status = :status, exit_price = :price, pnl_pct = :pnl,
+                                pnl_usdt = :pnl_usdt, max_favorable_pct = :fav, max_adverse_pct = :adv,
+                                exit_reason = :reason, duration_minutes = :dur, closed_at = NOW()
+                            WHERE id = :id AND status = 'open'
+                        """), {"status": status, "price": round(exit_price, 6),
+                               "pnl": round(pnl_pct, 4), "pnl_usdt": round(pnl_usdt, 2),
+                               "fav": round(new_max_fav, 4), "adv": round(new_max_adv, 4),
+                               "reason": reason_tag, "dur": duration_min, "id": sim_id})
+                        await session.commit()
+
+                    if portfolio_on:
+                        await _release_margin(redis, sim_margin, round(pnl_usdt, 2))
+
+                    emoji = "✅" if status == "win" else "❌"
+                    dur_str = f"{duration_min}dk" if duration_min else "?"
+                    print(f"[SimMonitor] {emoji} {sim['coin']} {sim['direction']} → {status} [{reason_tag}] "
+                          f"({pnl_pct:+.2f}% / ${pnl_usdt:+.1f}) [{dur_str}]")
+                    closed_ids.append(sim_id)
+                else:
+                    # Max favorable/adverse cache güncelle (DB yazma sadece değişince)
+                    sim["max_favorable_pct"] = new_max_fav
+                    sim["max_adverse_pct"] = new_max_adv
+                    if new_max_fav != max_fav or new_max_adv != max_adv:
+                        async with async_session() as session:
+                            await session.execute(sql_text("""
+                                UPDATE scanner_simulations
+                                SET max_favorable_pct = :fav, max_adverse_pct = :adv WHERE id = :id
+                            """), {"fav": round(new_max_fav, 4), "adv": round(new_max_adv, 4), "id": sim_id})
+                            await session.commit()
+
+            # Kapanan sim'leri cache'ten çıkar
+            if closed_ids:
+                _cached_sims = [s for s in _cached_sims if s["id"] not in closed_ids]
+
+        except Exception as e:
+            print(f"[SimMonitor] Hata: {e}")
+            import traceback
+            traceback.print_exc()
+
+        await asyncio.sleep(CHECK_INTERVAL)
+
+
 async def start_scanner_simulator():
-    """Arka plan görevi: sürekli simülasyon döngüsü."""
+    """Arka plan görevi: seçim döngüsü + hızlı fiyat izleme paralel çalışır."""
     print("[SimScanner] Scanner simülatör başladı.")
     await asyncio.sleep(90)  # DB + collector hazır olsun
+
+    # Hızlı fiyat izleme — ayrı task olarak paralel çalışır
+    asyncio.create_task(_fast_price_monitor())
 
     while True:
         try:
