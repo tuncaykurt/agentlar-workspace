@@ -29,9 +29,7 @@ async def _check_ai_log_col() -> bool:
 @router.get("")
 async def list_simulations(status: str = None, limit: int = 50, offset: int = 0):
     """Simülasyonları listele. ?status=open|win|loss|expired ile filtrele."""
-    has_ai_log = await _check_ai_log_col()
-    ai_log_col = ", ai_log" if has_ai_log else ""
-
+    # ai_log çok büyük — listede gösterme, sadece detay endpoint'inde ver
     async with async_session() as session:
         where = "WHERE 1=1"
         params = {"limit": limit, "offset": offset}
@@ -45,10 +43,11 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
                    rsi_14, adx, volume_ratio, funding_rate, fear_greed, atr_pct, supertrend_dir,
                    status, exit_price, pnl_pct, pnl_usdt,
                    max_favorable_pct, max_adverse_pct,
-                   ai_review, created_at, closed_at,
+                   created_at, closed_at,
                    exit_reason, duration_minutes, first_move, first_move_pct,
                    COALESCE(is_hedge, false) as is_hedge, hedge_pair_id,
-                   COALESCE(margin_usdt, 100) as margin_usdt{ai_log_col}
+                   COALESCE(margin_usdt, 100) as margin_usdt,
+                   (SELECT COUNT(*) FROM scanner_simulations {where}) as _total
             FROM scanner_simulations
             {where}
             ORDER BY created_at DESC
@@ -56,69 +55,72 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
         """), params)
         rows = result.fetchall()
 
-        count_result = await session.execute(text(f"""
-            SELECT COUNT(*) FROM scanner_simulations {where}
-        """), params)
-        total = count_result.scalar()
+    if not rows:
+        return {"items": [], "total": 0}
+
+    total = rows[0][-1]  # _total subquery sonucu
 
     cols = ["id", "coin", "symbol", "direction", "selection_mode", "confidence", "reason",
             "entry_price", "tp_price", "sl_price", "tp_pct", "sl_pct", "leverage",
             "rsi_14", "adx", "volume_ratio", "funding_rate", "fear_greed", "atr_pct", "supertrend_dir",
             "status", "exit_price", "pnl_pct", "pnl_usdt",
             "max_favorable_pct", "max_adverse_pct",
-            "ai_review", "created_at", "closed_at",
+            "created_at", "closed_at",
             "exit_reason", "duration_minutes", "first_move", "first_move_pct",
             "is_hedge", "hedge_pair_id", "margin_usdt"]
-    if has_ai_log:
-        cols.append("ai_log")
 
     items = []
     open_symbols = set()
     for row in rows:
-        d = dict(zip(cols, row))
+        d = dict(zip(cols, row[:-1]))  # son kolon _total, atla
         d["created_at"] = d["created_at"].isoformat() if d["created_at"] else None
         d["closed_at"] = d["closed_at"].isoformat() if d["closed_at"] else None
-        if not has_ai_log:
-            d["ai_log"] = None
+        d["ai_log"] = None  # Liste'de ai_log yok — detay endpoint'inde var
         items.append(d)
         if d["status"] == "open" and d.get("symbol"):
             open_symbols.add(d["symbol"])
 
-    # Açık sim'ler için Redis'ten anlık fiyat çek → current_price, current_pnl ekle
+    # Açık sim'ler için Redis'ten anlık fiyat çek (pipeline — tek round-trip)
     if open_symbols:
-        redis = get_redis()
-        live_prices = {}
-        for sym in open_symbols:
-            try:
-                raw = await redis.get(f"ticker:mexc:{sym}")
+        try:
+            redis = get_redis()
+            pipe = redis.pipeline()
+            sym_list = list(open_symbols)
+            for sym in sym_list:
+                pipe.get(f"ticker:mexc:{sym}")
+            results = await pipe.execute()
+
+            live_prices = {}
+            for sym, raw in zip(sym_list, results):
                 if raw:
                     data = json.loads(raw)
                     p = float(data.get("last", 0))
                     if p > 0:
                         live_prices[sym] = p
-            except Exception:
-                pass
 
-        for d in items:
-            if d["status"] == "open" and d.get("symbol") in live_prices:
-                cur = live_prices[d["symbol"]]
-                entry = d["entry_price"]
-                is_long = d["direction"] == "long"
-                pnl_pct = ((cur - entry) / entry * 100) if is_long else ((entry - cur) / entry * 100)
-                margin = d.get("margin_usdt") or 100
-                lev = d.get("leverage") or 50
-                pnl_usdt = margin * lev * pnl_pct / 100
-                d["current_price"] = round(cur, 6)
-                d["current_pnl_pct"] = round(pnl_pct, 4)
-                d["current_pnl_usdt"] = round(pnl_usdt, 2)
+            for d in items:
+                if d["status"] == "open" and d.get("symbol") in live_prices:
+                    cur = live_prices[d["symbol"]]
+                    entry = d["entry_price"]
+                    is_long = d["direction"] == "long"
+                    pnl_pct = ((cur - entry) / entry * 100) if is_long else ((entry - cur) / entry * 100)
+                    margin = d.get("margin_usdt") or 100
+                    lev = d.get("leverage") or 50
+                    pnl_usdt = margin * lev * pnl_pct / 100
+                    d["current_price"] = round(cur, 6)
+                    d["current_pnl_pct"] = round(pnl_pct, 4)
+                    d["current_pnl_usdt"] = round(pnl_usdt, 2)
+        except Exception:
+            pass
 
     return {"items": items, "total": total}
 
 
 @router.get("/stats")
 async def simulation_stats():
-    """Genel simülasyon istatistikleri."""
+    """Genel simülasyon istatistikleri — tek DB session, tek round-trip."""
     async with async_session() as session:
+        # Ana istatistikler + yön analizi + coin performansı — tek session
         result = await session.execute(text("""
             SELECT
                 COUNT(*) as total,
@@ -136,13 +138,6 @@ async def simulation_stats():
         """))
         row = result.fetchone()
 
-    total = row[0] or 0
-    wins = row[1] or 0
-    losses = row[2] or 0
-    closed = wins + losses
-
-    # Yön bazlı analiz
-    async with async_session() as session:
         dir_result = await session.execute(text("""
             SELECT direction,
                    COUNT(*) as total,
@@ -154,16 +149,6 @@ async def simulation_stats():
         """))
         dir_rows = dir_result.fetchall()
 
-    direction_stats = {}
-    for dr in dir_rows:
-        direction_stats[dr[0]] = {
-            "total": dr[1], "wins": dr[2],
-            "win_rate": round(dr[2] / max(1, dr[1]) * 100, 1),
-            "avg_pnl": round(dr[3], 2),
-        }
-
-    # En iyi/kötü coinler
-    async with async_session() as session:
         coin_result = await session.execute(text("""
             SELECT coin,
                    COUNT(*) as total,
@@ -175,8 +160,22 @@ async def simulation_stats():
             GROUP BY coin
             HAVING COUNT(*) >= 2
             ORDER BY COALESCE(SUM(pnl_usdt), 0) DESC
+            LIMIT 10
         """))
         coin_rows = coin_result.fetchall()
+
+    total = row[0] or 0
+    wins = row[1] or 0
+    losses = row[2] or 0
+    closed = wins + losses
+
+    direction_stats = {}
+    for dr in dir_rows:
+        direction_stats[dr[0]] = {
+            "total": dr[1], "wins": dr[2],
+            "win_rate": round(dr[2] / max(1, dr[1]) * 100, 1),
+            "avg_pnl": round(dr[3], 2),
+        }
 
     coin_stats = [
         {"coin": r[0], "total": r[1], "wins": r[2], "losses": r[3],
@@ -199,7 +198,7 @@ async def simulation_stats():
         "avg_loss_max_favorable": round(row[10], 2),
         "profit_factor": round(abs(row[5] * wins) / max(0.01, abs(row[6] * losses)), 2) if losses else 0,
         "direction_stats": direction_stats,
-        "coin_performance": coin_stats[:10],
+        "coin_performance": coin_stats,
     }
 
 
@@ -304,18 +303,25 @@ async def sim_status():
     raw = await redis.get("scanner_sim:status")
     status = json.loads(raw) if raw else {"running": False}
 
-    # MEXC WebSocket durumunu ekle
+    # MEXC WebSocket durumu — scan yerine cache'lenmiş sayaç kullan
     try:
-        ws_keys = []
-        cursor = b"0"
-        while True:
-            cursor, keys = await redis.scan(cursor, match="ticker:mexc:*", count=200)
-            ws_keys.extend(keys)
-            if cursor == b"0" or cursor == 0:
-                break
+        cached_count = await redis.get("mexc_ws:ticker_count")
+        if cached_count is not None:
+            count = int(cached_count)
+        else:
+            # Fallback: tek bir scan pass (count=500 ile hızlı)
+            count = 0
+            cursor = b"0"
+            while True:
+                cursor, keys = await redis.scan(cursor, match="ticker:mexc:*", count=500)
+                count += len(keys)
+                if cursor == b"0" or cursor == 0:
+                    break
+            # 60s cache'le — her istek scan yapmasın
+            await redis.set("mexc_ws:ticker_count", str(count), ex=60)
         status["mexc_ws"] = {
-            "active_tickers": len(ws_keys),
-            "connected": len(ws_keys) > 0,
+            "active_tickers": count,
+            "connected": count > 0,
         }
     except Exception:
         status["mexc_ws"] = {"active_tickers": 0, "connected": False}
