@@ -25,7 +25,7 @@ from bot.strategies.ut_bot import UTBotStrategy
 from bot.strategies.supertrend import SupertrendStrategy
 from bot.strategies.bb_ema_cross import BBEMACrossStrategy
 from bot.strategies.dual_hedge import DualHedgeStrategy
-from bot.strategies.smart_scanner import ManualCriteria, score_coin_manual, build_ai_prompt, determine_trade_direction
+from bot.strategies.smart_scanner import ManualCriteria, score_coin_manual, build_ai_prompt, determine_trade_direction, clamp_tp_sl
 import json
 
 
@@ -3099,42 +3099,15 @@ class BotEngine:
                     if clamped_lev != ai_lev:
                         print(f"[SmartScanner {bot_name}] Leverage clamp: AI={ai_lev}x → {clamped_lev}x (aralık {min_lev}-{max_lev}, coin_max={coin_max_lev})")
 
-                    # TP/SL: AI önerisini minimum değerlere sınırla (çok düşük TP/SL tehlikeli)
+                    # ── ATR + Kaldıraç bazlı TP/SL optimizasyonu ──
                     ai_tp = float(sel.get("tp_suggestion_pct") or params.get("tp_pct", 2))
                     ai_sl = float(sel.get("sl_suggestion_pct") or params.get("sl_pct", 1))
-
-                    # ── Kaldıraca göre TP/SL zorunlu sınırlama ──
-                    # Tasfiye mesafesi = 100 / kaldıraç
-                    liquidation_dist = 100.0 / clamped_lev
-                    # SL: tasfiye mesafesinin max %50'si (güvenli), min %15'i (çok yakın olmasın)
-                    max_sl = round(liquidation_dist * 0.50, 4)
-                    min_sl = max(0.05, round(liquidation_dist * 0.15, 4))
-                    # TP: tasfiye mesafesinin max %80'i, min %20'si
-                    max_tp = round(liquidation_dist * 0.80, 4)
-                    min_tp = max(0.08, round(liquidation_dist * 0.20, 4))
-
+                    coin_atr = matched.get("atr_pct") if matched else None
                     old_tp, old_sl = ai_tp, ai_sl
-
-                    # SL clamp
-                    if ai_sl > max_sl:
-                        ai_sl = max_sl
-                    elif ai_sl < min_sl:
-                        ai_sl = min_sl
-
-                    # TP clamp
-                    if ai_tp > max_tp:
-                        ai_tp = max_tp
-                    elif ai_tp < min_tp:
-                        ai_tp = min_tp
-
-                    # TP her zaman SL'den büyük olmalı (risk/ödül > 1)
-                    if ai_tp <= ai_sl:
-                        ai_tp = round(ai_sl * 1.5, 4)
-
+                    ai_tp, ai_sl = clamp_tp_sl(ai_tp, ai_sl, clamped_lev, coin_atr_pct=coin_atr)
                     if old_tp != ai_tp or old_sl != ai_sl:
-                        print(f"[SmartScanner {bot_name}] TP/SL clamp (lev={clamped_lev}x, tasfiye={liquidation_dist:.2f}%): "
-                              f"TP {old_tp}%→{ai_tp}% (aralık {min_tp}-{max_tp}%) | "
-                              f"SL {old_sl}%→{ai_sl}% (aralık {min_sl}-{max_sl}%)")
+                        print(f"[SmartScanner {bot_name}] TP/SL clamp (lev={clamped_lev}x ATR={coin_atr or '?'}%): "
+                              f"TP {old_tp}%→{ai_tp}% | SL {old_sl}%→{ai_sl}%")
 
                     # AI'ın çıkış stratejisi kararı
                     ai_exit_strategy = sel.get("exit_strategy", "normal_tp_sl")

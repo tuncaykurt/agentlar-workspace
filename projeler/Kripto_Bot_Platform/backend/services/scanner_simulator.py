@@ -21,7 +21,7 @@ from core.database import async_session
 from core.redis_client import get_redis
 from core.config import settings
 from bot.strategies.smart_scanner import (
-    ManualCriteria, score_coin_manual, build_ai_prompt, determine_trade_direction
+    ManualCriteria, score_coin_manual, build_ai_prompt, determine_trade_direction, clamp_tp_sl
 )
 
 
@@ -546,25 +546,15 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                 if ai_exit_strategy not in ("trailing", "normal_tp_sl", "hedge"):
                     ai_exit_strategy = "normal_tp_sl"
 
-                # ── Kaldıraca göre TP/SL zorunlu sınırlama ──
+                # ── ATR + Kaldıraç bazlı TP/SL optimizasyonu ──
                 ai_tp = float(sel.get("tp_suggestion_pct") or cfg.get("tp_pct", SIM_TP_PCT))
                 ai_sl = float(sel.get("sl_suggestion_pct") or cfg.get("sl_pct", SIM_SL_PCT))
-                liq_dist = 100.0 / max(1, final_lev)
-                max_sl = round(liq_dist * 0.50, 4)
-                min_sl = max(0.05, round(liq_dist * 0.15, 4))
-                max_tp = round(liq_dist * 0.80, 4)
-                min_tp = max(0.08, round(liq_dist * 0.20, 4))
-
-                if ai_sl > max_sl:
-                    ai_sl = max_sl
-                elif ai_sl < min_sl:
-                    ai_sl = min_sl
-                if ai_tp > max_tp:
-                    ai_tp = max_tp
-                elif ai_tp < min_tp:
-                    ai_tp = min_tp
-                if ai_tp <= ai_sl:
-                    ai_tp = round(ai_sl * 1.5, 4)
+                coin_atr = matched.get("atr_pct")  # Coin'in gerçek volatilitesi
+                old_tp, old_sl = ai_tp, ai_sl
+                ai_tp, ai_sl = clamp_tp_sl(ai_tp, ai_sl, final_lev, coin_atr_pct=coin_atr)
+                if old_tp != ai_tp or old_sl != ai_sl:
+                    print(f"[SimScanner] {coin_name} TP/SL clamp (lev={final_lev}x ATR={coin_atr or '?'}%): "
+                          f"TP {old_tp}%→{ai_tp}% | SL {old_sl}%→{ai_sl}%")
 
                 selections.append({
                     "coin": coin_name,
@@ -1032,23 +1022,13 @@ async def run_simulator_cycle():
             print(f"[SimScanner] {len(selections)} seçim → {remaining_slots} slot kaldı, kırpılıyor")
             selections = selections[:remaining_slots]
 
-        # 3. Kaldıraca göre TP/SL ölçekle + seçimleri kaydet
-        auto_scale = cfg.get("auto_scale_tp_sl", True)
-        base_lev = cfg.get("scale_base_leverage", 10)
-
+        # 3. Seçimleri kaydet (TP/SL zaten clamp_tp_sl ile optimize edildi)
         # Portföy
         portfolio = await _get_portfolio(redis) if portfolio_on else None
 
         opened = []
         for sel in selections:
             try:
-                # Kaldıraca göre TP/SL otomatik ölçekleme
-                if auto_scale and sel.get("leverage", 10) > base_lev:
-                    lev = sel["leverage"]
-                    scale = base_lev / lev  # 10x=1.0, 50x=0.2, 100x=0.1
-                    sel["tp_pct"] = round(max(0.1, float(sel["tp_pct"]) * scale), 2)
-                    sel["sl_pct"] = round(max(0.05, float(sel["sl_pct"]) * scale), 2)
-
                 price = await _get_price(sel["symbol"], exchange)
                 if not price:
                     print(f"[SimScanner] {sel['coin']} fiyat alınamadı — atlanıyor")

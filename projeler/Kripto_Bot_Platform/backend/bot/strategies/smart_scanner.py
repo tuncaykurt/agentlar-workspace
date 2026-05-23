@@ -213,6 +213,63 @@ def score_coin_manual(coin: dict, criteria: ManualCriteria) -> Optional[float]:
     return round(score, 2)
 
 
+def clamp_tp_sl(ai_tp: float, ai_sl: float, leverage: int, coin_atr_pct: float = None) -> tuple:
+    """
+    TP/SL'yi kaldıraç ve coin volatilitesine göre optimize et.
+
+    Felsefe:
+    - TP yakın olsun → daha sık ulaşılır → daha çok kazanç
+    - SL yeterli nefes payı → gürültüden erken kapanma olmasın
+    - Tasfiyeden güvenli mesafe → asla likidasyon
+
+    Args:
+        ai_tp: AI'ın önerdiği TP% (veya kullanıcı ayarı)
+        ai_sl: AI'ın önerdiği SL%
+        leverage: Kullanılacak kaldıraç
+        coin_atr_pct: Coin'in ATR% değeri (gerçek volatilite). None ise sadece kaldıraç bazlı.
+
+    Returns:
+        (tp_pct, sl_pct) — optimize edilmiş değerler
+    """
+    liq_dist = 100.0 / max(1, leverage)
+
+    # ── Tasfiye güvenlik sınırları (kesin) ──
+    hard_max_sl = round(liq_dist * 0.45, 4)  # Tasfiyenin max %45'i
+    hard_max_tp = round(liq_dist * 0.75, 4)  # Tasfiyenin max %75'i
+    hard_min_sl = max(0.05, round(liq_dist * 0.08, 4))
+    hard_min_tp = max(0.08, round(liq_dist * 0.12, 4))
+
+    tp, sl = ai_tp, ai_sl
+
+    # ── ATR-bazlı optimizasyon (coin'in gerçek volatilitesine göre) ──
+    if coin_atr_pct and coin_atr_pct > 0:
+        # 1 ATR = coin'in tipik mum büyüklüğü
+        # TP: ATR'nin %55'i → 1-2 mum içinde ulaşılabilir, realistik hedef
+        # SL: ATR'nin %70'i → normal geri çekilmeleri tolere eder
+        target_tp = round(coin_atr_pct * 0.55, 4)
+        target_sl = round(coin_atr_pct * 0.70, 4)
+
+        # TP: AI'nın önerisi veya ATR hedefi — yakın olanı al (daha ulaşılabilir)
+        tp = min(ai_tp, max(target_tp, hard_min_tp))
+
+        # SL: Çok dar olmamalı — ATR'nin en az %30'u kadar nefes payı
+        sl_floor = max(coin_atr_pct * 0.30, hard_min_sl)
+        sl = max(min(ai_sl, target_sl), sl_floor)
+
+    # ── Tasfiye güvenliği (kesin sınır) ──
+    tp = max(hard_min_tp, min(tp, hard_max_tp))
+    sl = max(hard_min_sl, min(sl, hard_max_sl))
+
+    # ── TP > SL olmalı (minimum R:R ≥ 1.2) ──
+    if tp <= sl:
+        tp = round(sl * 1.3, 4)
+        if tp > hard_max_tp:
+            sl = round(hard_max_tp / 1.3, 4)
+            tp = hard_max_tp
+
+    return round(tp, 4), round(sl, 4)
+
+
 def _build_exit_strategy_section(bot_config: dict = None) -> str:
     """Bot ayarlarına göre AI'a hangi exit stratejilerini kullanabileceğini bildir."""
     cfg = bot_config or {}
@@ -427,25 +484,36 @@ Mevcut Açık Pozisyonlar: {active_str}
    - ANCAK her coinin borsadaki max kaldıracını (Lev sütunu) AŞMA!
    - Volatiliteye göre kaldıraç seç: Yüksek ATR% → düşük kaldıraç, düşük ATR% → yüksek kaldıraç
    - ATR% > 2 → max {min(max_lev, 15)}x | ATR% 1-2 → max {min(max_lev, 30)}x | ATR% < 0.5 → {max_lev}x'e kadar
+   - ATR% çok düşük (< 0.2%) coin → İŞLEM AÇMA, yeterli hareket yok
    - Kayıp senaryosu: SL nereye konulmalı, risk/ödül oranı ne?
    - Açık pozisyonlarla korelasyon: Aynı yönde çok pozisyon riskli
 
-   ⚠️ KRİTİK — KALDIRAC ve TP/SL İLİŞKİSİ:
-   Tasfiye mesafesi = 100 / kaldıraç. SL tasfiye mesafesinin YARISI kadar olmalı!
-   TP/SL MUTLAKA kaldıraca orantılı olsun, aşağıdaki tabloyu KESİNLİKLE uygula:
+   ⚠️ KRİTİK — TP/SL STRATEJİSİ (ATR + KALDIRAC BAZLI):
 
-   | Kaldıraç  | Max TP%   | Max SL%   | Tasfiye   | Örnek              |
-   |-----------|-----------|-----------|-----------|---------------------|
-   | 5-10x     | 3.0-5.0%  | 1.5-3.0%  | 10-20%    | TP=4%, SL=2%       |
-   | 10-25x    | 1.5-3.0%  | 0.8-1.5%  | 4-10%     | TP=2%, SL=1%       |
-   | 25-50x    | 0.8-1.5%  | 0.4-0.8%  | 2-4%      | TP=1%, SL=0.5%     |
-   | 50-100x   | 0.4-0.8%  | 0.2-0.4%  | 1-2%      | TP=0.5%, SL=0.3%   |
-   | 100-200x  | 0.2-0.4%  | 0.1-0.2%  | 0.5-1%    | TP=0.3%, SL=0.15%  |
-   | 200x+     | 0.1-0.2%  | 0.05-0.1% | <0.5%     | TP=0.15%, SL=0.08% |
+   TEMEL PRENSİP: TP coin'in gerçek hareket kapasitesine (ATR%) yakın olmalı!
+   Çok uzak TP = asla ulaşılmaz, SL tetiklenir. Yakın TP = daha çok win!
 
-   FORMÜL: tp_suggestion_pct ≈ (100 / kaldıraç) × 0.3
-           sl_suggestion_pct ≈ (100 / kaldıraç) × 0.15
-   Yüksek kaldıraçta BÜYÜK TP/SL KOYMA — tasfiye olursun!
+   FORMÜL (ATR bazlı — BUNU KULLAN):
+     tp_suggestion_pct ≈ coin'in ATR% × 0.55   (yarım ATR = 1-2 mumda ulaşılır)
+     sl_suggestion_pct ≈ coin'in ATR% × 0.70   (gürültüyü tolere eder)
+
+   GÜVENLİK SINIRI (tasfiye mesafesi = 100 / kaldıraç):
+     TP hiçbir zaman tasfiye mesafesinin %75'ini geçmemeli
+     SL hiçbir zaman tasfiye mesafesinin %45'ini geçmemeli
+
+   ÖRNEKLER (ATR'ye göre):
+   | Coin ATR% | Kaldıraç | İdeal TP%  | İdeal SL%  | Neden?                    |
+   |-----------|----------|------------|------------|---------------------------|
+   | 0.3%      | 50x      | 0.17%      | 0.21%      | Düşük vol → dar hedef     |
+   | 0.8%      | 25x      | 0.44%      | 0.56%      | Orta vol → orta hedef     |
+   | 1.5%      | 20x      | 0.83%      | 1.05%      | Yüksek vol → geniş hedef  |
+   | 2.5%      | 10x      | 1.38%      | 1.75%      | Çok vol → en geniş hedef  |
+
+   ÖNEMLİ:
+   - ATR% düşük coin → düşük kaldıraç kullan (hareket yok = kazanç yok)
+   - ATR% yüksek coin → yüksek kaldıraç tehlikeli (çok volatil)
+   - Her zaman TP > SL olsun (R:R ≥ 1.2)
+   - tp_suggestion_pct ve sl_suggestion_pct'yi HER ZAMAN coin'in ATR%'sine göre ayarla!
 
 7. ÇIKIŞ STRATEJİSİ SEÇİMİ:
    - "normal_tp_sl": ADX < 25 veya yatay piyasa → sabit TP/SL ile disiplinli çık (her zaman kullanılabilir)
