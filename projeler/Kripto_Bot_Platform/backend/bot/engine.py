@@ -3381,28 +3381,38 @@ class BotEngine:
 
                     print(f"[SmartScanner {bot_name}] HEDGE {sel['coin']}: TP={hedge_tp}% SL={hedge_sl}% Lev={leverage}x (her iki yön aynı)")
 
-                    for h_dir in ["long", "short"]:
-                        h_side = "buy" if h_dir == "long" else "sell"
-                        if h_dir == "long":
-                            h_tp = round(price * (1 + hedge_tp / 100), 6)
-                            h_sl = round(price * (1 - hedge_sl / 100), 6)
-                        else:
-                            h_tp = round(price * (1 - hedge_tp / 100), 6)
-                            h_sl = round(price * (1 + hedge_sl / 100), 6)
+                    # Long ve Short TP/SL hesapla
+                    long_tp = round(price * (1 + hedge_tp / 100), 6)
+                    long_sl = round(price * (1 - hedge_sl / 100), 6)
+                    short_tp = round(price * (1 - hedge_tp / 100), 6)
+                    short_sl = round(price * (1 + hedge_sl / 100), 6)
 
-                        h_ai_result = {
-                            **ai_result,
-                            "take_profit": h_tp,
-                            "stop_loss": h_sl,
-                            "tp_pct": hedge_tp,
-                            "sl_pct": hedge_sl,
-                            "dynamic_leverage": leverage,  # Her iki yön AYNI kaldıraç
-                            "analysis": f"HEDGE {h_dir.upper()} (AI karar) — {sel.get('reason', '')}",
-                        }
-                        await self._execute(h_side, price, qty, h_sl, h_ai_result, symbol_override=symbol)
-                        # İkinci yönden önce kısa bekleme — borsanın emirleri işlemesi için
-                        if h_dir == "long":
-                            await asyncio.sleep(1.5)
+                    long_ai = {
+                        **ai_result,
+                        "take_profit": long_tp, "stop_loss": long_sl,
+                        "tp_pct": hedge_tp, "sl_pct": hedge_sl,
+                        "dynamic_leverage": leverage,
+                        "analysis": f"HEDGE LONG (AI karar) — {sel.get('reason', '')}",
+                    }
+                    short_ai = {
+                        **ai_result,
+                        "take_profit": short_tp, "stop_loss": short_sl,
+                        "tp_pct": hedge_tp, "sl_pct": hedge_sl,
+                        "dynamic_leverage": leverage,
+                        "analysis": f"HEDGE SHORT (AI karar) — {sel.get('reason', '')}",
+                    }
+
+                    # Hedge bot gibi paralel gönder — asyncio.gather
+                    hedge_results = await asyncio.gather(
+                        self._execute("buy", price, qty, long_sl, long_ai, symbol_override=symbol),
+                        self._execute("sell", price, qty, short_sl, short_ai, symbol_override=symbol),
+                        return_exceptions=True,
+                    )
+                    for i, (h_dir, h_res) in enumerate(zip(["Long", "Short"], hedge_results)):
+                        if isinstance(h_res, Exception):
+                            print(f"[SmartScanner {bot_name}] ✗ HEDGE {h_dir} hatası: {h_res}")
+                        else:
+                            print(f"[SmartScanner {bot_name}] ✓ HEDGE {h_dir} açıldı")
 
                     await self._log_signal(side, price, source="smart_scanner_ai_hedge",
                         action="executed", confidence=sel.get("confidence"),
@@ -3482,34 +3492,40 @@ class BotEngine:
                     coin_max_lev = hc.get("max_leverage") or 50
                     h_lev = coin_max_lev if use_max_lev else int(params.get("leverage", 5))
 
-                    for h_dir in ["long", "short"]:
-                        h_side = "buy" if h_dir == "long" else "sell"
-                        if h_dir == "long":
-                            h_tp = round(h_price * (1 + hedge_tp / 100), 6)
-                            h_sl = round(h_price * (1 - hedge_sl / 100), 6)
+                    # TP/SL hesapla
+                    h_long_tp = round(h_price * (1 + hedge_tp / 100), 6)
+                    h_long_sl = round(h_price * (1 - hedge_sl / 100), 6)
+                    h_short_tp = round(h_price * (1 - hedge_tp / 100), 6)
+                    h_short_sl = round(h_price * (1 + hedge_sl / 100), 6)
+
+                    h_qty = self.risk.position_size(h_price, h_long_sl)
+                    if h_qty <= 0:
+                        continue
+
+                    h_long_ai = {
+                        "approved": True, "confidence": 70,
+                        "take_profit": h_long_tp, "stop_loss": h_long_sl,
+                        "analysis": f"HEDGE LONG — ATR:{hc.get('atr_pct',0):.2f}% Vol:{hc.get('volume_ratio',0):.1f}x",
+                        "dynamic_leverage": h_lev, "tp_pct": hedge_tp, "sl_pct": hedge_sl,
+                    }
+                    h_short_ai = {
+                        "approved": True, "confidence": 70,
+                        "take_profit": h_short_tp, "stop_loss": h_short_sl,
+                        "analysis": f"HEDGE SHORT — ATR:{hc.get('atr_pct',0):.2f}% Vol:{hc.get('volume_ratio',0):.1f}x",
+                        "dynamic_leverage": h_lev, "tp_pct": hedge_tp, "sl_pct": hedge_sl,
+                    }
+
+                    # Hedge bot gibi paralel gönder
+                    h_results = await asyncio.gather(
+                        self._execute("buy", h_price, h_qty, h_long_sl, h_long_ai, symbol_override=h_symbol),
+                        self._execute("sell", h_price, h_qty, h_short_sl, h_short_ai, symbol_override=h_symbol),
+                        return_exceptions=True,
+                    )
+                    for h_dir, h_res in zip(["Long", "Short"], h_results):
+                        if isinstance(h_res, Exception):
+                            print(f"[SmartScanner {bot_name}] ✗ HEDGE {h_dir} hatası: {h_res}")
                         else:
-                            h_tp = round(h_price * (1 - hedge_tp / 100), 6)
-                            h_sl = round(h_price * (1 + hedge_sl / 100), 6)
-
-                        h_qty = self.risk.position_size(h_price, h_sl)
-                        if h_qty <= 0:
-                            continue
-
-                        h_ai_result = {
-                            "approved": True,
-                            "confidence": 70,
-                            "take_profit": h_tp,
-                            "stop_loss": h_sl,
-                            "analysis": f"HEDGE {h_dir.upper()} — ATR:{hc.get('atr_pct',0):.2f}% Vol:{hc.get('volume_ratio',0):.1f}x",
-                            "dynamic_leverage": h_lev,
-                            "tp_pct": hedge_tp,
-                            "sl_pct": hedge_sl,
-                        }
-
-                        await self._execute(h_side, h_price, h_qty, h_sl, h_ai_result, symbol_override=h_symbol)
-                        # İkinci yönden önce kısa bekleme — borsanın TP/SL emirlerini işlemesi için
-                        if h_dir == "long":
-                            await asyncio.sleep(1.5)
+                            print(f"[SmartScanner {bot_name}] ✓ HEDGE {h_dir} açıldı")
 
                     opened.append(f"{hc['base']}(H)")
                     active_positions.append(hc["base"])
