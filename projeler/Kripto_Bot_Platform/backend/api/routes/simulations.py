@@ -268,6 +268,83 @@ async def update_hft_settings(data: dict):
     return current
 
 
+# ─── Grid Live Trading Endpoints ─────────────────────────────────────
+
+@router.post("/hft-start")
+async def hft_start(data: dict):
+    """
+    Grid botunu başlat. Paper veya Live modda çalışır.
+
+    Body:
+    - mode: "paper" (sanal) veya "live" (gerçek borsa)
+    - symbol: "ETHUSDT" (opsiyonel, HFT settings'den alır)
+    - leverage, order_size, spread_pct, grid_count (opsiyonel)
+    """
+    from services.grid_live_engine import grid_engine
+
+    redis = get_redis()
+    hft_settings = await get_hft_settings()
+
+    config = {
+        "symbol": data.get("symbol", hft_settings.get("symbol", "ETHUSDT")),
+        "mode": data.get("mode", "paper"),
+        "leverage": data.get("leverage", hft_settings.get("leverage", 10)),
+        "order_size": data.get("order_size", hft_settings.get("order_size", 100)),
+        "spread_pct": data.get("spread_pct", hft_settings.get("spread_pct", 0.5)),
+        "grid_count": data.get("grid_count", hft_settings.get("grid_count", 20)),
+    }
+
+    result = await grid_engine.start(config)
+    return result
+
+
+@router.post("/hft-stop")
+async def hft_stop(data: dict = None):
+    """
+    Grid botunu durdur.
+
+    Body (opsiyonel):
+    - close_positions: true ise açık pozisyonları kapat (sadece live modda)
+    """
+    from services.grid_live_engine import grid_engine
+
+    close_positions = (data or {}).get("close_positions", False)
+    result = await grid_engine.stop(close_positions=close_positions)
+    return result
+
+
+@router.post("/hft-kill")
+async def hft_kill():
+    """
+    ACİL DURDURMA (Kill Switch).
+    Tüm emirleri iptal eder, tüm pozisyonları kapatır, motoru durdurur.
+    """
+    from services.grid_live_engine import grid_engine
+
+    result = await grid_engine.kill_switch()
+    return result
+
+
+@router.get("/hft-status")
+async def hft_live_status():
+    """
+    Grid botunun canlı durumu.
+    Mod, grid bilgisi, PnL, işlem geçmişi, borsa pozisyonları.
+    """
+    from services.grid_live_engine import grid_engine
+
+    return await grid_engine.get_status()
+
+
+@router.get("/hft-trades")
+async def hft_trades(limit: int = 50):
+    """Grid bot işlem geçmişi."""
+    redis = get_redis()
+    trades_raw = await redis.lrange("grid_live:trades", 0, limit - 1)
+    trades = [json.loads(t) for t in trades_raw] if trades_raw else []
+    return {"trades": trades, "count": len(trades)}
+
+
 @router.get("/status")
 async def sim_status():
     """Simülatörün anlık durumu + MEXC WS bilgisi."""

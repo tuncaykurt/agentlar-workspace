@@ -19,6 +19,7 @@ from services.signal_tracker import start_signal_tracker
 from services.coin_collector import start_coin_collector
 from services.scanner_simulator import start_scanner_simulator
 from services.mexc_ws_feeder import start_mexc_ws_feeder
+from services.hft_engine import run_hft_engine
 
 
 async def _init_db():
@@ -265,7 +266,8 @@ async def lifespan(app: FastAPI):
             tasks.append(asyncio.create_task(start_scanner_simulator()))
             tasks.append(asyncio.create_task(start_mexc_ws_feeder()))
             tasks.append(asyncio.create_task(_exchange_balance_cache()))
-            print("[Main] Coin veri toplayıcı + MEXC WS + bakiye cache başlatıldı.")
+            tasks.append(asyncio.create_task(run_hft_engine()))
+            print("[Main] Coin veri toplayıcı + MEXC WS + HFT Engine + bakiye cache başlatıldı.")
         except Exception as e:
             print(f"[Main] CoinCollector hatası (devam ediliyor): {e}")
 
