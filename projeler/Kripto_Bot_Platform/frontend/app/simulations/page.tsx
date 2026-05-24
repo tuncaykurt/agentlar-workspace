@@ -278,6 +278,73 @@ export default function SimulationsPage() {
         )}
       </div>
 
+      {/* Borsa Portfolyosu (Sanal Portfolyo Tarzında) */}
+      {portfolio.exchange_balance != null && (
+        <div className="bg-gradient-to-r from-indigo-900/40 to-blue-900/10 border border-indigo-500/30 rounded-xl p-5 space-y-4 mt-4 mb-4">
+          <h3 className="text-sm font-medium text-indigo-300">Borsa Portfolyosu</h3>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <div>
+              <div className="text-xs text-slate-500">Borsa Equity</div>
+              <div className="text-2xl font-bold text-white">
+                ${portfolio.exchange_balance.total?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Serbest Bakiye</div>
+              <div className="text-lg font-semibold text-white">
+                ${portfolio.exchange_balance.free?.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Islemlerde</div>
+              <div className="text-lg font-semibold text-yellow-400">
+                ${portfolio.exchange_balance.used?.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Tahmini ROI</div>
+              <div className={`text-lg font-bold ${(stats.total_pnl_usdt || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                {((stats.total_pnl_usdt || 0) > 0) ? "+" : ""}{((stats.total_pnl_usdt || 0) / Math.max(1, (portfolio.exchange_balance.total || 1) - (stats.total_pnl_usdt || 0)) * 100).toFixed(2)}%
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Toplam P&L</div>
+              <div className={`text-lg font-semibold ${(stats.total_pnl_usdt || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                {(stats.total_pnl_usdt || 0) > 0 ? "+" : ""}${(stats.total_pnl_usdt || 0).toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Max Drawdown</div>
+              <div className={`text-lg font-semibold ${(stats.max_drawdown || 0) > 10 ? "text-red-400" : (stats.max_drawdown || 0) > 5 ? "text-yellow-400" : "text-green-400"}`}>
+                -{(stats.max_drawdown || 0).toFixed(1)}%
+              </div>
+            </div>
+          </div>
+          {/* Equity bar */}
+          {(() => {
+            const borsaPnl = stats.total_pnl_usdt || 0;
+            const currentEquity = portfolio.exchange_balance.total || 0;
+            const initialBorsa = Math.max(1, currentEquity - borsaPnl);
+            const borsaRoi = (borsaPnl / initialBorsa) * 100;
+            return (
+              <div>
+                <div className="h-2 bg-slate-900/60 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${borsaRoi >= 0 ? "bg-indigo-500" : "bg-red-500"}`}
+                    style={{ width: `${Math.min(100, Math.max(5, (currentEquity / initialBorsa) * 50))}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
+                  <span>$0</span>
+                  <span>Baslangic Tahmini: ${initialBorsa.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                  <span>${(initialBorsa * 2).toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
       {/* Sanal Portfolyo */}
       {portfolio.equity != null && settings.portfolio_enabled !== false && (
         <div className="bg-gradient-to-r from-slate-800/80 to-slate-800/40 border border-slate-700/50 rounded-xl p-5 space-y-4">
