@@ -466,7 +466,7 @@ async def copy_sim_to_bot():
 
     # Güncel simülasyon ayarlarını Redis'ten al
     redis = get_redis()
-    raw_cfg = await redis.get(SIM_CONFIG_KEY)
+    raw_cfg = await redis.get("scanner_sim:settings")
     sim_cfg = json.loads(raw_cfg) if raw_cfg else {}
 
     # Bot parametrelerini hazırla (create_smart_bot ile aynı yapı)
