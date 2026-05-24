@@ -188,8 +188,8 @@ class MEXCClient:
             actual_entry = None
             actual_leverage = 20
             target_type = 1 if is_long else 2
-            _waits = [0.3, 0.7, 1.5]
-            for attempt in range(1, 4):
+            _waits = [0.5, 1.0, 2.0, 3.0, 4.0]  # Arttırılmış bekleme süreleri (toplam 10.5 saniye)
+            for attempt in range(1, 6):
                 await asyncio.sleep(_waits[attempt - 1])
                 try:
                     pos_resp = await self.exchange.contractPrivateGetPositionOpenPositions({"symbol": mexc_symbol})
@@ -201,12 +201,15 @@ class MEXCClient:
                             actual_leverage = int(p.get("leverage", 20))
                             break
                 except Exception as e:
-                    print(f"[MEXCClient] position query error (attempt {attempt}/3): {e}")
+                    print(f"[MEXCClient] position query error (attempt {attempt}/5): {e}")
 
                 if pos_id:
-                    print(f"[MEXCClient] Position ID bulundu: {pos_id} entry={actual_entry} lev={actual_leverage} (attempt {attempt}/3)")
+                    print(f"[MEXCClient] Position ID bulundu: {pos_id} entry={actual_entry} lev={actual_leverage} (attempt {attempt}/5)")
                     break
-                print(f"[MEXCClient] Position ID bulunamadi (attempt {attempt}/3), tekrar deneniyor...")
+                print(f"[MEXCClient] Position ID bulunamadi (attempt {attempt}/5), tekrar deneniyor...")
+
+            if not pos_id:
+                raise RuntimeError(f"MEXC'de pozisyon açılamadı veya 10 saniye içinde Position ID bulunamadı (symbol={mexc_symbol}, type={target_type})")
 
             # Gerçek giriş fiyatından TP/SL yeniden hesapla
             if pos_id and actual_entry and actual_entry > 0 and tp_pct is not None and sl_pct is not None:
