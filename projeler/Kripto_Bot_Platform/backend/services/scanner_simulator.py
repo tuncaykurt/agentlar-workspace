@@ -104,7 +104,7 @@ async def _calculate_margin(cfg: dict, portfolio: dict, leverage: int) -> float:
         # Mevcut bakiyenin yüzdesi
         equity = portfolio["balance"] + portfolio["reserved"]
         margin = equity * value / 100
-    elif mode == "auto_exchange":
+    elif mode in ["auto_exchange", "exchange_pct"]:
         # Borsadan çekilen gerçek bakiyenin yüzdesi (Redis cache)
         try:
             from core.redis_client import get_redis
