@@ -18,21 +18,22 @@ export default function SimulationsPage() {
 
   // Veri cek
   const { data: statsData } = useSWR("/simulations/stats", fetcher, { refreshInterval: 30000 })
-  const { data: statusData } = useSWR("/simulations/status", fetcher, { refreshInterval: 10000 })
+  const { data: statusData } = useSWR("/simulations/status", fetcher, { refreshInterval: 5000 })
   const { data: settingsData, mutate: mutateSettings } = useSWR("/simulations/settings", fetcher)
-  const { data: portfolioData, mutate: mutatePortfolio } = useSWR("/simulations/portfolio", fetcher, { refreshInterval: 15000 })
+  const { data: hftSettingsData, mutate: mutateHftSettings } = useSWR("/simulations/hft-settings", fetcher)
+  const { data: portfolioData, mutate: mutatePortfolio } = useSWR("/simulations/portfolio", fetcher, { refreshInterval: 5000 })
   const { data: scenarioData } = useSWR("/simulations/stats/scenarios", fetcher, { refreshInterval: 60000 })
 
-  const queryStatus = tab === "open" ? "open" : statusFilter || undefined
   const { data: listData, mutate: mutateList } = useSWR(
-    `/simulations?limit=50${queryStatus ? `&status=${queryStatus}` : ""}`,
-    fetcher,
+    tab === "settings" ? null : `/simulations/list?status=${tab === "open" ? "open" : "closed"}&symbol=${statusFilter}`, 
+    fetcher, 
     { refreshInterval: tab === "open" ? 10000 : 30000 }
   )
 
   const stats = statsData || {}
   const simStatus = statusData || {}
   const settings = settingsData || {}
+  const hftSettings = hftSettingsData || {}
   const portfolio = portfolioData || {}
   const items: any[] = listData?.items || []
   const scenarios = scenarioData || {}
@@ -41,6 +42,13 @@ export default function SimulationsPage() {
     try {
       await api.post("/simulations/settings", { [key]: value })
       mutateSettings()
+    } catch {}
+  }
+
+  const updateHftSetting = async (key: string, value: any) => {
+    try {
+      await api.post("/simulations/hft-settings", { [key]: value })
+      mutateHftSettings()
     } catch {}
   }
 
@@ -447,20 +455,42 @@ export default function SimulationsPage() {
         <div className="flex flex-wrap items-center gap-3 bg-slate-800/60 p-3 rounded-lg border border-slate-700/50 relative z-10 mt-2">
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400">Hedef Coin:</span>
-            <select className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+            <select 
+              value={hftSettings.symbol || "BTCUSDT"} 
+              onChange={e => updateHftSetting("symbol", e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+            >
               <option value="BTCUSDT">BTCUSDT</option>
               <option value="ETHUSDT">ETHUSDT</option>
               <option value="SOLUSDT">SOLUSDT</option>
+              <option value="XRPUSDT">XRPUSDT</option>
+              <option value="DOGEUSDT">DOGEUSDT</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400">Ağ Genişliği (Spread):</span>
-            <input type="number" defaultValue={5} className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white" />
+            <input 
+              type="number" 
+              value={hftSettings.spread_pct || 5} 
+              onChange={e => updateHftSetting("spread_pct", Number(e.target.value))}
+              min={0.1} step={0.1}
+              className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white" 
+            />
             <span className="text-xs text-slate-500">%</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400">Kademe Sayısı:</span>
-            <input type="number" defaultValue={20} className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white" />
+            <input 
+              type="number" 
+              value={hftSettings.grid_count || 20}
+              onChange={e => updateHftSetting("grid_count", Number(e.target.value))}
+              min={2} max={100}
+              className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white" 
+            />
+          </div>
+          <div className="ml-auto flex gap-2">
+             <span className="text-[10px] text-slate-500 bg-slate-900 px-2 py-1 rounded">Alt: {hftSettings.lower_price ? hftSettings.lower_price.toFixed(2) : "0.00"}</span>
+             <span className="text-[10px] text-slate-500 bg-slate-900 px-2 py-1 rounded">Üst: {hftSettings.upper_price ? hftSettings.upper_price.toFixed(2) : "0.00"}</span>
           </div>
         </div>
         

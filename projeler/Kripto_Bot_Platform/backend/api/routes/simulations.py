@@ -238,6 +238,36 @@ async def update_sim_settings(data: dict):
     return current
 
 
+@router.get("/hft-settings")
+async def get_hft_settings():
+    """HFT Motoru (Trailing Grid) ayarlarını getir."""
+    redis = get_redis()
+    raw = await redis.get("hft_sim:settings")
+    if raw:
+        return json.loads(raw)
+    return {
+        "symbol": "BTCUSDT",
+        "spread_pct": 5.0,
+        "grid_count": 20,
+    }
+
+
+@router.post("/hft-settings")
+async def update_hft_settings(data: dict):
+    """HFT Motoru ayarlarını (Coin, Spread, Grid) güncelle."""
+    redis = get_redis()
+    current = await get_hft_settings()
+    current.update(data)
+    
+    # Hedef coin değiştiyse ağ sınırlarını sıfırla ki yeni fiyattan kurulsun
+    if "symbol" in data and data["symbol"] != current.get("symbol"):
+        current["upper_price"] = 0
+        current["lower_price"] = 0
+        
+    await redis.set("hft_sim:settings", json.dumps(current))
+    return current
+
+
 @router.get("/status")
 async def sim_status():
     """Simülatörün anlık durumu + MEXC WS bilgisi."""
