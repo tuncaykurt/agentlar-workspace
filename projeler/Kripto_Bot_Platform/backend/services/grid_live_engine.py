@@ -95,9 +95,16 @@ class GridLiveEngine:
         # Kontrat sayısını hesapla (her grid seviyesi için)
         contracts_per_level = 1
         if mode == "live":
+            ex = await self._get_exchange()
+            # Cross margin ayarla (tüm bakiye margin olur, likidasyon riski düşer)
+            try:
+                mexc_sym = ccxt_symbol.split("/")[0] + "_" + ccxt_symbol.split("/")[1].split(":")[0]
+                await ex.exchange.contractPrivatePostPositionChangeMargin({"symbol": mexc_sym, "positionType": 2})
+                print(f"[GridLive] Cross margin modu set edildi: {ccxt_symbol}")
+            except Exception as e:
+                print(f"[GridLive] Cross margin ayar uyarısı (devam ediliyor): {e}")
             # Kaldıraç ayarla
             try:
-                ex = await self._get_exchange()
                 await ex.set_leverage(ccxt_symbol, leverage)
                 print(f"[GridLive] Kaldıraç {leverage}x set edildi: {ccxt_symbol}")
             except Exception as e:
@@ -298,7 +305,7 @@ class GridLiveEngine:
                         "leverage": int(pos.get("leverage", 10)),
                         "side": close_side,
                         "type": 5,  # market
-                        "openType": 1,
+                        "openType": 2,  # cross margin
                     }
                     resp = await ex.exchange.contractPrivatePostOrderSubmit(body)
                     closed.append({
@@ -514,7 +521,7 @@ class GridLiveEngine:
                 "leverage": int(state.get("leverage", 10)),
                 "side": mexc_side,
                 "type": 5,  # market order
-                "openType": 1,  # isolated
+                "openType": 2,  # cross margin (tüm bakiye korur, likidasyon riski düşük)
             }
 
             try:

@@ -78,7 +78,7 @@ export default function HftPage() {
   }, [chartFullscreen])
 
   const symbol = hftSettings.symbol || "ETHUSDT"
-  const spreadPct = hftSettings.spread_pct || 0.5
+  const spreadPct = hftSettings.spread_pct || 1.5
   const gridCount = hftSettings.grid_count || 20
   const leverage = hftSettings.leverage || 10
   const orderSize = hftSettings.order_size || 100
