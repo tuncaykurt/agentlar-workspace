@@ -482,9 +482,10 @@ function drawOBCanvas(
 //  Ana Bileşen
 // ═══════════════════════════════════════════════════════════════
 export default function ProChart({
-  symbol, onClose, tp, sl, gridLines
+  symbol, onClose, tp, sl, gridLines, hideVolume
 }: {
   symbol: string; onClose?: () => void; tp?: number; sl?: number; gridLines?: number[]
+  hideVolume?: boolean
 }) {
   const mainRef          = useRef<HTMLDivElement>(null)
   const chartRef         = useRef<IChartApi | null>(null)
@@ -493,6 +494,8 @@ export default function ProChart({
   const obCanvasRef        = useRef<HTMLCanvasElement>(null)
   const userPriceLinesRef  = useRef<IPriceLine[]>([])
   const gridPriceLinesRef  = useRef<IPriceLine[]>([])
+  const tpSlLinesRef       = useRef<IPriceLine[]>([])
+  const hasInitialFitRef   = useRef(false)
   const vpRafRef           = useRef<number>(0)
   const obRafRef           = useRef<number>(0)
   const cdRafRef           = useRef<number>(0)
@@ -504,7 +507,11 @@ export default function ProChart({
   const [tf,        setTf]        = useState(() =>
     typeof window !== "undefined" ? (localStorage.getItem("prochart_tf") ?? "1h") : "1h"
   )
-  const [inds,      setInds]      = useState<Indicator[]>(INDICATOR_LIBRARY)
+  const [inds,      setInds]      = useState<Indicator[]>(() =>
+    hideVolume
+      ? INDICATOR_LIBRARY.map(i => i.id === "volume" ? { ...i, enabled: false } : i)
+      : INDICATOR_LIBRARY
+  )
   const [picker,    setPicker]    = useState(false)
   const [legend,    setLegend]    = useState<Legend | null>(null)
   const [drawMode,  setDrawMode]  = useState(false)
@@ -810,9 +817,7 @@ export default function ProChart({
       )
     })
 
-    // TP / SL (grid lines handled in separate useEffect to avoid zoom reset)
-    if (tp) candles.createPriceLine({ price: tp, color: "rgba(34,197,94,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "TP" })
-    if (sl) candles.createPriceLine({ price: sl, color: "rgba(239,68,68,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "SL" })
+    // TP / SL handled in separate useEffect to avoid zoom reset
 
     // ── UT Bot ────────────────────────────────────────────────────
     if (showUT && data.ut_bot) {
@@ -839,15 +844,28 @@ export default function ProChart({
       if (lrc.lower?.length) addLine(lrc.lower,  bandColor, 2, LineStyle.Dashed)
     }
 
-    chart.timeScale().fitContent()
+    if (!hasInitialFitRef.current) {
+      chart.timeScale().fitContent()
+      hasInitialFitRef.current = true
+    }
 
     const onResize = () => {
       if (mainRef.current && chartRef.current)
         chartRef.current.applyOptions({ width: mainRef.current.clientWidth, height: mainRef.current.clientHeight || 420 })
     }
     window.addEventListener("resize", onResize)
-    return () => { window.removeEventListener("resize", onResize); chart.remove(); chartRef.current = null }
-  }, [data, inds, tp, sl, showUT, showLR])
+    return () => { window.removeEventListener("resize", onResize); chart.remove(); chartRef.current = null; hasInitialFitRef.current = false }
+  }, [data, inds, showUT, showLR])
+
+  // ── TP / SL çizgileri — ayrı useEffect (zoom sıfırlamaz) ──────
+  useEffect(() => {
+    const series = candleSeriesRef.current
+    if (!series) return
+    tpSlLinesRef.current.forEach(pl => { try { series.removePriceLine(pl) } catch {} })
+    tpSlLinesRef.current = []
+    if (tp) tpSlLinesRef.current.push(series.createPriceLine({ price: tp, color: "rgba(34,197,94,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "TP" }))
+    if (sl) tpSlLinesRef.current.push(series.createPriceLine({ price: sl, color: "rgba(239,68,68,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "SL" }))
+  }, [tp, sl])
 
   // ── Grid çizgileri — ayrı useEffect (zoom sıfırlamaz) ─────────
   useEffect(() => {

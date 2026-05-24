@@ -71,6 +71,12 @@ export default function HftPage() {
     return () => window.removeEventListener("keydown", handler)
   }, [chartFullscreen])
 
+  // Fullscreen gecisinde chart'i yeniden boyutlandir
+  useEffect(() => {
+    const timer = setTimeout(() => window.dispatchEvent(new Event("resize")), 50)
+    return () => clearTimeout(timer)
+  }, [chartFullscreen])
+
   const symbol = hftSettings.symbol || "ETHUSDT"
   const spreadPct = hftSettings.spread_pct || 0.5
   const gridCount = hftSettings.grid_count || 20
@@ -647,21 +653,24 @@ export default function HftPage() {
               </svg>
             </button>
           )}
-          {livePrice > 0 ? (
-            <ProChart
-              symbol={chartSymbol}
-              tp={gridBounds?.upper}
-              sl={gridBounds?.lower}
-              gridLines={gridLines}
-            />
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-                <span className="text-slate-400 text-sm">Canli fiyat bekleniyor ({symbol})...</span>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {livePrice > 0 ? (
+              <ProChart
+                symbol={chartSymbol}
+                tp={gridBounds?.upper}
+                sl={gridBounds?.lower}
+                gridLines={gridLines}
+                hideVolume
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center h-full">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+                  <span className="text-slate-400 text-sm">Canli fiyat bekleniyor ({symbol})...</span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Islem Gecmisi */}
