@@ -141,7 +141,7 @@ export default function HftPage() {
                 type="number" 
                 value={hftSettings.leverage || 10}
                 onChange={e => updateHftSetting("leverage", Number(e.target.value))}
-                min={1} max={125}
+                min={1} max={500}
                 className="w-20 bg-[#020817] border border-slate-700 rounded-md pl-3 pr-7 py-1.5 text-sm text-white font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all outline-none" 
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">x</span>
