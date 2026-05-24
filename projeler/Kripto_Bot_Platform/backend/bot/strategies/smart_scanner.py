@@ -343,23 +343,34 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
     def _v(val, default=0):
         """None-safe: dict.get() key varsa None dönebilir, bunu yakala."""
         return default if val is None else val
+        
+    def _t(dir_val):
+        """Trend direction to arrow."""
+        return '↑' if dir_val==1 else '↓' if dir_val==-1 else '—'
 
     coin_rows = []
     for c in coins:
+        mtf = c.get("mtf", {})
+        m5 = mtf.get("5m", {})
+        m15 = mtf.get("15m", {})
+        h4 = mtf.get("4h", {})
+        
+        mtf_str = (f"5m[{_t(m5.get('trend'))} R:{_v(m5.get('rsi'))}] "
+                   f"15m[{_t(m15.get('trend'))} R:{_v(m15.get('rsi'))}] "
+                   f"4h[{_t(h4.get('trend'))} R:{_v(h4.get('rsi'))}]")
+
         coin_rows.append(
             f"  {c.get('base','?'):>8} | "
             f"${_v(c.get('price')):>12,.4f} | "
             f"{_v(c.get('price_change_24h')):>+7.2f}% | "
-            f"RSI:{_v(c.get('rsi_14')):>5.1f} | "
+            f"1h Trend:{_t(c.get('supertrend_dir'))} | "
+            f"1h RSI:{_v(c.get('rsi_14')):>5.1f} | "
+            f"MTF: {mtf_str} | "
             f"ATR%:{_v(c.get('atr_pct')):>6.3f} | "
             f"ADX:{_v(c.get('adx')):>5.1f} | "
-            f"Trend:{'↑' if c.get('supertrend_dir')==1 else '↓' if c.get('supertrend_dir')==-1 else '—'} | "
             f"Vol:{_v(c.get('volume_ratio')):>4.1f}x | "
-            f"EMA200:{_v(c.get('ema200_dist')):>+7.2f}% | "
             f"MACD:{_v(c.get('macd_hist')):>+10.6f} | "
-            f"BB:[{_v(c.get('bb_lower')):>.2f}-{_v(c.get('bb_upper')):>.2f}] | "
-            f"Fund:{_v(c.get('funding_rate'), 0):>+.4f}% | "
-            f"Lev:{c.get('max_leverage') or '?'}x"
+            f"BB:[{_v(c.get('bb_lower')):>.2f}-{_v(c.get('bb_upper')):>.2f}]"
         )
     coin_table = "\n".join(coin_rows)
 
@@ -466,13 +477,18 @@ Mevcut Açık Pozisyonlar: {active_str}
 {perf_section}
 ═══════════════════════════════════════════════════════════════
                     TÜM COİN VERİLERİ
-═══════════════════════════════════════════════════════════════
-     Coin |        Fiyat |   24h%  |  RSI  |  ATR%  |  ADX  | Trend | Hacim | EMA200 Mesafe | MACD Hist  | Bollinger Bandı | Funding | Kaldıraç
+     Coin |        Fiyat |   24h%  | 1h Trend | 1h RSI | MTF: 5m, 15m, 4h (Trend+RSI) |  ATR%  |  ADX  | Hacim | MACD Hist | Bollinger Bandı
 {coin_table}
 
 ═══════════════════════════════════════════════════════════════
               ANALİZ ÇERÇEVEN (BUNLARIN HEPSİNİ KULLAN)
 ═══════════════════════════════════════════════════════════════
+
+1. ÇOKLU ZAMAN DİLİMİ (MTF) ANALİZİ:
+   - 4h Trend ile 1h Trend aynı yönde mi? (Büyük resim konfirmasyonu)
+   - 5m ve 15m RSI aşırı alım/satımda mı? (Kısa vadeli mükemmel giriş noktası)
+   - 1h Trend yukarıyken 15m RSI diplerdeyse (pullback), harika bir LONG fırsatıdır.
+   - Farklı zaman dilimlerinde zıtlıklar varsa (4h bullish, 15m bearish) temkinli ol.
 
 1. MOMENTUM ANALİZİ:
    - RSI divergence: Fiyat düşerken RSI yükseliyor mu? (bullish divergence)

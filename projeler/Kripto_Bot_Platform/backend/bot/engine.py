@@ -3041,7 +3041,38 @@ class BotEngine:
                 ai_candidates.sort(key=_interest_score, reverse=True)
                 ai_top = ai_candidates[:20]  # En ilgi çekici 20 coin (token limiti için)
 
-                print(f"[SmartScanner {bot_name}] AI'ya {len(ai_top)}/{len(coins)} coin gönderiliyor")
+                print(f"[SmartScanner {bot_name}] AI'ya {len(ai_top)}/{len(coins)} coin gönderiliyor. MTF verileri çekiliyor...")
+
+                # --- MTF FETCHING ---
+                from ai.indicators import calculate_all
+                async def _fetch_mtf(c):
+                    try:
+                        sym = c["symbol"]
+                        tasks = [
+                            self.exchange.exchange.fetch_ohlcv(sym, "5m", limit=60),
+                            self.exchange.exchange.fetch_ohlcv(sym, "15m", limit=60),
+                            self.exchange.exchange.fetch_ohlcv(sym, "4h", limit=60)
+                        ]
+                        res = await asyncio.gather(*tasks, return_exceptions=True)
+                        c["mtf"] = {}
+                        
+                        timeframes = ["5m", "15m", "4h"]
+                        for i, tf in enumerate(timeframes):
+                            if not isinstance(res[i], Exception) and len(res[i]) > 20:
+                                ind = calculate_all(res[i])
+                                if ind:
+                                    c["mtf"][tf] = {
+                                        "rsi": round(ind.get("rsi", 0), 1) if ind.get("rsi") else None,
+                                        "trend": ind.get("supertrend_dir"),
+                                        "macd": round(ind.get("macd_hist", 0), 4) if ind.get("macd_hist") else None
+                                    }
+                    except Exception as e:
+                        print(f"[SmartScanner {bot_name}] MTF çekim hatası {c.get('base')}: {e}")
+                        c["mtf"] = {}
+
+                # MTF verilerini paralel çek
+                await asyncio.gather(*[_fetch_mtf(c) for c in ai_top])
+                # --------------------
 
                 leverage_range = (
                     int(params.get("min_leverage", 3)),
