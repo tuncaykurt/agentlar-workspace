@@ -50,16 +50,79 @@ async def fetch_crypto_news(
     limit: int = 30,
 ) -> list[dict]:
     """
-    CryptoPanic API'den kripto haberleri çek.
-    API key yoksa RSS fallback kullanır.
+    Önce veritabanındaki (CryptoPanic Webhook'tan gelen) haberleri çek.
+    Eğer yeterli haber yoksa veya veritabanı boşsa API/RSS fallback'leri kullanır.
     """
+    from core.database import async_session
+    from models.trade import CryptoNews
+    from sqlalchemy import select, desc
+
+    db_results = []
+    try:
+        async with async_session() as session:
+            query = select(CryptoNews)
+            if currency:
+                # currencies veri tabanında "BTC,ETH" gibi tutuluyor
+                query = query.where(CryptoNews.currencies.like(f"%{currency.upper()}%"))
+            query = query.order_by(desc(CryptoNews.published_at)).limit(limit)
+            res = await session.execute(query)
+            db_items = res.scalars().all()
+            
+            for post in db_items:
+                # Sentiment tespiti
+                sentiment_val = post.sentiment_tr or post.sentiment or "neutral"
+                db_results.append({
+                    "id": post.id,
+                    "title": post.summary_tr if post.summary_tr else post.title,  # Varsa Türkçe özet, yoksa başlık
+                    "url": post.url,
+                    "source": post.source or "CryptoPanic Webhook",
+                    "published_at": post.published_at.isoformat() if post.published_at else "",
+                    "currencies": [c.strip() for c in post.currencies.split(",")] if post.currencies else [],
+                    "kind": "news",
+                    "votes": {
+                        "positive": post.positive_votes or 0,
+                        "negative": post.negative_votes or 0,
+                        "important": post.important_votes or 0,
+                    },
+                    "sentiment": sentiment_val,
+                })
+    except Exception as e:
+        print(f"[CryptoNews] Veritabanı haber çekme hatası: {e}")
+
+    # Eğer veritabanında yeterli sonuç varsa (örn: limit kadar), direkt dön
+    if len(db_results) >= limit:
+        return db_results
+
+    # Eksik kalan kısım için fallback'lerden veri çek ve birleştir
+    fallback_limit = limit - len(db_results)
+    fallback_results = []
+
     api_key = settings.CRYPTOPANIC_API_KEY
-
     if api_key:
-        return await _fetch_cryptopanic(api_key, currency, kind, limit)
+        try:
+            fallback_results = await _fetch_cryptopanic(api_key, currency, kind, fallback_limit)
+        except Exception:
+            pass
+    
+    if not fallback_results:
+        try:
+            fallback_results = await _fetch_rss_fallback(fallback_limit)
+            # Eğer currency filtresi varsa RSS sonuçlarında ara
+            if currency and fallback_results:
+                currency_upper = currency.upper()
+                fallback_results = [
+                    item for item in fallback_results
+                    if any(currency_upper in str(c).upper() for c in item.get("currencies", [])) or
+                       currency_upper in item.get("title", "").upper()
+                ]
+        except Exception:
+            pass
 
-    # Fallback: CoinGecko status + CoinTelegraph RSS proxy
-    return await _fetch_rss_fallback(limit)
+    # Webhook ve Fallback sonuçlarını birleştir, tarihe göre sırala
+    combined = db_results + fallback_results
+    combined.sort(key=lambda x: x.get("published_at", ""), reverse=True)
+    return combined[:limit]
+
 
 
 async def _fetch_cryptopanic(

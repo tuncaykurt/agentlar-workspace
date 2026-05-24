@@ -800,3 +800,147 @@ async def signal_performance(token: str):
             for s in signals[:50]
         ],
     }
+
+
+# ─── CryptoPanic Webhook Alıcısı (Discord/Slack Webhook Emülasyonu) ────────────
+
+@router.post("/cryptopanic/webhook")
+async def cryptopanic_webhook(request: Request):
+    """
+    CryptoPanic Webhook alıcısı.
+    CryptoPanic'in Discord veya Slack Webhook entegrasyonu aracılığıyla gönderdiği
+    haber akışını yakalar, veritabanına kaydeder ve arka planda Türkçe'ye çevirip özetler.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {"status": "error", "message": "Geçersiz JSON içeriği"}
+
+    print(f"[CryptoPanic Webhook] Gelen veri: {body}")
+
+    title = ""
+    url = ""
+    source = "CryptoPanic Webhook"
+    sentiment = "neutral"
+    currencies = []
+
+    # 1. Discord Embed formatı tespiti
+    if "embeds" in body and isinstance(body["embeds"], list) and len(body["embeds"]) > 0:
+        embed = body["embeds"][0]
+        title = embed.get("title", "")
+        url = embed.get("url", "")
+        
+        # Alanları (fields) tara (örn: Currencies, Sentiment)
+        fields = embed.get("fields", [])
+        for field in fields:
+            name = str(field.get("name", "")).lower()
+            val = str(field.get("value", ""))
+            if "sentiment" in name:
+                sentiment = val.lower().strip()
+            elif "currencies" in name or "coins" in name:
+                currencies = [c.strip().upper() for c in val.split(",") if c.strip()]
+                
+        # Başlıktan sentiment tahmini (fallback)
+        if sentiment == "neutral":
+            title_lower = title.lower()
+            if "bullish" in title_lower or "[bullish]" in title_lower:
+                sentiment = "bullish"
+            elif "bearish" in title_lower or "[bearish]" in title_lower:
+                sentiment = "bearish"
+
+    # 2. Slack veya Google Chat text formatı tespiti
+    elif "text" in body or "content" in body:
+        text = body.get("text", body.get("content", ""))
+        import re
+        
+        # Slack linki: <url|title>
+        slack_link_match = re.search(r"<(https?://[^\s|]+)\|([^>]+)>", text)
+        md_link_match = re.search(r"\[([^\]]+)\]\((https?://[^\s)]+)\)", text)
+        
+        if slack_link_match:
+            url = slack_link_match.group(1)
+            title = slack_link_match.group(2)
+        elif md_link_match:
+            title = md_link_match.group(1)
+            url = md_link_match.group(2)
+        else:
+            # Düz link tespiti
+            url_match = re.search(r"(https?://[^\s]+)", text)
+            if url_match:
+                url = url_match.group(1)
+                title = text.replace(url, "").strip()
+            else:
+                title = text
+        
+        text_lower = text.lower()
+        if "bullish" in text_lower:
+            sentiment = "bullish"
+        elif "bearish" in text_lower:
+            sentiment = "bearish"
+            
+        # Büyük harfli coin sembollerini bul (örn: BTC, ETH)
+        coin_matches = re.findall(r"\b([A-Z]{2,5})\b", text)
+        if coin_matches:
+            currencies = list(set(coin_matches))
+
+    # 3. Fallback
+    if not title:
+        title = body.get("title", "Kripto Haberi")
+        url = body.get("url", "")
+        sentiment = body.get("sentiment", "neutral")
+        currencies = body.get("currencies", [])
+
+    # Veritabanına kaydet
+    from core.database import async_session
+    from models.trade import CryptoNews
+    
+    currencies_str = ",".join(currencies) if isinstance(currencies, list) else str(currencies)
+
+    async with async_session() as session:
+        news_item = CryptoNews(
+            title=title,
+            url=url,
+            source=source,
+            sentiment=sentiment,
+            currencies=currencies_str,
+            published_at=datetime.utcnow()
+        )
+        session.add(news_item)
+        await session.commit()
+        await session.refresh(news_item)
+        news_id = news_item.id
+
+    # Arka planda Türkçe özetleme ve sentiment analizi tetikle
+    async def run_translation_and_summary(nid: int, ntitle: str, nurl: str):
+        from core.database import async_session
+        from sqlalchemy import select as sa_select
+        from services.crypto_news import summarize_news_turkish
+        
+        try:
+            summary_res = await summarize_news_turkish(ntitle, nurl)
+            if summary_res and isinstance(summary_res, dict):
+                async with async_session() as bsession:
+                    res = await bsession.execute(sa_select(CryptoNews).where(CryptoNews.id == nid))
+                    db_item = res.scalar_one_or_none()
+                    if db_item:
+                        db_item.summary_tr = summary_res.get("summary", "")
+                        db_item.sentiment_tr = summary_res.get("sentiment", "")
+                        
+                        aff_coins = summary_res.get("affected_coins", [])
+                        if aff_coins:
+                            db_item.currencies = ",".join(aff_coins)
+                        await bsession.commit()
+        except Exception as e:
+            print(f"[CryptoPanic Webhook] Arka plan ozetleme hatasi (id={nid}): {e}")
+
+    asyncio.create_task(run_translation_and_summary(news_id, title, url))
+
+    return {
+        "status": "ok",
+        "message": "Haber alindi ve kaydedildi",
+        "news_id": news_id,
+        "title": title,
+        "sentiment": sentiment,
+        "currencies": currencies
+    }
+

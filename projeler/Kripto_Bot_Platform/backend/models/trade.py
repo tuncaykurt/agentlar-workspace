@@ -350,3 +350,30 @@ class Liquidation(Base):
         Index("ix_liq_symbol_ts", "symbol", "timestamp"),
         Index("ix_liq_price", "symbol", "price"),
     )
+
+
+class CryptoNews(Base):
+    """
+    CryptoPanic webhook veya RSS üzerinden toplanan kripto haberleri.
+    """
+    __tablename__ = "crypto_news"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    title = Column(String, nullable=False)
+    url = Column(String, nullable=True)
+    source = Column(String, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    sentiment = Column(String, default="neutral")       # bullish, bearish, neutral
+    currencies = Column(String, nullable=True)          # Virgülle ayrılmış semboller: "BTC,ETH"
+    positive_votes = Column(Integer, default=0)
+    negative_votes = Column(Integer, default=0)
+    important_votes = Column(Integer, default=0)
+    summary_tr = Column(Text, nullable=True)            # Türkçe özet
+    sentiment_tr = Column(String, nullable=True)        # Türkçe sentiment
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_news_published", "published_at"),
+        Index("ix_news_sentiment", "sentiment"),
+    )
+
