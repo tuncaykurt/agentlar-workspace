@@ -27,9 +27,10 @@ export default function SimulationsPage() {
   const { data: portfolioData, mutate: mutatePortfolio } = useSWR("/simulations/portfolio", fetcher, { refreshInterval: 5000 })
   const { data: scenarioData } = useSWR("/simulations/stats/scenarios", fetcher, { refreshInterval: 60000 })
 
+  const queryStatus = tab === "open" ? "open" : statusFilter || undefined
   const { data: listData, mutate: mutateList } = useSWR(
-    tab === "settings" ? null : `/simulations/list?status=${tab === "open" ? "open" : "closed"}&symbol=${statusFilter}`, 
-    fetcher, 
+    tab === "settings" ? null : `/simulations?limit=50${queryStatus ? `&status=${queryStatus}` : ""}`,
+    fetcher,
     { refreshInterval: tab === "open" ? 10000 : 30000 }
   )
 
@@ -403,108 +404,7 @@ export default function SimulationsPage() {
         </div>
       )}
 
-      {/* HFT Grid Canlı Simülasyon Chart */}
-      <div className="bg-gradient-to-br from-slate-900 to-black border border-indigo-500/40 rounded-xl p-5 space-y-4 mt-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-4 opacity-10">
-          <svg className="w-32 h-32 text-indigo-400" fill="currentColor" viewBox="0 0 24 24"><path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
-        </div>
-        <div className="flex items-center justify-between relative z-10">
-          <div>
-            <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-              HFT Dinamik Ağ (Trailing Grid) İzleme
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">Dinamik ağ hareketlerini ve saniyelik scalping işlemlerini grafikte canlı izleyin.</p>
-          </div>
-          <button 
-            onClick={() => {
-              if ((window as any).hftDemoActive) {
-                clearInterval((window as any).hftDemoTimer);
-                (window as any).hftDemoActive = false;
-              } else {
-                (window as any).hftDemoActive = true;
-                let currentPrice = 65000;
-                let upperGrid = 65500;
-                let lowerGrid = 64500;
-                
-                (window as any).hftDemoTimer = setInterval(() => {
-                  // Rastgele fiyat hareketi
-                  const move = (Math.random() - 0.45) * 80;
-                  currentPrice += move;
-                  
-                  // Trailing Logic!
-                  if (currentPrice >= upperGrid) {
-                    const diff = currentPrice - upperGrid;
-                    upperGrid = currentPrice;
-                    lowerGrid = lowerGrid + diff;
-                  } else if (currentPrice <= lowerGrid) {
-                    const diff = lowerGrid - currentPrice;
-                    lowerGrid = currentPrice;
-                    upperGrid = upperGrid - diff;
-                  }
-                  
-                  // Component state'ini güncelle (Hack for demo via DOM event or global var, real impl will use state)
-                  const event = new CustomEvent('hft-tick', { detail: { currentPrice, upperGrid, lowerGrid } });
-                  window.dispatchEvent(event);
-                }, 500);
-              }
-            }}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-indigo-900/50 transition-all">
-            HFT Demo Başlat/Durdur
-          </button>
-        </div>
 
-        {/* HFT Ayar Paneli */}
-        <div className="flex flex-wrap items-center gap-3 bg-slate-800/60 p-3 rounded-lg border border-slate-700/50 relative z-10 mt-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Hedef Coin:</span>
-            <select 
-              value={hftSettings.symbol || "BTCUSDT"} 
-              onChange={e => updateHftSetting("symbol", e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-            >
-              <option value="BTCUSDT">BTCUSDT</option>
-              <option value="ETHUSDT">ETHUSDT</option>
-              <option value="SOLUSDT">SOLUSDT</option>
-              <option value="XRPUSDT">XRPUSDT</option>
-              <option value="DOGEUSDT">DOGEUSDT</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Ağ Genişliği (Spread):</span>
-            <input 
-              type="number" 
-              value={hftSettings.spread_pct || 5} 
-              onChange={e => updateHftSetting("spread_pct", Number(e.target.value))}
-              min={0.1} step={0.1}
-              className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white" 
-            />
-            <span className="text-xs text-slate-500">%</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Kademe Sayısı:</span>
-            <input 
-              type="number" 
-              value={hftSettings.grid_count || 20}
-              onChange={e => updateHftSetting("grid_count", Number(e.target.value))}
-              min={2} max={100}
-              className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white" 
-            />
-          </div>
-          <div className="ml-auto flex gap-2">
-             <span className="text-[10px] text-slate-500 bg-slate-900 px-2 py-1 rounded">Alt: {hftSettings.lower_price ? hftSettings.lower_price.toFixed(2) : "0.00"}</span>
-             <span className="text-[10px] text-slate-500 bg-slate-900 px-2 py-1 rounded">Üst: {hftSettings.upper_price ? hftSettings.upper_price.toFixed(2) : "0.00"}</span>
-          </div>
-        </div>
-        
-        <div className="h-[400px] w-full bg-[#020817] border border-slate-700/50 rounded-lg flex flex-col relative z-10 overflow-hidden mt-2">
-          <ProChart 
-            symbol={hftSettings.symbol || "BTCUSDT"} 
-            tp={hftSettings.upper_price || undefined} 
-            sl={hftSettings.lower_price || undefined} 
-          />
-        </div>
-      </div>
 
       {/* Senaryo Kartlari — 3 farkli bakis acisi */}
       {scenarios.scenario_all && (

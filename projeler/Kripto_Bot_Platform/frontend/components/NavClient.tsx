@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/analytics",     label: "Analiz" },
   { href: "/scanner",       label: "Tarayıcı" },
   { href: "/simulations",   label: "Simülasyon" },
+  { href: "/hft",           label: "HFT Grid" },
   { href: "/ai-chat",       label: "AI Chat" },
   { href: "/news",           label: "Haberler" },
   { href: "/freqtrade",      label: "Freqtrade" },
