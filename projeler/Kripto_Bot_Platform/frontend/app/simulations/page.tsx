@@ -1,8 +1,11 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import dynamic from "next/dynamic"
 import useSWR from "swr"
 import { api } from "@/lib/api"
+
+const ProChart = dynamic(() => import("@/components/Chart/ProChart"), { ssr: false })
 
 const fetcher = (path: string) => api.get(path)
 
@@ -494,34 +497,12 @@ export default function SimulationsPage() {
           </div>
         </div>
         
-        <div className="h-[300px] w-full bg-slate-800/80 border border-slate-700 rounded-lg flex flex-col relative z-10 overflow-hidden mt-2">
-          {(() => {
-            const [hftData, setHftData] = useState({ price: 0, upper: 0, lower: 0 });
-            
-            useEffect(() => {
-              const handleTick = (e: any) => {
-                setHftData(e.detail);
-              };
-              window.addEventListener('hft-tick', handleTick);
-              return () => window.removeEventListener('hft-tick', handleTick);
-            }, []);
-
-            if (hftData.price === 0) {
-              return (
-                <div className="w-full h-full flex flex-col items-center justify-center opacity-60">
-                  <svg className="w-12 h-12 text-slate-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
-                  </svg>
-                  <span className="text-sm font-medium text-slate-300 mt-2">TradingView Bekliyor...</span>
-                  <span className="text-xs text-slate-500">Demoyu başlatarak ağ çizgilerinin fiyatla nasıl kaydığını izleyin.</span>
-                </div>
-              )
-            }
-
-            // HFTChart component dynamically loaded to prevent SSR errors
-            const HFTChartObj = require('../../components/HFTChart').default;
-            return <HFTChartObj currentPrice={hftData.price} upperGrid={hftData.upper} lowerGrid={hftData.lower} />;
-          })()}
+        <div className="h-[400px] w-full bg-[#020817] border border-slate-700/50 rounded-lg flex flex-col relative z-10 overflow-hidden mt-2">
+          <ProChart 
+            symbol={hftSettings.symbol || "BTCUSDT"} 
+            tp={hftSettings.upper_price || undefined} 
+            sl={hftSettings.lower_price || undefined} 
+          />
         </div>
       </div>
 
