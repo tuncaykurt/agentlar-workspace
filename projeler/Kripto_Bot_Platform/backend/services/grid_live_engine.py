@@ -29,6 +29,7 @@ class GridLiveEngine:
     def __init__(self):
         self._exchange = None
         self._poll_task: asyncio.Task | None = None
+        self._tick_lock = asyncio.Lock()  # Çift emir önleme kilidi
 
     # ─── Exchange ─────────────────────────────────────────────────────
 
@@ -324,6 +325,14 @@ class GridLiveEngine:
         Grid seviyesi geçişi varsa işlem yapar.
         Dönen: trade listesi veya None
         """
+        # Çift emir önleme: aynı anda sadece bir tick işlenebilir
+        if self._tick_lock.locked():
+            return None  # Zaten işleniyor, atla
+        async with self._tick_lock:
+            return await self._process_tick_inner(current_price)
+
+    async def _process_tick_inner(self, current_price: float) -> list | None:
+        """process_tick'in asıl mantığı (lock içinden çağrılır)."""
         redis = get_redis()
 
         running = await redis.get("grid_live:running")
@@ -519,20 +528,24 @@ class GridLiveEngine:
             except Exception as e:
                 trade["exchange_status"] = "error"
                 trade["error"] = str(e)
+                pnl = 0.0  # Başarısız emir → PnL sayma
+                trade["pnl"] = 0.0
                 print(f"[GridLive] ✗ Emir hatası ({side}): {e}")
         else:
             trade["exchange_status"] = "paper"
 
-        # State güncelle
+        # State güncelle (başarısız emirlerde PnL=0 olacak)
         state["total_trades"] = state.get("total_trades", 0) + 1
         if pnl > 0:
             state["total_wins"] = state.get("total_wins", 0) + 1
         state["total_pnl"] = round(state.get("total_pnl", 0) + pnl, 4)
-        state["total_fees"] = round(
-            state.get("total_fees", 0) +
-            state["order_size"] * state["leverage"] * 0.0006 * 2 * level_count,
-            4
-        )
+        # Fee sadece başarılı emirlerde sayılsın
+        if trade["exchange_status"] != "error":
+            state["total_fees"] = round(
+                state.get("total_fees", 0) +
+                state["order_size"] * state["leverage"] * 0.0006 * 2 * level_count,
+                4
+            )
 
         # İşlem geçmişine ekle
         redis = get_redis()
