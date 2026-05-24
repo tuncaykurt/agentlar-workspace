@@ -215,12 +215,14 @@ def score_coin_manual(coin: dict, criteria: ManualCriteria) -> Optional[float]:
 
 def clamp_tp_sl(ai_tp: float, ai_sl: float, leverage: int, coin_atr_pct: float = None) -> tuple:
     """
-    TP/SL'yi kaldıraç ve coin volatilitesine göre optimize et.
+    TP/SL'yi kaldıraç ve coin volatilitesine göre dinamik optimize et.
 
-    Felsefe:
-    - TP yakın olsun → daha sık ulaşılır → daha çok kazanç
-    - SL yeterli nefes payı → gürültüden erken kapanma olmasın
-    - Tasfiyeden güvenli mesafe → asla likidasyon
+    Felsefe (v2 — Daha Agresif & Karlı):
+    - TP: Coin'in gerçek ATR kapasitesinin %70-85'ini hedefle → ulaşılabilir ama yeterli kar
+    - SL: ATR'nin %40-50'si → gürültü filtrelenir ama SL çok geniş değil
+    - R:R minimum 1.5:1 → her kazanç 1.5 kaybı karşılar
+    - Tasfiyeden güvenli → asla likidasyon
+    - Düşük ATR coinlerde daha sıkı, yüksek ATR'de daha geniş
 
     Args:
         ai_tp: AI'ın önerdiği TP% (veya kullanıcı ayarı)
@@ -234,37 +236,59 @@ def clamp_tp_sl(ai_tp: float, ai_sl: float, leverage: int, coin_atr_pct: float =
     liq_dist = 100.0 / max(1, leverage)
 
     # ── Tasfiye güvenlik sınırları (kesin) ──
-    hard_max_sl = round(liq_dist * 0.45, 4)  # Tasfiyenin max %45'i
-    hard_max_tp = round(liq_dist * 0.75, 4)  # Tasfiyenin max %75'i
-    hard_min_sl = max(0.05, round(liq_dist * 0.08, 4))
-    hard_min_tp = max(0.08, round(liq_dist * 0.12, 4))
+    hard_max_sl = round(liq_dist * 0.40, 4)  # Tasfiyenin max %40'ı (daha sıkı SL)
+    hard_max_tp = round(liq_dist * 0.80, 4)  # Tasfiyenin max %80'i (daha geniş TP)
+    hard_min_sl = max(0.05, round(liq_dist * 0.06, 4))
+    hard_min_tp = max(0.10, round(liq_dist * 0.15, 4))
 
     tp, sl = ai_tp, ai_sl
 
-    # ── ATR-bazlı optimizasyon (coin'in gerçek volatilitesine göre) ──
+    # ── ATR-bazlı dinamik optimizasyon ──
     if coin_atr_pct and coin_atr_pct > 0:
-        # 1 ATR = coin'in tipik mum büyüklüğü
-        # TP: ATR'nin %55'i → 1-2 mum içinde ulaşılabilir, realistik hedef
-        # SL: ATR'nin %70'i → normal geri çekilmeleri tolere eder
-        target_tp = round(coin_atr_pct * 0.55, 4)
-        target_sl = round(coin_atr_pct * 0.70, 4)
+        # ATR büyüklüğüne göre katsayı ayarla
+        # Düşük ATR → daha yakın hedef (volatilite düşük, büyük hareket zor)
+        # Yüksek ATR → daha geniş hedef (volatilite yüksek, büyük hareket kolay)
+        if coin_atr_pct < 0.3:
+            # Çok düşük volatilite — yeterli hareket yok, dar hedef
+            tp_mult = 0.70
+            sl_mult = 0.45
+        elif coin_atr_pct < 0.8:
+            # Orta-düşük volatilite — dengeli
+            tp_mult = 0.75
+            sl_mult = 0.45
+        elif coin_atr_pct < 1.5:
+            # Normal volatilite — standart
+            tp_mult = 0.80
+            sl_mult = 0.48
+        elif coin_atr_pct < 3.0:
+            # Yüksek volatilite — geniş hedef
+            tp_mult = 0.85
+            sl_mult = 0.50
+        else:
+            # Çok yüksek volatilite — maksimum hareket potansiyeli
+            tp_mult = 0.90
+            sl_mult = 0.55
 
-        # TP: AI'nın önerisi veya ATR hedefi — yakın olanı al (daha ulaşılabilir)
-        tp = min(ai_tp, max(target_tp, hard_min_tp))
+        target_tp = round(coin_atr_pct * tp_mult, 4)
+        target_sl = round(coin_atr_pct * sl_mult, 4)
 
-        # SL: Çok dar olmamalı — ATR'nin en az %30'u kadar nefes payı
-        sl_floor = max(coin_atr_pct * 0.30, hard_min_sl)
+        # TP: AI ve ATR hedefinin BÜYÜK olanı (daha geniş TP = daha çok kar)
+        tp = max(ai_tp, target_tp, hard_min_tp)
+
+        # SL: ATR hedefi veya AI — AMA çok geniş olmamalı
+        sl_floor = max(coin_atr_pct * 0.25, hard_min_sl)  # Minimum nefes payı
         sl = max(min(ai_sl, target_sl), sl_floor)
 
     # ── Tasfiye güvenliği (kesin sınır) ──
     tp = max(hard_min_tp, min(tp, hard_max_tp))
     sl = max(hard_min_sl, min(sl, hard_max_sl))
 
-    # ── TP > SL olmalı (minimum R:R ≥ 1.2) ──
-    if tp <= sl:
-        tp = round(sl * 1.3, 4)
+    # ── R:R minimum 1.5:1 — her kazanç 1.5 kaybı karşılasın ──
+    if tp <= sl * 1.5:
+        tp = round(sl * 1.6, 4)
         if tp > hard_max_tp:
-            sl = round(hard_max_tp / 1.3, 4)
+            # TP sığmıyorsa SL'yi küçült
+            sl = round(hard_max_tp / 1.6, 4)
             tp = hard_max_tp
 
     return round(tp, 4), round(sl, 4)

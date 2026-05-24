@@ -1,0 +1,12 @@
+https://www.mexc.com/api-docs/futures/websocket-api/get-a-single-ticker
+https://www.mexc.com/api-docs/futures/websocket-api/tickers
+https://www.mexc.com/api-docs/futures/websocket-api/deal
+https://www.mexc.com/api-docs/futures/websocket-api/depth-specify-minimum-notional-step
+https://www.mexc.com/api-docs/futures/websocket-api/contract-data
+https://www.mexc.com/api-docs/futures/websocket-api/k-line-data
+https://www.mexc.com/api-docs/futures/websocket-api/fair-price
+https://www.mexc.com/api-docs/futures/websocket-api/funding-rate
+https://www.mexc.com/api-docs/futures/websocket-api/index-price
+https://www.mexc.com/api-docs/futures/websocket-api/command-details-for-data-exchange
+https://www.mexc.com/api-docs/futures/websocket-api/subscription-filtering
+https://www.mexc.com/api-docs/futures/websocket-api/native-ws-endpoint

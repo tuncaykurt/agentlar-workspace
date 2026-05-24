@@ -230,70 +230,12 @@ async def get_sim_settings():
 
 @router.post("/settings")
 async def update_sim_settings(data: dict):
-    """Simülasyon ayarlarını güncelle + aktif smart_scanner botları senkronize et."""
+    """Simülasyon ayarlarını güncelle. Bot ayarlarını DEĞİŞTİRMEZ — bağımsız çalışır."""
     redis = get_redis()
     current = await get_sim_settings()
     current.update(data)
     await redis.set("scanner_sim:settings", json.dumps(current))
-
-    # Aktif smart_scanner botlarının params'ını da güncelle (sync)
-    try:
-        await _sync_sim_settings_to_bots(current)
-    except Exception as e:
-        print(f"[SimSettings] Bot sync hatası: {e}")
-
     return current
-
-
-async def _sync_sim_settings_to_bots(sim_cfg: dict):
-    """Simülasyon ayarlarını tüm smart_scanner botlarına senkronize et."""
-    from models.trade import Bot
-    from sqlalchemy import select, update
-
-    # Sim → Bot param mapping
-    sync_fields = {
-        "mode": "selection_mode",
-        "min_confidence": "min_ai_confidence",
-        "min_leverage": "min_leverage",
-        "max_leverage": "max_leverage",
-        "max_open": "max_positions",
-        "tp_pct": "tp_pct",
-        "sl_pct": "sl_pct",
-        "auto_scale_tp_sl": "auto_scale_tp_sl",
-        "scale_base_leverage": "scale_base_leverage",
-        "trailing_enabled": "trailing_enabled",
-        "trailing_activate_pct": "trailing_activate_pct",
-        "trailing_callback_pct": "trailing_callback_pct",
-        "hedge_enabled": "hedge_enabled",
-        "hedge_tp_pct": "hedge_tp_pct",
-        "hedge_sl_pct": "hedge_sl_pct",
-        "hedge_use_max_leverage": "hedge_use_max_leverage",
-        "trade_size_mode": "trade_size_mode",
-        "trade_size_value": "trade_size_value",
-    }
-
-    async with async_session() as session:
-        result = await session.execute(
-            select(Bot).where(Bot.strategy == "smart_scanner")
-        )
-        bots = result.scalars().all()
-        for bot in bots:
-            bot_params = json.loads(bot.params) if bot.params else {}
-            changed = False
-            for sim_key, bot_key in sync_fields.items():
-                if sim_key in sim_cfg:
-                    new_val = sim_cfg[sim_key]
-                    if bot_params.get(bot_key) != new_val:
-                        bot_params[bot_key] = new_val
-                        changed = True
-            if changed:
-                await session.execute(
-                    update(Bot).where(Bot.id == bot.id).values(
-                        params=json.dumps(bot_params)
-                    )
-                )
-                print(f"[SimSettings] Bot #{bot.id} '{bot.name}' params senkronize edildi")
-        await session.commit()
 
 
 @router.get("/status")
@@ -534,3 +476,128 @@ async def clear_simulations(status: str = None):
             await session.execute(text("DELETE FROM scanner_simulations"))
         await session.commit()
     return {"cleared": status or "all"}
+
+
+@router.get("/stats/scenarios")
+async def scenario_analysis():
+    """
+    3 farklı senaryo ile simülasyon performansını karşılaştır.
+    1. Tüm sinyallere girseydik (all-in)
+    2. Borsa bakiyesiyle max N işlem (portföy simülasyonu)
+    3. Sadece yüksek güvenli sinyaller (AI >80)
+    """
+    redis = get_redis()
+    sim_cfg = await get_sim_settings()
+
+    # Borsa bakiyesi
+    exchange_bal = None
+    try:
+        raw = await redis.get("exchange:mexc:balance")
+        if raw:
+            exchange_bal = json.loads(raw)
+    except Exception:
+        pass
+
+    real_balance = float(exchange_bal.get("free", 0)) if exchange_bal else 0
+    max_open = sim_cfg.get("max_open", 3)
+    margin_per_trade = round(real_balance / max(1, max_open), 2) if real_balance > 0 else float(sim_cfg.get("trade_size_value", 100))
+
+    async with async_session() as session:
+        # Tüm kapanmış simülasyonlar
+        result = await session.execute(text("""
+            SELECT id, coin, direction, confidence, leverage,
+                   entry_price, exit_price, tp_pct, sl_pct,
+                   pnl_pct, pnl_usdt, status, exit_reason,
+                   COALESCE(margin_usdt, 100) as margin_usdt,
+                   created_at, closed_at, duration_minutes,
+                   max_favorable_pct, max_adverse_pct,
+                   atr_pct
+            FROM scanner_simulations
+            WHERE status IN ('win', 'loss')
+            ORDER BY closed_at DESC
+        """))
+        rows = result.fetchall()
+
+    cols = ["id", "coin", "direction", "confidence", "leverage",
+            "entry_price", "exit_price", "tp_pct", "sl_pct",
+            "pnl_pct", "pnl_usdt", "status", "exit_reason",
+            "margin_usdt", "created_at", "closed_at", "duration_minutes",
+            "max_favorable_pct", "max_adverse_pct", "atr_pct"]
+    trades = [dict(zip(cols, row)) for row in rows]
+
+    if not trades:
+        empty = {
+            "total": 0, "wins": 0, "losses": 0, "win_rate": 0,
+            "total_pnl": 0, "avg_pnl": 0, "best_trade": 0, "worst_trade": 0,
+            "profit_factor": 0, "avg_duration_min": 0,
+        }
+        return {
+            "scenario_all": {**empty, "label": "Tum Sinyallere Girseydik", "description": "Gelen tum sinyallere islem acilsaydi"},
+            "scenario_portfolio": {**empty, "label": "Borsa Bakiyesiyle", "description": f"${real_balance:.0f} bakiye, max {max_open} esanli islem"},
+            "scenario_high_conf": {**empty, "label": "Sadece Yuksek Guvenli", "description": "AI guven skoru >80 olan sinyaller"},
+            "exchange_balance": real_balance,
+            "margin_per_trade": margin_per_trade,
+            "max_concurrent": max_open,
+        }
+
+    def _calc_scenario(filtered_trades, sim_margin_override=None):
+        if not filtered_trades:
+            return {
+                "total": 0, "wins": 0, "losses": 0, "win_rate": 0,
+                "total_pnl": 0, "avg_pnl": 0, "best_trade": 0, "worst_trade": 0,
+                "profit_factor": 0, "avg_duration_min": 0,
+            }
+        wins = [t for t in filtered_trades if t["status"] == "win"]
+        losses = [t for t in filtered_trades if t["status"] == "loss"]
+        total = len(filtered_trades)
+
+        # PnL hesapla (margin override varsa yeniden hesapla)
+        pnl_list = []
+        for t in filtered_trades:
+            margin = sim_margin_override or float(t.get("margin_usdt") or 100)
+            lev = t.get("leverage") or 50
+            pct = t.get("pnl_pct") or 0
+            pnl_list.append(margin * lev * pct / 100)
+
+        total_pnl = sum(pnl_list)
+        win_pnl = sum(p for p in pnl_list if p > 0)
+        loss_pnl = abs(sum(p for p in pnl_list if p < 0))
+        durations = [t["duration_minutes"] for t in filtered_trades if t.get("duration_minutes")]
+
+        return {
+            "total": total,
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate": round(len(wins) / max(1, total) * 100, 1),
+            "total_pnl": round(total_pnl, 2),
+            "avg_pnl": round(total_pnl / max(1, total), 2),
+            "best_trade": round(max(pnl_list) if pnl_list else 0, 2),
+            "worst_trade": round(min(pnl_list) if pnl_list else 0, 2),
+            "profit_factor": round(win_pnl / max(0.01, loss_pnl), 2),
+            "avg_duration_min": round(sum(durations) / max(1, len(durations)), 0) if durations else 0,
+        }
+
+    # Senaryo 1: Tüm sinyallere girseydik ($100 margin her biri)
+    s1 = _calc_scenario(trades)
+    s1["label"] = "Tum Sinyallere Girseydik"
+    s1["description"] = f"Toplam {s1['total']} sinyalin hepsine $100 margin ile girseydik"
+
+    # Senaryo 2: Borsa bakiyesiyle max N eşanlı işlem
+    s2 = _calc_scenario(trades, sim_margin_override=margin_per_trade)
+    s2["label"] = "Borsa Bakiyesiyle"
+    s2["description"] = f"${real_balance:.0f} bakiye, max {max_open} esanli islem, her biri ${margin_per_trade:.0f} margin"
+
+    # Senaryo 3: Sadece yüksek güvenli (confidence > 80)
+    high_conf = [t for t in trades if (t.get("confidence") or 0) >= 80]
+    s3 = _calc_scenario(high_conf)
+    s3["label"] = "Sadece Yuksek Guvenli"
+    s3["description"] = f"AI guven skoru >=80 olan {s3['total']} sinyal"
+
+    return {
+        "scenario_all": s1,
+        "scenario_portfolio": s2,
+        "scenario_high_conf": s3,
+        "exchange_balance": real_balance,
+        "margin_per_trade": margin_per_trade,
+        "max_concurrent": max_open,
+    }

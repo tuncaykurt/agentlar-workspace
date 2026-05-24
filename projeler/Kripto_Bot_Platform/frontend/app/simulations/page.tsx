@@ -21,6 +21,7 @@ export default function SimulationsPage() {
   const { data: statusData } = useSWR("/simulations/status", fetcher, { refreshInterval: 10000 })
   const { data: settingsData, mutate: mutateSettings } = useSWR("/simulations/settings", fetcher)
   const { data: portfolioData, mutate: mutatePortfolio } = useSWR("/simulations/portfolio", fetcher, { refreshInterval: 15000 })
+  const { data: scenarioData } = useSWR("/simulations/stats/scenarios", fetcher, { refreshInterval: 60000 })
 
   const queryStatus = tab === "open" ? "open" : statusFilter || undefined
   const { data: listData, mutate: mutateList } = useSWR(
@@ -34,6 +35,7 @@ export default function SimulationsPage() {
   const settings = settingsData || {}
   const portfolio = portfolioData || {}
   const items: any[] = listData?.items || []
+  const scenarios = scenarioData || {}
 
   const toggleSetting = async (key: string, value: any) => {
     try {
@@ -242,6 +244,95 @@ export default function SimulationsPage() {
         </div>
       )}
 
+      {/* Senaryo Kartlari — 3 farkli bakis acisi */}
+      {scenarios.scenario_all && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-300">Senaryo Karsilastirmasi</h2>
+            <span className="text-[10px] text-slate-600">Kapanmis islemler uzerinden hesaplandi</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              {
+                key: "scenario_all",
+                data: scenarios.scenario_all,
+                gradient: "from-blue-900/40 to-blue-800/20",
+                border: "border-blue-500/30",
+                icon: "📊",
+                iconBg: "bg-blue-500/20",
+              },
+              {
+                key: "scenario_portfolio",
+                data: scenarios.scenario_portfolio,
+                gradient: "from-emerald-900/40 to-emerald-800/20",
+                border: "border-emerald-500/30",
+                icon: "💰",
+                iconBg: "bg-emerald-500/20",
+              },
+              {
+                key: "scenario_high_conf",
+                data: scenarios.scenario_high_conf,
+                gradient: "from-purple-900/40 to-purple-800/20",
+                border: "border-purple-500/30",
+                icon: "🎯",
+                iconBg: "bg-purple-500/20",
+              },
+            ].map(s => {
+              const d = s.data || {}
+              const pnlColor = (d.total_pnl || 0) >= 0 ? "text-green-400" : "text-red-400"
+              const wrColor = (d.win_rate || 0) >= 50 ? "text-green-400" : (d.win_rate || 0) >= 40 ? "text-yellow-400" : "text-red-400"
+              return (
+                <div key={s.key} className={`bg-gradient-to-br ${s.gradient} border ${s.border} rounded-2xl p-5 space-y-4 transition-all hover:scale-[1.01]`}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-lg w-8 h-8 rounded-lg flex items-center justify-center ${s.iconBg}`}>{s.icon}</span>
+                        <span className="text-sm font-bold text-white">{d.label || s.key}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">{d.description || ""}</p>
+                    </div>
+                  </div>
+
+                  {/* Ana PnL */}
+                  <div className="text-center py-2">
+                    <div className={`text-3xl font-black ${pnlColor}`}>
+                      {(d.total_pnl || 0) > 0 ? "+" : ""}${(d.total_pnl || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Toplam Kar/Zarar</div>
+                  </div>
+
+                  {/* Detaylar */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center">
+                      <div className={`text-lg font-bold ${wrColor}`}>{d.win_rate || 0}%</div>
+                      <div className="text-[9px] text-slate-500">Basari</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-white">{d.total || 0}</div>
+                      <div className="text-[9px] text-slate-500">Islem</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-lg font-bold ${(d.profit_factor || 0) >= 1.5 ? "text-green-400" : (d.profit_factor || 0) >= 1 ? "text-yellow-400" : "text-red-400"}`}>
+                        {(d.profit_factor || 0).toFixed(1)}x
+                      </div>
+                      <div className="text-[9px] text-slate-500">PF</div>
+                    </div>
+                  </div>
+
+                  {/* Alt bilgi */}
+                  <div className="flex justify-between text-[10px] text-slate-500 pt-2 border-t border-white/5">
+                    <span className="text-green-500">W:{d.wins || 0}</span>
+                    <span className="text-red-500">L:{d.losses || 0}</span>
+                    <span>En iyi: <span className="text-green-400">${(d.best_trade || 0).toFixed(0)}</span></span>
+                    <span>En kotu: <span className="text-red-400">${(d.worst_trade || 0).toFixed(0)}</span></span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Ozet Kartlari */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
@@ -334,6 +425,18 @@ export default function SimulationsPage() {
       {/* Ayarlar */}
       {tab === "settings" && (
         <div className="space-y-4">
+
+          {/* Bagimsizlik Uyarisi */}
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3">
+            <span className="text-lg">⚡</span>
+            <div>
+              <div className="text-sm font-medium text-amber-400">Bu ayarlar sadece simulasyonu etkiler</div>
+              <div className="text-xs text-slate-400 mt-0.5">
+                Buradaki degisiklikler Bots sayfasindaki aktif botlarin parametrelerini DEGiSTiRMEZ.
+                Farkli senaryolari guvenle test edebilirsiniz. Basarili buldugunuz ayarlari &quot;Smart Bot&apos;a Aktar&quot; ile bota deploy edebilirsiniz.
+              </div>
+            </div>
+          </div>
 
           {/* Portfolyo & Pozisyon Buyuklugu */}
           <div className="bg-gradient-to-r from-indigo-900/20 to-slate-800/60 border border-indigo-500/30 rounded-xl p-5 space-y-4">
