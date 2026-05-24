@@ -295,19 +295,16 @@ class GridLiveEngine:
                 if contracts <= 0:
                     continue
 
-                # MEXC close: side=2 (close long), side=4 (close short)
-                close_side = 2 if side == "long" else 4
+                # CCXT reduceOnly ile pozisyon kapat (one-way + hedge mod uyumlu)
+                close_side_str = "sell" if side == "long" else "buy"
                 try:
-                    body = {
-                        "symbol": mexc_symbol,
-                        "price": 0,
-                        "vol": int(contracts),
-                        "leverage": int(pos.get("leverage", 10)),
-                        "side": close_side,
-                        "type": 5,  # market
-                        "openType": 2,  # cross margin
-                    }
-                    resp = await ex.exchange.contractPrivatePostOrderSubmit(body)
+                    resp = await ex.exchange.create_order(
+                        symbol=ccxt_symbol,
+                        type="market",
+                        side=close_side_str,
+                        amount=int(contracts),
+                        params={"reduceOnly": True}
+                    )
                     closed.append({
                         "side": side,
                         "contracts": contracts,
@@ -513,77 +510,40 @@ class GridLiveEngine:
             except Exception as e:
                 print(f"[GridLive] Kontrat hesap uyarısı: {e}")
 
-            # MEXC side: 1=open long, 2=close long, 3=open short, 4=close short
-            if side == "buy":
-                mexc_side = 1  # open long
-            else:
-                mexc_side = 2  # close long
-
             ex = await self._get_exchange()
 
-            # SELL öncesi pozisyon kontrolü — pozisyon yoksa SELL yapma
-            if side == "sell":
-                try:
-                    positions = await ex.get_positions(ccxt_symbol)
-                    has_long = any(
-                        float(p.get("contracts", 0)) > 0 and p.get("side") == "long"
-                        for p in positions
-                    )
-                    if not has_long:
-                        trade["exchange_status"] = "error"
-                        trade["error"] = "Borsada açık long pozisyon yok — SELL atlanıyor"
-                        trade["pnl"] = 0.0
-                        pnl = 0.0
-                        print(f"[GridLive] ⚠ SELL atlandı: borsada long pozisyon bulunamadı")
-                        # State güncelle ve erken dön
-                        state["total_trades"] = state.get("total_trades", 0) + 1
-                        redis = get_redis()
-                        await redis.lpush("grid_live:trades", json.dumps(trade))
-                        await redis.ltrim("grid_live:trades", 0, 199)
-                        return trade
-                except Exception as e:
-                    print(f"[GridLive] Pozisyon kontrol hatası (SELL devam): {e}")
-
-            order_body = {
-                "symbol": mexc_symbol,
-                "price": 0,
-                "vol": total_contracts,
-                "leverage": int(state.get("leverage", 10)),
-                "side": mexc_side,
-                "type": 5,  # market order
-                "openType": 2,  # cross margin (tüm bakiye korur, likidasyon riski düşük)
-            }
-
             try:
-                resp = await ex.exchange.contractPrivatePostOrderSubmit(order_body)
-                order_id = str(resp.get("data", resp.get("orderId", "")))
-                trade["order_id"] = order_id
-                trade["exchange_status"] = "filled"
+                if side == "buy":
+                    # BUY: raw API ile open long (side=1)
+                    order_body = {
+                        "symbol": mexc_symbol,
+                        "price": 0,
+                        "vol": total_contracts,
+                        "leverage": int(state.get("leverage", 10)),
+                        "side": 1,  # open long
+                        "type": 5,  # market order
+                        "openType": 2,  # cross margin
+                    }
+                    resp = await ex.exchange.contractPrivatePostOrderSubmit(order_body)
+                    order_id = str(resp.get("data", resp.get("orderId", "")))
+                    trade["order_id"] = order_id
+                    trade["exchange_status"] = "filled"
+                else:
+                    # SELL: CCXT create_order ile reduceOnly
+                    # Bu yöntem hem one-way hem hedge modda çalışır
+                    resp = await ex.exchange.create_order(
+                        symbol=ccxt_symbol,
+                        type="market",
+                        side="sell",
+                        amount=total_contracts,
+                        params={"reduceOnly": True}
+                    )
+                    order_id = str(resp.get("id", ""))
+                    trade["order_id"] = order_id
+                    trade["exchange_status"] = "filled"
+
                 print(f"[GridLive] ✓ {side.upper()} {total_contracts} kontrat @ ${price:.4f} "
                       f"seviyeler={grid_levels} order_id={order_id}")
-
-                # BUY sonrası pozisyon doğrulama (0.5s bekle + kontrol)
-                if side == "buy":
-                    await asyncio.sleep(0.5)
-                    try:
-                        positions = await ex.get_positions(ccxt_symbol)
-                        has_long = any(
-                            float(p.get("contracts", 0)) > 0 and p.get("side") == "long"
-                            for p in positions
-                        )
-                        if has_long:
-                            pos = next(p for p in positions if p.get("side") == "long")
-                            trade["verified"] = True
-                            trade["position_contracts"] = float(pos.get("contracts", 0))
-                            trade["position_margin"] = float(pos.get("initialMargin", 0))
-                            print(f"[GridLive] ✓ Pozisyon doğrulandı: {pos.get('contracts')} kontrat, "
-                                  f"margin=${pos.get('initialMargin', 0)}")
-                        else:
-                            trade["verified"] = False
-                            trade["warning"] = "BUY emri doldu ama borsada pozisyon bulunamadı!"
-                            print(f"[GridLive] ⚠ BUY emri doldu ama pozisyon YOK! Likidasyon olmuş olabilir.")
-                    except Exception as ve:
-                        print(f"[GridLive] Pozisyon doğrulama hatası: {ve}")
             except Exception as e:
                 trade["exchange_status"] = "error"
                 trade["error"] = str(e)
