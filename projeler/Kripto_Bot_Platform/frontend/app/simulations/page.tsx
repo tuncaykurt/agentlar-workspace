@@ -225,37 +225,6 @@ export default function SimulationsPage() {
                 ${(portfolio.exchange_balance.total || 0).toFixed(2)}
               </div>
             </div>
-            <div className="col-span-2 md:col-span-2">
-              <div className="text-[10px] text-indigo-400/70 uppercase tracking-wider">Simulasyon Islem Buyuklugu</div>
-              <div className="flex items-center gap-2 mt-1">
-                <select
-                  value={settings.trade_size_mode || "fixed"}
-                  onChange={e => toggleSetting("trade_size_mode", e.target.value)}
-                  className="bg-slate-900 border border-indigo-500/30 rounded px-2 py-1 text-xs text-white"
-                >
-                  <option value="fixed">Sabit ($)</option>
-                  <option value="percent">Sanal Bakiye %</option>
-                  <option value="exchange_pct">MEXC Bakiye %</option>
-                </select>
-                <input
-                  type="number"
-                  value={settings.trade_size_value ?? (settings.trade_size_mode === "exchange_pct" || settings.trade_size_mode === "percent" ? 10 : 100)}
-                  min={1}
-                  max={settings.trade_size_mode === "exchange_pct" || settings.trade_size_mode === "percent" ? 100 : 100000}
-                  step={settings.trade_size_mode === "exchange_pct" || settings.trade_size_mode === "percent" ? 1 : 10}
-                  onChange={e => toggleSetting("trade_size_value", Number(e.target.value))}
-                  className="w-16 bg-slate-900 border border-indigo-500/30 rounded px-2 py-1 text-xs text-white"
-                />
-                <span className="text-[11px] text-indigo-300/80 font-medium">
-                  {settings.trade_size_mode === "fixed" || !settings.trade_size_mode
-                    ? `= Her islem $${settings.trade_size_value || 100} margin`
-                    : settings.trade_size_mode === "percent"
-                    ? `= Sanal bakiyenin %${settings.trade_size_value || 10}'i ($${((portfolio.balance || 1000) * (settings.trade_size_value || 10) / 100).toFixed(0)})`
-                    : `= MEXC bakiyenin %${settings.trade_size_value || 10}'i ($${((portfolio.exchange_balance?.free || 0) * (settings.trade_size_value || 10) / 100).toFixed(0)})`
-                  }
-                </span>
-              </div>
-            </div>
           </div>
         ) : (
           <div className="flex items-center justify-between bg-slate-900/40 rounded-lg p-4">
@@ -278,77 +247,33 @@ export default function SimulationsPage() {
         )}
       </div>
 
-      {/* Borsa Portfolyosu (Sanal Portfolyo Tarzında) */}
-      {portfolio.exchange_balance != null && (
-        <div className="bg-gradient-to-r from-indigo-900/40 to-blue-900/10 border border-indigo-500/30 rounded-xl p-5 space-y-4 mt-4 mb-4">
-          <h3 className="text-sm font-medium text-indigo-300">Borsa Portfolyosu</h3>
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-            <div>
-              <div className="text-xs text-slate-500">Borsa Equity</div>
-              <div className="text-2xl font-bold text-white">
-                ${portfolio.exchange_balance.total?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Serbest Bakiye</div>
-              <div className="text-lg font-semibold text-white">
-                ${portfolio.exchange_balance.free?.toFixed(2)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Islemlerde</div>
-              <div className="text-lg font-semibold text-yellow-400">
-                ${portfolio.exchange_balance.used?.toFixed(2)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Tahmini ROI</div>
-              <div className={`text-lg font-bold ${(stats.total_pnl_usdt || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
-                {((stats.total_pnl_usdt || 0) > 0) ? "+" : ""}{((stats.total_pnl_usdt || 0) / Math.max(1, (portfolio.exchange_balance.total || 1) - (stats.total_pnl_usdt || 0)) * 100).toFixed(2)}%
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Toplam P&L</div>
-              <div className={`text-lg font-semibold ${(stats.total_pnl_usdt || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
-                {(stats.total_pnl_usdt || 0) > 0 ? "+" : ""}${(stats.total_pnl_usdt || 0).toFixed(2)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-slate-500">Max Drawdown</div>
-              <div className={`text-lg font-semibold ${(stats.max_drawdown || 0) > 10 ? "text-red-400" : (stats.max_drawdown || 0) > 5 ? "text-yellow-400" : "text-green-400"}`}>
-                -{(stats.max_drawdown || 0).toFixed(1)}%
-              </div>
-            </div>
-          </div>
-          {/* Equity bar */}
-          {(() => {
-            const borsaPnl = stats.total_pnl_usdt || 0;
-            const currentEquity = portfolio.exchange_balance.total || 0;
-            const initialBorsa = Math.max(1, currentEquity - borsaPnl);
-            const borsaRoi = (borsaPnl / initialBorsa) * 100;
-            return (
-              <div>
-                <div className="h-2 bg-slate-900/60 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${borsaRoi >= 0 ? "bg-indigo-500" : "bg-red-500"}`}
-                    style={{ width: `${Math.min(100, Math.max(5, (currentEquity / initialBorsa) * 50))}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
-                  <span>$0</span>
-                  <span>Baslangic Tahmini: ${initialBorsa.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-                  <span>${(initialBorsa * 2).toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-                </div>
-              </div>
-            )
-          })()}
-        </div>
-      )}
-
       {/* Sanal Portfolyo */}
       {portfolio.equity != null && settings.portfolio_enabled !== false && (
-        <div className="bg-gradient-to-r from-slate-800/80 to-slate-800/40 border border-slate-700/50 rounded-xl p-5 space-y-4">
-          <h3 className="text-sm font-medium text-slate-300">Sanal Portfolyo</h3>
+        <div className="bg-gradient-to-r from-slate-800/80 to-slate-800/40 border border-slate-700/50 rounded-xl p-5 space-y-4 mt-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h3 className="text-sm font-medium text-slate-300">Sanal Portfolyo</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider">İşlem Büyüklüğü:</span>
+              <select
+                value={settings.trade_size_mode || "fixed"}
+                onChange={e => toggleSetting("trade_size_mode", e.target.value)}
+                className="bg-slate-900 border border-slate-700/50 rounded px-2 py-1 text-xs text-white"
+              >
+                <option value="fixed">Sabit ($)</option>
+                <option value="percent">Sanal Bakiye %</option>
+                <option value="exchange_pct">MEXC Bakiye %</option>
+              </select>
+              <input
+                type="number"
+                value={settings.trade_size_value ?? (settings.trade_size_mode === "exchange_pct" || settings.trade_size_mode === "percent" ? 10 : 100)}
+                min={1}
+                max={settings.trade_size_mode === "exchange_pct" || settings.trade_size_mode === "percent" ? 100 : 100000}
+                step={settings.trade_size_mode === "exchange_pct" || settings.trade_size_mode === "percent" ? 1 : 10}
+                onChange={e => toggleSetting("trade_size_value", Number(e.target.value))}
+                className="w-16 bg-slate-900 border border-slate-700/50 rounded px-2 py-1 text-xs text-white"
+              />
+            </div>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div>
               <div className="text-xs text-slate-500">Sanal Equity</div>
@@ -357,7 +282,7 @@ export default function SimulationsPage() {
               </div>
             </div>
             <div>
-              <div className="text-xs text-slate-500">Kullanilabilir</div>
+              <div className="text-xs text-slate-500">Kullanılabilir</div>
               <div className="text-lg font-semibold text-white">
                 ${portfolio.balance?.toFixed(2)}
               </div>
