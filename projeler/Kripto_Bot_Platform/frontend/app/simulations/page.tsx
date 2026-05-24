@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState, useEffect } from "react"
 import useSWR from "swr"
 import { api } from "@/lib/api"
 
@@ -445,9 +445,9 @@ export default function SimulationsPage() {
         
         <div className="h-[300px] w-full bg-slate-800/80 border border-slate-700 rounded-lg flex flex-col relative z-10 overflow-hidden">
           {(() => {
-            const [hftData, setHftData] = React.useState({ price: 0, upper: 0, lower: 0 });
+            const [hftData, setHftData] = useState({ price: 0, upper: 0, lower: 0 });
             
-            React.useEffect(() => {
+            useEffect(() => {
               const handleTick = (e: any) => {
                 setHftData(e.detail);
               };
