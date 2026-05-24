@@ -857,7 +857,7 @@ export default function ProChart({
     }
     window.addEventListener("resize", onResize)
     return () => { window.removeEventListener("resize", onResize); chart.remove(); chartRef.current = null }
-  }, [data, inds, tp, sl, showUT, showLR])
+  }, [data, inds, tp, sl, gridLines, showUT, showLR])
 
   // ── Birleşik marker useEffect (UT Bot + strateji sinyalleri) ──
   useEffect(() => {
