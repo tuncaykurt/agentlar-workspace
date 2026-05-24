@@ -405,28 +405,72 @@ export default function SimulationsPage() {
             </h3>
             <p className="text-xs text-slate-400 mt-1">Dinamik ağ hareketlerini ve saniyelik scalping işlemlerini grafikte canlı izleyin.</p>
           </div>
-          <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-indigo-900/50 transition-all">
-            HFT Simülatörü Başlat
+          <button 
+            onClick={() => {
+              if ((window as any).hftDemoActive) {
+                clearInterval((window as any).hftDemoTimer);
+                (window as any).hftDemoActive = false;
+              } else {
+                (window as any).hftDemoActive = true;
+                let currentPrice = 65000;
+                let upperGrid = 65500;
+                let lowerGrid = 64500;
+                
+                (window as any).hftDemoTimer = setInterval(() => {
+                  // Rastgele fiyat hareketi
+                  const move = (Math.random() - 0.45) * 80;
+                  currentPrice += move;
+                  
+                  // Trailing Logic!
+                  if (currentPrice >= upperGrid) {
+                    const diff = currentPrice - upperGrid;
+                    upperGrid = currentPrice;
+                    lowerGrid = lowerGrid + diff;
+                  } else if (currentPrice <= lowerGrid) {
+                    const diff = lowerGrid - currentPrice;
+                    lowerGrid = currentPrice;
+                    upperGrid = upperGrid - diff;
+                  }
+                  
+                  // Component state'ini güncelle (Hack for demo via DOM event or global var, real impl will use state)
+                  const event = new CustomEvent('hft-tick', { detail: { currentPrice, upperGrid, lowerGrid } });
+                  window.dispatchEvent(event);
+                }, 500);
+              }
+            }}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-indigo-900/50 transition-all">
+            HFT Demo Başlat/Durdur
           </button>
         </div>
         
-        <div className="h-64 w-full bg-slate-800/50 border border-slate-700 rounded-lg flex flex-col items-center justify-center relative z-10 overflow-hidden">
-          <div className="flex flex-col items-center space-y-3 opacity-60 z-20">
-            <svg className="w-12 h-12 text-slate-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
-            </svg>
-            <span className="text-sm font-medium text-slate-300">TradingView Grid Chart Bağlanıyor...</span>
-            <span className="text-xs text-slate-500">HFT verileri bağlandığında saniyelik iğneler ve ağ dizilişi burada görünecek.</span>
-          </div>
-          
-          {/* Mock Grid Lines */}
-          <div className="absolute inset-0 pointer-events-none opacity-20 z-10 flex flex-col justify-between py-8 px-4">
-            <div className="w-full border-t border-red-500 border-dashed"></div>
-            <div className="w-full border-t border-red-500 border-dashed"></div>
-            <div className="w-full border-t-2 border-slate-300"></div>
-            <div className="w-full border-t border-green-500 border-dashed"></div>
-            <div className="w-full border-t border-green-500 border-dashed"></div>
-          </div>
+        <div className="h-[300px] w-full bg-slate-800/80 border border-slate-700 rounded-lg flex flex-col relative z-10 overflow-hidden">
+          {(() => {
+            const [hftData, setHftData] = React.useState({ price: 0, upper: 0, lower: 0 });
+            
+            React.useEffect(() => {
+              const handleTick = (e: any) => {
+                setHftData(e.detail);
+              };
+              window.addEventListener('hft-tick', handleTick);
+              return () => window.removeEventListener('hft-tick', handleTick);
+            }, []);
+
+            if (hftData.price === 0) {
+              return (
+                <div className="w-full h-full flex flex-col items-center justify-center opacity-60">
+                  <svg className="w-12 h-12 text-slate-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                  </svg>
+                  <span className="text-sm font-medium text-slate-300 mt-2">TradingView Bekliyor...</span>
+                  <span className="text-xs text-slate-500">Demoyu başlatarak ağ çizgilerinin fiyatla nasıl kaydığını izleyin.</span>
+                </div>
+              )
+            }
+
+            // HFTChart component dynamically loaded to prevent SSR errors
+            const HFTChartObj = require('../../components/HFTChart').default;
+            return <HFTChartObj currentPrice={hftData.price} upperGrid={hftData.upper} lowerGrid={hftData.lower} />;
+          })()}
         </div>
       </div>
 
