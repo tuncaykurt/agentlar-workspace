@@ -60,6 +60,16 @@ export default function HftPage() {
   const [isStopping, setIsStopping] = useState(false)
   const [isKilling, setIsKilling] = useState(false)
   const [killConfirm, setKillConfirm] = useState(false)
+  const [chartFullscreen, setChartFullscreen] = useState(false)
+
+  // ESC ile tam ekrandan cik
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && chartFullscreen) setChartFullscreen(false)
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [chartFullscreen])
 
   const symbol = hftSettings.symbol || "ETHUSDT"
   const spreadPct = hftSettings.spread_pct || 0.5
@@ -596,7 +606,47 @@ export default function HftPage() {
         )}
 
         {/* Grafik */}
-        <div className="h-[450px] w-full bg-[#020817] border border-slate-700/80 rounded-xl flex flex-col relative z-10 overflow-hidden shadow-inner">
+        <div className={`${
+          chartFullscreen
+            ? 'fixed inset-0 z-[9999] bg-[#020817] flex flex-col'
+            : 'h-[450px] w-full bg-[#020817] border border-slate-700/80 rounded-xl flex flex-col relative z-10 overflow-hidden shadow-inner'
+        }`}>
+          {/* Fullscreen baslik bari */}
+          {chartFullscreen && (
+            <div className="flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-700/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-white font-bold text-sm">{symbol}</span>
+                <span className="text-slate-400 text-xs">±{spreadPct}% · {gridCount} kademe · {leverage}x</span>
+                {livePrice > 0 && (
+                  <span className="text-white font-mono text-sm">${livePrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                )}
+                {simRunning && (
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${mc.badge}`}>{mc.label}</span>
+                )}
+              </div>
+              <button
+                onClick={() => setChartFullscreen(false)}
+                className="p-1.5 hover:bg-slate-700 rounded-lg transition-all text-slate-400 hover:text-white"
+                title="Tam ekrandan cik (Esc)"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+          {/* Fullscreen buton (normal modda) */}
+          {!chartFullscreen && (
+            <button
+              onClick={() => setChartFullscreen(true)}
+              className="absolute top-2 right-2 z-20 p-1.5 bg-slate-800/80 hover:bg-slate-700 border border-slate-600/50 rounded-lg transition-all text-slate-400 hover:text-white"
+              title="Tam ekran"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+              </svg>
+            </button>
+          )}
           {livePrice > 0 ? (
             <ProChart
               symbol={chartSymbol}
