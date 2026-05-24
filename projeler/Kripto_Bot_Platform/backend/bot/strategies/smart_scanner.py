@@ -359,6 +359,9 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
                    f"15m[{_t(m15.get('trend'))} R:{_v(m15.get('rsi'))}] "
                    f"4h[{_t(h4.get('trend'))} R:{_v(h4.get('rsi'))}]")
 
+        news_list = c.get("news", [])
+        news_str = " | Haberler: " + " / ".join(news_list) if news_list else ""
+
         coin_rows.append(
             f"  {c.get('base','?'):>8} | "
             f"${_v(c.get('price')):>12,.4f} | "
@@ -370,7 +373,7 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
             f"ADX:{_v(c.get('adx')):>5.1f} | "
             f"Vol:{_v(c.get('volume_ratio')):>4.1f}x | "
             f"MACD:{_v(c.get('macd_hist')):>+10.6f} | "
-            f"BB:[{_v(c.get('bb_lower')):>.2f}-{_v(c.get('bb_upper')):>.2f}]"
+            f"BB:[{_v(c.get('bb_lower')):>.2f}-{_v(c.get('bb_upper')):>.2f}]{news_str}"
         )
     coin_table = "\n".join(coin_rows)
 
@@ -516,8 +519,7 @@ Mevcut Açık Pozisyonlar: {active_str}
    - Funding Rate: Negatif = short kalabalık (long squeeze potansiyeli)
    - Funding Rate: Pozitif ve yüksek (>0.05%) = long kalabalık (short squeeze potansiyeli)
    - Fear & Greed: <25 = Aşırı korku → kontrarian alım fırsatı
-   - Fear & Greed: >75 = Aşırı açgözlülük → risk yüksek, dikkatli ol
-   - Funding + RSI birlikte değerlendir: negatif funding + oversold = güçlü long sinyal
+   - Haberler (Varsa): Olumlu gelişmeler (ortaklık, listeleme) hacimle destekleniyorsa LONG fırsatı. Kötü haberler varsa (hack, dava) grafiği iyi olsa bile pas geç.
 
 6. RİSK DEĞERLENDİRMESİ & KALDIRAC:
    - Kaldıraç ARALIGI: Minimum {min_lev}x — Maksimum {max_lev}x

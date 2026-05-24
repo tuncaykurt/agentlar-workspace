@@ -3074,6 +3074,32 @@ class BotEngine:
                 await asyncio.gather(*[_fetch_mtf(c) for c in ai_top])
                 # --------------------
 
+                # --- NEWS & SENTIMENT (CryptoPanic) ---
+                news_data = {}
+                cp_key = settings.CRYPTOPANIC_API_KEY
+                if cp_key and len(cp_key) > 5:
+                    print(f"[SmartScanner {bot_name}] CryptoPanic'ten haberler çekiliyor...")
+                    # Sadece top 5 coin için haber çekelim ki token limiti veya API limiti dolmasın
+                    top_coins = [c["base"] for c in ai_top[:5]]
+                    try:
+                        async with httpx.AsyncClient(timeout=8) as client:
+                            for coin_base in top_coins:
+                                url = f"https://cryptopanic.com/api/v1/posts/?auth_token={cp_key}&currencies={coin_base}&kind=news"
+                                r = await client.get(url)
+                                if r.status_code == 200:
+                                    posts = r.json().get("results", [])[:3] # Son 3 haber
+                                    if posts:
+                                        news_data[coin_base] = [p.get("title", "") for p in posts]
+                    except Exception as e:
+                        print(f"[SmartScanner {bot_name}] Haber çekim hatası: {e}")
+                else:
+                    print(f"[SmartScanner {bot_name}] CRYPTOPANIC_API_KEY bulunamadı, haber analizi atlanıyor.")
+                
+                # Haberleri coin datasına ekle
+                for c in ai_top:
+                    c["news"] = news_data.get(c["base"], [])
+                # -------------------------------------
+
                 leverage_range = (
                     int(params.get("min_leverage", 3)),
                     int(params.get("max_leverage", 75)),
