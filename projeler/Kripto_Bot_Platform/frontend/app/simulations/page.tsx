@@ -91,7 +91,30 @@ export default function SimulationsPage() {
             Bot acmadan AI secimlerini takip et — basarili ise botu aktif et
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 mt-4 md:mt-0">
+          <button
+            onClick={async () => {
+              if (!confirm("Sanal Bakiye ($1000) ile simülasyon başlatılacak. Emin misiniz?")) return;
+              try {
+                // Set trade size mode to fixed $100, enabled=true, reset portfolio to 1000
+                await api.post("/simulations/settings", { 
+                  trade_size_mode: "fixed", 
+                  trade_size_value: 100, 
+                  enabled: true 
+                });
+                await api.post("/simulations/portfolio/reset", { initial_balance: 1000 });
+                mutateSettings();
+                mutatePortfolio();
+                alert("Simülasyon Sanal Bakiye ($1000) moduyla başlatıldı!");
+              } catch (e) {
+                alert("Hata: " + String(e));
+              }
+            }}
+            className="px-3 py-1.5 bg-emerald-600/80 hover:bg-emerald-600 text-white text-xs rounded-lg transition-colors border border-emerald-500 whitespace-nowrap"
+          >
+            Sanal Bakiye ($1000) ile Başlat
+          </button>
+
           <button
             onClick={async () => {
               if (!confirm("Borsa bakiyesi modu ile yeni simülasyon başlatılacak. Emin misiniz?")) return;
@@ -110,7 +133,7 @@ export default function SimulationsPage() {
                 alert("Hata: " + String(e));
               }
             }}
-            className="px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs rounded-lg transition-colors border border-indigo-500"
+            className="px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs rounded-lg transition-colors border border-indigo-500 whitespace-nowrap"
           >
             Borsa Bakiyesi ile Baslat
           </button>
@@ -125,7 +148,7 @@ export default function SimulationsPage() {
                 alert("Hata: " + String(e));
               }
             }}
-            className="px-3 py-1.5 bg-red-600/80 hover:bg-red-600 text-white text-xs font-semibold rounded-lg transition-colors shadow-[0_0_15px_rgba(220,38,38,0.3)]"
+            className="px-3 py-1.5 bg-red-600/80 hover:bg-red-600 text-white text-xs font-semibold rounded-lg transition-colors shadow-[0_0_15px_rgba(220,38,38,0.3)] whitespace-nowrap"
           >
             Gercek Bota Kopyala & Baslat
           </button>
@@ -133,29 +156,31 @@ export default function SimulationsPage() {
           <button
             onClick={triggerSim}
             disabled={triggering}
-            className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-600 text-white text-xs rounded-lg transition-colors disabled:opacity-50 ml-2"
+            className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-600 text-white text-xs rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
           >
             {triggering ? "Taraniyor..." : "Manuel Tara"}
           </button>
           
-          <div className="w-px h-6 bg-slate-700 mx-1"></div>
+          <div className="w-px h-6 bg-slate-700 hidden md:block mx-1"></div>
           
-          <span className="text-xs text-slate-400">Simulasyon</span>
-          <button
-            onClick={() => toggleSetting("enabled", !settings.enabled)}
-            className={`w-12 h-6 rounded-full transition-colors relative ${settings.enabled ? "bg-green-500" : "bg-slate-700"}`}
-          >
-            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${settings.enabled ? "left-6" : "left-0.5"}`} />
-          </button>
-          <span className={`text-xs font-medium ${settings.enabled ? "text-green-400" : "text-slate-500"}`}>
-            {settings.enabled ? "Aktif" : "Kapali"}
-          </span>
+          <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700">
+            <span className="text-xs text-slate-400">Simulasyon</span>
+            <button
+              onClick={() => toggleSetting("enabled", !settings.enabled)}
+              className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${settings.enabled ? "bg-green-500" : "bg-slate-700"}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${settings.enabled ? "left-6" : "left-0.5"}`} />
+            </button>
+            <span className={`text-xs font-medium ${settings.enabled ? "text-green-400" : "text-slate-500"}`}>
+              {settings.enabled ? "Aktif" : "Kapali"}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* MEXC Borsa Bakiyesi — Ayrı Kart */}
       <div className="bg-gradient-to-r from-indigo-900/30 to-blue-900/20 border border-indigo-500/30 rounded-xl p-5 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <span className="text-lg">🏦</span>
             <h3 className="text-sm font-semibold text-indigo-300">MEXC Borsa Bakiyesi</h3>
@@ -383,7 +408,7 @@ export default function SimulationsPage() {
                       <div className={`text-lg font-bold ${(d.profit_factor || 0) >= 1.5 ? "text-green-400" : (d.profit_factor || 0) >= 1 ? "text-yellow-400" : "text-red-400"}`}>
                         {(d.profit_factor || 0).toFixed(1)}x
                       </div>
-                      <div className="text-[9px] text-slate-500">PF</div>
+                      <div className="text-[9px] text-slate-500">Kâr Faktörü</div>
                     </div>
                   </div>
 
@@ -835,7 +860,7 @@ export default function SimulationsPage() {
                     <span className={stats.total_pnl_usdt >= 0 ? "text-green-400" : "text-red-400"}>${stats.total_pnl_usdt?.toFixed(0)}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500">PF:</span>{" "}
+                    <span className="text-slate-500">Kâr Faktörü:</span>{" "}
                     <span className={stats.profit_factor >= 1.5 ? "text-green-400" : "text-yellow-400"}>{stats.profit_factor?.toFixed(2)}</span>
                   </div>
                   <div>
