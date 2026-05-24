@@ -3100,6 +3100,42 @@ class BotEngine:
                     c["news"] = news_data.get(c["base"], [])
                 # -------------------------------------
 
+                # --- COINALYZE L/S RATIO (Coinglass Alternatifi) ---
+                coinalyze_key = getattr(settings, "COINALYZE_API_KEY", "d81902f0-8b0d-42ed-9c4d-36e8f31de1f8")
+                ls_data = {}
+                if coinalyze_key:
+                    import time
+                    print(f"[SmartScanner {bot_name}] Coinalyze'dan Long/Short verileri çekiliyor...")
+                    try:
+                        # Binance formatında sembolleri oluştur (örn: BTCUSDT_PERP.A)
+                        coinalyze_symbols = [f"{c['base']}USDT_PERP.A" for c in ai_top]
+                        symbols_str = ",".join(coinalyze_symbols)
+                        now = int(time.time())
+                        from_time = now - 3600 # Son 1 saat
+                        
+                        async with httpx.AsyncClient(timeout=8) as client:
+                            url = f"https://api.coinalyze.net/v1/long-short-ratio-history?symbols={symbols_str}&interval=1hour&from={from_time}&to={now}"
+                            r = await client.get(url, headers={"api_key": coinalyze_key})
+                            if r.status_code == 200:
+                                ls_results = r.json()
+                                for item in ls_results:
+                                    sym = item.get("symbol", "").replace("USDT_PERP.A", "")
+                                    hist = item.get("history", [])
+                                    if hist:
+                                        latest = hist[-1]
+                                        ls_data[sym] = {
+                                            "ratio": latest.get("r"),
+                                            "long_pct": latest.get("l"),
+                                            "short_pct": latest.get("s")
+                                        }
+                    except Exception as e:
+                        print(f"[SmartScanner {bot_name}] Coinalyze çekim hatası: {e}")
+                
+                # L/S verilerini coin'e ekle
+                for c in ai_top:
+                    c["ls_ratio"] = ls_data.get(c["base"])
+                # --------------------------------------------------
+
                 leverage_range = (
                     int(params.get("min_leverage", 3)),
                     int(params.get("max_leverage", 75)),
