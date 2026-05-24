@@ -49,13 +49,16 @@ async def run_hft_engine():
 
             # 1. Her 10 saniyede bir veritabanından güncel HFT bot listesini çek
             if now - last_db_check > 10:
-                async with async_session() as db:
-                    res = await db.execute(sql_text(
-                        "SELECT id, name, symbol, strategy, params, status, paper_mode "
-                        "FROM bots WHERE status = 'running' AND strategy IN ('grid_hft', 'dual_hedge_hft')"
-                    ))
-                    active_hft_bots = res.mappings().all()
-                last_db_check = now
+                last_db_check = now  # Hata olsa bile tekrar tekrar sorgulamayı önle
+                try:
+                    async with async_session() as db:
+                        res = await db.execute(sql_text(
+                            "SELECT id, name, symbol, strategy, params, status::text, paper_mode "
+                            "FROM bots WHERE status::text = 'running' AND strategy IN ('grid_hft', 'dual_hedge_hft')"
+                        ))
+                        active_hft_bots = res.mappings().all()
+                except Exception as db_err:
+                    print(f"[HFT Engine] DB sorgu hatası (10s sonra tekrar): {db_err}")
 
             # Grid Live Engine çalışıyor mu kontrol et
             grid_running = await redis.get("grid_live:running")
