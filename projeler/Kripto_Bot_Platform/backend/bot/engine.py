@@ -3037,7 +3037,8 @@ class BotEngine:
                     return s
 
                 # Açık pozisyondakileri çıkar, ilgi skoruna göre sırala
-                ai_candidates = [c for c in coins if c["base"] not in active_positions]
+                # NOT: active_positions bazen eksik kalabilir, borsadan dönen open_symbols'ü kullanmak en güvenlisidir.
+                ai_candidates = [c for c in coins if c["base"] not in open_symbols]
                 ai_candidates.sort(key=_interest_score, reverse=True)
                 ai_top = ai_candidates[:20]  # En ilgi çekici 20 coin (token limiti için)
 

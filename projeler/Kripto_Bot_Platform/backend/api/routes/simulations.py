@@ -609,7 +609,7 @@ async def scenario_analysis():
         }
         return {
             "scenario_all": {**empty, "label": "Tum Sinyallere Girseydik", "description": "Gelen tum sinyallere islem acilsaydi"},
-            "scenario_portfolio": {**empty, "label": "Borsa Bakiyesiyle", "description": f"${real_balance:.0f} bakiye, max {max_open} esanli islem"},
+            "scenario_portfolio": {**empty, "label": "Borsa Bakiyesiyle", "description": f"${real_balance:.0f} bakiye, max {max_open} eşzamanlı işlem"},
             "scenario_high_conf": {**empty, "label": "Sadece Yuksek Guvenli", "description": "AI guven skoru >80 olan sinyaller"},
             "exchange_balance": real_balance,
             "margin_per_trade": margin_per_trade,
@@ -661,7 +661,7 @@ async def scenario_analysis():
     # Senaryo 2: Borsa bakiyesiyle max N eşanlı işlem
     s2 = _calc_scenario(trades, sim_margin_override=margin_per_trade)
     s2["label"] = "Borsa Bakiyesiyle"
-    s2["description"] = f"${real_balance:.0f} bakiye, max {max_open} esanli islem, her biri ${margin_per_trade:.0f} margin"
+    s2["description"] = f"${real_balance:.0f} bakiye, max {max_open} eşzamanlı işlem, her biri ${margin_per_trade:.0f} margin"
 
     # Senaryo 3: Sadece yüksek güvenli (confidence > 80)
     high_conf = [t for t in trades if (t.get("confidence") or 0) >= 80]
