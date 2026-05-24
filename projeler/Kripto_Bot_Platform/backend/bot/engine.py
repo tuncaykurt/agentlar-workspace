@@ -3145,6 +3145,15 @@ class BotEngine:
                     c["ls_ratio"] = ls_data.get(c["base"])
                 # --------------------------------------------------
 
+                # --- LİKİDASYON VERİLERİ ---
+                from services.liquidation_collector import get_liquidation_stats
+                print(f"[SmartScanner {bot_name}] Likidasyon (Binance WS) verileri çekiliyor...")
+                liq_tasks = [get_liquidation_stats(c["base"]) for c in ai_top]
+                liq_results = await asyncio.gather(*liq_tasks)
+                for i, c in enumerate(ai_top):
+                    c["liquidations"] = liq_results[i]
+                # ---------------------------
+
                 leverage_range = (
                     int(params.get("min_leverage", 3)),
                     int(params.get("max_leverage", 75)),

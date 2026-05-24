@@ -365,6 +365,10 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
         ls = c.get("ls_ratio")
         ls_str = f"L/S:{ls.get('long_pct')}%-{ls.get('short_pct')}%" if ls else "L/S:?"
 
+        liq = c.get("liquidations", {})
+        liq_total = liq.get('total_usd', 0) / 1000
+        liq_str = f"Liq:${liq_total:.1f}K({liq.get('signal', '?')})" if liq_total > 0 else "Liq:$0"
+
         coin_rows.append(
             f"  {c.get('base','?'):>8} | "
             f"${_v(c.get('price')):>12,.4f} | "
@@ -373,6 +377,7 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
             f"1h RSI:{_v(c.get('rsi_14')):>5.1f} | "
             f"MTF: {mtf_str} | "
             f"{ls_str} | "
+            f"{liq_str} | "
             f"ATR%:{_v(c.get('atr_pct')):>6.3f} | "
             f"ADX:{_v(c.get('adx')):>5.1f} | "
             f"Vol:{_v(c.get('volume_ratio')):>4.1f}x | "
@@ -484,7 +489,7 @@ Mevcut Açık Pozisyonlar: {active_str}
 {perf_section}
 ═══════════════════════════════════════════════════════════════
                     TÜM COİN VERİLERİ
-     Coin |        Fiyat |   24h%  | 1h Trend | 1h RSI | MTF: 5m, 15m, 4h (Trend+RSI) | L/S Oranı |  ATR%  |  ADX  | Hacim | MACD Hist | Bollinger Bandı
+     Coin |        Fiyat |   24h%  | 1h Trend | 1h RSI | MTF: 5m, 15m, 4h (Trend+RSI) | L/S Oranı | Likidasyon |  ATR%  |  ADX  | Hacim | MACD Hist | Bollinger Bandı
 {coin_table}
 
 ═══════════════════════════════════════════════════════════════
@@ -519,10 +524,11 @@ Mevcut Açık Pozisyonlar: {active_str}
    - Farklı yönde giden coinler → Coin-spesifik fırsat
    - Sektör bazlı hareket: DeFi, Layer1, Meme coinler ayrı analiz et
 
-5. FUNDING RATE, L/S RATIO & SENTİMENT ANALİZİ:
+5. FUNDING RATE, L/S RATIO, LİKİDASYON & SENTİMENT ANALİZİ:
    - Funding Rate: Negatif = short kalabalık (long squeeze potansiyeli)
    - Funding Rate: Pozitif ve yüksek (>0.05%) = long kalabalık (short squeeze potansiyeli)
    - Long/Short Oranı (L/S): Eğer Long %65'in üzerindeyse piyasa aşırı iyimserdir, balinalar onları likide etmek için aşağı vurabilir (Short fırsatı). Short %65'in üzerindeyse tam tersi (Long fırsatı).
+   - Likidasyon (Liq): 'shorts_liquidated' sinyali varsa büyük bir short pozisyonu patlatılmış demektir, fiyat fırlayabilir (Short Squeeze). 'longs_liquidated' varsa tam tersi.
    - Fear & Greed: <25 = Aşırı korku → kontrarian alım fırsatı
    - Haberler (Varsa): Olumlu gelişmeler (ortaklık, listeleme) hacimle destekleniyorsa LONG fırsatı. Kötü haberler varsa (hack, dava) grafiği iyi olsa bile pas geç.
 
