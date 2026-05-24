@@ -213,21 +213,21 @@ export default function BotCard({
     return () => { try { ws?.close() } catch {} }
   }, [bot.id, running])
 
-  // Canlı işlemleri periyodik çek
-  useEffect(() => {
-    if (!showLiveTrades || !running) return
-    let cancelled = false
-    const fetchLive = () => {
-      setLiveTradesLoading(true)
-      api.get(`/bots/${bot.id}/live-trades`)
-        .then((data: any) => { if (!cancelled) setLiveTrades(data) })
-        .catch(() => {})
-        .finally(() => { if (!cancelled) setLiveTradesLoading(false) })
-    }
-    fetchLive()
-    const iv = setInterval(fetchLive, 10000)
-    return () => { cancelled = true; clearInterval(iv) }
-  }, [bot.id, showLiveTrades, running])
+    // Canlı işlemleri periyodik çek
+    useEffect(() => {
+      if (!showLiveTrades || !running) return
+      let cancelled = false
+      const fetchLive = () => {
+        setLiveTradesLoading(true)
+        api.get(`/bots/${bot.id}/live-trades`)
+          .then((data: any) => { if (!cancelled) setLiveTrades(data) })
+          .catch(() => {})
+          .finally(() => { if (!cancelled) setLiveTradesLoading(false) })
+      }
+      fetchLive()
+      const iv = setInterval(fetchLive, 2000)
+      return () => { cancelled = true; clearInterval(iv) }
+    }, [bot.id, showLiveTrades, running])
 
   // Borsa bakiyesini çek (mount'ta bir kez)
   useEffect(() => {
@@ -832,62 +832,104 @@ export default function BotCard({
               )}
 
               {/* Açık Pozisyonlar */}
-              {liveTrades?.open?.map((pos: any, i: number) => {
-                const isLong = pos.direction === "long"
-                const coinBase = pos.coin?.replace("STOCK", "") || ""
-                const coinIconUrl = `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/${coinBase.toLowerCase()}.png`
-                return (
-                  <div key={i} className={clsx("bg-slate-800/60 border rounded-xl p-3", pos.pnl_pct >= 0 ? "border-green-500/20" : "border-red-500/20")}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="relative w-8 h-8 shrink-0">
-                          <img src={coinIconUrl} alt={coinBase} className="w-8 h-8 rounded-full"
-                            onError={(e) => { const t = e.target as HTMLImageElement; t.style.display = "none"; t.parentElement!.innerHTML = `<div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300">${coinBase.slice(0,3)}</div>` }} />
-                          <div className={clsx("absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px]", isLong ? "bg-green-500" : "bg-red-500")}>
-                            {isLong ? "↑" : "↓"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-white text-sm">{pos.coin}</span>
-                            <span className={clsx("text-[10px] font-medium px-1 py-0.5 rounded", isLong ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400")}>{pos.direction.toUpperCase()}</span>
-                            <span className="text-[10px] text-slate-500 bg-slate-900/50 px-1 py-0.5 rounded">{pos.leverage}x</span>
-                            <span className="text-[10px] text-slate-600">{pos.margin_type}</span>
-                            {pos.confidence && <span className={clsx("text-[10px] px-1 py-0.5 rounded", pos.confidence >= 75 ? "bg-green-500/15 text-green-400" : "bg-blue-500/15 text-blue-400")}>%{pos.confidence}</span>}
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">
-                            Giris: ${pos.entry_price?.toFixed(4)} | Mark: ${pos.mark_price?.toFixed(4)}
-                          </div>
-                          {pos.tp_price && pos.sl_price && (
-                            <div className="text-[10px] text-slate-500">
-                              TP: ${pos.tp_price.toFixed(4)} ({pos.tp_pct}%) | SL: ${pos.sl_price.toFixed(4)} ({pos.sl_pct}%)
+              {(() => {
+                if (!liveTrades?.open || liveTrades.open.length === 0) return null;
+
+                const renderPos = (pos: any, isSingle = true) => {
+                  const isLong = pos.direction === "long"
+                  const coinBase = pos.coin?.replace("STOCK", "") || ""
+                  const coinIconUrl = `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/${coinBase.toLowerCase()}.png`
+                  
+                  return (
+                    <div key={`${pos.coin}-${pos.direction}`} className={clsx("bg-slate-800/60 border rounded-xl p-3", isSingle ? "mb-2" : "flex-1", pos.pnl_pct >= 0 ? "border-green-500/20" : "border-red-500/20")}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2.5">
+                          {isSingle && (
+                            <div className="relative w-8 h-8 shrink-0">
+                              <img src={coinIconUrl} alt={coinBase} className="w-8 h-8 rounded-full"
+                                onError={(e) => { const t = e.target as HTMLImageElement; t.style.display = "none"; t.parentElement!.innerHTML = `<div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300">${coinBase.slice(0,3)}</div>` }} />
+                              <div className={clsx("absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px]", isLong ? "bg-green-500" : "bg-red-500")}>
+                                {isLong ? "↑" : "↓"}
+                              </div>
                             </div>
                           )}
-                          <div className="text-[10px] text-slate-500">
-                            Margin: ${pos.margin_usdt} | Pozisyon: ${pos.notional?.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isSingle && <span className="font-bold text-white text-sm">{pos.coin}</span>}
+                              <span className={clsx("text-[10px] font-medium px-1 py-0.5 rounded", isLong ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400")}>{pos.direction.toUpperCase()}</span>
+                              <span className="text-[10px] text-slate-500 bg-slate-900/50 px-1 py-0.5 rounded">{pos.leverage}x</span>
+                              <span className="text-[10px] text-slate-600">{pos.margin_type}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Giris: ${pos.entry_price?.toFixed(4)} | Mark: ${pos.mark_price?.toFixed(4)}
+                            </div>
+                            {pos.tp_price && pos.sl_price && (
+                              <div className="text-[10px] text-slate-500">
+                                TP: ${pos.tp_price.toFixed(4)} | SL: ${pos.sl_price.toFixed(4)}
+                              </div>
+                            )}
+                            <div className="text-[10px] text-slate-500">
+                              Mgn: ${pos.margin_usdt} | Poz: ${pos.notional?.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                            </div>
                           </div>
-                          {pos.reason && <div className="text-[10px] text-purple-400/80 mt-0.5 truncate max-w-[260px]">{pos.reason}</div>}
                         </div>
-                      </div>
-                      <div className="text-right shrink-0 ml-2 min-w-[80px]">
-                        <div className={clsx("text-lg font-bold", pos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
-                          {pos.pnl_pct > 0 ? "+" : ""}{pos.pnl_pct.toFixed(2)}%
+                        <div className="text-right shrink-0 ml-2 min-w-[60px]">
+                          <div className={clsx("text-lg font-bold", pos.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                            {pos.pnl_pct > 0 ? "+" : ""}{pos.pnl_pct.toFixed(2)}%
+                          </div>
+                          <div className={clsx("text-xs", pos.unrealized_pnl >= 0 ? "text-green-500" : "text-red-500")}>
+                            {pos.unrealized_pnl > 0 ? "+" : ""}${pos.unrealized_pnl.toFixed(2)}
+                          </div>
+                          {pos.liquidation_price > 0 && (
+                            <div className="text-[9px] text-red-400/60 mt-0.5">Liq: ${pos.liquidation_price.toFixed(2)}</div>
+                          )}
                         </div>
-                        <div className={clsx("text-xs", pos.unrealized_pnl >= 0 ? "text-green-500" : "text-red-500")}>
-                          {pos.unrealized_pnl > 0 ? "+" : ""}${pos.unrealized_pnl.toFixed(2)}
-                        </div>
-                        {pos.liquidation_price > 0 && (
-                          <div className="text-[9px] text-red-400/60 mt-0.5">Liq: ${pos.liquidation_price.toFixed(2)}</div>
-                        )}
-                        {pos.opened_at && (() => {
-                          const mins = Math.floor((Date.now() - new Date(pos.opened_at).getTime()) / 60000)
-                          return <div className="text-[9px] text-slate-500 mt-0.5">{mins < 60 ? `${mins}dk` : mins < 1440 ? `${Math.floor(mins/60)}sa ${mins%60}dk` : `${Math.floor(mins/1440)}g`}</div>
-                        })()}
                       </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                }
+
+                if (!isHedge) {
+                  return liveTrades.open.map((pos: any) => renderPos(pos, true))
+                }
+
+                const groups: Record<string, any[]> = {}
+                liveTrades.open.forEach((pos: any) => {
+                  if (!groups[pos.coin]) groups[pos.coin] = []
+                  groups[pos.coin].push(pos)
+                })
+
+                return Object.entries(groups).map(([coin, positions], idx) => {
+                  if (positions.length === 1) return renderPos(positions[0], true)
+                  
+                  const p1 = positions[0], p2 = positions[1]
+                  const netUsdt = (p1.unrealized_pnl || 0) + (p2.unrealized_pnl || 0)
+                  const coinBase = coin.replace("STOCK", "")
+                  const coinIconUrl = `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/${coinBase.toLowerCase()}.png`
+                  
+                  return (
+                    <div key={idx} className="bg-slate-900/40 border border-slate-700/50 rounded-xl p-3 mb-2 space-y-2">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-700/50">
+                        <div className="flex items-center gap-2">
+                          <img src={coinIconUrl} alt={coinBase} className="w-6 h-6 rounded-full" onError={(e) => { (e.target as any).style.display = "none" }} />
+                          <span className="font-bold text-white text-sm">{coin}</span>
+                          <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">HEDGE DÖNGÜSÜ</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-500 mr-2">Net PnL</span>
+                          <span className={clsx("text-sm font-bold", netUsdt >= 0 ? "text-green-400" : "text-red-400")}>
+                            {netUsdt >= 0 ? "+" : ""}${netUsdt.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col md:flex-row gap-2">
+                        {renderPos(p1, false)}
+                        {renderPos(p2, false)}
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
 
               {liveTrades?.open?.length === 0 && !liveTradesLoading && (
                 <div className="text-center text-slate-500 text-xs py-3">Acik pozisyon yok</div>

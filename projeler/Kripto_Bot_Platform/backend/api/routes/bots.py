@@ -1868,9 +1868,30 @@ async def get_live_trades(bot_id: int):
             for pp in parsed_positions:
                 mark = mark_prices.get(pp["mexc_sym"]) or pp["entry"]
                 notional = pp["hold_vol"] * mark
+                
+                # --- CCXT Market verisinden Contract Size çek ---
+                contract_size = 1.0
+                try:
+                    if engine and hasattr(engine, "exchange") and engine.exchange.exchange.markets:
+                        mkt = engine.exchange.exchange.markets.get(pp["ccxt_sym"])
+                        if mkt and "contractSize" in mkt:
+                            contract_size = float(mkt["contractSize"])
+                except Exception:
+                    pass
+                
+                # Gerçek Notional (dolar büyüklüğü)
+                real_notional = pp["hold_vol"] * contract_size * mark
+                
+                if pp["unrealized_pnl"] == 0 and mark > 0 and pp["entry"] > 0:
+                    pos_val_coins = pp["hold_vol"] * contract_size
+                    if pp["side_str"] == "long":
+                        pp["unrealized_pnl"] = pos_val_coins * (mark - pp["entry"])
+                    else:
+                        pp["unrealized_pnl"] = pos_val_coins * (pp["entry"] - mark)
+
                 margin_val = pp["margin_val"]
                 if margin_val <= 0:
-                    margin_val = notional / pp["lev"] if pp["lev"] > 0 else 0
+                    margin_val = real_notional / pp["lev"] if pp["lev"] > 0 else 0
                 pnl_pct = (pp["unrealized_pnl"] / margin_val * 100) if margin_val > 0 else 0
                 exchange_positions.append({
                     "coin": pp["base"],
@@ -1881,7 +1902,7 @@ async def get_live_trades(bot_id: int):
                     "leverage": pp["lev"],
                     "margin_type": pp["margin_type"],
                     "size": pp["hold_vol"],
-                    "notional": round(abs(notional), 2),
+                    "notional": round(abs(real_notional), 2),
                     "margin_usdt": round(margin_val, 2),
                     "unrealized_pnl": round(pp["unrealized_pnl"], 2),
                     "pnl_pct": round(pnl_pct, 2),
