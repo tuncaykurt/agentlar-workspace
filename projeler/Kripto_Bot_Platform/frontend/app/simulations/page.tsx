@@ -329,6 +329,107 @@ export default function SimulationsPage() {
         </div>
       )}
 
+      {/* Borsa Hesap Portfolyosu */}
+      {portfolio.exchange_balance != null && (
+        <div className="bg-gradient-to-r from-indigo-900/40 to-blue-900/10 border border-indigo-500/30 rounded-xl p-5 space-y-4 mt-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h3 className="text-sm font-medium text-indigo-300">Borsa Hesap Portfolyosu</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-indigo-400 uppercase tracking-wider">İşlem Yüzdesi:</span>
+              <input
+                type="number"
+                defaultValue={10}
+                min={1} max={100}
+                className="w-16 bg-slate-900 border border-indigo-500/30 rounded px-2 py-1 text-xs text-white"
+              />
+              <span className="text-[10px] text-indigo-400 uppercase tracking-wider ml-2">Max İşlem:</span>
+              <input
+                type="number"
+                defaultValue={3}
+                min={1} max={10}
+                className="w-16 bg-slate-900 border border-indigo-500/30 rounded px-2 py-1 text-xs text-white"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <div>
+              <div className="text-xs text-slate-500">Borsa Equity</div>
+              <div className="text-2xl font-bold text-white">
+                ${portfolio.exchange_balance.total?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Serbest Bakiye</div>
+              <div className="text-lg font-semibold text-white">
+                ${portfolio.exchange_balance.free?.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">İşlemlerde</div>
+              <div className="text-lg font-semibold text-yellow-400">
+                ${portfolio.exchange_balance.used?.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Borsa ROI</div>
+              <div className="text-lg font-bold text-slate-400">
+                Veri Bekleniyor...
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Borsa P&L</div>
+              <div className="text-lg font-semibold text-slate-400">
+                Veri Bekleniyor...
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Max Drawdown</div>
+              <div className="text-lg font-semibold text-slate-400">
+                -0.0%
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HFT Grid Canlı Simülasyon Chart */}
+      <div className="bg-gradient-to-br from-slate-900 to-black border border-indigo-500/40 rounded-xl p-5 space-y-4 mt-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-10">
+          <svg className="w-32 h-32 text-indigo-400" fill="currentColor" viewBox="0 0 24 24"><path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
+        </div>
+        <div className="flex items-center justify-between relative z-10">
+          <div>
+            <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              HFT Dinamik Ağ (Trailing Grid) İzleme
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Dinamik ağ hareketlerini ve saniyelik scalping işlemlerini grafikte canlı izleyin.</p>
+          </div>
+          <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-lg shadow-indigo-900/50 transition-all">
+            HFT Simülatörü Başlat
+          </button>
+        </div>
+        
+        <div className="h-64 w-full bg-slate-800/50 border border-slate-700 rounded-lg flex flex-col items-center justify-center relative z-10 overflow-hidden">
+          <div className="flex flex-col items-center space-y-3 opacity-60 z-20">
+            <svg className="w-12 h-12 text-slate-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+            </svg>
+            <span className="text-sm font-medium text-slate-300">TradingView Grid Chart Bağlanıyor...</span>
+            <span className="text-xs text-slate-500">HFT verileri bağlandığında saniyelik iğneler ve ağ dizilişi burada görünecek.</span>
+          </div>
+          
+          {/* Mock Grid Lines */}
+          <div className="absolute inset-0 pointer-events-none opacity-20 z-10 flex flex-col justify-between py-8 px-4">
+            <div className="w-full border-t border-red-500 border-dashed"></div>
+            <div className="w-full border-t border-red-500 border-dashed"></div>
+            <div className="w-full border-t-2 border-slate-300"></div>
+            <div className="w-full border-t border-green-500 border-dashed"></div>
+            <div className="w-full border-t border-green-500 border-dashed"></div>
+          </div>
+        </div>
+      </div>
+
       {/* Senaryo Kartlari — 3 farkli bakis acisi */}
       {scenarios.scenario_all && (
         <div className="space-y-3">
