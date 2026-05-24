@@ -369,6 +369,8 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
         liq_total = liq.get('total_usd', 0) / 1000
         liq_str = f"Liq:${liq_total:.1f}K({liq.get('signal', '?')})" if liq_total > 0 else "Liq:$0"
 
+        max_lev = c.get("max_leverage", "?")
+
         coin_rows.append(
             f"  {c.get('base','?'):>8} | "
             f"${_v(c.get('price')):>12,.4f} | "
@@ -378,6 +380,7 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
             f"MTF: {mtf_str} | "
             f"{ls_str} | "
             f"{liq_str} | "
+            f"MaxLev:{max_lev}x | "
             f"ATR%:{_v(c.get('atr_pct')):>6.3f} | "
             f"ADX:{_v(c.get('adx')):>5.1f} | "
             f"Vol:{_v(c.get('volume_ratio')):>4.1f}x | "
@@ -489,12 +492,13 @@ Mevcut Açık Pozisyonlar: {active_str}
 {perf_section}
 ═══════════════════════════════════════════════════════════════
                     TÜM COİN VERİLERİ
-     Coin |        Fiyat |   24h%  | 1h Trend | 1h RSI | MTF: 5m, 15m, 4h (Trend+RSI) | L/S Oranı | Likidasyon |  ATR%  |  ADX  | Hacim | MACD Hist | Bollinger Bandı
+     Coin |        Fiyat |   24h%  | 1h Trend | 1h RSI | MTF: 5m, 15m, 4h (Trend+RSI) | L/S Oranı | Likidasyon | MaxLev |  ATR%  |  ADX  | Hacim | MACD Hist | Bollinger Bandı
 {coin_table}
 
 ═══════════════════════════════════════════════════════════════
               ANALİZ ÇERÇEVEN (BUNLARIN HEPSİNİ KULLAN)
 ═══════════════════════════════════════════════════════════════
+* NOT: Kullanıcının belirlediği izin verilen kaldıraç aralığı: {leverage_range[0]}x - {leverage_range[1]}x arasıdır. Kararlarını bu aralık içinde kalacak şekilde ver. Tablodaki 'MaxLev', borsanın izin verdiği teknik üst sınırdır, hedge yaparken bu üst sınır kullanılacaktır.
 
 1. ÇOKLU ZAMAN DİLİMİ (MTF) ANALİZİ:
    - 4h Trend ile 1h Trend aynı yönde mi? (Büyük resim konfirmasyonu)

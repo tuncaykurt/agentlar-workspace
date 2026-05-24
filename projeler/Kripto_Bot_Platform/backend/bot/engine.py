@@ -3153,6 +3153,16 @@ class BotEngine:
                 for i, c in enumerate(ai_top):
                     c["liquidations"] = liq_results[i]
                 # ---------------------------
+                
+                # --- MEXC MAX KALDIRAÇ BİLGİSİ ---
+                try:
+                    for c in ai_top:
+                        m_sym = f"{c['base']}/USDT:USDT"
+                        m_data = self.exchange.exchange.market(m_sym)
+                        c["max_leverage"] = int(m_data['info'].get('maxLeverage', 50))
+                except Exception as e:
+                    print(f"[SmartScanner {bot_name}] Max kaldıraç çekim hatası: {e}")
+                # ---------------------------------
 
                 leverage_range = (
                     int(params.get("min_leverage", 3)),
