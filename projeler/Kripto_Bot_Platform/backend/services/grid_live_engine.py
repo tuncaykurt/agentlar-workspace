@@ -411,7 +411,6 @@ class GridLiveEngine:
             for lvl in range(last_level, current_level):
                 if lvl in filled:
                     sell_levels.append(lvl)
-                    filled.discard(lvl)
 
             if sell_levels:
                 # PnL hesapla: her satılan seviye için grid step kadar kâr
@@ -423,6 +422,12 @@ class GridLiveEngine:
                     state, "sell", current_price, sell_levels, len(sell_levels), net_pnl
                 )
                 trades.append(trade)
+
+                # Sadece başarılı SELL'lerde seviyeleri boşalt
+                if trade.get("exchange_status") != "error":
+                    for lvl in sell_levels:
+                        filled.discard(lvl)
+                # Başarısız → seviyeler dolu kalır, tekrar SELL denemez BUY da yapılmaz
 
         state["filled_levels"] = list(filled)
         state["last_level"] = current_level
@@ -514,6 +519,31 @@ class GridLiveEngine:
             else:
                 mexc_side = 2  # close long
 
+            ex = await self._get_exchange()
+
+            # SELL öncesi pozisyon kontrolü — pozisyon yoksa SELL yapma
+            if side == "sell":
+                try:
+                    positions = await ex.get_positions(ccxt_symbol)
+                    has_long = any(
+                        float(p.get("contracts", 0)) > 0 and p.get("side") == "long"
+                        for p in positions
+                    )
+                    if not has_long:
+                        trade["exchange_status"] = "error"
+                        trade["error"] = "Borsada açık long pozisyon yok — SELL atlanıyor"
+                        trade["pnl"] = 0.0
+                        pnl = 0.0
+                        print(f"[GridLive] ⚠ SELL atlandı: borsada long pozisyon bulunamadı")
+                        # State güncelle ve erken dön
+                        state["total_trades"] = state.get("total_trades", 0) + 1
+                        redis = get_redis()
+                        await redis.lpush("grid_live:trades", json.dumps(trade))
+                        await redis.ltrim("grid_live:trades", 0, 199)
+                        return trade
+                except Exception as e:
+                    print(f"[GridLive] Pozisyon kontrol hatası (SELL devam): {e}")
+
             order_body = {
                 "symbol": mexc_symbol,
                 "price": 0,
@@ -525,13 +555,35 @@ class GridLiveEngine:
             }
 
             try:
-                ex = await self._get_exchange()
                 resp = await ex.exchange.contractPrivatePostOrderSubmit(order_body)
                 order_id = str(resp.get("data", resp.get("orderId", "")))
                 trade["order_id"] = order_id
                 trade["exchange_status"] = "filled"
                 print(f"[GridLive] ✓ {side.upper()} {total_contracts} kontrat @ ${price:.4f} "
                       f"seviyeler={grid_levels} order_id={order_id}")
+
+                # BUY sonrası pozisyon doğrulama (0.5s bekle + kontrol)
+                if side == "buy":
+                    await asyncio.sleep(0.5)
+                    try:
+                        positions = await ex.get_positions(ccxt_symbol)
+                        has_long = any(
+                            float(p.get("contracts", 0)) > 0 and p.get("side") == "long"
+                            for p in positions
+                        )
+                        if has_long:
+                            pos = next(p for p in positions if p.get("side") == "long")
+                            trade["verified"] = True
+                            trade["position_contracts"] = float(pos.get("contracts", 0))
+                            trade["position_margin"] = float(pos.get("initialMargin", 0))
+                            print(f"[GridLive] ✓ Pozisyon doğrulandı: {pos.get('contracts')} kontrat, "
+                                  f"margin=${pos.get('initialMargin', 0)}")
+                        else:
+                            trade["verified"] = False
+                            trade["warning"] = "BUY emri doldu ama borsada pozisyon bulunamadı!"
+                            print(f"[GridLive] ⚠ BUY emri doldu ama pozisyon YOK! Likidasyon olmuş olabilir.")
+                    except Exception as ve:
+                        print(f"[GridLive] Pozisyon doğrulama hatası: {ve}")
             except Exception as e:
                 trade["exchange_status"] = "error"
                 trade["error"] = str(e)
