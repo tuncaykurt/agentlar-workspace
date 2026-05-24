@@ -889,10 +889,6 @@ export default function BotCard({
                   )
                 }
 
-                if (!isHedge) {
-                  return liveTrades.open.map((pos: any) => renderPos(pos, true))
-                }
-
                 const groups: Record<string, any[]> = {}
                 liveTrades.open.forEach((pos: any) => {
                   if (!groups[pos.coin]) groups[pos.coin] = []
