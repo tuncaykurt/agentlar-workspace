@@ -1,11 +1,8 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import dynamic from "next/dynamic"
 import useSWR from "swr"
 import { api } from "@/lib/api"
-
-const ProChart = dynamic(() => import("@/components/Chart/ProChart"), { ssr: false })
 
 const fetcher = (path: string) => api.get(path)
 
@@ -23,7 +20,6 @@ export default function SimulationsPage() {
   const { data: statsData } = useSWR("/simulations/stats", fetcher, { refreshInterval: 30000 })
   const { data: statusData } = useSWR("/simulations/status", fetcher, { refreshInterval: 5000 })
   const { data: settingsData, mutate: mutateSettings } = useSWR("/simulations/settings", fetcher)
-  const { data: hftSettingsData, mutate: mutateHftSettings } = useSWR("/simulations/hft-settings", fetcher)
   const { data: portfolioData, mutate: mutatePortfolio } = useSWR("/simulations/portfolio", fetcher, { refreshInterval: 5000 })
   const { data: scenarioData } = useSWR("/simulations/stats/scenarios", fetcher, { refreshInterval: 60000 })
 
@@ -37,7 +33,6 @@ export default function SimulationsPage() {
   const stats = statsData || {}
   const simStatus = statusData || {}
   const settings = settingsData || {}
-  const hftSettings = hftSettingsData || {}
   const portfolio = portfolioData || {}
   const items: any[] = listData?.items || []
   const scenarios = scenarioData || {}
@@ -49,12 +44,7 @@ export default function SimulationsPage() {
     } catch {}
   }
 
-  const updateHftSetting = async (key: string, value: any) => {
-    try {
-      await api.post("/simulations/hft-settings", { [key]: value })
-      mutateHftSettings()
-    } catch {}
-  }
+
 
   const triggerSim = async () => {
     setTriggering(true)

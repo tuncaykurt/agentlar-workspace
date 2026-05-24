@@ -492,6 +492,7 @@ export default function ProChart({
   const vpCanvasRef        = useRef<HTMLCanvasElement>(null)
   const obCanvasRef        = useRef<HTMLCanvasElement>(null)
   const userPriceLinesRef  = useRef<IPriceLine[]>([])
+  const gridPriceLinesRef  = useRef<IPriceLine[]>([])
   const vpRafRef           = useRef<number>(0)
   const obRafRef           = useRef<number>(0)
   const cdRafRef           = useRef<number>(0)
@@ -809,20 +810,9 @@ export default function ProChart({
       )
     })
 
-    // TP / SL / Grid Lines
+    // TP / SL (grid lines handled in separate useEffect to avoid zoom reset)
     if (tp) candles.createPriceLine({ price: tp, color: "rgba(34,197,94,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "TP" })
     if (sl) candles.createPriceLine({ price: sl, color: "rgba(239,68,68,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "SL" })
-    if (gridLines && gridLines.length > 0) {
-      gridLines.forEach(price => {
-        candles.createPriceLine({
-          price: price,
-          color: "rgba(99,102,241,0.4)", // Indigo-ish color for grid lines
-          lineWidth: 1,
-          lineStyle: LineStyle.Dotted,
-          axisLabelVisible: false,
-        })
-      })
-    }
 
     // ── UT Bot ────────────────────────────────────────────────────
     if (showUT && data.ut_bot) {
@@ -857,7 +847,31 @@ export default function ProChart({
     }
     window.addEventListener("resize", onResize)
     return () => { window.removeEventListener("resize", onResize); chart.remove(); chartRef.current = null }
-  }, [data, inds, tp, sl, gridLines, showUT, showLR])
+  }, [data, inds, tp, sl, showUT, showLR])
+
+  // ── Grid çizgileri — ayrı useEffect (zoom sıfırlamaz) ─────────
+  useEffect(() => {
+    const series = candleSeriesRef.current
+    if (!series) return
+    // Eski grid çizgilerini temizle
+    gridPriceLinesRef.current.forEach(pl => {
+      try { series.removePriceLine(pl) } catch {}
+    })
+    gridPriceLinesRef.current = []
+    // Yeni çizgileri ekle
+    if (gridLines && gridLines.length > 0) {
+      gridLines.forEach(price => {
+        const pl = series.createPriceLine({
+          price,
+          color: "rgba(99,102,241,0.35)",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: false,
+        })
+        gridPriceLinesRef.current.push(pl)
+      })
+    }
+  }, [gridLines])
 
   // ── Birleşik marker useEffect (UT Bot + strateji sinyalleri) ──
   useEffect(() => {
