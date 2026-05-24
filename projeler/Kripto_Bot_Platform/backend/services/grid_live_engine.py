@@ -28,6 +28,7 @@ from core.redis_client import get_redis
 class GridLiveEngine:
     def __init__(self):
         self._exchange = None
+        self._poll_task: asyncio.Task | None = None
 
     # ─── Exchange ─────────────────────────────────────────────────────
 
@@ -145,6 +146,11 @@ class GridLiveEngine:
         }
         await redis.set("hft_sim:settings", json.dumps(hft_settings))
 
+        # Standalone polling loop başlat (HFT Engine'e bağımlı olmadan)
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+        self._poll_task = asyncio.create_task(self.run_standalone_loop())
+
         emoji = "🔴 CANLI" if mode == "live" else "📝 PAPER"
         print(f"[GridLive] {emoji} Grid Bot Başlatıldı: {symbol_raw} | "
               f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | "
@@ -172,6 +178,11 @@ class GridLiveEngine:
         redis = get_redis()
         await redis.delete("grid_live:running")
 
+        # Polling loop'u durdur
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+            self._poll_task = None
+
         state_raw = await redis.get("grid_live:state")
         state = json.loads(state_raw) if state_raw else {}
 
@@ -195,6 +206,11 @@ class GridLiveEngine:
         """ACİL DURDURMA: Tüm emirleri iptal et + tüm pozisyonları kapat."""
         redis = get_redis()
         await redis.delete("grid_live:running")
+
+        # Polling loop'u durdur
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+            self._poll_task = None
 
         state_raw = await redis.get("grid_live:state")
         state = json.loads(state_raw) if state_raw else {}
@@ -598,6 +614,62 @@ class GridLiveEngine:
             "exchange_positions": exchange_positions,
             "exchange_balance": exchange_balance,
         }
+
+
+    # ─── Kendi Kendine Çalışan Polling Loop ─────────────────────────────
+
+    async def run_standalone_loop(self):
+        """
+        HFT Engine çalışmasa bile grid motoru kendi kendine çalışır.
+        Redis'ten fiyat okur ve process_tick çağırır.
+        start() tarafından arka plan task'ı olarak başlatılır.
+        """
+        redis = get_redis()
+        print("[GridLive] Standalone polling loop başlatıldı (0.5s interval)")
+
+        while True:
+            try:
+                running = await redis.get("grid_live:running")
+                if not running:
+                    print("[GridLive] Standalone loop: grid_live:running yok, durduruluyor.")
+                    break
+
+                state_raw = await redis.get("grid_live:state")
+                if not state_raw:
+                    await asyncio.sleep(1)
+                    continue
+
+                state = json.loads(state_raw)
+                ccxt_symbol = state.get("ccxt_symbol", "")
+                if not ccxt_symbol:
+                    await asyncio.sleep(1)
+                    continue
+
+                # Redis'ten fiyat oku
+                price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
+                if not price_raw:
+                    await asyncio.sleep(1)
+                    continue
+
+                price_data = json.loads(price_raw)
+                current_price = float(price_data.get("last", 0))
+                if current_price <= 0:
+                    await asyncio.sleep(1)
+                    continue
+
+                # process_tick çağır
+                await self.process_tick(current_price)
+
+                await asyncio.sleep(0.5)  # 500ms interval
+
+            except asyncio.CancelledError:
+                print("[GridLive] Standalone loop iptal edildi.")
+                break
+            except Exception as e:
+                print(f"[GridLive] Standalone loop hatası: {e}")
+                await asyncio.sleep(2)
+
+        print("[GridLive] Standalone loop sonlandı.")
 
 
 # Singleton

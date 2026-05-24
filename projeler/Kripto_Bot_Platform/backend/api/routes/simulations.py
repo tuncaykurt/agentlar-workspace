@@ -345,6 +345,90 @@ async def hft_trades(limit: int = 50):
     return {"trades": trades, "count": len(trades)}
 
 
+@router.post("/hft-tick")
+async def hft_manual_tick():
+    """
+    Manuel tek tick — HFT Engine çalışmıyorsa bu endpoint ile grid motoru tetiklenir.
+    Redis'ten anlık fiyatı okur ve grid_engine.process_tick() çağırır.
+    """
+    from services.grid_live_engine import grid_engine
+
+    redis = get_redis()
+
+    # Grid state'den sembolü al
+    state_raw = await redis.get("grid_live:state")
+    if not state_raw:
+        return {"error": "Grid state bulunamadı. Önce /hft-start ile başlatın."}
+
+    state = json.loads(state_raw)
+    ccxt_symbol = state.get("ccxt_symbol", "")
+    if not ccxt_symbol:
+        return {"error": "Sembol bulunamadı"}
+
+    # Redis'ten fiyat çek
+    price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
+    if not price_raw:
+        return {"error": f"Fiyat bulunamadı: {ccxt_symbol}"}
+
+    price_data = json.loads(price_raw)
+    current_price = float(price_data.get("last", 0))
+    if current_price <= 0:
+        return {"error": "Geçersiz fiyat"}
+
+    # process_tick çağır
+    try:
+        result = await grid_engine.process_tick(current_price)
+        return {
+            "tick": True,
+            "price": current_price,
+            "result": result,
+            "last_level": (json.loads(await redis.get("grid_live:state") or "{}")).get("last_level", -1),
+        }
+    except Exception as e:
+        import traceback
+        return {"tick": False, "error": str(e), "traceback": traceback.format_exc()[-500:]}
+
+
+@router.get("/hft-debug")
+async def hft_debug():
+    """HFT Engine ve Grid Live Engine debug bilgisi."""
+    redis = get_redis()
+
+    # HFT Engine heartbeat kontrolü
+    hft_heartbeat = await redis.get("hft_engine:heartbeat")
+
+    # Grid state
+    running = await redis.get("grid_live:running")
+    state_raw = await redis.get("grid_live:state")
+    state = json.loads(state_raw) if state_raw else {}
+
+    # Fiyat kontrolü
+    ccxt_symbol = state.get("ccxt_symbol", "")
+    price_available = False
+    current_price = 0
+    if ccxt_symbol:
+        price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
+        if price_raw:
+            price_data = json.loads(price_raw)
+            current_price = float(price_data.get("last", 0))
+            price_available = current_price > 0
+
+    return {
+        "hft_engine_heartbeat": hft_heartbeat,
+        "hft_engine_running": hft_heartbeat is not None,
+        "grid_live_running": bool(running),
+        "grid_mode": state.get("mode"),
+        "grid_symbol": ccxt_symbol,
+        "grid_last_level": state.get("last_level", -1),
+        "price_available": price_available,
+        "current_price": current_price,
+        "grid_upper": state.get("upper", 0),
+        "grid_lower": state.get("lower", 0),
+        "filled_count": len(state.get("filled_levels", [])),
+        "total_trades": state.get("total_trades", 0),
+    }
+
+
 @router.get("/status")
 async def sim_status():
     """Simülatörün anlık durumu + MEXC WS bilgisi."""

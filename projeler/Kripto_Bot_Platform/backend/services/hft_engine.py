@@ -31,11 +31,21 @@ async def run_hft_engine():
     await asyncio.sleep(5)
 
     last_db_check = 0
+    last_heartbeat = 0
     active_hft_bots = []
 
     while True:
         try:
             now = time.time()
+
+            # Heartbeat — her 5 saniyede Redis'e yaz (debug/monitoring)
+            if now - last_heartbeat > 5:
+                await redis.set("hft_engine:heartbeat", json.dumps({
+                    "ts": now,
+                    "alive": True,
+                    "grid_running": bool(await redis.get("grid_live:running")),
+                }), ex=30)
+                last_heartbeat = now
 
             # 1. Her 10 saniyede bir veritabanından güncel HFT bot listesini çek
             if now - last_db_check > 10:
