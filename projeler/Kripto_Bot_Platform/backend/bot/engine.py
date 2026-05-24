@@ -3448,6 +3448,16 @@ class BotEngine:
                     params.pop("trailing_callback_pct", None)
                     params.pop("trailing_callback_rate", None)
 
+                    # HEDGE HIZLANDIRMA (MAX KALDIRAÇ KULLANIMI)
+                    try:
+                        market = self.exchange.exchange.market(symbol)
+                        max_lev = int(market['info'].get('maxLeverage', leverage))
+                        if max_lev > leverage:
+                            leverage = max_lev
+                            print(f"[SmartScanner {bot_name}] Hedge HIZLANDIRMA: {sel['coin']} için Max Kaldıraç bulundu -> {leverage}x")
+                    except Exception as e:
+                        pass
+
                     # Hedge TP/SL: bot ayarlarından oku (kullanıcının girdiği değerler)
                     hedge_tp = float(params.get("hedge_tp_pct") or tp_pct)
                     hedge_sl = float(params.get("hedge_sl_pct") or sl_pct)
