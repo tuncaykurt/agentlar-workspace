@@ -568,14 +568,21 @@ Mevcut Açık Pozisyonlar: {active_str}
    - Her zaman TP > SL olsun (R:R ≥ 1.2)
    - tp_suggestion_pct ve sl_suggestion_pct'yi HER ZAMAN coin'in ATR%'sine göre ayarla!
 
-7. ÇIKIŞ STRATEJİSİ SEÇİMİ:
-   - "normal_tp_sl": ADX < 25 veya yatay piyasa → sabit TP/SL ile disiplinli çık (her zaman kullanılabilir)
-   - "trailing": ADX > 30 + net trend + yüksek hacim → fiyat koşarken kârı maksimize et (SADECE trailing izin verildiyse!)
-   - "hedge": BB squeeze + yüksek ATR + funding aşırı → yön belirsiz ama büyük hareket bekleniyor (SADECE hedge izin verildiyse!)
+7. EXIT STRATEGY (ÇIKIŞ STRATEJİSİ) SEÇİMİ:
+   - normal_tp_sl: Standart trend kırılımlarında kullan.
+   - trailing: Güçlü bir momentum yakaladıysan (ADX > 30 ve Volüm Yüksek) kârı sonuna kadar sürmek için seç.
+   - hedge: Piyasa çok kararsızsa (F&G 45-55 arası, L/S oranı %50'lerdeyse) ve yön belli değilse her iki yöne de pozisyon açmak için seç.
+   * ÖNEMLİ HEDGE KURALI: Eğer 'hedge' seçersen, sistem sermaye verimliliği için borsa limitlerindeki MAX KALDIRACI (örn: 100x-200x) kullanacaktır! Bu yüzden hedge seçtiğinde TP ve SL oranlarını dar tutmalısın.
+
+8. DİNAMİK KALDIRAÇ (LEVERAGE) BELİRLEME METRİKLERİ:
+   - Hedge harici işlemlerde kaldıracı piyasa koşullarına göre sen belirle (5x - 50x arası).
+   - Volatilite (ATR) Yüksekse: Düşük kaldıraç (5x - 10x) kullan ki iğnelerde likide olma.
+   - Volatilite Düşük ama Trend Güçlüyse (ADX > 25): Yüksek kaldıraç (20x - 50x) kullanabilirsin.
+   - Haber (News) Kaynaklı İşlemlerde: Ani hareketler olacağı için risk yönetimi adına 10x - 15x bandını geçme.
    - ⚠️ Yukarıda KAPALI olarak işaretlenen stratejileri KESİNLİKLE SEÇME!
    - Geçmiş performanstan öğren: hangi strateji hangi koşulda daha başarılı oldu?
 
-8. ZAMANLAMA ANALİZİ:
+9. ZAMANLAMA ANALİZİ:
    - Momentum zirve/dip noktasında mı?
    - Hacim spike'ı var mı? (haber etkisi olabilir)
    - Trend başlangıcı mı yoksa sonu mu?
