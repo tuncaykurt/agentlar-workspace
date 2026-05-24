@@ -13,6 +13,18 @@ export default function HftPage() {
   const { data: hftSettingsData, mutate: mutateHftSettings } = useSWR("/simulations/hft-settings", fetcher)
   const hftSettings = hftSettingsData || {}
 
+  const [demoUpper, setDemoUpper] = useState<number | null>(null)
+  const [demoLower, setDemoLower] = useState<number | null>(null)
+
+  useEffect(() => {
+    const handleTick = (e: any) => {
+      setDemoUpper(e.detail.upperGrid)
+      setDemoLower(e.detail.lowerGrid)
+    }
+    window.addEventListener('hft-tick', handleTick)
+    return () => window.removeEventListener('hft-tick', handleTick)
+  }, [])
+
   const updateHftSetting = async (key: string, value: any) => {
     try {
       await api.post("/simulations/hft-settings", { [key]: value })
@@ -122,17 +134,45 @@ export default function HftPage() {
             />
           </div>
 
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Kaldıraç</span>
+            <div className="relative">
+              <input 
+                type="number" 
+                value={hftSettings.leverage || 10}
+                onChange={e => updateHftSetting("leverage", Number(e.target.value))}
+                min={1} max={125}
+                className="w-20 bg-[#020817] border border-slate-700 rounded-md pl-3 pr-7 py-1.5 text-sm text-white font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all outline-none" 
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">x</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">İşlem Miktarı</span>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
+              <input 
+                type="number" 
+                value={hftSettings.order_size || 100}
+                onChange={e => updateHftSetting("order_size", Number(e.target.value))}
+                min={10} step={10}
+                className="w-24 bg-[#020817] border border-slate-700 rounded-md pl-7 pr-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all outline-none" 
+              />
+            </div>
+          </div>
+
           <div className="ml-auto flex gap-3 mt-2 md:mt-0">
              <div className="flex flex-col items-end">
                <span className="text-[10px] text-green-400 font-semibold mb-0.5">Alt Ağ (SL / DCA)</span>
                <span className="text-sm text-white bg-green-500/10 border border-green-500/20 px-3 py-1 rounded-md font-mono">
-                 ${hftSettings.lower_price ? hftSettings.lower_price.toFixed(2) : "0.00"}
+                 ${(demoLower || hftSettings.lower_price || 0).toFixed(2)}
                </span>
              </div>
              <div className="flex flex-col items-end">
                <span className="text-[10px] text-red-400 font-semibold mb-0.5">Üst Ağ (TP)</span>
                <span className="text-sm text-white bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-md font-mono">
-                 ${hftSettings.upper_price ? hftSettings.upper_price.toFixed(2) : "0.00"}
+                 ${(demoUpper || hftSettings.upper_price || 0).toFixed(2)}
                </span>
              </div>
           </div>
@@ -140,11 +180,28 @@ export default function HftPage() {
         
         {/* Grafiğin Render Edildiği Kısım */}
         <div className="h-[600px] w-full bg-[#020817] border border-slate-700/80 rounded-xl flex flex-col relative z-10 overflow-hidden shadow-inner">
-          <ProChart 
-            symbol={hftSettings.symbol || "BTCUSDT"} 
-            tp={hftSettings.upper_price || undefined} 
-            sl={hftSettings.lower_price || undefined} 
-          />
+          {(() => {
+            const up = demoUpper || hftSettings.upper_price;
+            const dn = demoLower || hftSettings.lower_price;
+            const count = hftSettings.grid_count || 20;
+            const lines: number[] = [];
+            
+            if (up && dn && up > dn && count > 1) {
+              const step = (up - dn) / count;
+              for (let i = 1; i < count; i++) {
+                lines.push(dn + step * i);
+              }
+            }
+
+            return (
+              <ProChart 
+                symbol={hftSettings.symbol || "BTCUSDT"} 
+                tp={up || undefined} 
+                sl={dn || undefined}
+                gridLines={lines}
+              />
+            );
+          })()}
         </div>
       </div>
     </div>

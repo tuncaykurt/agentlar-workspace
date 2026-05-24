@@ -482,9 +482,9 @@ function drawOBCanvas(
 //  Ana Bileşen
 // ═══════════════════════════════════════════════════════════════
 export default function ProChart({
-  symbol, onClose, tp, sl,
+  symbol, onClose, tp, sl, gridLines
 }: {
-  symbol: string; onClose?: () => void; tp?: number; sl?: number
+  symbol: string; onClose?: () => void; tp?: number; sl?: number; gridLines?: number[]
 }) {
   const mainRef          = useRef<HTMLDivElement>(null)
   const chartRef         = useRef<IChartApi | null>(null)
@@ -809,9 +809,20 @@ export default function ProChart({
       )
     })
 
-    // TP / SL
+    // TP / SL / Grid Lines
     if (tp) candles.createPriceLine({ price: tp, color: "rgba(34,197,94,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "TP" })
     if (sl) candles.createPriceLine({ price: sl, color: "rgba(239,68,68,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "SL" })
+    if (gridLines && gridLines.length > 0) {
+      gridLines.forEach(price => {
+        candles.createPriceLine({
+          price: price,
+          color: "rgba(99,102,241,0.4)", // Indigo-ish color for grid lines
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: false,
+        })
+      })
+    }
 
     // ── UT Bot ────────────────────────────────────────────────────
     if (showUT && data.ut_bot) {
