@@ -3074,31 +3074,39 @@ class BotEngine:
                 await asyncio.gather(*[_fetch_mtf(c) for c in ai_top])
                 # --------------------
 
-                # --- NEWS & SENTIMENT (CryptoPanic) ---
+                # --- NEWS & SENTIMENT (CryptoCompare / Coindesk) ---
                 news_data = {}
-                cp_key = settings.CRYPTOPANIC_API_KEY
-                if cp_key and len(cp_key) > 5:
-                    print(f"[SmartScanner {bot_name}] CryptoPanic'ten haberler çekiliyor...")
-                    # Sadece top 5 coin için haber çekelim ki token limiti veya API limiti dolmasın
+                cc_key = getattr(settings, "CRYPTOCOMPARE_API_KEY", "a6227ed9ecdf95dafbf4a08d6095bd516cb0dd27132c1de8eb4f59c30e328391")
+                if cc_key and len(cc_key) > 20:
+                    print(f"[SmartScanner {bot_name}] CryptoCompare'den (Coindesk) haberler çekiliyor...")
                     top_coins = [c["base"] for c in ai_top[:5]]
                     try:
-                        async with httpx.AsyncClient(timeout=8) as client:
-                            for coin_base in top_coins:
-                                url = f"https://cryptopanic.com/api/v1/posts/?auth_token={cp_key}&currencies={coin_base}&kind=news"
-                                r = await client.get(url)
-                                if r.status_code == 200:
-                                    posts = r.json().get("results", [])[:3] # Son 3 haber
-                                    if posts:
-                                        news_data[coin_base] = [p.get("title", "") for p in posts]
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            categories = ",".join(top_coins)
+                            url = f"https://min-api.cryptocompare.com/data/v2/news/?lang=EN&categories={categories}&api_key={cc_key}"
+                            r = await client.get(url)
+                            if r.status_code == 200:
+                                data = r.json()
+                                if data.get("Data"):
+                                    posts = data["Data"]
+                                    for post in posts:
+                                        # Hangi coin(ler)le ilgili olduğunu bul
+                                        tags = post.get("categories", "").split("|")
+                                        for coin_base in top_coins:
+                                            if coin_base in tags or coin_base in post.get("title", ""):
+                                                if coin_base not in news_data:
+                                                    news_data[coin_base] = []
+                                                if len(news_data[coin_base]) < 3: # En fazla 3 haber
+                                                    news_data[coin_base].append(post.get("title", ""))
                     except Exception as e:
                         print(f"[SmartScanner {bot_name}] Haber çekim hatası: {e}")
                 else:
-                    print(f"[SmartScanner {bot_name}] CRYPTOPANIC_API_KEY bulunamadı, haber analizi atlanıyor.")
+                    print(f"[SmartScanner {bot_name}] CRYPTOCOMPARE_API_KEY bulunamadı, haber atlanıyor.")
                 
                 # Haberleri coin datasına ekle
                 for c in ai_top:
                     c["news"] = news_data.get(c["base"], [])
-                # -------------------------------------
+                # ---------------------------------------------------
 
                 # --- COINALYZE L/S RATIO (Coinglass Alternatifi) ---
                 coinalyze_key = getattr(settings, "COINALYZE_API_KEY", "d81902f0-8b0d-42ed-9c4d-36e8f31de1f8")
