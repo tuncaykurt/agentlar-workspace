@@ -93,12 +93,53 @@ export default function SimulationsPage() {
         </div>
         <div className="flex items-center gap-3">
           <button
+            onClick={async () => {
+              if (!confirm("Borsa bakiyesi modu ile yeni simülasyon başlatılacak. Emin misiniz?")) return;
+              try {
+                // Set trade size mode to exchange_pct, enabled=true, reset portfolio
+                await api.post("/simulations/settings", { 
+                  trade_size_mode: "exchange_pct", 
+                  trade_size_value: 10, 
+                  enabled: true 
+                });
+                await api.post("/simulations/portfolio/reset", { initial_balance: portfolio.exchange_balance?.free || 1000 });
+                mutateSettings();
+                mutatePortfolio();
+                alert("Simülasyon Borsa Bakiyesi (MEXC %10) moduyla başlatıldı!");
+              } catch (e) {
+                alert("Hata: " + String(e));
+              }
+            }}
+            className="px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs rounded-lg transition-colors border border-indigo-500"
+          >
+            Borsa Bakiyesi ile Baslat
+          </button>
+          
+          <button
+            onClick={async () => {
+              if (!confirm("Simülasyon ayarları gerçek Smart Scanner botuna kopyalanacak ve bot başlatılacak. İşlemler GERÇEK borsa bakiyesi ile açılacaktır. Emin misiniz?")) return;
+              try {
+                const res = await api.post("/simulations/copy-to-bot");
+                alert(res.data?.message || "Başarıyla kopyalandı!");
+              } catch (e) {
+                alert("Hata: " + String(e));
+              }
+            }}
+            className="px-3 py-1.5 bg-red-600/80 hover:bg-red-600 text-white text-xs font-semibold rounded-lg transition-colors shadow-[0_0_15px_rgba(220,38,38,0.3)]"
+          >
+            Gercek Bota Kopyala & Baslat
+          </button>
+
+          <button
             onClick={triggerSim}
             disabled={triggering}
-            className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-600 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-600 text-white text-xs rounded-lg transition-colors disabled:opacity-50 ml-2"
           >
             {triggering ? "Taraniyor..." : "Manuel Tara"}
           </button>
+          
+          <div className="w-px h-6 bg-slate-700 mx-1"></div>
+          
           <span className="text-xs text-slate-400">Simulasyon</span>
           <button
             onClick={() => toggleSetting("enabled", !settings.enabled)}

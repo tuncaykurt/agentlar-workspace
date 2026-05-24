@@ -457,6 +457,82 @@ async def deploy_to_bot(data: dict = None):
     }
 
 
+@router.post("/copy-to-bot")
+async def copy_sim_to_bot():
+    """Simülasyon ayarlarını gerçek 'smart_scanner' botuna kopyala ve (eğer çalışmıyorsa) çalıştır."""
+    from models.trade import Bot, BotStatus
+    from core.database import async_session
+    from sqlalchemy import select
+
+    # Güncel simülasyon ayarlarını Redis'ten al
+    redis = get_redis()
+    raw_cfg = await redis.get(SIM_CONFIG_KEY)
+    sim_cfg = json.loads(raw_cfg) if raw_cfg else {}
+
+    # Bot parametrelerini hazırla (create_smart_bot ile aynı yapı)
+    bot_params = {
+        "auto_tp_sl": sim_cfg.get("auto_tp_sl", True),
+        "tp_pct": sim_cfg.get("tp_pct", 1.5),
+        "sl_pct": sim_cfg.get("sl_pct", 0.8),
+        "auto_scale_tp_sl": sim_cfg.get("auto_scale_tp_sl", True),
+        "scale_base_leverage": sim_cfg.get("scale_base_leverage", 10),
+        "trailing_enabled": sim_cfg.get("trailing_enabled", False),
+        "trailing_activate_pct": sim_cfg.get("trailing_activate_pct", 0.3),
+        "trailing_callback_pct": sim_cfg.get("trailing_callback_pct", 0.15),
+        "hedge_enabled": sim_cfg.get("hedge_enabled", False),
+        "hedge_tp_pct": sim_cfg.get("hedge_tp_pct", 0.4),
+        "hedge_sl_pct": sim_cfg.get("hedge_sl_pct", 0.1),
+        "hedge_use_max_leverage": sim_cfg.get("hedge_use_max_leverage", True),
+        "trade_size_mode": sim_cfg.get("trade_size_mode", "fixed"),
+        "trade_size_value": sim_cfg.get("trade_size_value", 100),
+        "margin_type": sim_cfg.get("margin_type", "cross"),
+    }
+
+    leverage = sim_cfg.get("max_leverage", 75)
+    
+    async with async_session() as session:
+        # Mevcut bir smart_scanner botu bul
+        result = await session.execute(select(Bot).where(Bot.strategy == "smart_scanner").limit(1))
+        bot = result.scalar_one_or_none()
+
+        if bot:
+            # Var olan botu güncelle
+            bot.params = json.dumps(bot_params)
+            bot.leverage = leverage
+            bot.paper_mode = False # Gerçek borsa moduna geçir
+            
+            # Eğer bot duruyorsa, çalıştır
+            if bot.status != BotStatus.RUNNING:
+                bot.status = BotStatus.RUNNING
+                
+            await session.commit()
+            bot_name = bot.name
+        else:
+            # Eğer yoksa yeni bot oluştur ve başlat
+            initial_balance = sim_cfg.get("trade_size_value", 100) * sim_cfg.get("max_open", 5)
+            bot = Bot(
+                name="Smart Scanner Bot",
+                symbol="MULTI",
+                strategy="smart_scanner",
+                exchange="mexc",
+                status=BotStatus.RUNNING,
+                paper_mode=False,
+                leverage=leverage,
+                risk_per_trade=0.02,
+                max_daily_loss=0.10,
+                initial_balance=initial_balance,
+                params=json.dumps(bot_params),
+            )
+            session.add(bot)
+            await session.commit()
+            bot_name = bot.name
+
+    return {
+        "success": True,
+        "message": f"Simülasyon ayarları '{bot_name}' botuna kopyalandı ve gerçek işlemler başlatıldı!"
+    }
+
+
 @router.delete("/{sim_id}")
 async def delete_simulation(sim_id: int):
     """Tek bir simülasyonu sil."""
