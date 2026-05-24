@@ -473,8 +473,8 @@ class BotEngine:
                 print(f"[Bot {bot_name}] Kontrat hesabı hatası (devam): {e}")
 
             # TP/SL fiyatları hesapla
-            tp_price = round(take_profit, 2) if take_profit else None
-            sl_price = round(stop_loss, 2) if stop_loss else None
+            tp_price = round(take_profit, 6) if take_profit else None
+            sl_price = round(stop_loss, 6) if stop_loss else None
 
             # GÜVENLİK: TP ve SL ikisi de yoksa işlem açma
             if not tp_price and not sl_price:

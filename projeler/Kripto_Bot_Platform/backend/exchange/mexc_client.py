@@ -214,11 +214,11 @@ class MEXCClient:
             # Gerçek giriş fiyatından TP/SL yeniden hesapla
             if pos_id and actual_entry and actual_entry > 0 and tp_pct is not None and sl_pct is not None:
                 if is_long:
-                    tp_price = round(actual_entry * (1 + float(tp_pct) / 100), 2)
-                    sl_price = round(actual_entry * (1 - float(sl_pct) / 100), 2)
+                    tp_price = round(actual_entry * (1 + float(tp_pct) / 100), 6)
+                    sl_price = round(actual_entry * (1 - float(sl_pct) / 100), 6)
                 else:
-                    tp_price = round(actual_entry * (1 - float(tp_pct) / 100), 2)
-                    sl_price = round(actual_entry * (1 + float(sl_pct) / 100), 2)
+                    tp_price = round(actual_entry * (1 - float(tp_pct) / 100), 6)
+                    sl_price = round(actual_entry * (1 + float(sl_pct) / 100), 6)
                 if use_trailing and tp_price:
                     trailing_active_price = tp_price
                 print(f"[MEXCClient] TP/SL gercek giris fiyatindan hesaplandi: entry={actual_entry} TP={tp_price} SL={sl_price}")
@@ -235,11 +235,11 @@ class MEXCClient:
                         "takeProfitType": 0,
                         "stopLossOrderPrice": 0,
                         "takeProfitOrderPrice": 0,
-                        "stopLossPrice": round(float(sl_price), 2),
+                        "stopLossPrice": round(float(sl_price), 6),
                     }
                     # Trailing yoksa TP'yi de ekle
                     if not use_trailing and tp_price:
-                        stop_body["takeProfitPrice"] = round(float(tp_price), 2)
+                        stop_body["takeProfitPrice"] = round(float(tp_price), 6)
                     try:
                         result = await self.exchange.contractPrivatePostStoporderPlace(stop_body)
                         print(f"[MEXCClient] ✓ SL{'+ TP' if not use_trailing and tp_price else ''} başarıyla konuldu: result={result}")
