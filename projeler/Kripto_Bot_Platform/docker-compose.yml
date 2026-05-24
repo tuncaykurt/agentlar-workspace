@@ -48,8 +48,6 @@ services:
       dockerfile: Dockerfile
     expose:
       - "80"
-    ports:
-      - "80:80"
     depends_on:
       - frontend
       - backend
