@@ -442,8 +442,29 @@ export default function SimulationsPage() {
             HFT Demo Başlat/Durdur
           </button>
         </div>
+
+        {/* HFT Ayar Paneli */}
+        <div className="flex flex-wrap items-center gap-3 bg-slate-800/60 p-3 rounded-lg border border-slate-700/50 relative z-10 mt-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">Hedef Coin:</span>
+            <select className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+              <option value="BTCUSDT">BTCUSDT</option>
+              <option value="ETHUSDT">ETHUSDT</option>
+              <option value="SOLUSDT">SOLUSDT</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">Ağ Genişliği (Spread):</span>
+            <input type="number" defaultValue={5} className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white" />
+            <span className="text-xs text-slate-500">%</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">Kademe Sayısı:</span>
+            <input type="number" defaultValue={20} className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white" />
+          </div>
+        </div>
         
-        <div className="h-[300px] w-full bg-slate-800/80 border border-slate-700 rounded-lg flex flex-col relative z-10 overflow-hidden">
+        <div className="h-[300px] w-full bg-slate-800/80 border border-slate-700 rounded-lg flex flex-col relative z-10 overflow-hidden mt-2">
           {(() => {
             const [hftData, setHftData] = useState({ price: 0, upper: 0, lower: 0 });
             
