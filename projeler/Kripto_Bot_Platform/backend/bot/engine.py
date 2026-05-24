@@ -3365,6 +3365,7 @@ class BotEngine:
                         "take_profit": long_tp, "stop_loss": long_sl,
                         "tp_pct": hedge_tp, "sl_pct": hedge_sl,
                         "dynamic_leverage": leverage,
+                        "pos_side": "long",
                         "analysis": f"HEDGE LONG (AI karar) — {sel.get('reason', '')}",
                     }
                     short_ai = {
@@ -3372,6 +3373,7 @@ class BotEngine:
                         "take_profit": short_tp, "stop_loss": short_sl,
                         "tp_pct": hedge_tp, "sl_pct": hedge_sl,
                         "dynamic_leverage": leverage,
+                        "pos_side": "short",
                         "analysis": f"HEDGE SHORT (AI karar) — {sel.get('reason', '')}",
                     }
 
@@ -3480,12 +3482,14 @@ class BotEngine:
                         "take_profit": h_long_tp, "stop_loss": h_long_sl,
                         "analysis": f"HEDGE LONG — ATR:{hc.get('atr_pct',0):.2f}% Vol:{hc.get('volume_ratio',0):.1f}x",
                         "dynamic_leverage": h_lev, "tp_pct": hedge_tp, "sl_pct": hedge_sl,
+                        "pos_side": "long",
                     }
                     h_short_ai = {
                         "approved": True, "confidence": 70,
                         "take_profit": h_short_tp, "stop_loss": h_short_sl,
                         "analysis": f"HEDGE SHORT — ATR:{hc.get('atr_pct',0):.2f}% Vol:{hc.get('volume_ratio',0):.1f}x",
                         "dynamic_leverage": h_lev, "tp_pct": hedge_tp, "sl_pct": hedge_sl,
+                        "pos_side": "short",
                     }
 
                     # Hedge bot gibi paralel gönder
