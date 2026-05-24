@@ -591,6 +591,11 @@ Mevcut Açık Pozisyonlar: {active_str}
    - Hacim spike'ı var mı? (haber etkisi olabilir)
    - Trend başlangıcı mı yoksa sonu mu?
 
+10. KURUMSAL UZMAN (SMART MONEY) KURALLARI:
+   - LİKİDİTE AVI (Liquidity Sweep): Eğer bir coinde Likidasyon ('shorts_liquidated' veya 'longs_liquidated') gerçekleşmişse ve hacim yüksekse, bu bir "Stop Patlatma" operasyonudur. Trendin likidasyonun tersi yönüne dönmesi muhtemeldir (Smart Money girişi). Bu tuzaklardan faydalan.
+   - GERİ DÖNÜŞ (Mean Reversion) & FOMO KONTROLÜ: 1h RSI 80 üzerindeyken ASLA Long açma! Fiyat uzaya gitmişse FOMO'ya kapılma. Aksine, RSI şişkinliğinin sönmesini bekle veya EMA200'den seken "Pullback" (Geri Çekilme) fırsatlarını kovala.
+   - RİSK/ÖDÜL ASİMETRİSİ (Kelly Criterion): Hesapladığın TP (Kâr) Yüzdesi, SL (Zarar) Yüzdesinin EN AZ 1.5 - 2 katı (R:R > 1.5) olmak ZORUNDADIR! Eğer kazanacağımız miktar, riske ettiğimiz miktardan belirgin şekilde büyük değilse, o sinyal grafikte ne kadar kusursuz görünürse görünsün KESİNLİKLE PAS GEÇ!
+
 ═══════════════════════════════════════════════════════════════
                      KARAR VER
 ═══════════════════════════════════════════════════════════════
