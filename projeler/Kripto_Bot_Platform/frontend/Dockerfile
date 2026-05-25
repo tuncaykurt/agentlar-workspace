@@ -6,11 +6,13 @@ RUN npm install --frozen-lockfile || npm install
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-RUN echo "cache-bust-v14"
+RUN echo "cache-bust-v15"
 COPY . .
 ENV NEXT_PUBLIC_API_URL=""
-ENV NODE_OPTIONS="--max-old-space-size=512"
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN rm -rf .next && npm run build
+# Standalone output dogrulama
+RUN ls -la .next/standalone/server.js || (echo "STANDALONE BUILD FAILED" && exit 1)
 
 FROM node:20-alpine AS runner
 WORKDIR /app
