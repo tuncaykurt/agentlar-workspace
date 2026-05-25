@@ -172,6 +172,6 @@ async def _run_ws_all_tickers():
 async def start_mexc_ws_feeder():
     """Arka plan görevi: MEXC WebSocket üzerinden fiyat verisi topla."""
     print("[MEXC-WS] Başlatılıyor (sub.tickers — tüm coinler)...")
-    await asyncio.sleep(30)  # Başlangıçta biraz bekle
+    await asyncio.sleep(5)  # Redis/exchange hazır olana kadar kısa bekleme
 
     await _run_ws_all_tickers()

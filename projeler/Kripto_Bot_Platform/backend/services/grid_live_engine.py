@@ -722,17 +722,25 @@ class GridLiveEngine:
                     continue
 
                 # Redis'ten fiyat oku — MEXC WS önce, yoksa genel ticker
+                current_price = 0.0
                 price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
                 if not price_raw:
                     price_raw = await redis.get(f"ticker:{ccxt_symbol}")
-                if not price_raw:
-                    await asyncio.sleep(1)
-                    continue
+                if price_raw:
+                    price_data = json.loads(price_raw)
+                    current_price = float(price_data.get("last", 0))
 
-                price_data = json.loads(price_raw)
-                current_price = float(price_data.get("last", 0))
+                # Redis'te yoksa exchange'den çek (WS feeder henüz başlamamışsa)
                 if current_price <= 0:
-                    await asyncio.sleep(1)
+                    try:
+                        ex = await self._get_exchange()
+                        ticker = await ex.exchange.fetch_ticker(ccxt_symbol)
+                        current_price = float(ticker.get("last", 0))
+                    except Exception:
+                        pass
+
+                if current_price <= 0:
+                    await asyncio.sleep(2)
                     continue
 
                 # process_tick çağır
