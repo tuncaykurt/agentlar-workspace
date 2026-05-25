@@ -209,7 +209,7 @@ class GridLiveEngine:
             "total_budget": total_budget,
             "margin_per_level": margin_per_level,
             "estimated_profit_per_grid": round(
-                contracts_per_level * contract_size * step - contracts_per_level * contract_size * current_price * 0.0002 * 2, 6
+                contracts_per_level * contract_size * step - contracts_per_level * contract_size * current_price * 0.0006 * 2, 6
             ),
         }
 
@@ -461,7 +461,7 @@ class GridLiveEngine:
                 avg_price_diff = total_price_diff / len(sell_levels) if sell_levels else 0
                 gross_pnl = total_contracts * cs * avg_price_diff
                 notional = total_contracts * cs * current_price
-                fee_total = notional * 0.0002 * 2  # MEXC %0.02 fee giriş+çıkış
+                fee_total = notional * 0.0006 * 2  # MEXC taker fee %0.06 giriş+çıkış
                 net_pnl = round(gross_pnl - fee_total, 6)
 
                 # Minimum kâr kontrolü — fee'yi karşılamayan SELL yapma
@@ -630,7 +630,7 @@ class GridLiveEngine:
         if trade["exchange_status"] != "error":
             cs = state.get("contract_size", 0.01)
             notional = total_contracts * cs * price
-            fee = notional * 0.0002 * 2 * level_count
+            fee = notional * 0.0006 * 2  # taker fee %0.06 giriş+çıkış
             state["total_fees"] = round(state.get("total_fees", 0) + fee, 6)
 
         # İşlem geçmişine ekle

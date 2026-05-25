@@ -237,7 +237,7 @@ export default function HftPage() {
   const marginPerLevel = orderSize / gridCount
   const contracts = Math.max(1, Math.floor((marginPerLevel * leverage) / (livePrice * contractSize)))
   const grossPerGrid = contracts * contractSize * gridStep
-  const feePerGrid = contracts * contractSize * livePrice * 0.0002 * 2  // MEXC %0.02 fee
+  const feePerGrid = contracts * contractSize * livePrice * 0.0006 * 2  // MEXC taker fee %0.06
   const netPerGrid = grossPerGrid - feePerGrid
   const profitPerGrid = livePrice > 0 && gridStep > 0 ? (netPerGrid / (contracts * contractSize * livePrice)) * 100 * leverage : 0
 
