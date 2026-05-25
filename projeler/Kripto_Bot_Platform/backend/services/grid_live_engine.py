@@ -86,14 +86,28 @@ class GridLiveEngine:
         grid_count = int(config.get("grid_count", 20))
         margin_per_level = round(total_budget / grid_count, 4)  # Kademe başına margin
 
-        # Canlı fiyat al
+        # Canlı fiyat al — önce MEXC WS Redis, yoksa genel ticker, yoksa exchange fetch
+        current_price = 0.0
         price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
-        if not price_raw:
-            return {"error": f"Fiyat bulunamadı: {ccxt_symbol}. MEXC WebSocket bağlantısını kontrol edin."}
-        price_data = json.loads(price_raw)
-        current_price = float(price_data.get("last", 0))
+        if price_raw:
+            price_data = json.loads(price_raw)
+            current_price = float(price_data.get("last", 0))
         if current_price <= 0:
-            return {"error": "Geçersiz fiyat"}
+            # Fallback: genel ticker cache (Bitget/Binance)
+            price_raw2 = await redis.get(f"ticker:{ccxt_symbol}")
+            if price_raw2:
+                price_data2 = json.loads(price_raw2)
+                current_price = float(price_data2.get("last", 0))
+        if current_price <= 0:
+            # Son çare: MEXC exchange'den direkt çek
+            try:
+                ex = await self._get_exchange()
+                ticker = await ex.exchange.fetch_ticker(ccxt_symbol)
+                current_price = float(ticker.get("last", 0))
+            except Exception as e:
+                print(f"[GridLive] Exchange fetch_ticker hatası: {e}")
+        if current_price <= 0:
+            return {"error": f"Fiyat bulunamadı: {ccxt_symbol}. Lütfen birkaç saniye bekleyip tekrar deneyin."}
 
         # Grid sınırlarını hesapla
         upper = current_price * (1 + spread_pct / 100)
@@ -707,8 +721,10 @@ class GridLiveEngine:
                     await asyncio.sleep(1)
                     continue
 
-                # Redis'ten fiyat oku
+                # Redis'ten fiyat oku — MEXC WS önce, yoksa genel ticker
                 price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
+                if not price_raw:
+                    price_raw = await redis.get(f"ticker:{ccxt_symbol}")
                 if not price_raw:
                     await asyncio.sleep(1)
                     continue
