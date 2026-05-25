@@ -201,7 +201,7 @@ class GridLiveEngine:
             "total_budget": total_budget,
             "margin_per_level": margin_per_level,
             "estimated_profit_per_grid": round(
-                (step / current_price) * order_size * leverage - order_size * leverage * 0.0012, 4
+                contracts_per_level * contract_size * step - contracts_per_level * contract_size * current_price * 0.0002 * 2, 6
             ),
         }
 
