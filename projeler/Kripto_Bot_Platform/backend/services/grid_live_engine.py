@@ -464,17 +464,26 @@ class GridLiveEngine:
                 fee_total = notional * 0.0002 * 2  # MEXC %0.02 fee giriş+çıkış
                 net_pnl = round(gross_pnl - fee_total, 6)
 
-                trade = await self._execute_order(
-                    state, "sell", current_price, sell_levels, len(sell_levels), net_pnl
-                )
-                trades.append(trade)
+                # Minimum kâr kontrolü — fee'yi karşılamayan SELL yapma
+                # Kâr < fee × 1.5 ise bekle (churn engelleme)
+                if net_pnl < 0 and mode == "live":
+                    min_profit_price = fee_total / (total_contracts * cs) * 1.5
+                    print(f"[GridLive] ⏸ SELL atlandı: net_pnl=${net_pnl:.4f} < 0 | "
+                          f"fark=${avg_price_diff:.4f} < min ${min_profit_price:.4f} | "
+                          f"seviyeler={sell_levels} — fee'yi karşılamıyor, bekleniyor")
+                    # Seviyeleri dolu bırak, fiyat daha yükselince tekrar denenecek
+                else:
+                    trade = await self._execute_order(
+                        state, "sell", current_price, sell_levels, len(sell_levels), net_pnl
+                    )
+                    trades.append(trade)
 
-                # Sadece başarılı SELL'lerde seviyeleri boşalt
-                if trade.get("exchange_status") != "error":
-                    for lvl in sell_levels:
-                        filled.discard(lvl)
-                        entry_prices.pop(str(lvl), None)
-                # Başarısız → seviyeler dolu kalır, tekrar SELL denemez BUY da yapılmaz
+                    # Sadece başarılı SELL'lerde seviyeleri boşalt
+                    if trade.get("exchange_status") != "error":
+                        for lvl in sell_levels:
+                            filled.discard(lvl)
+                            entry_prices.pop(str(lvl), None)
+                    # Başarısız → seviyeler dolu kalır, tekrar SELL denemez BUY da yapılmaz
 
         state["entry_prices"] = entry_prices
 
