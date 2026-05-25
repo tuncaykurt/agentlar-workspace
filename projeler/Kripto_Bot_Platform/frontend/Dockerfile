@@ -6,13 +6,11 @@ RUN npm install --frozen-lockfile || npm install
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-RUN echo "cache-bust-v13"
+RUN echo "cache-bust-v14"
 COPY . .
-# NEXT_PUBLIC_* değişkenler build-time'da bake edilir.
-# Boş bırakarak client tarayıcıda relative /api kullanılmasını sağlıyoruz.
 ENV NEXT_PUBLIC_API_URL=""
-ENV NODE_OPTIONS="--max-old-space-size=1024"
-RUN npm run build
+ENV NODE_OPTIONS="--max-old-space-size=512"
+RUN rm -rf .next && npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
