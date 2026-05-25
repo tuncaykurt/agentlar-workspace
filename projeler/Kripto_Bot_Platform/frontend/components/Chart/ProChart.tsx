@@ -878,13 +878,21 @@ export default function ProChart({
     gridPriceLinesRef.current = []
     // Yeni çizgileri ekle
     if (gridLines && gridLines.length > 0) {
-      gridLines.forEach(price => {
+      gridLines.forEach((price, idx) => {
+        // Her kademe için fiyat farkı yüzdesi (bir öncekine göre)
+        const prevPrice = idx > 0 ? gridLines[idx - 1] : null
+        const pctDiff = prevPrice ? ((price - prevPrice) / prevPrice * 100).toFixed(2) : null
+        const label = pctDiff ? `$${price.toFixed(2)}  +${pctDiff}%` : `$${price.toFixed(2)}`
+
         const pl = series.createPriceLine({
           price,
-          color: "rgba(99,102,241,0.35)",
+          color: "rgba(99,102,241,0.30)",
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
-          axisLabelVisible: false,
+          axisLabelVisible: true,
+          title: label,
+          axisLabelColor: "rgba(99,102,241,0.9)",
+          axisLabelTextColor: "#e2e8f0",
         })
         gridPriceLinesRef.current.push(pl)
       })
