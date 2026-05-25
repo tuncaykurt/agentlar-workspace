@@ -78,10 +78,31 @@ export default function HftPage() {
   }, [chartFullscreen])
 
   const symbol = hftSettings.symbol || "ETHUSDT"
-  const spreadPct = hftSettings.spread_pct || 1.5
-  const gridCount = hftSettings.grid_count || 20
-  const leverage = hftSettings.leverage || 10
-  const orderSize = hftSettings.order_size || 100
+
+  // Local input state — silme/yazma sorunsuz çalışır, blur'da API'ye gönderilir
+  const [localSpread, setLocalSpread] = useState("")
+  const [localGrid, setLocalGrid] = useState("")
+  const [localLev, setLocalLev] = useState("")
+  const [localOrder, setLocalOrder] = useState("")
+
+  // Backend'den gelen değerler değişince local'i güncelle (ilk yükleme + dışarıdan değişim)
+  useEffect(() => {
+    if (hftSettings.spread_pct != null) setLocalSpread(String(hftSettings.spread_pct))
+    if (hftSettings.grid_count != null) setLocalGrid(String(hftSettings.grid_count))
+    if (hftSettings.leverage != null) setLocalLev(String(hftSettings.leverage))
+    if (hftSettings.order_size != null) setLocalOrder(String(hftSettings.order_size))
+  }, [hftSettings.spread_pct, hftSettings.grid_count, hftSettings.leverage, hftSettings.order_size])
+
+  const spreadPct = Number(localSpread) || hftSettings.spread_pct || 1.5
+  const gridCount = Number(localGrid) || hftSettings.grid_count || 20
+  const leverage = Number(localLev) || hftSettings.leverage || 10
+  const orderSize = Number(localOrder) || hftSettings.order_size || 100
+
+  const commitSetting = (key: string, raw: string, fallback: number) => {
+    const v = Number(raw)
+    if (!v || isNaN(v)) return
+    updateHftSetting(key, v)
+  }
 
   const isBackendMode = tradingMode === "paper" || tradingMode === "live"
 
@@ -210,7 +231,14 @@ export default function HftPage() {
   }, [livePrice, simRunning, gridBounds, tradingMode])
 
   const gridStep = gridBounds ? (gridBounds.upper - gridBounds.lower) / gridCount : 0
-  const profitPerGrid = livePrice > 0 && gridStep > 0 ? (gridStep / livePrice) * 100 * leverage : 0
+  // Kontrat bazlı gerçek kâr: contracts × contractSize × step
+  // contractSize ETH=0.01, BTC=0.0001 vb.
+  const contractSize = symbol.includes("BTC") ? 0.0001 : 0.01
+  const contracts = Math.max(1, Math.floor(orderSize / (livePrice * contractSize)))
+  const grossPerGrid = contracts * contractSize * gridStep
+  const feePerGrid = contracts * contractSize * livePrice * 0.0002 * 2  // MEXC %0.02 fee
+  const netPerGrid = grossPerGrid - feePerGrid
+  const profitPerGrid = livePrice > 0 && gridStep > 0 ? (netPerGrid / (contracts * contractSize * livePrice)) * 100 * leverage : 0
 
   const updateHftSetting = async (key: string, value: any) => {
     try {
@@ -476,7 +504,9 @@ export default function HftPage() {
 
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Spread (±%)</span>
-            <input type="number" value={spreadPct} onChange={e => updateHftSetting("spread_pct", Number(e.target.value))}
+            <input type="number" value={localSpread} onChange={e => setLocalSpread(e.target.value)}
+              onBlur={() => commitSetting("spread_pct", localSpread, 1.5)}
+              onKeyDown={e => e.key === "Enter" && commitSetting("spread_pct", localSpread, 1.5)}
               min={0.05} step={0.05} max={20} disabled={simRunning}
               className="w-24 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />
@@ -484,7 +514,9 @@ export default function HftPage() {
 
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Kademe</span>
-            <input type="number" value={gridCount} onChange={e => updateHftSetting("grid_count", Number(e.target.value))}
+            <input type="number" value={localGrid} onChange={e => setLocalGrid(e.target.value)}
+              onBlur={() => commitSetting("grid_count", localGrid, 20)}
+              onKeyDown={e => e.key === "Enter" && commitSetting("grid_count", localGrid, 20)}
               min={2} max={200} disabled={simRunning}
               className="w-20 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />
@@ -492,7 +524,9 @@ export default function HftPage() {
 
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Kaldirac</span>
-            <input type="number" value={leverage} onChange={e => updateHftSetting("leverage", Number(e.target.value))}
+            <input type="number" value={localLev} onChange={e => setLocalLev(e.target.value)}
+              onBlur={() => commitSetting("leverage", localLev, 10)}
+              onKeyDown={e => e.key === "Enter" && commitSetting("leverage", localLev, 10)}
               min={1} max={500} disabled={simRunning}
               className="w-20 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />
@@ -500,7 +534,9 @@ export default function HftPage() {
 
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Islem ($)</span>
-            <input type="number" value={orderSize} onChange={e => updateHftSetting("order_size", Number(e.target.value))}
+            <input type="number" value={localOrder} onChange={e => setLocalOrder(e.target.value)}
+              onBlur={() => commitSetting("order_size", localOrder, 100)}
+              onKeyDown={e => e.key === "Enter" && commitSetting("order_size", localOrder, 100)}
               min={1} step={5} disabled={simRunning}
               className="w-24 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />
@@ -536,7 +572,7 @@ export default function HftPage() {
           </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
             <div className="text-[10px] text-slate-500 uppercase">Kademe Kari</div>
-            <div className="text-sm font-bold text-emerald-400 font-mono">%{profitPerGrid.toFixed(3)}</div>
+            <div className="text-sm font-bold text-emerald-400 font-mono">${netPerGrid.toFixed(4)}</div>
           </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
             <div className="text-[10px] text-slate-500 uppercase">Liq. Mesafesi</div>

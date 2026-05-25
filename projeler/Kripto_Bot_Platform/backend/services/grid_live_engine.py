@@ -112,6 +112,10 @@ class GridLiveEngine:
 
             contracts_per_level = await self._calc_contracts(ccxt_symbol, order_size, current_price)
 
+        # Kontrat büyüklüğü (PnL hesabı için KRİTİK)
+        contract_size = await self._get_contract_size(ccxt_symbol)
+        print(f"[GridLive] Contract size: {contract_size} (örn: ETH=0.01)")
+
         # Grid state oluştur
         state = {
             "mode": mode,
@@ -120,6 +124,7 @@ class GridLiveEngine:
             "leverage": leverage,
             "order_size": order_size,
             "contracts_per_level": contracts_per_level,
+            "contract_size": contract_size,
             "spread_pct": spread_pct,
             "grid_count": grid_count,
             "levels": levels,
@@ -410,10 +415,16 @@ class GridLiveEngine:
                     sell_levels.append(lvl)
 
             if sell_levels:
-                # PnL hesapla: her satılan seviye için grid step kadar kâr
-                gross_per_level = (step / current_price) * state["order_size"] * state["leverage"]
-                fee_per_level = state["order_size"] * state["leverage"] * 0.0006 * 2  # giriş+çıkış
-                net_pnl = (gross_per_level - fee_per_level) * len(sell_levels)
+                # PnL hesapla — kontrat bazlı (GERÇEK değerler)
+                # Örn: 1 kontrat ETH, contract_size=0.01, step=$4.18
+                # Gross = 1 × 0.01 × $4.18 = $0.0418
+                # Fee = 1 × 0.01 × price × 0.0002 × 2 = ~$0.0084 (MEXC %0.02 maker/taker)
+                cs = state.get("contract_size", 0.01)
+                total_contracts = state.get("contracts_per_level", 1) * len(sell_levels)
+                gross_pnl = total_contracts * cs * step
+                notional = total_contracts * cs * current_price
+                fee_total = notional * 0.0002 * 2  # taker fee giriş+çıkış
+                net_pnl = round(gross_pnl - fee_total, 6)
 
                 trade = await self._execute_order(
                     state, "sell", current_price, sell_levels, len(sell_levels), net_pnl
@@ -558,13 +569,12 @@ class GridLiveEngine:
         if pnl > 0:
             state["total_wins"] = state.get("total_wins", 0) + 1
         state["total_pnl"] = round(state.get("total_pnl", 0) + pnl, 4)
-        # Fee sadece başarılı emirlerde sayılsın
+        # Fee sadece başarılı emirlerde sayılsın (kontrat bazlı)
         if trade["exchange_status"] != "error":
-            state["total_fees"] = round(
-                state.get("total_fees", 0) +
-                state["order_size"] * state["leverage"] * 0.0006 * 2 * level_count,
-                4
-            )
+            cs = state.get("contract_size", 0.01)
+            notional = total_contracts * cs * price
+            fee = notional * 0.0002 * 2 * level_count
+            state["total_fees"] = round(state.get("total_fees", 0) + fee, 6)
 
         # İşlem geçmişine ekle
         redis = get_redis()
