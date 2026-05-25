@@ -86,28 +86,22 @@ class GridLiveEngine:
         grid_count = int(config.get("grid_count", 20))
         margin_per_level = round(total_budget / grid_count, 4)  # Kademe başına margin
 
-        # Canlı fiyat al — önce MEXC WS Redis, yoksa genel ticker, yoksa exchange fetch
+        # Canlı fiyat al — SADECE MEXC kaynaklari (baska borsa fiyati kullanma!)
         current_price = 0.0
         price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
         if price_raw:
             price_data = json.loads(price_raw)
             current_price = float(price_data.get("last", 0))
         if current_price <= 0:
-            # Fallback: genel ticker cache (Bitget/Binance)
-            price_raw2 = await redis.get(f"ticker:{ccxt_symbol}")
-            if price_raw2:
-                price_data2 = json.loads(price_raw2)
-                current_price = float(price_data2.get("last", 0))
-        if current_price <= 0:
-            # Son çare: MEXC exchange'den direkt çek
+            # MEXC WS yoksa MEXC API'den direkt cek
             try:
                 ex = await self._get_exchange()
                 ticker = await ex.exchange.fetch_ticker(ccxt_symbol)
                 current_price = float(ticker.get("last", 0))
             except Exception as e:
-                print(f"[GridLive] Exchange fetch_ticker hatası: {e}")
+                print(f"[GridLive] MEXC fetch_ticker hatası: {e}")
         if current_price <= 0:
-            return {"error": f"Fiyat bulunamadı: {ccxt_symbol}. Lütfen birkaç saniye bekleyip tekrar deneyin."}
+            return {"error": f"Fiyat bulunamadı: {ccxt_symbol}. MEXC bağlantısını kontrol edin."}
 
         # Grid sınırlarını hesapla
         upper = current_price * (1 + spread_pct / 100)
@@ -545,15 +539,21 @@ class GridLiveEngine:
         if mode == "live" and ccxt_symbol:
             mexc_symbol = ccxt_symbol.split("/")[0] + "_" + ccxt_symbol.split("/")[1].split(":")[0]
 
-            # Kontrat sayısını güncel fiyattan yeniden hesapla
-            try:
-                margin = state.get("margin_per_level", 2.0) * level_count
-                total_contracts = await self._calc_contracts(
-                    ccxt_symbol, margin, price, int(state.get("leverage", 10))
-                )
+            if side == "buy":
+                # BUY: güncel fiyattan kontrat hesapla (pozisyon açma)
+                try:
+                    margin = state.get("margin_per_level", 2.0) * level_count
+                    total_contracts = await self._calc_contracts(
+                        ccxt_symbol, margin, price, int(state.get("leverage", 10))
+                    )
+                    trade["contracts"] = total_contracts
+                except Exception as e:
+                    print(f"[GridLive] Kontrat hesap uyarısı: {e}")
+            else:
+                # SELL: state'teki contracts_per_level kullan (BUY ile aynı miktar)
+                # Yeniden hesaplama YAPMA — kontrat uyuşmazlığı zarara yol açar
+                total_contracts = contracts_per_level * level_count
                 trade["contracts"] = total_contracts
-            except Exception as e:
-                print(f"[GridLive] Kontrat hesap uyarısı: {e}")
 
             ex = await self._get_exchange()
 
@@ -721,16 +721,14 @@ class GridLiveEngine:
                     await asyncio.sleep(1)
                     continue
 
-                # Redis'ten fiyat oku — MEXC WS önce, yoksa genel ticker
+                # Redis'ten fiyat oku — SADECE MEXC kaynaklari (baska borsa fiyati kullanma!)
                 current_price = 0.0
                 price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
-                if not price_raw:
-                    price_raw = await redis.get(f"ticker:{ccxt_symbol}")
                 if price_raw:
                     price_data = json.loads(price_raw)
                     current_price = float(price_data.get("last", 0))
 
-                # Redis'te yoksa exchange'den çek (WS feeder henüz başlamamışsa)
+                # MEXC WS yoksa MEXC API'den direkt cek (Bitget/Binance KULLANMA)
                 if current_price <= 0:
                     try:
                         ex = await self._get_exchange()
