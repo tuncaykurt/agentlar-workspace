@@ -231,10 +231,11 @@ export default function HftPage() {
   }, [livePrice, simRunning, gridBounds, tradingMode])
 
   const gridStep = gridBounds ? (gridBounds.upper - gridBounds.lower) / gridCount : 0
-  // Kontrat bazlı gerçek kâr: contracts × contractSize × step
+  // Kontrat bazlı tahmini kademe kari (margin bazli)
   // contractSize ETH=0.01, BTC=0.0001 vb.
   const contractSize = symbol.includes("BTC") ? 0.0001 : 0.01
-  const contracts = Math.max(1, Math.floor(orderSize / (livePrice * contractSize)))
+  const marginPerLevel = orderSize / gridCount
+  const contracts = Math.max(1, Math.floor((marginPerLevel * leverage) / (livePrice * contractSize)))
   const grossPerGrid = contracts * contractSize * gridStep
   const feePerGrid = contracts * contractSize * livePrice * 0.0002 * 2  // MEXC %0.02 fee
   const netPerGrid = grossPerGrid - feePerGrid
@@ -574,7 +575,7 @@ export default function HftPage() {
             <div className="text-sm font-bold text-white font-mono">${gridStep.toFixed(4)}</div>
           </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
-            <div className="text-[10px] text-slate-500 uppercase">Kademe Kari</div>
+            <div className="text-[10px] text-slate-500 uppercase">Maks Kademe Kari</div>
             <div className="text-sm font-bold text-emerald-400 font-mono">${netPerGrid.toFixed(4)}</div>
           </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">

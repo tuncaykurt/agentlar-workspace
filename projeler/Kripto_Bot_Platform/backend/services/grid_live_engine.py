@@ -420,6 +420,9 @@ class GridLiveEngine:
         filled = set(state.get("filled_levels", []))
         trades = []
 
+        # Giriş fiyatları takibi (level_index → entry_price)
+        entry_prices = state.get("entry_prices", {})
+
         if current_level < last_level:
             # Fiyat DÜŞTÜ → BUY (pozisyon aç)
             buy_levels = []
@@ -427,6 +430,7 @@ class GridLiveEngine:
                 if lvl not in filled and 0 <= lvl < grid_count:
                     buy_levels.append(lvl)
                     filled.add(lvl)
+                    entry_prices[str(lvl)] = current_price  # Gerçek giriş fiyatını kaydet
 
             if buy_levels:
                 trade = await self._execute_order(
@@ -442,15 +446,22 @@ class GridLiveEngine:
                     sell_levels.append(lvl)
 
             if sell_levels:
-                # PnL hesapla — kontrat bazlı (GERÇEK değerler)
-                # Örn: 1 kontrat ETH, contract_size=0.01, step=$4.18
-                # Gross = 1 × 0.01 × $4.18 = $0.0418
-                # Fee = 1 × 0.01 × price × 0.0002 × 2 = ~$0.0084 (MEXC %0.02 maker/taker)
+                # PnL hesapla — GERÇEK giriş fiyatlarından
                 cs = state.get("contract_size", 0.01)
-                total_contracts = state.get("contracts_per_level", 1) * len(sell_levels)
-                gross_pnl = total_contracts * cs * step
+                contracts_per_lvl = state.get("contracts_per_level", 1)
+                total_contracts = contracts_per_lvl * len(sell_levels)
+
+                # Her seviyenin gerçek giriş fiyatını bul, ortalama al
+                total_price_diff = 0.0
+                for lvl in sell_levels:
+                    entry_price = entry_prices.get(str(lvl), current_price - step)
+                    price_diff = current_price - entry_price
+                    total_price_diff += price_diff
+
+                avg_price_diff = total_price_diff / len(sell_levels) if sell_levels else 0
+                gross_pnl = total_contracts * cs * avg_price_diff
                 notional = total_contracts * cs * current_price
-                fee_total = notional * 0.0002 * 2  # taker fee giriş+çıkış
+                fee_total = notional * 0.0002 * 2  # MEXC %0.02 fee giriş+çıkış
                 net_pnl = round(gross_pnl - fee_total, 6)
 
                 trade = await self._execute_order(
@@ -462,7 +473,10 @@ class GridLiveEngine:
                 if trade.get("exchange_status") != "error":
                     for lvl in sell_levels:
                         filled.discard(lvl)
+                        entry_prices.pop(str(lvl), None)
                 # Başarısız → seviyeler dolu kalır, tekrar SELL denemez BUY da yapılmaz
+
+        state["entry_prices"] = entry_prices
 
         state["filled_levels"] = list(filled)
         state["last_level"] = current_level
