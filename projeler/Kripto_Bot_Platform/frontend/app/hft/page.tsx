@@ -356,36 +356,39 @@ export default function HftPage() {
   const mc = modeConfig[tradingMode]
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto space-y-5">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto space-y-4 sm:space-y-5 overflow-x-hidden">
 
       {/* Baslik */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <span className="p-2 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-lg shadow-lg shadow-indigo-500/20">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </span>
-            HFT Trailing Grid Motoru
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            {symbol} · ±{spreadPct}% · {gridCount} kademe · {leverage}x kaldirac
-            <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold ${mc.badge}`}>
-              {mc.label}
-            </span>
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Canli Fiyat */}
-          <div className="text-right">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+              <span className="p-1.5 sm:p-2 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-lg shadow-lg shadow-indigo-500/20 shrink-0">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </span>
+              <span className="truncate">HFT Trailing Grid Motoru</span>
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1 truncate">
+              {symbol} · ±{spreadPct}% · {gridCount} kademe · {leverage}x kaldirac
+              <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold ${mc.badge}`}>
+                {mc.label}
+              </span>
+            </p>
+          </div>
+          {/* Canli Fiyat — sag ust */}
+          <div className="text-right shrink-0">
             <div className="text-[10px] text-slate-500 uppercase tracking-wider">{symbol}</div>
-            <div className="text-2xl font-bold text-white font-mono">
+            <div className="text-lg sm:text-2xl font-bold text-white font-mono flex items-center gap-1 justify-end">
               {livePrice > 0 ? `$${livePrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "..."}
+              {livePrice > 0 && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />}
             </div>
           </div>
-          {livePrice > 0 && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
+        </div>
 
+        {/* Mod Secici + Baslat/Durdur — mobilde alt satir */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Mod Secici */}
           <div className="flex bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
             {(["sim", "paper", "live"] as TradingMode[]).map(m => (
@@ -409,7 +412,7 @@ export default function HftPage() {
             <button
               onClick={handleStart}
               disabled={livePrice <= 0 || isStarting}
-              className={`px-6 py-2.5 bg-gradient-to-r ${mc.color} hover:brightness-110 disabled:opacity-50 text-white font-bold rounded-lg shadow-lg transition-all flex items-center gap-2`}
+              className={`px-4 sm:px-6 py-2 sm:py-2.5 bg-gradient-to-r ${mc.color} hover:brightness-110 disabled:opacity-50 text-white font-bold rounded-lg shadow-lg transition-all flex items-center gap-2 text-sm`}
             >
               {isStarting ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -423,7 +426,7 @@ export default function HftPage() {
               <button
                 onClick={handleStop}
                 disabled={isStopping}
-                className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg transition-all flex items-center gap-2"
+                className="px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg transition-all flex items-center gap-2 text-sm"
               >
                 {isStopping ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -436,7 +439,7 @@ export default function HftPage() {
                 <button
                   onClick={handleStopAndClose}
                   disabled={isStopping}
-                  className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-lg transition-all text-xs"
+                  className="px-3 sm:px-4 py-2 sm:py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-lg transition-all text-xs"
                 >
                   Durdur + Kapat
                 </button>
@@ -448,18 +451,18 @@ export default function HftPage() {
 
       {/* Live Mode Uyari + Kill Switch */}
       {tradingMode === "live" && (
-        <div className="flex items-center justify-between bg-red-950/40 border border-red-500/30 rounded-xl px-5 py-3">
-          <div className="flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-            <div>
-              <span className="text-red-400 font-bold text-sm">CANLI ISLEM MODU</span>
-              <span className="text-red-400/70 text-xs ml-3">Gercek MEXC emirleri gonderilecek — dikkatli olun!</span>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 bg-red-950/40 border border-red-500/30 rounded-xl px-3 sm:px-5 py-2.5 sm:py-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse shrink-0" />
+            <div className="min-w-0">
+              <span className="text-red-400 font-bold text-xs sm:text-sm">CANLI ISLEM MODU</span>
+              <span className="text-red-400/70 text-[10px] sm:text-xs ml-2 sm:ml-3 hidden sm:inline">Gercek MEXC emirleri gonderilecek — dikkatli olun!</span>
             </div>
           </div>
           <button
             onClick={handleKillSwitch}
             disabled={isKilling}
-            className={`px-5 py-2.5 font-bold rounded-lg transition-all flex items-center gap-2 text-sm ${
+            className={`px-3 sm:px-5 py-2 sm:py-2.5 font-bold rounded-lg transition-all flex items-center gap-2 text-xs sm:text-sm shrink-0 w-full sm:w-auto justify-center ${
               killConfirm
                 ? "bg-red-600 hover:bg-red-500 text-white animate-pulse shadow-lg shadow-red-600/50"
                 : "bg-red-900/80 hover:bg-red-800 text-red-300 border border-red-500/50"
@@ -468,20 +471,20 @@ export default function HftPage() {
             {isKilling ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
               </svg>
             )}
-            {killConfirm ? "ONAYLA — TUM EMIRLERI IPTAL ET" : "KILL SWITCH"}
+            {killConfirm ? "ONAYLA — IPTAL ET" : "KILL SWITCH"}
           </button>
         </div>
       )}
 
       {/* Ana Kart */}
-      <div className="bg-gradient-to-br from-slate-900 to-black border border-indigo-500/30 rounded-xl p-5 relative overflow-hidden shadow-2xl">
+      <div className="bg-gradient-to-br from-slate-900 to-black border border-indigo-500/30 rounded-xl p-3 sm:p-5 relative overflow-hidden shadow-2xl">
 
         {/* Ayar Paneli */}
-        <div className="flex flex-wrap items-end gap-4 bg-slate-800/80 p-4 rounded-xl border border-slate-700/60 relative z-10 mb-4 shadow-inner">
+        <div className="flex flex-wrap items-end gap-2 sm:gap-4 bg-slate-800/80 p-3 sm:p-4 rounded-xl border border-slate-700/60 relative z-10 mb-4 shadow-inner">
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Coin</span>
             <select
@@ -548,7 +551,7 @@ export default function HftPage() {
           </button>
 
           {/* Alt/Ust Sinir */}
-          <div className="ml-auto flex gap-3">
+          <div className="flex gap-2 sm:gap-3 sm:ml-auto">
              <div className="flex flex-col items-end">
                <span className="text-[10px] text-green-400 font-semibold">Alt Ag</span>
                <span className="text-sm text-white bg-green-500/10 border border-green-500/20 px-3 py-1 rounded-md font-mono">
@@ -565,7 +568,7 @@ export default function HftPage() {
         </div>
 
         {/* Performans & Simulasyon Durumu */}
-        <div className="grid grid-cols-2 md:grid-cols-7 gap-3 relative z-10 mb-4">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2 sm:gap-3 relative z-10 mb-4">
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
             <div className="text-[10px] text-slate-500 uppercase">Kademe Araligi</div>
             <div className="text-sm font-bold text-white font-mono">${gridStep.toFixed(4)}</div>
@@ -651,7 +654,7 @@ export default function HftPage() {
         <div className={`${
           chartFullscreen
             ? 'fixed inset-0 z-[9999] bg-[#020817] flex flex-col'
-            : 'h-[450px] w-full bg-[#020817] border border-slate-700/80 rounded-xl flex flex-col relative z-10 overflow-hidden shadow-inner'
+            : 'h-[300px] sm:h-[450px] w-full bg-[#020817] border border-slate-700/80 rounded-xl flex flex-col relative z-10 overflow-hidden shadow-inner'
         }`}>
           {/* Fullscreen baslik bari */}
           {chartFullscreen && (
