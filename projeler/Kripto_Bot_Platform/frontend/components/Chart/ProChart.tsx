@@ -857,47 +857,50 @@ export default function ProChart({
     return () => { window.removeEventListener("resize", onResize); chart.remove(); chartRef.current = null; hasInitialFitRef.current = false }
   }, [data, inds, showUT, showLR])
 
-  // ── TP / SL çizgileri — ayrı useEffect (zoom sıfırlamaz) ──────
+  // ── TP / SL + Grid çizgileri — tek useEffect (zoom sıfırlamaz) ──
   useEffect(() => {
     const series = candleSeriesRef.current
     if (!series) return
+
+    // Eski TP/SL temizle
     tpSlLinesRef.current.forEach(pl => { try { series.removePriceLine(pl) } catch {} })
     tpSlLinesRef.current = []
-    if (tp) tpSlLinesRef.current.push(series.createPriceLine({ price: tp, color: "rgba(34,197,94,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "TP" }))
-    if (sl) tpSlLinesRef.current.push(series.createPriceLine({ price: sl, color: "rgba(239,68,68,0.9)", lineWidth: 2, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "SL" }))
-  }, [tp, sl])
-
-  // ── Grid çizgileri — ayrı useEffect (zoom sıfırlamaz) ─────────
-  useEffect(() => {
-    const series = candleSeriesRef.current
-    if (!series) return
-    // Eski grid çizgilerini temizle
-    gridPriceLinesRef.current.forEach(pl => {
-      try { series.removePriceLine(pl) } catch {}
-    })
+    // Eski grid temizle
+    gridPriceLinesRef.current.forEach(pl => { try { series.removePriceLine(pl) } catch {} })
     gridPriceLinesRef.current = []
-    // Yeni çizgileri ekle
-    if (gridLines && gridLines.length > 0) {
-      gridLines.forEach((price, idx) => {
-        // Her kademe için fiyat farkı yüzdesi (bir öncekine göre)
-        const prevPrice = idx > 0 ? gridLines[idx - 1] : null
-        const pctDiff = prevPrice ? ((price - prevPrice) / prevPrice * 100).toFixed(2) : null
-        const label = pctDiff ? `$${price.toFixed(2)}  +${pctDiff}%` : `$${price.toFixed(2)}`
+
+    // TP çizgisi — üst sınır (yeşil, noktalı, kalın)
+    if (tp) tpSlLinesRef.current.push(series.createPriceLine({
+      price: tp, color: "rgba(34,197,94,0.8)", lineWidth: 2, lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true, title: `TP  $${tp.toFixed(2)}`,
+    }))
+    // SL çizgisi — alt sınır (kırmızı, noktalı, kalın)
+    if (sl) tpSlLinesRef.current.push(series.createPriceLine({
+      price: sl, color: "rgba(239,68,68,0.8)", lineWidth: 2, lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true, title: `SL  $${sl.toFixed(2)}`,
+    }))
+
+    // Grid ara kademeleri — ilk ve son hariç (TP/SL ile çakışmasın)
+    if (gridLines && gridLines.length > 2) {
+      const innerLines = gridLines.slice(1, -1)
+      innerLines.forEach((price, idx) => {
+        const prevPrice = idx === 0 ? gridLines[0] : innerLines[idx - 1]
+        const pctDiff = ((price - prevPrice) / prevPrice * 100).toFixed(2)
 
         const pl = series.createPriceLine({
           price,
-          color: "rgba(99,102,241,0.30)",
+          color: "rgba(99,102,241,0.25)",
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           axisLabelVisible: true,
-          title: label,
-          axisLabelColor: "rgba(99,102,241,0.9)",
-          axisLabelTextColor: "#e2e8f0",
+          title: `$${price.toFixed(2)}  +${pctDiff}%`,
+          axisLabelColor: "rgba(99,102,241,0.85)",
+          axisLabelTextColor: "#cbd5e1",
         })
         gridPriceLinesRef.current.push(pl)
       })
     }
-  }, [gridLines])
+  }, [tp, sl, gridLines])
 
   // ── Birleşik marker useEffect (UT Bot + strateji sinyalleri) ──
   useEffect(() => {
