@@ -294,8 +294,13 @@ async def hft_start(data: dict):
         "grid_count": data.get("grid_count", hft_settings.get("grid_count", 20)),
     }
 
-    result = await grid_engine.start(config)
-    return result
+    try:
+        result = await grid_engine.start(config)
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": f"Grid başlatma hatası: {str(e)}"}
 
 
 @router.post("/hft-stop")
