@@ -46,15 +46,23 @@ class GridLiveEngine:
         market = ex.exchange.market(ccxt_symbol)
         return float(market.get("contractSize", 0.001))
 
-    async def _calc_contracts(self, ccxt_symbol: str, usdt_amount: float, price: float) -> int:
-        """USDT tutarından kontrat sayısı hesapla. KRİTİK: Doğru hesaplama şart!"""
+    async def _calc_contracts(self, ccxt_symbol: str, margin_usdt: float, price: float, leverage: int) -> int:
+        """Margin tutarından kontrat sayısı hesapla. KRİTİK: Doğru hesaplama şart!
+        margin_usdt: Kademe başına kullanılacak margin (USDT)
+        leverage: Kaldıraç çarpanı
+        Formül: notional = margin × leverage → contracts = notional / (price × contractSize)
+        """
         contract_size = await self._get_contract_size(ccxt_symbol)
         if contract_size <= 0:
             contract_size = 0.001
-        contracts = int(usdt_amount / (price * contract_size))
+        notional = margin_usdt * leverage
+        contracts = int(notional / (price * contract_size))
         if contracts < 1:
             contracts = 1
-        print(f"[GridLive] Kontrat hesabı: ${usdt_amount} / (${price} × {contract_size}) = {contracts} kontrat")
+        actual_margin = contracts * price * contract_size / leverage
+        print(f"[GridLive] Kontrat hesabı: margin=${margin_usdt:.2f} × {leverage}x = "
+              f"notional=${notional:.2f} / (${price} × {contract_size}) = {contracts} kontrat "
+              f"(gerçek margin=${actual_margin:.4f})")
         return contracts
 
     # ─── Başlat / Durdur ──────────────────────────────────────────────
@@ -73,9 +81,10 @@ class GridLiveEngine:
 
         mode = config.get("mode", "paper")  # "paper" veya "live"
         leverage = int(config.get("leverage", 10))
-        order_size = float(config.get("order_size", 100))
+        total_budget = float(config.get("order_size", 100))  # Toplam bütçe (USDT)
         spread_pct = float(config.get("spread_pct", 0.5))
         grid_count = int(config.get("grid_count", 20))
+        margin_per_level = round(total_budget / grid_count, 4)  # Kademe başına margin
 
         # Canlı fiyat al
         price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
@@ -110,11 +119,14 @@ class GridLiveEngine:
             except Exception as e:
                 print(f"[GridLive] Kaldıraç ayar uyarısı (devam ediliyor): {e}")
 
-            contracts_per_level = await self._calc_contracts(ccxt_symbol, order_size, current_price)
+            contracts_per_level = await self._calc_contracts(ccxt_symbol, margin_per_level, current_price, leverage)
 
         # Kontrat büyüklüğü (PnL hesabı için KRİTİK)
         contract_size = await self._get_contract_size(ccxt_symbol)
-        print(f"[GridLive] Contract size: {contract_size} (örn: ETH=0.01)")
+        actual_margin_per_level = contracts_per_level * contract_size * current_price / leverage
+        print(f"[GridLive] Contract size: {contract_size} | "
+              f"Toplam bütçe: ${total_budget} | Kademe margin: ${margin_per_level:.4f} | "
+              f"Kontrat/kademe: {contracts_per_level} | Gerçek margin/kademe: ${actual_margin_per_level:.4f}")
 
         # Grid state oluştur
         state = {
@@ -122,7 +134,8 @@ class GridLiveEngine:
             "symbol": symbol_raw,
             "ccxt_symbol": ccxt_symbol,
             "leverage": leverage,
-            "order_size": order_size,
+            "order_size": total_budget,
+            "margin_per_level": margin_per_level,
             "contracts_per_level": contracts_per_level,
             "contract_size": contract_size,
             "spread_pct": spread_pct,
@@ -152,7 +165,7 @@ class GridLiveEngine:
             "spread_pct": spread_pct,
             "grid_count": grid_count,
             "leverage": leverage,
-            "order_size": order_size,
+            "order_size": total_budget,
             "upper_price": upper,
             "lower_price": lower,
             "live_mode": mode,
@@ -167,7 +180,8 @@ class GridLiveEngine:
         emoji = "🔴 CANLI" if mode == "live" else "📝 PAPER"
         print(f"[GridLive] {emoji} Grid Bot Başlatıldı: {symbol_raw} | "
               f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | "
-              f"{leverage}x | ${order_size}/kademe | {contracts_per_level} kontrat/kademe")
+              f"{leverage}x | toplam=${total_budget} margin/kademe=${margin_per_level:.4f} | "
+              f"{contracts_per_level} kontrat/kademe")
 
         return {
             "success": True,
@@ -180,7 +194,8 @@ class GridLiveEngine:
             "grid_count": grid_count,
             "leverage": leverage,
             "contracts_per_level": contracts_per_level,
-            "order_size": order_size,
+            "total_budget": total_budget,
+            "margin_per_level": margin_per_level,
             "estimated_profit_per_grid": round(
                 (step / current_price) * order_size * leverage - order_size * leverage * 0.0012, 4
             ),
@@ -514,8 +529,9 @@ class GridLiveEngine:
 
             # Kontrat sayısını güncel fiyattan yeniden hesapla
             try:
+                margin = state.get("margin_per_level", 2.0) * level_count
                 total_contracts = await self._calc_contracts(
-                    ccxt_symbol, state["order_size"] * level_count, price
+                    ccxt_symbol, margin, price, int(state.get("leverage", 10))
                 )
                 trade["contracts"] = total_contracts
             except Exception as e:
