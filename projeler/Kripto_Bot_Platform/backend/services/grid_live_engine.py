@@ -658,13 +658,75 @@ class GridLiveEngine:
                                 filled.discard(lvl)
                                 entry_prices.pop(str(lvl), None)
 
+        # ═══ BAND EXIT CLOSE — bant dışına çık + geri gir = tüm pozisyonları kapat ═══
+        if grid_mode in ("bollinger", "hybrid") and filled:
+            bb_upper = state.get("bb_upper", 0)
+            bb_lower = state.get("bb_lower", 0)
+            band_exited = state.get("band_exited", False)
+            band_exit_side = state.get("band_exit_side", None)
+
+            if not band_exited:
+                # Fiyat bant dışına çıktı mı?
+                if active_dir == "long" and current_price > bb_upper and bb_upper > 0:
+                    state["band_exited"] = True
+                    state["band_exit_side"] = "upper"
+                    print(f"[GridLive] 🔔 Band EXIT: fiyat ${current_price:.2f} > üst bant ${bb_upper:.2f}")
+                elif active_dir == "short" and current_price < bb_lower and bb_lower > 0:
+                    state["band_exited"] = True
+                    state["band_exit_side"] = "lower"
+                    print(f"[GridLive] 🔔 Band EXIT: fiyat ${current_price:.2f} < alt bant ${bb_lower:.2f}")
+            else:
+                # Fiyat geri girdi mi? → tüm pozisyonları kapat
+                re_entered = False
+                if band_exit_side == "upper" and current_price <= bb_upper:
+                    re_entered = True
+                elif band_exit_side == "lower" and current_price >= bb_lower:
+                    re_entered = True
+
+                if re_entered:
+                    close_levels = list(filled)
+                    cs = state.get("contract_size", 0.01)
+                    contracts_per_lvl = state.get("contracts_per_level", 1)
+                    total_contracts = contracts_per_lvl * len(close_levels)
+
+                    total_price_diff = 0.0
+                    for lvl in close_levels:
+                        ep = entry_prices.get(str(lvl), current_price)
+                        if active_dir == "long":
+                            total_price_diff += (current_price - ep)
+                        else:
+                            total_price_diff += (ep - current_price)
+
+                    avg_diff = total_price_diff / len(close_levels) if close_levels else 0
+                    gross_pnl = total_contracts * cs * avg_diff
+                    notional = total_contracts * cs * current_price
+                    fee_total = notional * 0.0006 * 2
+                    net_pnl = round(gross_pnl - fee_total, 6)
+
+                    close_side = "sell" if active_dir == "long" else "buy"
+                    trade = await self._execute_order(
+                        state, close_side, current_price, close_levels, len(close_levels), net_pnl
+                    )
+                    trades.append(trade)
+
+                    if trade.get("exchange_status") != "error":
+                        for lvl in close_levels:
+                            filled.discard(lvl)
+                            entry_prices.pop(str(lvl), None)
+
+                    state["band_exited"] = False
+                    state["band_exit_side"] = None
+                    print(f"[GridLive] 🔄 Band RE-ENTRY: tüm pozisyonlar kapatıldı | "
+                          f"pnl=${net_pnl:.4f} | {len(close_levels)} seviye")
+
         state["entry_prices"] = entry_prices
 
         state["filled_levels"] = list(filled)
         state["last_level"] = current_level
 
-        # Trailing kontrol
-        await self._check_trailing(state, current_price, redis)
+        # Trailing kontrol — band exit durumunda trailing yapma
+        if not state.get("band_exited", False):
+            await self._check_trailing(state, current_price, redis)
 
         await redis.set("grid_live:state", json.dumps(state))
         return trades if trades else None

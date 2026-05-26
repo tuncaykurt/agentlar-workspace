@@ -102,6 +102,9 @@ export default function HftPage() {
   const [filterAtrStep, setFilterAtrStep] = useState(false)
   const [gridDirection, setGridDirection] = useState<GridDirection>("long")
 
+  // Band exit tracking — fiyat BB bant disina cikip geri girince pozisyon kapat
+  const bandExitRef = useRef<{ exited: boolean; side: "upper" | "lower" | null }>({ exited: false, side: null })
+
   // Sim BB state — backend'den alinan BB meta verisi
   const simBbRef = useRef<{
     bb_upper: number; bb_lower: number; bb_mid: number; bb_width: number;
@@ -495,6 +498,63 @@ export default function HftPage() {
       }
     }
 
+    // ═══ BAND EXIT CLOSE — bant disina cik + geri gir = tum pozisyonlari kapat ═══
+    const bandExit = bandExitRef.current
+    const bbData = simBbRef.current
+
+    if (isBbMode && bbData && filled.size > 0) {
+      if (!bandExit.exited) {
+        // Fiyat bant disina cikti mi?
+        if (dir === "long" && livePrice > bbData.bb_upper) {
+          bandExitRef.current = { exited: true, side: "upper" }
+        } else if (dir === "short" && livePrice < bbData.bb_lower) {
+          bandExitRef.current = { exited: true, side: "lower" }
+        }
+      } else {
+        // Fiyat geri girdi mi? → TUM pozisyonlari kapat
+        const reEntered =
+          (bandExit.side === "upper" && livePrice <= bbData.bb_upper) ||
+          (bandExit.side === "lower" && livePrice >= bbData.bb_lower)
+
+        if (reEntered) {
+          // Tum acik pozisyonlari kapat
+          const closeLevels = Array.from(filled)
+          if (closeLevels.length > 0) {
+            const totalContracts = contractsPerLvl * closeLevels.length
+            let totalPriceDiff = 0
+            for (const lvl of closeLevels) {
+              const ep = entryPrices.get(lvl) ?? livePrice
+              if (dir === "long") {
+                totalPriceDiff += (livePrice - ep)
+              } else {
+                totalPriceDiff += (ep - livePrice)
+              }
+            }
+            const grossPnl = totalContracts * cs * (totalPriceDiff / closeLevels.length)
+            const notional = totalContracts * cs * livePrice
+            const netPnl = grossPnl - notional * 0.0006 * 2
+
+            for (const lvl of closeLevels) { filled.delete(lvl); entryPrices.delete(lvl) }
+
+            newTrades.push({
+              id: ++tradeIdRef.current,
+              side: dir === "long" ? "SELL" : "BUY",
+              price: livePrice,
+              gridLevel: closeLevels[0],
+              grid_levels: closeLevels,
+              level_count: closeLevels.length,
+              pnl: Number(netPnl.toFixed(4)),
+              time: new Date().toLocaleTimeString("tr-TR"),
+              mode: "sim",
+              timestamp: Math.floor(Date.now() / 1000),
+            })
+          }
+          // Band exit sifirla
+          bandExitRef.current = { exited: false, side: null }
+        }
+      }
+    }
+
     if (newTrades.length > 0) {
       setTrades(prev => [...newTrades.reverse(), ...prev].slice(0, 100))
       const pnlSum = newTrades.reduce((s, t) => s + t.pnl, 0)
@@ -504,8 +564,10 @@ export default function HftPage() {
 
     lastGridHitRef.current = clampedLevel
 
-    // Trailing
-    if (livePrice >= gridBounds.upper) {
+    // Trailing — BB modda bant disina cikinca trailing YAPMA (band exit mekanizmasi devreye girer)
+    if (isBbMode && bandExitRef.current.exited) {
+      // Bant disinda — trailing yok, geri girisi bekle
+    } else if (livePrice >= gridBounds.upper) {
       const diff = livePrice - gridBounds.upper
       setGridBounds(prev => prev ? { upper: prev.upper + diff, lower: prev.lower + diff } : null)
     } else if (livePrice <= gridBounds.lower && simFilledRef.current.size === 0) {
