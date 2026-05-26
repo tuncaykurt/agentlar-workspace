@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 import pandas as pd
 from bot.backtester import BacktestEngine
+from bot.grid_backtester import GridBacktestEngine
 from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
 
@@ -26,7 +27,7 @@ def _compute_indicators(ohlcv: list, strategy: str, params: dict, step: int, ext
                 out.append({"time": int(t), "value": round(float(v), 8)})
         return out[::step]
 
-    if strategy in ("bb_ema_cross", "bollinger_bounce"):
+    if strategy in ("bb_ema_cross", "bollinger_bounce") or strategy.startswith("grid_"):
         period  = int(params.get("bb_period") or params.get("period") or 20)
         std_dev = float(params.get("bb_std") or params.get("std_dev") or 2.0)
         sma   = s.rolling(period).mean()
@@ -117,17 +118,33 @@ async def run_backtest(req: BacktestRequest):
             "candle_count": len(ohlcv),
         }
 
-    engine = BacktestEngine({
-        "strategy": req.strategy,
-        "params": req.params,
-        "initial_balance": req.initial_balance,
-        "risk_per_trade": req.risk_per_trade,
-        "leverage": req.leverage,
-        "stop_loss_pct": req.stop_loss_pct,
-        "take_profit_pct": req.take_profit_pct,
-        "fee_pct": req.fee_pct,
-        "timeframe": req.timeframe,
-    })
+    if req.strategy.startswith("grid_"):
+        grid_mode = req.strategy.replace("grid_", "")
+        engine = GridBacktestEngine({
+            "symbol": req.symbol,
+            "grid_mode": grid_mode,
+            "grid_direction": "auto" if grid_mode in ("bollinger", "hybrid", "bb_direction") else "long",
+            "grid_count": req.params.get("grid_count", 20),
+            "bb_period": req.params.get("bb_period", 20),
+            "bb_std_dev": req.params.get("bb_std_dev", 2.0),
+            "initial_balance": req.initial_balance,
+            "order_size": req.initial_balance * req.risk_per_trade * 10, # arbitrary logic to set order size
+            "leverage": req.leverage,
+            "fee_pct": req.fee_pct,
+            "filters": req.params.get("filters", {"rsi_filter": True, "squeeze_filter": True, "midline_filter": True}),
+        })
+    else:
+        engine = BacktestEngine({
+            "strategy": req.strategy,
+            "params": req.params,
+            "initial_balance": req.initial_balance,
+            "risk_per_trade": req.risk_per_trade,
+            "leverage": req.leverage,
+            "stop_loss_pct": req.stop_loss_pct,
+            "take_profit_pct": req.take_profit_pct,
+            "fee_pct": req.fee_pct,
+            "timeframe": req.timeframe,
+        })
 
     result = engine.run(ohlcv)
     result["config"] = {
@@ -146,7 +163,11 @@ async def run_backtest(req: BacktestRequest):
 
     # İndikatörler için step (performans — çizgide boşluk olmaz)
     ind_step = max(1, len(ohlcv) // 6000)
-    result["indicators"] = _compute_indicators(ohlcv, req.strategy, req.params, ind_step, req.overlay_indicators)
+    computed_inds = _compute_indicators(ohlcv, req.strategy, req.params, ind_step, req.overlay_indicators)
+    if "indicators" in result:
+        result["indicators"].update(computed_inds)
+    else:
+        result["indicators"] = computed_inds
 
     return result
 
@@ -248,6 +269,24 @@ async def list_strategies():
                     "touch_pct": 0.3, "setup_lookback": 5,
                     "direction": "both", "exit_at_bands": True,
                 },
+            },
+            {
+                "id": "grid_bollinger",
+                "name": "Bollinger Grid",
+                "description": "Bollinger bantlarını grid sınırı olarak kullanan bot",
+                "params": {"grid_count": 20, "bb_period": 20, "bb_std_dev": 2.0},
+            },
+            {
+                "id": "grid_hybrid",
+                "name": "Hibrit Grid (BB+Filtre)",
+                "description": "Bollinger grid ve RSI/Squeeze filtreleri",
+                "params": {"grid_count": 20, "bb_period": 20, "bb_std_dev": 2.0},
+            },
+            {
+                "id": "grid_bb_direction",
+                "name": "BB Yön (Oto Long/Short)",
+                "description": "Tam otomatik yön değişimi, bant dokunuşu çıkışı",
+                "params": {"grid_count": 20, "bb_period": 20, "bb_std_dev": 2.0},
             },
         ]
     }

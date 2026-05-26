@@ -45,6 +45,8 @@ interface BacktestResult {
   avg_trade_pnl: number
   best_trade: number
   worst_trade: number
+  avg_win: number
+  avg_loss: number
   trades: Trade[]
   ohlcv?: OHLCVCandle[]
   indicators?: Record<string, { time: number; value: number }[]>
@@ -67,9 +69,12 @@ const STRATEGIES = [
       bb_period: 20, bb_std: 2.0,
       ema_fast: 5, ema_slow: 13,
       touch_pct: 0.3, setup_lookback: 5,
-      direction: "both", exit_at_bands: true,
+      exit_at_bands: true,
     },
   },
+  { id: "grid_bollinger",   name: "Bollinger Grid",   params: { grid_count: 20, bb_period: 20, bb_std_dev: 2.0 } },
+  { id: "grid_hybrid",      name: "Hibrit Grid (BB+Filtre)", params: { grid_count: 20, bb_period: 20, bb_std_dev: 2.0 } },
+  { id: "grid_bb_direction",name: "BB Yön (Oto Long/Short)", params: { grid_count: 20, bb_period: 20, bb_std_dev: 2.0 } },
 ]
 
 const PARAM_OPTIONS: Record<string, Record<string, string[]>> = {

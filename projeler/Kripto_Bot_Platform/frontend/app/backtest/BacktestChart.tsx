@@ -44,6 +44,8 @@ const INDICATOR_STYLES: Record<string, { color: string; lineWidth: number; lineS
   bb_lower: { color: "rgba(96,165,250,0.6)",  lineWidth: 1, lineStyle: LineStyle.Dashed,   title: "BB ↓" },
   ema_fast: { color: "#22c55e",               lineWidth: 1, lineStyle: LineStyle.Solid,    title: "EMA fast" },
   ema_slow: { color: "#fbbf24",               lineWidth: 1, lineStyle: LineStyle.Solid,    title: "EMA slow" },
+  grid_upper: { color: "#f97316",             lineWidth: 1, lineStyle: LineStyle.Solid,   title: "Grid Üst Sınır" },
+  grid_lower: { color: "#f97316",             lineWidth: 1, lineStyle: LineStyle.Solid,   title: "Grid Alt Sınır" },
 }
 
 function resolveIndicatorStyle(key: string, colorIdx: number): { color: string; lineWidth: number; lineStyle: number; title: string } {
