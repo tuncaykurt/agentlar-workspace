@@ -761,14 +761,13 @@ export default function HftPage() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Toplam Butce ($)</span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Butce ($) <span className="text-slate-500 normal-case font-normal">· kademe ${(orderSize / gridCount).toFixed(2)}</span></span>
             <input type="number" value={localOrder} onChange={e => setLocalOrder(e.target.value)}
               onBlur={() => commitSetting("order_size", localOrder, 100)}
               onKeyDown={e => e.key === "Enter" && commitSetting("order_size", localOrder, 100)}
               min={1} step={5} disabled={simRunning}
               className="w-24 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />
-            <span className="text-[9px] text-slate-500">Kademe: ${(orderSize / gridCount).toFixed(2)}</span>
           </div>
 
           <button onClick={recalcGrid} disabled={simRunning}
