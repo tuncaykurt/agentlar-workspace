@@ -482,10 +482,10 @@ function drawOBCanvas(
 //  Ana Bileşen
 // ═══════════════════════════════════════════════════════════════
 export default function ProChart({
-  symbol, onClose, tp, sl, gridLines, hideVolume
+  symbol, onClose, tp, sl, gridLines, hideVolume, gridMode, trades
 }: {
   symbol: string; onClose?: () => void; tp?: number; sl?: number; gridLines?: number[]
-  hideVolume?: boolean
+  hideVolume?: boolean; gridMode?: string; trades?: any[]
 }) {
   const mainRef          = useRef<HTMLDivElement>(null)
   const chartRef         = useRef<IChartApi | null>(null)
@@ -574,6 +574,21 @@ export default function ProChart({
       return [...withoutOld, ...newCustom]
     })
   }, [])
+
+  // Strateji secimine gore Bollinger ve RSI indikatörlerini otomatik ac/kapat
+  useEffect(() => {
+    if (gridMode === "bollinger" || gridMode === "hybrid") {
+      setInds(prev => prev.map(i => {
+        if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: true }
+        return i
+      }))
+    } else if (gridMode === "manual") {
+      setInds(prev => prev.map(i => {
+        if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: false }
+        return i
+      }))
+    }
+  }, [gridMode])
 
   const oscillators = inds.filter(i => i.type === "oscillator" && i.enabled)
   const paneRefs    = useRef<Record<string, HTMLDivElement | null>>({})
@@ -959,10 +974,41 @@ export default function ProChart({
       })
     }
 
+    // HFT Bot Sim/Canli islemleri
+    if (trades && trades.length) {
+      const candleTimes = data.candles.map(c => c.time)
+      const snap = (tradeTs: number) => {
+        let best = candleTimes[0]
+        let bestDiff = Math.abs(tradeTs - (best as number))
+        for (const ct of candleTimes) {
+          const d = Math.abs(tradeTs - (ct as number))
+          if (d < bestDiff) {
+            best = ct
+            bestDiff = d
+          }
+        }
+        return best
+      }
+      trades.forEach((t) => {
+        const tradeTs = t.timestamp || 0
+        if (tradeTs <= 0) return
+        const markerTime = snap(tradeTs)
+        const isBuy = t.side.toUpperCase() === "BUY"
+        allMarkers.push({
+          time:     markerTime as Time,
+          position: isBuy ? "belowBar" : "aboveBar",
+          color:    isBuy ? "#22c55e" : (t.pnl >= 0 ? "#10b981" : "#ef4444"),
+          shape:    isBuy ? "arrowUp" : "arrowDown",
+          text:     isBuy ? `BUY` : `SELL ${t.pnl >= 0 ? "+" : ""}$${t.pnl.toFixed(2)}`,
+          size:     1.2,
+        })
+      })
+    }
+
     // Sırala (lightweight-charts zorunluluğu)
     allMarkers.sort((a, b) => (a.time as number) - (b.time as number))
     try { series.setMarkers(allMarkers as any) } catch {}
-  }, [showUT, data, stratTrades])
+  }, [showUT, data, stratTrades, trades])
 
   // ── Volume Profile canvas (rAF ile sürekli senkron) ──────────
   useEffect(() => {

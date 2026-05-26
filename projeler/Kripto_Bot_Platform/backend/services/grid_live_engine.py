@@ -761,6 +761,7 @@ class GridLiveEngine:
             "pnl": round(pnl, 4),
             "mode": mode,
             "time": datetime.now(timezone.utc).isoformat(),
+            "timestamp": int(time.time()),
         }
 
         # Live modda gerçek emir gönder

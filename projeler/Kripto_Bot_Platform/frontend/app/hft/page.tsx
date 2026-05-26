@@ -60,6 +60,7 @@ interface SimTrade {
   exchange_status?: string
   grid_levels?: number[]
   level_count?: number
+  timestamp?: number
 }
 
 interface ExchangePosition {
@@ -270,6 +271,7 @@ export default function HftPage() {
                 exchange_status: t.exchange_status,
                 grid_levels: t.grid_levels,
                 level_count: t.level_count,
+                timestamp: t.timestamp || (t.time ? Math.floor(new Date(t.time).getTime() / 1000) : undefined),
               })))
             }
           } else {
@@ -379,6 +381,7 @@ export default function HftPage() {
           pnl: 0, // BUY'da PnL yok
           time: new Date().toLocaleTimeString("tr-TR"),
           mode: "sim",
+          timestamp: Math.floor(Date.now() / 1000),
         })
       }
     } else if (clampedLevel > lastLevel && !skipSell) {
@@ -423,6 +426,7 @@ export default function HftPage() {
           pnl: Number(netPnl.toFixed(4)),
           time: new Date().toLocaleTimeString("tr-TR"),
           mode: "sim",
+          timestamp: Math.floor(Date.now() / 1000),
         })
       }
     }
@@ -1170,6 +1174,8 @@ export default function HftPage() {
                 sl={gridBounds?.lower}
                 gridLines={gridLines}
                 hideVolume
+                gridMode={isBackendMode ? backendStatus?.grid_mode : gridMode}
+                trades={trades}
               />
             ) : (
               <div className="flex-1 flex items-center justify-center h-full">
