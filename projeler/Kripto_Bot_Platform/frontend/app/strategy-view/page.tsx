@@ -72,9 +72,9 @@ const STRATEGIES = [
       exit_at_bands: true,
     },
   },
-  { id: "grid_bollinger",   name: "Bollinger Grid",   params: { grid_count: 20, bb_period: 20, bb_std_dev: 2.0 } },
-  { id: "grid_hybrid",      name: "Hibrit Grid (BB+Filtre)", params: { grid_count: 20, bb_period: 20, bb_std_dev: 2.0 } },
-  { id: "grid_bb_direction",name: "BB Yön (Oto Long/Short)", params: { grid_count: 20, bb_period: 20, bb_std_dev: 2.0 } },
+  { id: "grid_bollinger",   name: "Bollinger Grid",   params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0 } },
+  { id: "grid_hybrid",      name: "Hibrit Grid (BB+Filtre)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0 } },
+  { id: "grid_bb_direction",name: "BB Yön (Oto Long/Short)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0 } },
 ]
 
 const PARAM_OPTIONS: Record<string, Record<string, string[]>> = {
@@ -288,10 +288,17 @@ export default function StrategyViewPage() {
 
       // ── Normal strateji: backend ──
       const mergedParams = { ...selectedStrat.params, ...params }
+      if (strategy.startsWith("grid_")) {
+        mergedParams.budget = Number(riskPct) || 1000
+        if (mergedParams.Kademe) { mergedParams.grid_count = mergedParams.Kademe; delete mergedParams.Kademe }
+        if (mergedParams.BB_Periyot) { mergedParams.bb_period = mergedParams.BB_Periyot; delete mergedParams.BB_Periyot }
+        if (mergedParams.BB_Sapma) { mergedParams.bb_std_dev = mergedParams.BB_Sapma; delete mergedParams.BB_Sapma }
+      }
+      
       const res = await api.post("/backtest/run", {
         symbol, timeframe, strategy, days,
         initial_balance: Number(initialBalance) || 10000,
-        risk_per_trade: (Number(riskPct) || 2) / 100,
+        risk_per_trade: strategy.startsWith("grid_") ? 0.02 : (Number(riskPct) || 2) / 100,
         leverage: Number(leverage) || 1,
         stop_loss_pct: Number(slPct) || 3,
         take_profit_pct: Number(tpPct) || 6,
@@ -388,7 +395,7 @@ export default function StrategyViewPage() {
             </label>
             {strategy.startsWith("grid_") ? (
               <label className="block">
-                <span className="text-xs text-slate-400">Toplam Grid Bütçesi (%)</span>
+                <span className="text-xs text-slate-400">Toplam Grid Bütçesi ($)</span>
                 <input type="number" value={riskPct}
                   onChange={e => setRiskPct(e.target.value)}
                   className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />

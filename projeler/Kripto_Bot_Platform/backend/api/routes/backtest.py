@@ -128,7 +128,7 @@ async def run_backtest(req: BacktestRequest):
             "bb_period": req.params.get("bb_period", 20),
             "bb_std_dev": req.params.get("bb_std_dev", 2.0),
             "initial_balance": req.initial_balance,
-            "order_size": req.initial_balance * req.risk_per_trade * 10, # arbitrary logic to set order size
+            "order_size": req.params.get("budget", 1000),
             "leverage": req.leverage,
             "fee_pct": req.fee_pct,
             "filters": req.params.get("filters", {"rsi_filter": True, "squeeze_filter": True, "midline_filter": True}),
