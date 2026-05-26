@@ -159,7 +159,13 @@ export default function BacktestPage() {
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4 pb-20">
-      <h1 className="text-xl font-bold text-white">Backtest</h1>
+      <div className="section-header">
+        <div className="section-header-icon">🧪</div>
+        <div>
+          <h1 className="section-title">Backtest</h1>
+          <p className="section-subtitle">Geçmiş veriyle strateji test et — equity curve, win rate, drawdown analizi</p>
+        </div>
+      </div>
 
       {/* Config Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

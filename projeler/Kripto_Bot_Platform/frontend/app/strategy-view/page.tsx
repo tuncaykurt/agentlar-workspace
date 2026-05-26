@@ -304,11 +304,12 @@ export default function StrategyViewPage() {
     <div className="p-4 max-w-7xl mx-auto space-y-4 pb-10">
 
       {/* Başlık */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Strateji Görüntüleyici</h1>
-        <span className="text-xs text-slate-500 hidden md:block">
-          Grafik üstünde giriş/çıkış noktaları · altında işlem hesaplaması
-        </span>
+      <div className="section-header">
+        <div className="section-header-icon">📈</div>
+        <div>
+          <h1 className="section-title">Strateji Görüntüleme</h1>
+          <p className="section-subtitle">Grafik üstünde giriş/çıkış noktaları · Trade simulations</p>
+        </div>
       </div>
 
       {/* Kontrol Paneli */}
@@ -644,9 +645,9 @@ export default function StrategyViewPage() {
 
 function StatCard({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-3">
-      <p className="text-xs text-slate-500 mb-0.5">{label}</p>
-      <p className={`text-base font-semibold ${color ?? "text-white"}`}>{value}</p>
+    <div className="stat-card">
+      <div className="stat-card-label">{label}</div>
+      <div className={`stat-card-value ${color ?? 'text-white'}`}>{value}</div>
     </div>
   )
 }

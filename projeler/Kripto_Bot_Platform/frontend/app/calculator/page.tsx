@@ -327,9 +327,12 @@ export default function CalculatorPage() {
   const [tab, setTab] = useState<Tab>("leverage")
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 pb-20">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-white">🧮 İşlem Hesaplama</h1>
-        <p className="text-sm text-slate-500 mt-1">Kaldıraç, hedge ve komisyon hesapla</p>
+      <div className="section-header mb-6">
+        <div className="section-header-icon">🧮</div>
+        <div>
+          <h1 className="section-title">İşlem Hesaplama</h1>
+          <p className="section-subtitle">Kaldıraç, hedge ve komisyon hesapla</p>
+        </div>
       </div>
       <div className="flex gap-1.5 mb-6 bg-slate-900 p-1 rounded-xl border border-slate-800">
         {TABS.map(t => (

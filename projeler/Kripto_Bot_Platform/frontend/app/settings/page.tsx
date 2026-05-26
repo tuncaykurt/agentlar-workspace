@@ -102,49 +102,49 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-6 pb-20 space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-white">Borsa Bağlantısı</h1>
-        <p className="text-sm text-slate-400 mt-1">Borsa API bağlantılarınızı yönetin</p>
+      <div className="section-header">
+        <div className="section-header-icon">🔗</div>
+        <div>
+          <h1 className="section-title">Borsa Bağlantısı</h1>
+          <p className="section-subtitle">Borsa API bağlantılarınızı yönetin</p>
+        </div>
       </div>
 
       {loadError && (
-        <div className="text-sm rounded-lg px-4 py-3 border border-yellow-500/20 bg-yellow-500/10 text-yellow-400">
-          Backend bağlantısı kurulamadı. Borsalar çevrimdışı görünüyor. Coolify&apos;da servisin çalıştığını kontrol edin.
+        <div className="glass-card p-4 border-amber-500/20 text-amber-400 text-sm flex items-center gap-2">
+          ⚠️ Backend bağlantısı kurulamadı. Coolify&apos;da servisin çalıştığını kontrol edin.
         </div>
       )}
 
       {message && (
-        <div
-          className={`text-sm rounded-lg px-4 py-3 border ${
-            message.type === "success"
-              ? "text-green-400 bg-green-500/10 border-green-500/20"
-              : "text-red-400 bg-red-500/10 border-red-500/20"
-          }`}
-        >
-          {message.text}
+        <div className={`glass-card p-4 text-sm flex items-center gap-2 ${
+          message.type === "success"
+            ? "border-emerald-500/20 text-emerald-400"
+            : "border-red-500/20 text-red-400"
+        }`}>
+          {message.type === "success" ? "✓" : "✕"} {message.text}
         </div>
       )}
 
       {/* Exchange listesi */}
       <div className="space-y-3">
-        <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Borsalar</p>
+        <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest">Borsalar</p>
         {exchanges.map((ex) => (
-          <div
-            key={ex.exchange}
-            className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between gap-4"
-          >
+          <div key={ex.exchange} className="glass-card p-4 flex items-center justify-between gap-4 fade-in-up">
             <div className="flex items-center gap-3">
-              <span className="text-xl">{EXCHANGE_ICONS[ex.exchange] ?? "🔗"}</span>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+                style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}>
+                {EXCHANGE_ICONS[ex.exchange] ?? "🔗"}
+              </div>
               <div>
                 <p className="font-semibold text-white">{ex.label}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs mt-0.5">
                   {ex.connected ? (
-                    <span className="text-green-400 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-                      Bağlı
+                    <span className="badge badge-running text-[9px]">
+                      <span className="badge-dot badge-dot-green pulse-dot" /> Bağlı
                     </span>
                   ) : (
-                    "Bağlı değil"
+                    <span className="text-slate-600">Bağlı değil</span>
                   )}
                 </p>
               </div>
@@ -153,26 +153,19 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2">
               {ex.connected && (
                 <>
-                  <button
-                    onClick={() => testConnection(ex.exchange)}
-                    disabled={testing === ex.exchange}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
-                  >
-                    {testing === ex.exchange ? "Test ediliyor..." : "Test Et"}
+                  <button onClick={() => testConnection(ex.exchange)} disabled={testing === ex.exchange}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/15 disabled:opacity-50 transition-all">
+                    {testing === ex.exchange ? "Test ediliyor..." : "🔌 Test Et"}
                   </button>
-                  <button
-                    onClick={() => disconnect(ex.exchange)}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-colors"
-                  >
+                  <button onClick={() => disconnect(ex.exchange)}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all">
                     Kaldır
                   </button>
                 </>
               )}
-              <button
-                onClick={() => openForm(ex.exchange)}
-                className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
-              >
-                {ex.connected ? "Güncelle" : "Bağla"}
+              <button onClick={() => openForm(ex.exchange)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-all">
+                {ex.connected ? "Güncelle" : "+ Bağla"}
               </button>
             </div>
           </div>
@@ -181,7 +174,7 @@ export default function SettingsPage() {
 
       {/* API Key formu */}
       {selected && selectedInfo && (
-        <div className="bg-slate-900 border border-blue-500/30 rounded-xl p-5 space-y-4">
+        <div className="glass-card border-blue-500/25 p-5 space-y-4 fade-in-up">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-white">
               {EXCHANGE_ICONS[selected]} {selectedInfo.label} API Key
@@ -262,9 +255,9 @@ export default function SettingsPage() {
       )}
 
       {/* Güvenlik notu */}
-      <div className="text-xs text-slate-600 border border-slate-800 rounded-lg p-4 space-y-1">
-        <p className="font-semibold text-slate-500">Güvenlik Notu</p>
-        <p>API key'ler sunucunuzdaki Redis&apos;te şifreli olarak saklanır. Asla para çekme yetkisi vermeyin.</p>
+      <div className="glass-card p-4 space-y-1 text-xs text-slate-600">
+        <p className="font-semibold text-slate-500 flex items-center gap-1.5">🔒 Güvenlik Notu</p>
+        <p>API key&apos;ler sunucunuzdaki Redis&apos;te şifreli olarak saklanır. Asla para çekme yetkisi vermeyin.</p>
       </div>
     </div>
   )

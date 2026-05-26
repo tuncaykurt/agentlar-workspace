@@ -847,8 +847,11 @@ export default function AnalyticsPage() {
 
   if (isLoading) {
     return (
-      <div className="p-4 md:p-8 flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="spinner" />
+          <span className="text-slate-500 text-sm">Analiz verileri yükleniyor...</span>
+        </div>
       </div>
     )
   }
@@ -878,67 +881,59 @@ export default function AnalyticsPage() {
   const pct = (val: number) => totalSignals > 0 ? (val / totalSignals) * 100 : 0
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
 
       {/* Başlık */}
-      <div>
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-          Analiz ve Performans Paneli
-        </h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Botların genel performansı, seans analizi ve akıllı filtre metrikleri
-        </p>
+      <div className="section-header">
+        <div className="section-header-icon">📊</div>
+        <div>
+          <h1 className="section-title">Analiz ve Performans Paneli</h1>
+          <p className="section-subtitle">Botların genel performansı, seans analizi ve akıllı filtre metrikleri</p>
+        </div>
       </div>
 
       {error && (
-        <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 p-3 rounded-xl text-sm flex items-center gap-2">
-          <span>⚠</span>
-          <span>Bazı analiz verileri yüklenemedi — sayfa kısmi verilerle gösteriliyor. Sayfayı yenileyerek tekrar deneyin.</span>
+        <div className="glass-card p-4 border-amber-500/20 text-amber-400 text-sm flex items-center gap-2">
+          ⚠️ Bazı analiz verileri yüklenemedi — sayfa kısmi verilerle gösteriliyor.
         </div>
       )}
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm">
-          <div className="text-slate-400 text-sm font-medium mb-1">Sonuclanan Sinyal</div>
-          <div className="text-3xl font-bold text-white">
-            {sigResolved > 0 ? sigResolved : <span className="text-slate-600">—</span>}
-          </div>
-          {sigResolved > 0 ? (
-            <div className="text-xs text-slate-500 mt-1">{sigTpCount} TP / {sigSlCount} SL</div>
-          ) : (
-            <div className="text-xs text-slate-600 mt-1">TP veya SL ile biten sinyal yok</div>
-          )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="stat-card fade-in-up">
+          <div className="stat-card-icon">📁</div>
+          <div className="stat-card-label">Sonuçlanan Sinyal</div>
+          <div className="stat-card-value text-white">{sigResolved > 0 ? sigResolved : <span className="text-slate-600">—</span>}</div>
+          {sigResolved > 0 && <div className="stat-card-delta stat-card-delta-up">{sigTpCount} TP / {sigSlCount} SL</div>}
         </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent pointer-events-none"></div>
-          <div className="text-slate-400 text-sm font-medium mb-1">Kazanma Orani (Win Rate)</div>
+        <div className="stat-card fade-in-up">
+          <div className="stat-card-icon">🎯</div>
+          <div className="stat-card-label">Kazanma Oranı</div>
           {sigResolved > 0 ? (
             <>
-              <div className="text-3xl font-bold text-green-400">%{sigWinRate}</div>
-              <div className="text-xs text-slate-500 mt-1">{sigTpCount} TP kazandi / {sigSlCount} SL kaybetti</div>
+              <div className="stat-card-value text-emerald-400">%{sigWinRate}</div>
+              <div className="stat-card-delta stat-card-delta-up">{sigTpCount} kazandı</div>
             </>
-          ) : (
-            <div className="text-3xl font-bold text-slate-600">—</div>
-          )}
+          ) : <div className="stat-card-value text-slate-600">—</div>}
         </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm relative overflow-hidden">
-          <div className={`absolute inset-0 bg-gradient-to-br ${sigPnlPct >= 0 ? 'from-blue-500/10' : 'from-red-500/10'} to-transparent pointer-events-none`}></div>
-          <div className="text-slate-400 text-sm font-medium mb-1">Toplam PnL</div>
+        <div className="stat-card fade-in-up">
+          <div className="stat-card-icon">💰</div>
+          <div className="stat-card-label">Toplam PnL</div>
           {sigResolved > 0 ? (
-            <div className={`text-3xl font-bold ${sigPnlPct >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
-              %{sigPnlPct > 0 ? '+' : ''}{sigPnlPct}
-            </div>
-          ) : (
-            <div className="text-3xl font-bold text-slate-600">—</div>
-          )}
-          {sigResolved > 0 && <div className="text-xs text-slate-500 mt-1">Sinyal bazli toplam</div>}
+            <>
+              <div className={`stat-card-value ${sigPnlPct >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                %{sigPnlPct > 0 ? '+' : ''}{sigPnlPct}
+              </div>
+              <div className={`stat-card-delta ${sigPnlPct >= 0 ? 'stat-card-delta-up' : 'stat-card-delta-down'}`}>
+                Sinyal bazlı
+              </div>
+            </>
+          ) : <div className="stat-card-value text-slate-600">—</div>}
         </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-5 rounded-2xl backdrop-blur-sm">
-          <div className="text-slate-400 text-sm font-medium mb-1">Gelen Sinyal</div>
-          <div className="text-3xl font-bold text-orange-400">
-            {totalSignals > 0 ? totalSignals : <span className="text-slate-600">—</span>}
-          </div>
+        <div className="stat-card fade-in-up">
+          <div className="stat-card-icon">⚡</div>
+          <div className="stat-card-label">Gelen Sinyal</div>
+          <div className="stat-card-value text-amber-400">{totalSignals > 0 ? totalSignals : <span className="text-slate-600">—</span>}</div>
           {totalSignals > 0 ? (
             <div className="text-xs text-slate-500 mt-1">
               {analyzedCount > 0 && <span>{analyzedCount} analiz </span>}

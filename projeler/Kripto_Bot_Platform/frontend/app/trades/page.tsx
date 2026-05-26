@@ -6,85 +6,91 @@ import { api } from "@/lib/api"
 
 const fetcher = (path: string) => api.get(path)
 
-// ─────── Trade Kartı ───────
+// ─────── Trade Satırı (DataTable) ───────
 function TradeRow({ t }: { t: any }) {
   const isProfit = (t.pnl || 0) > 0
-  const isOpen = t.status === "open"
+  const isOpen   = t.status === "open"
+
+  const PnlBadge = () => {
+    if (t.pnl == null) return <span className="pnl-neu">—</span>
+    if (isOpen)        return <span className="pnl-neu">Açık</span>
+    return (
+      <span className={isProfit ? "pnl-up" : "pnl-down"}>
+        {isProfit ? "+" : ""}${t.pnl.toFixed(2)}
+        {t.pnl_pct != null && (
+          <span className="ml-1 opacity-70">({t.pnl_pct > 0 ? "+" : ""}{t.pnl_pct.toFixed(1)}%)</span>
+        )}
+      </span>
+    )
+  }
 
   return (
-    <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/50 hover:border-slate-600 transition-colors">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-            t.side === "buy" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-          }`}>
-            {t.side?.toUpperCase()}
+    <tr className="border-b border-slate-800/30 hover:bg-blue-500/[0.03] transition-colors">
+      {/* Sembol */}
+      <td className="px-3 py-2.5">
+        <div>
+          <span className="text-sm font-semibold text-white">{t.symbol?.replace("/USDT:USDT","").replace("/USDT","")}</span>
+          <span className="text-slate-600 text-xs">/USDT</span>
+          {t.paper && <span className="badge badge-paper ml-2 text-[9px]">PAPER</span>}
+        </div>
+        {t.leverage_used && (
+          <span className="text-[10px] text-amber-400 font-mono">{t.leverage_used}× kaldıraç</span>
+        )}
+      </td>
+      {/* Yön */}
+      <td className="px-3 py-2.5">
+        <span className={t.side === "buy" ? "badge badge-buy" : "badge badge-sell"}>
+          {t.side === "buy" ? "▲" : "▼"} {t.side?.toUpperCase()}
+        </span>
+      </td>
+      {/* Durum */}
+      <td className="px-3 py-2.5">
+        {isOpen ? (
+          <span className="badge badge-open">
+            <span className="badge-dot badge-dot-blue pulse-dot" />
+            Açık
           </span>
-          <span className="text-sm font-medium text-white">{t.symbol}</span>
-          {t.leverage_used && (
-            <span className="text-xs text-yellow-400">{t.leverage_used}x</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {t.paper && <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">PAPER</span>}
-          <span className={`text-xs px-2 py-0.5 rounded ${
-            isOpen ? "bg-blue-500/20 text-blue-400" :
-            t.status === "cancelled" ? "bg-slate-600/50 text-slate-400" :
-            "bg-slate-700 text-slate-300"
-          }`}>
-            {isOpen ? "Açık" : t.status === "cancelled" ? "İptal" : "Kapandı"}
+        ) : t.status === "cancelled" ? (
+          <span className="badge badge-closed">
+            <span className="badge-dot badge-dot-gray" />
+            İptal
           </span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-        <div>
-          <span className="text-slate-500">Giriş</span>
-          <div className="text-white font-medium">${t.entry_price?.toFixed(2)}</div>
-        </div>
-        <div>
-          <span className="text-slate-500">Çıkış</span>
-          <div className="text-white font-medium">{t.exit_price ? `$${t.exit_price.toFixed(2)}` : "—"}</div>
-        </div>
-        <div>
-          <span className="text-slate-500">Miktar</span>
-          <div className="text-white font-medium">{t.quantity?.toFixed(4)}</div>
-        </div>
-        <div>
-          <span className="text-slate-500">PnL</span>
-          <div className={`font-bold ${isOpen ? "text-slate-400" : isProfit ? "text-green-400" : "text-red-400"}`}>
-            {t.pnl != null ? `${isProfit ? "+" : ""}$${t.pnl.toFixed(2)}` : "—"}
-            {t.pnl_pct != null && <span className="text-[10px] ml-1">({t.pnl_pct > 0 ? "+" : ""}{t.pnl_pct.toFixed(1)}%)</span>}
-          </div>
-        </div>
-      </div>
-
-      {(t.exit_reason || t.duration_minutes || t.session_type) && (
-        <div className="flex items-center gap-2 mt-2 flex-wrap">
-          {t.exit_reason && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-              t.exit_reason === "tp" ? "bg-green-500/20 text-green-400" :
-              t.exit_reason === "sl" ? "bg-red-500/20 text-red-400" :
-              "bg-slate-700 text-slate-400"
-            }`}>
-              {t.exit_reason.toUpperCase()}
-            </span>
-          )}
-          {t.duration_minutes && (
-            <span className="text-[10px] text-slate-500">{t.duration_minutes} dk</span>
-          )}
-          {t.session_type && (
-            <span className="text-[10px] text-slate-500">{t.session_type}</span>
-          )}
-          {t.rsi_at_entry && (
-            <span className="text-[10px] text-slate-500">RSI: {t.rsi_at_entry.toFixed(0)}</span>
-          )}
-          <span className="text-[10px] text-slate-600 ml-auto">
-            {t.opened_at ? new Date(t.opened_at).toLocaleString("tr-TR") : ""}
+        ) : (
+          <span className="badge badge-closed">
+            <span className="badge-dot badge-dot-gray" />
+            Kapandı
           </span>
-        </div>
-      )}
-    </div>
+        )}
+      </td>
+      {/* Giriş */}
+      <td className="px-3 py-2.5">
+        <span className="mono-val text-white">${t.entry_price?.toFixed(2)}</span>
+      </td>
+      {/* Çıkış */}
+      <td className="px-3 py-2.5">
+        <span className="mono-val text-slate-400">{t.exit_price ? `$${t.exit_price.toFixed(2)}` : "—"}</span>
+      </td>
+      {/* PnL */}
+      <td className="px-3 py-2.5"><PnlBadge /></td>
+      {/* Çıkış sbb */}
+      <td className="px-3 py-2.5">
+        {t.exit_reason === "tp" && <span className="badge badge-tp">✓ TP</span>}
+        {t.exit_reason === "sl" && <span className="badge badge-sl">✕ SL</span>}
+        {!t.exit_reason && <span className="text-slate-600 text-xs">—</span>}
+      </td>
+      {/* Süre */}
+      <td className="px-3 py-2.5">
+        <span className="text-xs text-slate-500">
+          {t.duration_minutes ? `${t.duration_minutes}dk` : "—"}
+        </span>
+      </td>
+      {/* Tarih */}
+      <td className="px-3 py-2.5">
+        <span className="text-[10px] text-slate-600 mono-val">
+          {t.opened_at ? new Date(t.opened_at).toLocaleString("tr-TR", { day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}
+        </span>
+      </td>
+    </tr>
   )
 }
 
@@ -95,38 +101,34 @@ function BotCard({ bot, isSelected, onSelect }: { bot: any; isSelected: boolean;
   return (
     <button
       onClick={onSelect}
-      className={`w-full text-left p-3 rounded-lg border transition-all ${
+      className={`w-full text-left p-3 rounded-xl border transition-all ${
         isSelected
-          ? "border-blue-500 bg-blue-500/10"
-          : "border-slate-700/50 bg-slate-800/60 hover:border-slate-600"
+          ? "border-blue-500/50 bg-blue-500/8 shadow-sm shadow-blue-500/10"
+          : "border-slate-800/60 bg-slate-900/40 hover:border-slate-700/70 hover:bg-slate-800/30"
       }`}
     >
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-white truncate">{bot.bot_name}</span>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-          bot.status === "running" ? "bg-green-500/20 text-green-400" :
-          bot.status === "error" ? "bg-red-500/20 text-red-400" :
-          "bg-slate-700 text-slate-400"
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-sm font-semibold text-white truncate">{bot.bot_name}</span>
+        <span className={`badge text-[9px] ${
+          bot.status === "running" ? "badge-running" :
+          bot.status === "error"   ? "badge-error"   : "badge-stopped"
         }`}>
-          {bot.status === "running" ? "Aktif" : bot.status === "error" ? "Hata" : "Durduruldu"}
+          {bot.status === "running" && <span className="badge-dot badge-dot-green pulse-dot" />}
+          {bot.status === "running" ? "Aktif" : bot.status === "error" ? "Hata" : "Durdu"}
         </span>
       </div>
-      <div className="text-xs text-slate-400 mb-2">{bot.symbol} · {bot.strategy} · {bot.exchange}</div>
-      <div className="grid grid-cols-3 gap-2 text-xs">
-        <div>
-          <span className="text-slate-500">Trade</span>
-          <div className="text-white font-medium">{bot.trade_count}</div>
-        </div>
-        <div>
-          <span className="text-slate-500">Kazanma</span>
-          <div className="text-white font-medium">%{bot.win_rate}</div>
-        </div>
-        <div>
-          <span className="text-slate-500">PnL</span>
-          <div className={`font-bold ${isProfit ? "text-green-400" : bot.total_pnl < 0 ? "text-red-400" : "text-slate-400"}`}>
-            ${bot.total_pnl?.toFixed(2)}
+      <div className="text-[11px] text-slate-500 mb-2">{bot.symbol?.replace(":USDT","").replace("/USDT","")}/USDT · {bot.strategy}</div>
+      <div className="grid grid-cols-3 gap-1.5 text-center">
+        {[
+          { l: "İşlem", v: bot.trade_count, c: "text-white" },
+          { l: "Kazanma", v: `%${bot.win_rate}`, c: "text-blue-400" },
+          { l: "PnL", v: `$${bot.total_pnl?.toFixed(2)}`, c: isProfit ? "text-emerald-400" : bot.total_pnl < 0 ? "text-red-400" : "text-slate-400" },
+        ].map(item => (
+          <div key={item.l} className="bg-slate-800/40 rounded-lg py-1.5">
+            <div className="text-[9px] text-slate-600 uppercase tracking-wide">{item.l}</div>
+            <div className={`text-xs font-bold mono-val ${item.c}`}>{item.v}</div>
           </div>
-        </div>
+        ))}
       </div>
     </button>
   )
@@ -134,218 +136,241 @@ function BotCard({ bot, isSelected, onSelect }: { bot: any; isSelected: boolean;
 
 export default function TradesPage() {
   const [selectedBot, setSelectedBot] = useState<number | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [analyzing, setAnalyzing] = useState(false)
-  const [analysis, setAnalysis] = useState<string | null>(null)
+  const [deleting,   setDeleting]   = useState(false)
+  const [analyzing,  setAnalyzing]  = useState(false)
+  const [analysis,   setAnalysis]   = useState<string | null>(null)
+  const [sideFilter, setSideFilter] = useState<"" | "buy" | "sell">("")
+  const [search,     setSearch]     = useState("")
 
-  const { data: botsData, mutate: mutateBots } = useSWR("/trades/bots-summary", fetcher, { refreshInterval: 30000 })
+  const { data: botsData,   mutate: mutateBots } = useSWR("/trades/bots-summary", fetcher, { refreshInterval: 30000 })
   const { data: tradesData, mutate: mutateTrades, isLoading: tradesLoading } = useSWR(
     selectedBot != null ? `/trades/bot/${selectedBot}?limit=200` : null,
-    fetcher,
-    { refreshInterval: 30000 }
+    fetcher, { refreshInterval: 30000 }
   )
 
-  const bots = botsData?.bots || []
-  const trades = tradesData?.trades || []
+  const bots   = botsData?.bots  || []
+  const trades = (tradesData?.trades || []).filter((t: any) => {
+    if (sideFilter && t.side !== sideFilter) return false
+    if (search && !t.symbol?.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
 
   const handleDelete = useCallback(async () => {
     if (selectedBot == null) return
     const botName = bots.find((b: any) => b.bot_id === selectedBot)?.bot_name || `#${selectedBot}`
-    if (!confirm(`"${botName}" botunun tüm işlem kayıtlarını silmek istediğinize emin misiniz?`)) return
-
+    if (!confirm(`"${botName}" botunun tüm işlem kayıtlarını silmek istiyor musunuz?`)) return
     setDeleting(true)
-    try {
-      await api.delete(`/trades/bot/${selectedBot}`)
-      mutateTrades()
-      mutateBots()
-    } catch (e: any) {
-      alert(e.message || "Silme hatası")
-    } finally {
-      setDeleting(false)
-    }
+    try { await api.delete(`/trades/bot/${selectedBot}`); mutateTrades(); mutateBots() }
+    catch (e: any) { alert(e.message || "Silme hatası") }
+    finally { setDeleting(false) }
   }, [selectedBot, bots, mutateTrades, mutateBots])
 
   const handleAiAnalysis = useCallback(async () => {
     if (selectedBot == null) return
-    setAnalyzing(true)
-    setAnalysis(null)
-    try {
-      const res = await api.get(`/trades/bot/${selectedBot}/ai-analysis`)
-      setAnalysis(res.analysis)
-    } catch (e: any) {
-      setAnalysis(`Analiz hatası: ${e.message}`)
-    } finally {
-      setAnalyzing(false)
-    }
+    setAnalyzing(true); setAnalysis(null)
+    try { const res = await api.get(`/trades/bot/${selectedBot}/ai-analysis`); setAnalysis(res.analysis) }
+    catch (e: any) { setAnalysis(`Analiz hatası: ${e.message}`) }
+    finally { setAnalyzing(false) }
   }, [selectedBot])
 
-  // Toplam istatistikler
-  const totalTrades = bots.reduce((s: number, b: any) => s + b.trade_count, 0)
-  const totalPnl = bots.reduce((s: number, b: any) => s + (b.total_pnl || 0), 0)
-  const totalWins = bots.reduce((s: number, b: any) => s + (b.wins || 0), 0)
-  const totalClosed = bots.reduce((s: number, b: any) => s + (b.closed_count || 0), 0)
-  const overallWinRate = totalClosed > 0 ? (totalWins / totalClosed * 100).toFixed(1) : "0"
+  // Toplamlar
+  const totalTrades  = bots.reduce((s: number, b: any) => s + b.trade_count, 0)
+  const totalPnl     = bots.reduce((s: number, b: any) => s + (b.total_pnl || 0), 0)
+  const totalWins    = bots.reduce((s: number, b: any) => s + (b.wins || 0), 0)
+  const totalClosed  = bots.reduce((s: number, b: any) => s + (b.closed_count || 0), 0)
+  const winRate      = totalClosed > 0 ? (totalWins / totalClosed * 100).toFixed(1) : "0"
+  const activeBots   = bots.filter((b: any) => b.status === "running").length
+
+  const stats = [
+    { icon: "📊", label: "Toplam İşlem", value: totalTrades, color: "text-white",       delta: null },
+    { icon: "💰", label: "Toplam PnL",   value: `$${totalPnl.toFixed(2)}`, color: totalPnl >= 0 ? "text-emerald-400" : "text-red-400", delta: totalPnl >= 0 ? "up" : "down" },
+    { icon: "🎯", label: "Başarı Oranı", value: `%${winRate}`, color: "text-blue-400",  delta: "up" },
+    { icon: "🤖", label: "Aktif Bot",    value: activeBots,   color: "text-amber-400",  delta: "neu" },
+  ]
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-6">
+    <div className="page-container min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="section-header mb-6">
+        <div className="section-header-icon">📋</div>
         <div>
-          <h1 className="text-xl font-bold">Bot Islem Kayitlari</h1>
-          <p className="text-sm text-slate-400 mt-1">Her botun trade gecmisi, analizi ve istatistikleri</p>
+          <h1 className="section-title">Bot İşlem Kayıtları</h1>
+          <p className="section-subtitle">Her botun trade geçmişi, analizi ve istatistikleri</p>
         </div>
       </div>
 
-      {/* Genel Istatistikler */}
+      {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/50">
-          <div className="text-xs text-slate-400">Toplam Islem</div>
-          <div className="text-lg font-bold text-white">{totalTrades}</div>
-        </div>
-        <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/50">
-          <div className="text-xs text-slate-400">Toplam PnL</div>
-          <div className={`text-lg font-bold ${totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-            ${totalPnl.toFixed(2)}
+        {stats.map((s) => (
+          <div key={s.label} className="stat-card fade-in-up">
+            <div className="stat-card-icon">{s.icon}</div>
+            <div className="stat-card-label">{s.label}</div>
+            <div className={`stat-card-value ${s.color}`}>{s.value}</div>
+            {s.delta === "up"  && <div className="stat-card-delta stat-card-delta-up">↑  Güncelleniyor</div>}
+            {s.delta === "down"&& <div className="stat-card-delta stat-card-delta-down">↓ Dikkat</div>}
+            {s.delta === "neu" && <div className="stat-card-delta stat-card-delta-neu">● Canlı</div>}
           </div>
-        </div>
-        <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/50">
-          <div className="text-xs text-slate-400">Basari Orani</div>
-          <div className="text-lg font-bold text-blue-400">%{overallWinRate}</div>
-        </div>
-        <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/50">
-          <div className="text-xs text-slate-400">Aktif Bot</div>
-          <div className="text-lg font-bold text-yellow-400">
-            {bots.filter((b: any) => b.status === "running").length}
-          </div>
-        </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Sol Panel — Bot Listesi */}
+        {/* Sol — Bot Listesi */}
         <div className="lg:col-span-1 space-y-2">
-          <h2 className="text-sm font-semibold text-slate-300 mb-2">Botlar ({bots.length})</h2>
+          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Botlar ({bots.length})</h2>
 
-          {/* Tümü butonu */}
           <button
-            onClick={() => { setSelectedBot(null); setAnalysis(null); }}
-            className={`w-full text-left p-3 rounded-lg border transition-all ${
+            onClick={() => { setSelectedBot(null); setAnalysis(null) }}
+            className={`w-full text-left p-3 rounded-xl border transition-all ${
               selectedBot === null
-                ? "border-blue-500 bg-blue-500/10"
-                : "border-slate-700/50 bg-slate-800/60 hover:border-slate-600"
+                ? "border-blue-500/50 bg-blue-500/8 shadow-sm shadow-blue-500/10"
+                : "border-slate-800/60 bg-slate-900/40 hover:border-slate-700/70"
             }`}
           >
-            <span className="text-sm font-medium text-white">Tum Botlar</span>
-            <div className="text-xs text-slate-400 mt-1">{totalTrades} islem · ${totalPnl.toFixed(2)} PnL</div>
+            <div className="text-sm font-semibold text-white">Tüm Botlar</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">{totalTrades} işlem · ${totalPnl.toFixed(2)} PnL</div>
           </button>
 
           {bots.map((bot: any) => (
             <BotCard
-              key={bot.bot_id}
-              bot={bot}
+              key={bot.bot_id} bot={bot}
               isSelected={selectedBot === bot.bot_id}
-              onSelect={() => { setSelectedBot(bot.bot_id); setAnalysis(null); }}
+              onSelect={() => { setSelectedBot(bot.bot_id); setAnalysis(null) }}
             />
           ))}
 
           {bots.length === 0 && (
-            <div className="text-center py-8 text-slate-500 text-sm">
-              Henuz bot olusturulmamis
+            <div className="empty-state">
+              <div className="empty-state-icon">🤖</div>
+              <div className="empty-state-title">Henüz bot yok</div>
             </div>
           )}
         </div>
 
-        {/* Sag Panel — Trade Listesi */}
+        {/* Sağ — Trade Listesi */}
         <div className="lg:col-span-3">
           {selectedBot != null && (
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-sm font-semibold text-slate-300 flex-1">
-                {bots.find((b: any) => b.bot_id === selectedBot)?.bot_name || `Bot #${selectedBot}`} — Islemler ({tradesData?.total || 0})
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <h2 className="text-sm font-semibold text-white flex-1">
+                {bots.find((b: any) => b.bot_id === selectedBot)?.bot_name || `Bot #${selectedBot}`}
+                <span className="text-slate-500 font-normal ml-2">({tradesData?.total || 0} işlem)</span>
               </h2>
-              <button
-                onClick={handleAiAnalysis}
-                disabled={analyzing}
-                className="text-xs px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 disabled:opacity-50 transition-colors"
-              >
-                {analyzing ? "Analiz ediliyor..." : "AI Analiz"}
+              <button onClick={handleAiAnalysis} disabled={analyzing}
+                className="text-xs px-3 py-1.5 rounded-lg bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/35 disabled:opacity-50 transition-all">
+                {analyzing ? "Analiz ediliyor..." : "🤖 AI Analiz"}
               </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="text-xs px-3 py-1.5 rounded bg-red-600/80 hover:bg-red-500 disabled:opacity-50 transition-colors"
-              >
-                {deleting ? "Siliniyor..." : "Kayitlari Sil"}
+              <button onClick={handleDelete} disabled={deleting}
+                className="text-xs px-3 py-1.5 rounded-lg bg-red-600/15 border border-red-500/25 text-red-400 hover:bg-red-600/30 disabled:opacity-50 transition-all">
+                {deleting ? "Siliniyor..." : "🗑 Kayıtları Sil"}
               </button>
             </div>
           )}
 
-          {selectedBot === null && (
-            <h2 className="text-sm font-semibold text-slate-300 mb-3">
-              Bir bot secin veya tum botlarin ozet bilgilerini gorun
+          {!selectedBot && (
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
+              Özet — Tüm Botlar
             </h2>
           )}
 
           {/* AI Analiz Sonucu */}
           {analysis && (
-            <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4 mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-purple-400 font-semibold text-sm">AI Analiz Raporu</span>
-                <button onClick={() => setAnalysis(null)} className="text-slate-500 hover:text-white ml-auto text-xs">Kapat</button>
+            <div className="glass-card p-4 mb-4 border-violet-500/20 fade-in-up">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-violet-400 font-semibold text-sm">🤖 AI Analiz Raporu</span>
+                <button onClick={() => setAnalysis(null)} className="text-slate-500 hover:text-white ml-auto text-xs">× Kapat</button>
               </div>
-              <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed prose prose-invert prose-sm max-w-none">
-                {analysis}
-              </div>
+              <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{analysis}</div>
             </div>
           )}
 
-          {/* Trade Listesi */}
+          {/* Trade DataTable */}
           {selectedBot != null ? (
             tradesLoading ? (
-              <div className="text-center py-12 text-slate-500">Yukluyor...</div>
-            ) : trades.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 text-sm">Bu botta henuz islem yok</div>
+              <div className="empty-state">
+                <div className="spinner mb-4" />
+                <div className="empty-state-title">Yükleniyor...</div>
+              </div>
+            ) : (tradesData?.trades || []).length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-icon">📭</div>
+                <div className="empty-state-title">Bu botta henüz işlem yok</div>
+              </div>
             ) : (
-              <div className="space-y-2">
-                {trades.map((t: any) => (
-                  <TradeRow key={t.id} t={t} />
-                ))}
+              <div className="dt-wrapper fade-in-up">
+                {/* Toolbar */}
+                <div className="dt-toolbar flex-wrap gap-2">
+                  <input
+                    className="dt-search"
+                    placeholder="🔍  Sembol ara..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                  <div className="flex gap-1.5">
+                    {(["", "buy", "sell"] as const).map(f => (
+                      <button key={f} onClick={() => setSideFilter(f)}
+                        className={`filter-pill ${sideFilter === f ? (f === "buy" ? "active-green" : f === "sell" ? "active-red" : "active-all") : ""}`}>
+                        {f === "" ? "Tümü" : f === "buy" ? "▲ BUY" : "▼ SELL"}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[10px] text-slate-600 ml-auto">{trades.length} kayıt</span>
+                </div>
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="dt-table">
+                    <thead>
+                      <tr>
+                        <th>Sembol</th>
+                        <th>Yön</th>
+                        <th>Durum</th>
+                        <th>Giriş</th>
+                        <th>Çıkış</th>
+                        <th>PnL</th>
+                        <th>Çıkış Sbb.</th>
+                        <th>Süre</th>
+                        <th>Tarih</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trades.map((t: any) => <TradeRow key={t.id} t={t} />)}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )
           ) : (
-            /* Tüm botlar özet görünümü */
+            /* Tüm botlar özet */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {bots.map((bot: any) => (
-                <div key={bot.bot_id} className="bg-slate-800/60 rounded-lg p-4 border border-slate-700/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-white text-sm">{bot.bot_name}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                      bot.status === "running" ? "bg-green-500/20 text-green-400" : "bg-slate-700 text-slate-400"
-                    }`}>
-                      {bot.status}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-400 mb-3">{bot.symbol} · {bot.strategy}</div>
-                  <div className="grid grid-cols-4 gap-2 text-xs text-center">
-                    <div>
-                      <div className="text-slate-500">Trade</div>
-                      <div className="text-white font-medium">{bot.trade_count}</div>
+              {bots.map((bot: any) => {
+                const p = bot.total_pnl || 0
+                return (
+                  <div key={bot.bot_id} className="glass-card p-4 fade-in-up">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-white text-sm">{bot.bot_name}</span>
+                      <span className={`badge text-[9px] ${
+                        bot.status === "running" ? "badge-running" :
+                        bot.status === "error"   ? "badge-error"   : "badge-stopped"
+                      }`}>
+                        {bot.status === "running" && <span className="badge-dot badge-dot-green pulse-dot" />}
+                        {bot.status}
+                      </span>
                     </div>
-                    <div>
-                      <div className="text-slate-500">W/L</div>
-                      <div className="text-white font-medium">{bot.wins}/{bot.losses}</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-500">Basari</div>
-                      <div className="text-blue-400 font-medium">%{bot.win_rate}</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-500">PnL</div>
-                      <div className={`font-bold ${bot.total_pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        ${bot.total_pnl?.toFixed(2)}
-                      </div>
+                    <div className="text-xs text-slate-500 mb-3">{bot.symbol?.replace(":USDT","").replace("/USDT","")}/USDT · {bot.strategy}</div>
+                    <div className="grid grid-cols-4 gap-2 text-center">
+                      {[
+                        { l: "Trade",   v: bot.trade_count, c: "text-white" },
+                        { l: "W/L",     v: `${bot.wins}/${bot.losses}`, c: "text-white" },
+                        { l: "Başarı",  v: `%${bot.win_rate}`, c: "text-blue-400" },
+                        { l: "PnL",     v: `$${p.toFixed(2)}`, c: p >= 0 ? "text-emerald-400" : "text-red-400" },
+                      ].map(item => (
+                        <div key={item.l} className="bg-slate-800/40 rounded-lg py-2">
+                          <div className="text-[9px] text-slate-600 uppercase tracking-wide">{item.l}</div>
+                          <div className={`text-xs font-bold mono-val ${item.c}`}>{item.v}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
