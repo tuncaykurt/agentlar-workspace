@@ -1,9 +1,40 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useRef } from "react"
+import React, { useState, useEffect, useMemo, useRef, Component, ErrorInfo, ReactNode } from "react"
 import dynamic from "next/dynamic"
 import useSWR from "swr"
 import { api, API_URL } from "@/lib/api"
+
+// Error Boundary — client-side hataları yakalar ve gösterir
+class HftErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[HFT Error]", error, info)
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-8 text-center">
+          <h2 className="text-red-400 text-xl font-bold mb-4">HFT Sayfa Hatasi</h2>
+          <pre className="bg-slate-900 text-red-300 p-4 rounded-lg text-left text-xs overflow-auto max-h-60 mb-4">
+            {this.state.error.message}{"\n"}{this.state.error.stack}
+          </pre>
+          <button onClick={() => { localStorage.removeItem("hft_sim_state"); window.location.reload() }}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500">
+            Sifirla ve Yeniden Yukle
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const ProChart = dynamic(() => import("@/components/Chart/ProChart"), { ssr: false })
 
@@ -525,6 +556,7 @@ export default function HftPage() {
   const mc = modeConfig[tradingMode]
 
   return (
+    <HftErrorBoundary>
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto space-y-4 sm:space-y-5 overflow-x-hidden">
 
       {/* Baslik */}
@@ -1080,5 +1112,6 @@ export default function HftPage() {
         )}
       </div>
     </div>
+    </HftErrorBoundary>
   )
 }
