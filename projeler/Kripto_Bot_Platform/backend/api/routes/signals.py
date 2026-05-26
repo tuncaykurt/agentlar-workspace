@@ -304,6 +304,48 @@ async def tradingview_webhook(token: str, request: Request):
             await _log_rejected("TradingView değişkeni ({{...}}) çözülemedi ve yön bulunamadı", raw_text[:2000], symbol_raw, price)
             return {"status": "ignored", "reason": f"unresolved template, cannot detect action from body"}
 
+    # ─── Grid Bot Komutları (START_GRID / STOP_GRID / KILL_SWITCH) ──────────────
+    # Bu aksiyonlar doğrudan grid_live_engine'e yönlendirilir, BUY/SELL akışına girmez.
+    if action_raw in ("start_grid", "grid_start"):
+        try:
+            from services.grid_live_engine import grid_engine
+            gc = body.get("grid_config", {})
+            config = {
+                "symbol":     body.get("symbol", gc.get("symbol", "ETHUSDT")),
+                "mode":       gc.get("mode", "paper"),
+                "leverage":   int(gc.get("leverage", 10)),
+                "order_size": float(gc.get("order_size", 100)),
+                "spread_pct": float(gc.get("spread_pct", 0.5)),
+                "grid_count": int(gc.get("grid_count", 20)),
+            }
+            import asyncio as _asyncio
+            _asyncio.create_task(grid_engine.start(config))
+            print(f"[TV Webhook] 🚀 START_GRID komutu alındı: {config}")
+        except Exception as _e:
+            print(f"[TV Webhook] START_GRID hatası: {_e}")
+        return {"status": "ok", "action": "start_grid", "symbol": symbol_raw}
+
+    if action_raw in ("stop_grid", "grid_stop"):
+        try:
+            from services.grid_live_engine import grid_engine
+            import asyncio as _asyncio
+            _asyncio.create_task(grid_engine.stop(close_positions=False))
+            print(f"[TV Webhook] ⏹ STOP_GRID komutu alındı")
+        except Exception as _e:
+            print(f"[TV Webhook] STOP_GRID hatası: {_e}")
+        return {"status": "ok", "action": "stop_grid"}
+
+    if action_raw in ("kill_switch", "kill", "emergency_stop"):
+        try:
+            from services.grid_live_engine import grid_engine
+            import asyncio as _asyncio
+            _asyncio.create_task(grid_engine.kill_switch())
+            print(f"[TV Webhook] ⚡ KILL_SWITCH komutu alındı")
+        except Exception as _e:
+            print(f"[TV Webhook] KILL_SWITCH hatası: {_e}")
+        return {"status": "ok", "action": "kill_switch"}
+    # ─────────────────────────────────────────────────────────────────────────────
+
     if action_raw in ("buy", "long", "open_long", "buy_market", "1"):
         sig_type = "buy"
     elif action_raw in ("sell", "short", "open_short", "sell_market", "-1"):
@@ -314,6 +356,7 @@ async def tradingview_webhook(token: str, request: Request):
         print(f"[TV Webhook] Tanınmayan action: '{action_raw}'")
         await _log_rejected(f"Tanınmayan işlem yönü: '{action_raw}'", raw_text[:2000], symbol_raw, price)
         return {"status": "ignored", "reason": f"unrecognized action: '{action_raw}'"}
+
 
     # Sembol normalize et (BTCUSDT → BTC/USDT:USDT)
     symbol_raw = str(body.get("symbol", body.get("ticker", ""))).strip()
