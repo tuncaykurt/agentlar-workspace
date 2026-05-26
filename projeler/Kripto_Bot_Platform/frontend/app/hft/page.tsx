@@ -310,6 +310,28 @@ export default function HftPage() {
     return lines
   }, [gridBounds, gridCount])
 
+  const isSimWaiting = useMemo(() => {
+    if (!simRunning || tradingMode !== "sim" || gridMode === "manual") return false
+    const bb = simBbMeta
+    if (!bb) return false
+    if (filterRsi && (bb.rsi > 70 || bb.rsi < 30)) return true
+    if (filterSqueeze && bb.is_squeeze) return true
+    if (filterMidline && !bb.above_midline) return true
+    return false
+  }, [simRunning, tradingMode, gridMode, simBbMeta, filterRsi, filterSqueeze, filterMidline])
+
+  const isBackendWaiting = useMemo(() => {
+    if (!simRunning || !isBackendMode || !backendStatus) return false
+    if (backendStatus.bb_paused) return true
+    if (backendStatus.grid_mode && backendStatus.grid_mode !== "manual") {
+      const filters = backendStatus.filters || {}
+      if (filters.midline_filter && backendStatus.bb_mid && livePrice < backendStatus.bb_mid) return true
+    }
+    return false
+  }, [simRunning, isBackendMode, backendStatus, livePrice])
+
+  const isWaiting = isBackendMode ? isBackendWaiting : isSimWaiting
+
   // Simulasyon motoru — SADECE "sim" modunda calisir (frontend-only)
   // Backend grid_live_engine.py mantigi ile AYNI: BUY duste, SELL yukseliste, fee dahil
   useEffect(() => {
@@ -555,17 +577,6 @@ export default function HftPage() {
         const ok = await fetchBbData()
         setIsStarting(false)
         if (!ok) return
-
-        // Midline filtresi — fiyat orta altindaysa baslatma
-        if (filterMidline && simBbRef.current && !simBbRef.current.above_midline) {
-          alert("BB orta cizgisi altinda — trend uygun degil, bekleyin.")
-          return
-        }
-        // Squeeze filtresi — bantlar cok darsa baslatma
-        if (filterSqueeze && simBbRef.current?.is_squeeze) {
-          alert("BB squeeze tespit edildi — breakout bekleniyor.")
-          return
-        }
       } else {
         recalcGrid()
       }
@@ -1000,10 +1011,20 @@ export default function HftPage() {
             <div className="text-[10px] text-slate-500 uppercase">Liq. Mesafesi</div>
             <div className="text-sm font-bold text-orange-400 font-mono">%{leverage > 0 ? (100 / leverage).toFixed(2) : "\u2014"}</div>
           </div>
-          <div className={`rounded-lg p-3 border ${simRunning ? 'bg-emerald-900/30 border-emerald-500/40' : 'bg-slate-800/60 border-slate-700/40'}`}>
+          <div className={`rounded-lg p-3 border ${
+            !simRunning ? 'bg-slate-800/60 border-slate-700/40' :
+            isWaiting ? 'bg-amber-950/30 border-amber-500/40' :
+            'bg-emerald-900/30 border-emerald-500/40'
+          }`}>
             <div className="text-[10px] text-slate-500 uppercase">Durum</div>
-            <div className={`text-sm font-bold ${simRunning ? 'text-emerald-400' : 'text-slate-500'}`}>
-              {simRunning ? `● ${mc.label}` : '○ Durdu'}
+            <div className={`text-sm font-bold ${
+              !simRunning ? 'text-slate-500' :
+              isWaiting ? 'text-amber-400' :
+              'text-emerald-400'
+            }`}>
+              {!simRunning ? '○ Durdu' :
+               isWaiting ? `● Avda (Bekliyor)` :
+               `● Çalışıyor (${mc.label})`}
             </div>
           </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
