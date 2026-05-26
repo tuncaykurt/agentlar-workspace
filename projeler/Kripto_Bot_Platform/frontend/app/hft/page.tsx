@@ -54,6 +54,8 @@ export default function HftPage() {
   const [gridBounds, setGridBounds] = useState<{ upper: number; lower: number } | null>(null)
   const lastGridHitRef = useRef<number>(-1)
   const tradeIdRef = useRef(0)
+  const simFilledRef = useRef<Set<number>>(new Set())       // Sim: dolu seviyeler
+  const simEntryPricesRef = useRef<Map<number, number>>(new Map()) // Sim: entry fiyatları
 
   // Backend status (paper/live modlar icin)
   const [backendStatus, setBackendStatus] = useState<any>(null)
@@ -205,6 +207,7 @@ export default function HftPage() {
   }, [gridBounds, gridCount])
 
   // Simulasyon motoru — SADECE "sim" modunda calisir (frontend-only)
+  // Backend grid_live_engine.py mantigi ile AYNI: BUY duste, SELL yukseliste, fee dahil
   useEffect(() => {
     if (tradingMode !== "sim" || !simRunning || !gridBounds || livePrice <= 0 || gridLines.length < 2) return
 
@@ -212,25 +215,13 @@ export default function HftPage() {
     const currentLevel = Math.floor((livePrice - gridBounds.lower) / step)
     const clampedLevel = Math.max(0, Math.min(gridCount - 1, currentLevel))
 
-    if (lastGridHitRef.current !== -1 && clampedLevel !== lastGridHitRef.current) {
-      const direction = clampedLevel > lastGridHitRef.current ? "BUY" : "SELL"
-      const levelsDiff = Math.abs(clampedLevel - lastGridHitRef.current)
-      const pnlPerLevel = (step / livePrice) * orderSize * leverage
-      const pnl = direction === "SELL" ? pnlPerLevel * levelsDiff : -pnlPerLevel * levelsDiff * 0.1
+    if (lastGridHitRef.current === -1) {
+      lastGridHitRef.current = clampedLevel
+      return
+    }
 
-      const trade: SimTrade = {
-        id: ++tradeIdRef.current,
-        side: direction === "BUY" ? "BUY" : "SELL",
-        price: livePrice,
-        gridLevel: clampedLevel,
-        pnl: Number(pnl.toFixed(4)),
-        time: new Date().toLocaleTimeString("tr-TR"),
-        mode: "sim",
-      }
-      setTrades(prev => [trade, ...prev].slice(0, 100))
-      setTotalPnl(prev => prev + pnl)
-      setTradeCount(prev => prev + 1)
-
+    if (clampedLevel === lastGridHitRef.current) {
+      // Trailing kontrolu
       if (livePrice >= gridBounds.upper) {
         const diff = livePrice - gridBounds.upper
         setGridBounds(prev => prev ? { upper: prev.upper + diff, lower: prev.lower + diff } : null)
@@ -238,8 +229,98 @@ export default function HftPage() {
         const diff = gridBounds.lower - livePrice
         setGridBounds(prev => prev ? { upper: prev.upper - diff, lower: prev.lower - diff } : null)
       }
+      return
     }
+
+    const lastLevel = lastGridHitRef.current
+    const filled = simFilledRef.current
+    const entryPrices = simEntryPricesRef.current
+    const cs = symbol.includes("BTC") ? 0.0001 : 0.01
+    const marginPerLvl = orderSize / gridCount
+    const contractsPerLvl = Math.max(1, Math.floor((marginPerLvl * leverage) / (livePrice * cs)))
+    const newTrades: SimTrade[] = []
+
+    if (clampedLevel < lastLevel) {
+      // Fiyat DUSTU → BUY (pozisyon ac)
+      const buyLevels: number[] = []
+      for (let lvl = lastLevel - 1; lvl >= clampedLevel; lvl--) {
+        if (!filled.has(lvl) && lvl >= 0 && lvl < gridCount) {
+          buyLevels.push(lvl)
+          filled.add(lvl)
+          entryPrices.set(lvl, livePrice)
+        }
+      }
+      if (buyLevels.length > 0) {
+        newTrades.push({
+          id: ++tradeIdRef.current,
+          side: "BUY",
+          price: livePrice,
+          gridLevel: buyLevels[0],
+          grid_levels: buyLevels,
+          level_count: buyLevels.length,
+          pnl: 0, // BUY'da PnL yok
+          time: new Date().toLocaleTimeString("tr-TR"),
+          mode: "sim",
+        })
+      }
+    } else if (clampedLevel > lastLevel) {
+      // Fiyat YUKSELDI → SELL (kar al)
+      const sellLevels: number[] = []
+      for (let lvl = lastLevel; lvl < clampedLevel; lvl++) {
+        if (filled.has(lvl)) {
+          sellLevels.push(lvl)
+        }
+      }
+      if (sellLevels.length > 0) {
+        const totalContracts = contractsPerLvl * sellLevels.length
+        let totalPriceDiff = 0
+        for (const lvl of sellLevels) {
+          const entryPrice = entryPrices.get(lvl) ?? (livePrice - step)
+          totalPriceDiff += (livePrice - entryPrice)
+        }
+        const avgPriceDiff = totalPriceDiff / sellLevels.length
+        const grossPnl = totalContracts * cs * avgPriceDiff
+        const notional = totalContracts * cs * livePrice
+        const feeBothSides = notional * 0.0006 * 2 // MEXC taker fee %0.06 giris+cikis
+        const netPnl = grossPnl - feeBothSides
+
+        // Seviyeleri bosalt
+        for (const lvl of sellLevels) {
+          filled.delete(lvl)
+          entryPrices.delete(lvl)
+        }
+
+        newTrades.push({
+          id: ++tradeIdRef.current,
+          side: "SELL",
+          price: livePrice,
+          gridLevel: sellLevels[0],
+          grid_levels: sellLevels,
+          level_count: sellLevels.length,
+          pnl: Number(netPnl.toFixed(4)),
+          time: new Date().toLocaleTimeString("tr-TR"),
+          mode: "sim",
+        })
+      }
+    }
+
+    if (newTrades.length > 0) {
+      setTrades(prev => [...newTrades.reverse(), ...prev].slice(0, 100))
+      const pnlSum = newTrades.reduce((s, t) => s + t.pnl, 0)
+      setTotalPnl(prev => prev + pnlSum)
+      setTradeCount(prev => prev + newTrades.length)
+    }
+
     lastGridHitRef.current = clampedLevel
+
+    // Trailing
+    if (livePrice >= gridBounds.upper) {
+      const diff = livePrice - gridBounds.upper
+      setGridBounds(prev => prev ? { upper: prev.upper + diff, lower: prev.lower + diff } : null)
+    } else if (livePrice <= gridBounds.lower) {
+      const diff = gridBounds.lower - livePrice
+      setGridBounds(prev => prev ? { upper: prev.upper - diff, lower: prev.lower - diff } : null)
+    }
   }, [livePrice, simRunning, gridBounds, tradingMode])
 
   const gridStep = gridBounds ? (gridBounds.upper - gridBounds.lower) / gridCount : 0
@@ -268,6 +349,9 @@ export default function HftPage() {
       setTrades([])
       setTotalPnl(0)
       setTradeCount(0)
+      lastGridHitRef.current = -1
+      simFilledRef.current = new Set()
+      simEntryPricesRef.current = new Map()
       setSimRunning(true)
       return
     }
