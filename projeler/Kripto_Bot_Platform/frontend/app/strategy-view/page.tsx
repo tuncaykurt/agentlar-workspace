@@ -386,24 +386,35 @@ export default function StrategyViewPage() {
                 onChange={e => setLeverage(e.target.value)}
                 className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
-            <label className="block">
-              <span className="text-xs text-slate-400">Risk / İşlem (%)</span>
-              <input type="number" value={riskPct}
-                onChange={e => setRiskPct(e.target.value)}
-                className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
-            </label>
-            <label className="block">
-              <span className="text-xs text-slate-400">Zarar Durdur (%)</span>
-              <input type="number" value={slPct}
-                onChange={e => setSlPct(e.target.value)}
-                className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
-            </label>
-            <label className="block">
-              <span className="text-xs text-slate-400">Kar Al (%)</span>
-              <input type="number" value={tpPct}
-                onChange={e => setTpPct(e.target.value)}
-                className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
-            </label>
+            {strategy.startsWith("grid_") ? (
+              <label className="block">
+                <span className="text-xs text-slate-400">Toplam Grid Bütçesi (%)</span>
+                <input type="number" value={riskPct}
+                  onChange={e => setRiskPct(e.target.value)}
+                  className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+              </label>
+            ) : (
+              <>
+                <label className="block">
+                  <span className="text-xs text-slate-400">Risk / İşlem (%)</span>
+                  <input type="number" value={riskPct}
+                    onChange={e => setRiskPct(e.target.value)}
+                    className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-slate-400">Zarar Durdur (%)</span>
+                  <input type="number" value={slPct}
+                    onChange={e => setSlPct(e.target.value)}
+                    className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-slate-400">Kar Al (%)</span>
+                  <input type="number" value={tpPct}
+                    onChange={e => setTpPct(e.target.value)}
+                    className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+                </label>
+              </>
+            )}
           </div>
         </div>
 

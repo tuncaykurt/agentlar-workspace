@@ -1063,18 +1063,20 @@ export default function HftPage() {
 
           {/* Yon Secimi */}
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Yon</span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Yön</span>
             <select
-              value={gridDirection}
+              value={gridMode === "bb_direction" ? "auto" : gridDirection}
               onChange={e => setGridDirection(e.target.value as GridDirection)}
-              disabled={simRunning}
+              disabled={simRunning || gridMode === "bb_direction"}
               className={`bg-[#020817] border rounded-md px-3 py-1.5 text-sm font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50 ${
-                activeDirection === "long" ? "border-emerald-500/50 text-emerald-400" : "border-red-500/50 text-red-400"
+                (gridMode === "bb_direction" ? "auto" : activeDirection) === "long" ? "border-emerald-500/50 text-emerald-400" : 
+                (gridMode === "bb_direction" ? "auto" : activeDirection) === "short" ? "border-red-500/50 text-red-400" :
+                "border-indigo-500/50 text-indigo-400"
               }`}
             >
               <option value="long">Long (Al-Sat)</option>
               <option value="short">Short (Sat-Al)</option>
-              <option value="auto">Otomatik (BB)</option>
+              <option value="auto">Otomatik (BB Yön)</option>
             </select>
           </div>
 
