@@ -108,31 +108,35 @@ export default function HftPage() {
 
   // Sim verilerini localStorage'dan yukle (sayfa yenilemede kaybolmasin)
   const simRestoredRef = useRef(false)
+  const [isRestored, setIsRestored] = useState(false)
   useEffect(() => {
     if (simRestoredRef.current) return
     simRestoredRef.current = true
     try {
       const saved = localStorage.getItem("hft_sim_state")
-      if (!saved) return
-      const s = JSON.parse(saved)
-      if (s && s.simRunning) {
-        setSimRunning(true)
-        setTradingMode(s.tradingMode || "sim")
-        setTrades(Array.isArray(s.trades) ? s.trades : [])
-        setTotalPnl(Number(s.totalPnl) || 0)
-        setTradeCount(Number(s.tradeCount) || 0)
-        if (s.gridBounds && typeof s.gridBounds.upper === "number") setGridBounds(s.gridBounds)
-        lastGridHitRef.current = s.lastLevel ?? -1
-        tradeIdRef.current = s.tradeId ?? 0
-        if (Array.isArray(s.filled)) simFilledRef.current = new Set(s.filled)
-        if (Array.isArray(s.entryPrices)) simEntryPricesRef.current = new Map(s.entryPrices)
-        if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid") {
-          setGridMode(s.gridMode)
+      if (saved) {
+        const s = JSON.parse(saved)
+        if (s && s.simRunning) {
+          setSimRunning(true)
+          setTradingMode(s.tradingMode || "sim")
+          setTrades(Array.isArray(s.trades) ? s.trades : [])
+          setTotalPnl(Number(s.totalPnl) || 0)
+          setTradeCount(Number(s.tradeCount) || 0)
+          if (s.gridBounds && typeof s.gridBounds.upper === "number") setGridBounds(s.gridBounds)
+          lastGridHitRef.current = s.lastLevel ?? -1
+          tradeIdRef.current = s.tradeId ?? 0
+          if (Array.isArray(s.filled)) simFilledRef.current = new Set(s.filled)
+          if (Array.isArray(s.entryPrices)) simEntryPricesRef.current = new Map(s.entryPrices)
+          if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid") {
+            setGridMode(s.gridMode)
+          }
         }
       }
     } catch {
       // Bozuk localStorage verisi — temizle
       localStorage.removeItem("hft_sim_state")
+    } finally {
+      setIsRestored(true)
     }
   }, [])
 
@@ -288,10 +292,10 @@ export default function HftPage() {
     lastGridHitRef.current = -1
   }
 
-  // Ilk fiyat geldiginde grid kur
+  // Ilk fiyat geldiginde grid kur (sadece restore islemi bittikten sonra ve gridBounds yoksa)
   useEffect(() => {
-    if (livePrice > 0 && !gridBounds) recalcGrid()
-  }, [livePrice])
+    if (isRestored && livePrice > 0 && !gridBounds) recalcGrid()
+  }, [livePrice, isRestored, gridBounds])
 
   // Grid cizgileri
   const gridLines = useMemo(() => {
