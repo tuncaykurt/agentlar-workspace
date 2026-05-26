@@ -101,6 +101,8 @@ export default function HftPage() {
   const [filterMidline, setFilterMidline] = useState(true)
   const [filterAtrStep, setFilterAtrStep] = useState(false)
   const [gridDirection, setGridDirection] = useState<GridDirection>("long")
+  const [autoGridCount, setAutoGridCount] = useState(false) // Otomatik kademe sayisi
+  const [suggestedGrid, setSuggestedGrid] = useState<{ count: number; step: number; stepPct: number; atrRatio: number } | null>(null)
 
   // Band exit tracking — fiyat BB bant disina cikip geri girince pozisyon kapat
   const bandExitRef = useRef<{ exited: boolean; side: "upper" | "lower" | null }>({ exited: false, side: null })
@@ -599,6 +601,14 @@ export default function HftPage() {
         }
         simBbRef.current = meta
         setSimBbMeta(meta)
+        // Otomatik kademe guncelle
+        if (res.suggested_grid_count && autoGridCount) {
+          setSuggestedGrid({
+            count: res.suggested_grid_count, step: res.suggested_step || 0,
+            stepPct: res.suggested_step_pct || 0, atrRatio: res.atr_step_ratio || 0,
+          })
+          setLocalGrid(String(res.suggested_grid_count))
+        }
         // Grid bounds degistiyse guncelle (filled levels korunur)
         setGridBounds(prev => {
           if (!prev) return { upper: res.bb_upper, lower: res.bb_lower }
@@ -658,6 +668,21 @@ export default function HftPage() {
       simBbRef.current = meta
       setSimBbMeta(meta)
       setGridBounds({ upper: res.bb_upper, lower: res.bb_lower })
+
+      // Otomatik kademe onerisi
+      if (res.suggested_grid_count) {
+        setSuggestedGrid({
+          count: res.suggested_grid_count,
+          step: res.suggested_step || 0,
+          stepPct: res.suggested_step_pct || 0,
+          atrRatio: res.atr_step_ratio || 0,
+        })
+        // Oto mod aciksa kademe sayisini otomatik ayarla
+        if (autoGridCount) {
+          setLocalGrid(String(res.suggested_grid_count))
+          commitSetting("grid_count", String(res.suggested_grid_count), 20)
+        }
+      }
       return true
     } catch (e: any) {
       alert(`BB veri hatasi: ${e.message}`)
@@ -1042,13 +1067,42 @@ export default function HftPage() {
           )}
 
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Kademe</span>
-            <input type="number" value={localGrid} onChange={e => setLocalGrid(e.target.value)}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Kademe</span>
+              {gridMode !== "manual" && (
+                <button
+                  onClick={() => {
+                    const next = !autoGridCount
+                    setAutoGridCount(next)
+                    if (next && suggestedGrid) {
+                      setLocalGrid(String(suggestedGrid.count))
+                      commitSetting("grid_count", String(suggestedGrid.count), 20)
+                    }
+                  }}
+                  disabled={simRunning}
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all disabled:opacity-50 ${
+                    autoGridCount
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      : "bg-slate-700/50 text-slate-500 border border-slate-600/30 hover:text-slate-300"
+                  }`}
+                >
+                  {autoGridCount ? "OTO" : "MAN"}
+                </button>
+              )}
+            </div>
+            <input type="number" value={localGrid} onChange={e => { setLocalGrid(e.target.value); if (autoGridCount) setAutoGridCount(false) }}
               onBlur={() => commitSetting("grid_count", localGrid, 20)}
               onKeyDown={e => e.key === "Enter" && commitSetting("grid_count", localGrid, 20)}
-              min={2} max={200} disabled={simRunning}
-              className="w-20 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+              min={2} max={200} disabled={simRunning || (autoGridCount && gridMode !== "manual")}
+              className={`w-20 bg-[#020817] border rounded-md px-3 py-1.5 text-sm font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50 ${
+                autoGridCount && gridMode !== "manual" ? "border-cyan-500/30 text-cyan-400" : "border-slate-700 text-white"
+              }`}
             />
+            {gridMode !== "manual" && suggestedGrid && (
+              <span className="text-[9px] text-slate-500">
+                ATR: {suggestedGrid.count} kademe · %{suggestedGrid.stepPct.toFixed(2)}/kademe
+              </span>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">

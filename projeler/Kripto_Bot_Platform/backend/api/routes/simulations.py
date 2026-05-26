@@ -381,6 +381,34 @@ async def hft_bb_data(data: dict):
         )
         if not bb_data:
             return {"error": "BB hesaplanamadı — OHLCV verisi alınamıyor."}
+
+        # ATR bazlı otomatik kademe önerisi hesapla
+        atr = bb_data.get("atr", 0)
+        bb_upper = bb_data.get("bb_upper", 0)
+        bb_lower = bb_data.get("bb_lower", 0)
+        bb_mid = bb_data.get("bb_mid", 0)
+        band_width = bb_upper - bb_lower
+
+        if atr > 0 and band_width > 0 and bb_mid > 0:
+            # Min step = ATR * 0.8 (her kademe en az 0.8 ATR olmalı, fee karşılansın)
+            min_step = atr * 0.8
+            # Fee floor: step en az %0.15 olmalı (0.12% fee + margin)
+            fee_floor = bb_mid * 0.0015
+            effective_step = max(min_step, fee_floor)
+            suggested_count = max(3, min(50, int(band_width / effective_step)))
+            actual_step = band_width / suggested_count
+            step_pct = (actual_step / bb_mid) * 100
+
+            bb_data["suggested_grid_count"] = suggested_count
+            bb_data["suggested_step"] = round(actual_step, 4)
+            bb_data["suggested_step_pct"] = round(step_pct, 4)
+            bb_data["atr_step_ratio"] = round(actual_step / atr, 2) if atr > 0 else 0
+        else:
+            bb_data["suggested_grid_count"] = 15
+            bb_data["suggested_step"] = 0
+            bb_data["suggested_step_pct"] = 0
+            bb_data["atr_step_ratio"] = 0
+
         return bb_data
     except Exception as e:
         return {"error": f"BB hesaplama hatası: {str(e)}"}
