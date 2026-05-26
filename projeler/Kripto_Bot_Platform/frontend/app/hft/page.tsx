@@ -99,6 +99,13 @@ export default function HftPage() {
   const [filterMidline, setFilterMidline] = useState(true)
   const [filterAtrStep, setFilterAtrStep] = useState(false)
 
+  // Sim BB state — backend'den alinan BB meta verisi
+  const simBbRef = useRef<{
+    bb_upper: number; bb_lower: number; bb_mid: number; bb_width: number;
+    rsi: number; adx: number; is_squeeze: boolean; above_midline: boolean;
+  } | null>(null)
+  const [simBbMeta, setSimBbMeta] = useState<typeof simBbRef.current>(null)
+
   // Sim verilerini localStorage'dan yukle (sayfa yenilemede kaybolmasin)
   const simRestoredRef = useRef(false)
   useEffect(() => {
@@ -331,7 +338,23 @@ export default function HftPage() {
     const contractsPerLvl = Math.max(1, Math.floor((marginPerLvl * leverage) / (livePrice * cs)))
     const newTrades: SimTrade[] = []
 
-    if (clampedLevel < lastLevel) {
+    // BB/Hibrit filtre kontrolleri
+    const bb = simBbRef.current
+    const isBbMode = gridMode !== "manual"
+    let skipBuy = false
+    let skipSell = false
+
+    if (isBbMode && bb) {
+      // RSI filtresi — asiri alimda BUY yapma, asiri satimda SELL yapma
+      if (filterRsi && bb.rsi > 70) skipBuy = true
+      if (filterRsi && bb.rsi < 30) skipSell = true
+      // Squeeze filtresi — yeni islem yapma
+      if (filterSqueeze && bb.is_squeeze) skipBuy = true
+      // Midline filtresi — orta cizgi altinda BUY yapma
+      if (filterMidline && !bb.above_midline) skipBuy = true
+    }
+
+    if (clampedLevel < lastLevel && !skipBuy) {
       // Fiyat DUSTU → BUY (pozisyon ac)
       const buyLevels: number[] = []
       for (let lvl = lastLevel - 1; lvl >= clampedLevel; lvl--) {
@@ -354,7 +377,7 @@ export default function HftPage() {
           mode: "sim",
         })
       }
-    } else if (clampedLevel > lastLevel) {
+    } else if (clampedLevel > lastLevel && !skipSell) {
       // Fiyat YUKSELDI → SELL (kar al)
       const sellLevels: number[] = []
       for (let lvl = lastLevel; lvl < clampedLevel; lvl++) {
@@ -414,6 +437,43 @@ export default function HftPage() {
     }
   }, [livePrice, simRunning, gridBounds, tradingMode])
 
+  // Sim BB recalc loop — her 60s BB bantlarini yeniden hesapla ve grid'i guncelle
+  useEffect(() => {
+    if (tradingMode !== "sim" || !simRunning || gridMode === "manual") return
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.post("/simulations/hft-bb-data", {
+          symbol,
+          bb_timeframe: bbTimeframe,
+          bb_period: Number(bbPeriod) || 20,
+          bb_std_dev: Number(bbStdDev) || 2.0,
+          min_spread_pct: Number(minSpread) || 0.3,
+          current_price: livePrice,
+        })
+        if (res.error || !res.bb_upper) return
+        const meta = {
+          bb_upper: res.bb_upper, bb_lower: res.bb_lower,
+          bb_mid: res.bb_mid, bb_width: res.bb_width,
+          rsi: res.rsi ?? 50, adx: res.adx ?? 0,
+          is_squeeze: res.is_squeeze ?? false,
+          above_midline: res.above_midline ?? true,
+        }
+        simBbRef.current = meta
+        setSimBbMeta(meta)
+        // Grid bounds degistiyse guncelle (filled levels korunur)
+        setGridBounds(prev => {
+          if (!prev) return { upper: res.bb_upper, lower: res.bb_lower }
+          const diffPct = Math.abs(res.bb_upper - prev.upper) / prev.upper
+          if (diffPct > 0.001) { // %0.1'den fazla degisim varsa guncelle
+            return { upper: res.bb_upper, lower: res.bb_lower }
+          }
+          return prev
+        })
+      } catch {}
+    }, 60000) // 60 saniye
+    return () => clearInterval(interval)
+  }, [tradingMode, simRunning, gridMode, symbol, bbTimeframe, bbPeriod, bbStdDev, minSpread])
+
   const gridStep = gridBounds ? (gridBounds.upper - gridBounds.lower) / gridCount : 0
   // Kontrat bazlı tahmini kademe kari (margin bazli)
   // contractSize ETH=0.01, BTC=0.0001 vb.
@@ -434,9 +494,40 @@ export default function HftPage() {
 
   // ─── Baslat / Durdur ───────────────────────────────────────────────
 
+  // BB verisi cek (sim modu icin)
+  const fetchBbData = async (): Promise<boolean> => {
+    try {
+      const res = await api.post("/simulations/hft-bb-data", {
+        symbol,
+        bb_timeframe: bbTimeframe,
+        bb_period: Number(bbPeriod) || 20,
+        bb_std_dev: Number(bbStdDev) || 2.0,
+        min_spread_pct: Number(minSpread) || 0.3,
+        current_price: livePrice,
+      })
+      if (res.error) {
+        alert(`BB Hatasi: ${res.error}`)
+        return false
+      }
+      const meta = {
+        bb_upper: res.bb_upper, bb_lower: res.bb_lower,
+        bb_mid: res.bb_mid, bb_width: res.bb_width,
+        rsi: res.rsi ?? 50, adx: res.adx ?? 0,
+        is_squeeze: res.is_squeeze ?? false,
+        above_midline: res.above_midline ?? true,
+      }
+      simBbRef.current = meta
+      setSimBbMeta(meta)
+      setGridBounds({ upper: res.bb_upper, lower: res.bb_lower })
+      return true
+    } catch (e: any) {
+      alert(`BB veri hatasi: ${e.message}`)
+      return false
+    }
+  }
+
   const handleStart = async () => {
     if (tradingMode === "sim") {
-      recalcGrid()
       setTrades([])
       setTotalPnl(0)
       setTradeCount(0)
@@ -444,6 +535,28 @@ export default function HftPage() {
       simFilledRef.current = new Set()
       simEntryPricesRef.current = new Map()
       localStorage.removeItem("hft_sim_state")
+
+      if (gridMode !== "manual") {
+        // BB/Hibrit: backend'den BB bantlarini al
+        setIsStarting(true)
+        const ok = await fetchBbData()
+        setIsStarting(false)
+        if (!ok) return
+
+        // Midline filtresi — fiyat orta altindaysa baslatma
+        if (filterMidline && simBbRef.current && !simBbRef.current.above_midline) {
+          alert("BB orta cizgisi altinda — trend uygun degil, bekleyin.")
+          return
+        }
+        // Squeeze filtresi — bantlar cok darsa baslatma
+        if (filterSqueeze && simBbRef.current?.is_squeeze) {
+          alert("BB squeeze tespit edildi — breakout bekleniyor.")
+          return
+        }
+      } else {
+        recalcGrid()
+      }
+
       setSimRunning(true)
       return
     }
@@ -894,52 +1007,65 @@ export default function HftPage() {
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
             <div className="text-[10px] text-slate-500 uppercase">Acik Seviye</div>
             <div className="text-sm font-bold text-purple-400 font-mono">
-              {backendStatus?.filled_count ?? 0} / {gridCount}
+              {isBackendMode ? (backendStatus?.filled_count ?? 0) : simFilledRef.current.size} / {gridCount}
             </div>
           </div>
         </div>
 
-        {/* BB Modu Istatistikleri */}
-        {backendStatus?.grid_mode && backendStatus.grid_mode !== "manual" && (
+        {/* BB Modu Istatistikleri — sim + backend */}
+        {(() => {
+          // BB verisini kaynagina gore sec
+          const bbSrc = isBackendMode
+            ? (backendStatus?.grid_mode && backendStatus.grid_mode !== "manual" ? {
+                width: backendStatus.bb_width || 0, rsi: backendStatus.bb_rsi || 50,
+                paused: backendStatus.bb_paused, mid: backendStatus.bb_mid || 0,
+              } : null)
+            : (gridMode !== "manual" && simBbMeta ? {
+                width: simBbMeta.bb_width || 0, rsi: simBbMeta.rsi || 50,
+                paused: simBbMeta.is_squeeze, mid: simBbMeta.bb_mid || 0,
+              } : null)
+          if (!bbSrc) return null
+          return (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 relative z-10 mb-4">
             <div className={`rounded-lg p-3 border ${
-              (backendStatus.bb_width || 0) < 0.005 ? 'bg-yellow-900/20 border-yellow-500/30' :
-              (backendStatus.bb_width || 0) > 0.05 ? 'bg-red-900/20 border-red-500/30' :
+              bbSrc.width < 0.005 ? 'bg-yellow-900/20 border-yellow-500/30' :
+              bbSrc.width > 0.05 ? 'bg-red-900/20 border-red-500/30' :
               'bg-indigo-900/20 border-indigo-500/30'
             }`}>
               <div className="text-[10px] text-indigo-400 uppercase">BB Genisligi</div>
               <div className="text-sm font-bold text-white font-mono">
-                %{((backendStatus.bb_width || 0) * 100).toFixed(2)}
+                %{(bbSrc.width * 100).toFixed(2)}
               </div>
             </div>
             <div className={`rounded-lg p-3 border ${
-              (backendStatus.bb_rsi || 50) > 70 ? 'bg-red-900/20 border-red-500/30' :
-              (backendStatus.bb_rsi || 50) < 30 ? 'bg-red-900/20 border-red-500/30' :
+              bbSrc.rsi > 70 ? 'bg-red-900/20 border-red-500/30' :
+              bbSrc.rsi < 30 ? 'bg-red-900/20 border-red-500/30' :
               'bg-emerald-900/20 border-emerald-500/30'
             }`}>
               <div className="text-[10px] text-indigo-400 uppercase">RSI</div>
               <div className={`text-sm font-bold font-mono ${
-                (backendStatus.bb_rsi || 50) > 70 || (backendStatus.bb_rsi || 50) < 30 ? 'text-red-400' : 'text-emerald-400'
+                bbSrc.rsi > 70 || bbSrc.rsi < 30 ? 'text-red-400' : 'text-emerald-400'
               }`}>
-                {(backendStatus.bb_rsi || 0).toFixed(1)}
+                {bbSrc.rsi.toFixed(1)}
               </div>
             </div>
             <div className={`rounded-lg p-3 border ${
-              backendStatus.bb_paused ? 'bg-yellow-900/20 border-yellow-500/30' : 'bg-indigo-900/20 border-indigo-500/30'
+              bbSrc.paused ? 'bg-yellow-900/20 border-yellow-500/30' : 'bg-indigo-900/20 border-indigo-500/30'
             }`}>
               <div className="text-[10px] text-indigo-400 uppercase">BB Durum</div>
-              <div className={`text-sm font-bold ${backendStatus.bb_paused ? 'text-yellow-400' : 'text-indigo-400'}`}>
-                {backendStatus.bb_paused ? 'DURAKLADI' : 'Aktif'}
+              <div className={`text-sm font-bold ${bbSrc.paused ? 'text-yellow-400' : 'text-indigo-400'}`}>
+                {bbSrc.paused ? 'SQUEEZE' : 'Aktif'}
               </div>
             </div>
             <div className="bg-indigo-900/20 rounded-lg p-3 border border-indigo-500/30">
               <div className="text-[10px] text-indigo-400 uppercase">BB Orta</div>
               <div className="text-sm font-bold text-white font-mono">
-                ${(backendStatus.bb_mid || 0).toFixed(2)}
+                ${bbSrc.mid.toFixed(2)}
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* Borsa Pozisyonlari (Live modda) */}
         {isBackendMode && backendStatus?.exchange_positions && backendStatus.exchange_positions.length > 0 && (
