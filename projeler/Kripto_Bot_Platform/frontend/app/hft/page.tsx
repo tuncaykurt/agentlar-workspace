@@ -48,6 +48,7 @@ function toChartSymbol(s: string): string {
 
 type TradingMode = "sim" | "paper" | "live"
 type GridMode = "manual" | "bollinger" | "hybrid"
+type GridDirection = "long" | "short" | "auto"
 
 interface SimTrade {
   id: number
@@ -99,6 +100,7 @@ export default function HftPage() {
   const [filterSqueeze, setFilterSqueeze] = useState(true)
   const [filterMidline, setFilterMidline] = useState(true)
   const [filterAtrStep, setFilterAtrStep] = useState(false)
+  const [gridDirection, setGridDirection] = useState<GridDirection>("long")
 
   // Sim BB state — backend'den alinan BB meta verisi
   const simBbRef = useRef<{
@@ -131,6 +133,9 @@ export default function HftPage() {
           if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid") {
             setGridMode(s.gridMode)
           }
+          if (s.gridDirection === "long" || s.gridDirection === "short" || s.gridDirection === "auto") {
+            setGridDirection(s.gridDirection)
+          }
         }
       }
     } catch {
@@ -158,6 +163,7 @@ export default function HftPage() {
           filled: Array.from(simFilledRef.current),
           entryPrices: Array.from(simEntryPricesRef.current.entries()),
           gridMode,
+          gridDirection,
         }))
       } else {
         // Durmus ama verileri gostermek icin sakla
@@ -169,7 +175,7 @@ export default function HftPage() {
         }
       }
     } catch {}
-  }, [simRunning, trades, totalPnl, tradeCount, gridBounds, tradingMode, gridMode])
+  }, [simRunning, trades, totalPnl, tradeCount, gridBounds, tradingMode, gridMode, gridDirection])
 
   // Backend status (paper/live modlar icin)
   const [backendStatus, setBackendStatus] = useState<any>(null)
@@ -310,15 +316,27 @@ export default function HftPage() {
     return lines
   }, [gridBounds, gridCount])
 
+  // Aktif yon hesapla — auto modda BB midline'a gore, degilse sabit
+  const activeDirection = useMemo((): "long" | "short" => {
+    if (gridDirection === "auto") {
+      const bb = simBbMeta
+      if (bb) return bb.above_midline ? "long" : "short"
+      return "long" // BB verisi yoksa default long
+    }
+    return gridDirection === "short" ? "short" : "long"
+  }, [gridDirection, simBbMeta])
+
   const isSimWaiting = useMemo(() => {
     if (!simRunning || tradingMode !== "sim" || gridMode === "manual") return false
     const bb = simBbMeta
     if (!bb) return false
-    if (filterRsi && (bb.rsi > 70 || bb.rsi < 30)) return true
     if (filterSqueeze && bb.is_squeeze) return true
-    if (filterMidline && !bb.above_midline) return true
+    if (filterMidline) {
+      if (activeDirection === "long" && !bb.above_midline) return true
+      if (activeDirection === "short" && bb.above_midline) return true
+    }
     return false
-  }, [simRunning, tradingMode, gridMode, simBbMeta, filterRsi, filterSqueeze, filterMidline])
+  }, [simRunning, tradingMode, gridMode, simBbMeta, filterSqueeze, filterMidline, activeDirection])
 
   const isBackendWaiting = useMemo(() => {
     if (!simRunning || !isBackendMode || !backendStatus) return false
@@ -333,7 +351,7 @@ export default function HftPage() {
   const isWaiting = isBackendMode ? isBackendWaiting : isSimWaiting
 
   // Simulasyon motoru — SADECE "sim" modunda calisir (frontend-only)
-  // Backend grid_live_engine.py mantigi ile AYNI: BUY duste, SELL yukseliste, fee dahil
+  // LONG: duste al, yukseliste sat | SHORT: yukseliste short ac, duste kapat
   useEffect(() => {
     if (tradingMode !== "sim" || !simRunning || !gridBounds || livePrice <= 0 || gridLines.length < 2) return
 
@@ -347,7 +365,7 @@ export default function HftPage() {
     }
 
     if (clampedLevel === lastGridHitRef.current) {
-      // Trailing kontrolu (Sadece acik pozisyon yoksa asagi trailing yapilabilir)
+      // Trailing kontrolu
       if (livePrice >= gridBounds.upper) {
         const diff = livePrice - gridBounds.upper
         setGridBounds(prev => prev ? { upper: prev.upper + diff, lower: prev.lower + diff } : null)
@@ -365,91 +383,115 @@ export default function HftPage() {
     const marginPerLvl = orderSize / gridCount
     const contractsPerLvl = Math.max(1, Math.floor((marginPerLvl * leverage) / (livePrice * cs)))
     const newTrades: SimTrade[] = []
+    const dir = activeDirection
 
     // BB/Hibrit filtre kontrolleri
     const bb = simBbRef.current
     const isBbMode = gridMode !== "manual"
-    let skipBuy = false
-    let skipSell = false
+    let skipOpen = false
+    let skipClose = false
 
     if (isBbMode && bb) {
-      // RSI filtresi — asiri alimda BUY yapma, asiri satimda SELL yapma
-      if (filterRsi && bb.rsi > 70) skipBuy = true
-      if (filterRsi && bb.rsi < 30) skipSell = true
-      // Squeeze filtresi — yeni islem yapma
-      if (filterSqueeze && bb.is_squeeze) skipBuy = true
-      // Midline filtresi — orta cizgi altinda BUY yapma
-      if (filterMidline && !bb.above_midline) skipBuy = true
+      // RSI filtresi — yon bazli
+      if (dir === "long") {
+        if (filterRsi && bb.rsi > 70) skipOpen = true   // Asiri alimda LONG acma
+        if (filterRsi && bb.rsi < 30) skipClose = true   // Asiri satimda SELL yapma
+      } else {
+        if (filterRsi && bb.rsi < 30) skipOpen = true   // Asiri satimda SHORT acma
+        if (filterRsi && bb.rsi > 70) skipClose = true   // Asiri alimda COVER yapma
+      }
+      // Squeeze filtresi — yeni pozisyon acma
+      if (filterSqueeze && bb.is_squeeze) skipOpen = true
     }
 
-    if (clampedLevel < lastLevel && !skipBuy) {
-      // Fiyat DUSTU → BUY (pozisyon ac)
-      const buyLevels: number[] = []
-      for (let lvl = lastLevel - 1; lvl >= clampedLevel; lvl--) {
-        if (!filled.has(lvl) && lvl >= 0 && lvl < gridCount) {
-          buyLevels.push(lvl)
-          filled.add(lvl)
-          entryPrices.set(lvl, livePrice)
+    if (dir === "long") {
+      // ═══ LONG GRID: duste al, yukseliste sat ═══
+      if (clampedLevel < lastLevel && !skipOpen) {
+        const buyLevels: number[] = []
+        for (let lvl = lastLevel - 1; lvl >= clampedLevel; lvl--) {
+          if (!filled.has(lvl) && lvl >= 0 && lvl < gridCount) {
+            buyLevels.push(lvl)
+            filled.add(lvl)
+            entryPrices.set(lvl, livePrice)
+          }
+        }
+        if (buyLevels.length > 0) {
+          newTrades.push({
+            id: ++tradeIdRef.current, side: "BUY", price: livePrice,
+            gridLevel: buyLevels[0], grid_levels: buyLevels, level_count: buyLevels.length,
+            pnl: 0, time: new Date().toLocaleTimeString("tr-TR"),
+            mode: "sim", timestamp: Math.floor(Date.now() / 1000),
+          })
+        }
+      } else if (clampedLevel > lastLevel && !skipClose) {
+        const sellLevels: number[] = []
+        for (let lvl = lastLevel; lvl < clampedLevel; lvl++) {
+          if (filled.has(lvl)) sellLevels.push(lvl)
+        }
+        if (sellLevels.length > 0) {
+          const totalContracts = contractsPerLvl * sellLevels.length
+          let totalPriceDiff = 0
+          for (const lvl of sellLevels) {
+            totalPriceDiff += (livePrice - (entryPrices.get(lvl) ?? (livePrice - step)))
+          }
+          const grossPnl = totalContracts * cs * (totalPriceDiff / sellLevels.length)
+          const notional = totalContracts * cs * livePrice
+          const netPnl = grossPnl - notional * 0.0006 * 2
+          if (netPnl < 0) { lastGridHitRef.current = clampedLevel; return }
+          for (const lvl of sellLevels) { filled.delete(lvl); entryPrices.delete(lvl) }
+          newTrades.push({
+            id: ++tradeIdRef.current, side: "SELL", price: livePrice,
+            gridLevel: sellLevels[0], grid_levels: sellLevels, level_count: sellLevels.length,
+            pnl: Number(netPnl.toFixed(4)), time: new Date().toLocaleTimeString("tr-TR"),
+            mode: "sim", timestamp: Math.floor(Date.now() / 1000),
+          })
         }
       }
-      if (buyLevels.length > 0) {
-        newTrades.push({
-          id: ++tradeIdRef.current,
-          side: "BUY",
-          price: livePrice,
-          gridLevel: buyLevels[0],
-          grid_levels: buyLevels,
-          level_count: buyLevels.length,
-          pnl: 0, // BUY'da PnL yok
-          time: new Date().toLocaleTimeString("tr-TR"),
-          mode: "sim",
-          timestamp: Math.floor(Date.now() / 1000),
-        })
-      }
-    } else if (clampedLevel > lastLevel && !skipSell) {
-      // Fiyat YUKSELDI → SELL (kar al)
-      const sellLevels: number[] = []
-      for (let lvl = lastLevel; lvl < clampedLevel; lvl++) {
-        if (filled.has(lvl)) {
-          sellLevels.push(lvl)
+    } else {
+      // ═══ SHORT GRID: yukseliste short ac, duste kapat (cover) ═══
+      if (clampedLevel > lastLevel && !skipOpen) {
+        // Fiyat YUKSELDI → SHORT ac (pozisyon ac)
+        const shortLevels: number[] = []
+        for (let lvl = lastLevel + 1; lvl <= clampedLevel; lvl++) {
+          if (!filled.has(lvl) && lvl >= 0 && lvl < gridCount) {
+            shortLevels.push(lvl)
+            filled.add(lvl)
+            entryPrices.set(lvl, livePrice) // Short giris fiyati
+          }
         }
-      }
-      if (sellLevels.length > 0) {
-        const totalContracts = contractsPerLvl * sellLevels.length
-        let totalPriceDiff = 0
-        for (const lvl of sellLevels) {
-          const entryPrice = entryPrices.get(lvl) ?? (livePrice - step)
-          totalPriceDiff += (livePrice - entryPrice)
+        if (shortLevels.length > 0) {
+          newTrades.push({
+            id: ++tradeIdRef.current, side: "SELL", price: livePrice,
+            gridLevel: shortLevels[0], grid_levels: shortLevels, level_count: shortLevels.length,
+            pnl: 0, time: new Date().toLocaleTimeString("tr-TR"),
+            mode: "sim", timestamp: Math.floor(Date.now() / 1000),
+          })
         }
-        const avgPriceDiff = totalPriceDiff / sellLevels.length
-        const grossPnl = totalContracts * cs * avgPriceDiff
-        const notional = totalContracts * cs * livePrice
-        const feeBothSides = notional * 0.0006 * 2 // MEXC taker fee %0.06 giris+cikis
-        const netPnl = grossPnl - feeBothSides
-
-        if (netPnl < 0) {
-          // Komisyonu karsilamayan veya zararda olan satisi atla (fiyatin yukselmesini bekle)
-          return
+      } else if (clampedLevel < lastLevel && !skipClose) {
+        // Fiyat DUSTU → COVER (short kapat, kar al)
+        const coverLevels: number[] = []
+        for (let lvl = lastLevel; lvl > clampedLevel; lvl--) {
+          if (filled.has(lvl)) coverLevels.push(lvl)
         }
-
-        // Seviyeleri bosalt
-        for (const lvl of sellLevels) {
-          filled.delete(lvl)
-          entryPrices.delete(lvl)
+        if (coverLevels.length > 0) {
+          const totalContracts = contractsPerLvl * coverLevels.length
+          let totalPriceDiff = 0
+          for (const lvl of coverLevels) {
+            // Short kar = giris - cikis (fiyat dustugunde kar)
+            totalPriceDiff += ((entryPrices.get(lvl) ?? (livePrice + step)) - livePrice)
+          }
+          const grossPnl = totalContracts * cs * (totalPriceDiff / coverLevels.length)
+          const notional = totalContracts * cs * livePrice
+          const netPnl = grossPnl - notional * 0.0006 * 2
+          if (netPnl < 0) { lastGridHitRef.current = clampedLevel; return }
+          for (const lvl of coverLevels) { filled.delete(lvl); entryPrices.delete(lvl) }
+          newTrades.push({
+            id: ++tradeIdRef.current, side: "BUY", price: livePrice,
+            gridLevel: coverLevels[0], grid_levels: coverLevels, level_count: coverLevels.length,
+            pnl: Number(netPnl.toFixed(4)), time: new Date().toLocaleTimeString("tr-TR"),
+            mode: "sim", timestamp: Math.floor(Date.now() / 1000),
+          })
         }
-
-        newTrades.push({
-          id: ++tradeIdRef.current,
-          side: "SELL",
-          price: livePrice,
-          gridLevel: sellLevels[0],
-          grid_levels: sellLevels,
-          level_count: sellLevels.length,
-          pnl: Number(netPnl.toFixed(4)),
-          time: new Date().toLocaleTimeString("tr-TR"),
-          mode: "sim",
-          timestamp: Math.floor(Date.now() / 1000),
-        })
       }
     }
 
@@ -462,7 +504,7 @@ export default function HftPage() {
 
     lastGridHitRef.current = clampedLevel
 
-    // Trailing (Sadece acik pozisyon yoksa asagi trailing yapilabilir)
+    // Trailing
     if (livePrice >= gridBounds.upper) {
       const diff = livePrice - gridBounds.upper
       setGridBounds(prev => prev ? { upper: prev.upper + diff, lower: prev.lower + diff } : null)
@@ -470,7 +512,7 @@ export default function HftPage() {
       const diff = gridBounds.lower - livePrice
       setGridBounds(prev => prev ? { upper: prev.upper - diff, lower: prev.lower - diff } : null)
     }
-  }, [livePrice, simRunning, gridBounds, tradingMode])
+  }, [livePrice, simRunning, gridBounds, tradingMode, activeDirection])
 
   // Sim BB recalc loop — her 60s BB bantlarini yeniden hesapla ve grid'i guncelle
   useEffect(() => {
@@ -596,6 +638,7 @@ export default function HftPage() {
         spread_pct: spreadPct,
         grid_count: gridCount,
         grid_mode: gridMode,
+        grid_direction: gridDirection,
         bb_timeframe: bbTimeframe,
         bb_period: Number(bbPeriod) || 20,
         bb_std_dev: Number(bbStdDev) || 2.0,
@@ -718,6 +761,11 @@ export default function HftPage() {
                   {gridMode === "bollinger" ? "BB" : "HIBRIT"}
                 </span>
               )}
+              <span className={`ml-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                activeDirection === "long" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
+              }`}>
+                {activeDirection === "long" ? "LONG" : "SHORT"}
+              </span>
             </p>
           </div>
           {/* Canli Fiyat — sag ust */}
@@ -860,6 +908,23 @@ export default function HftPage() {
               <option value="manual">Manuel Grid</option>
               <option value="bollinger">Bollinger Grid</option>
               <option value="hybrid">Hibrit (BB+Filtre)</option>
+            </select>
+          </div>
+
+          {/* Yon Secimi */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Yon</span>
+            <select
+              value={gridDirection}
+              onChange={e => setGridDirection(e.target.value as GridDirection)}
+              disabled={simRunning}
+              className={`bg-[#020817] border rounded-md px-3 py-1.5 text-sm font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50 ${
+                activeDirection === "long" ? "border-emerald-500/50 text-emerald-400" : "border-red-500/50 text-red-400"
+              }`}
+            >
+              <option value="long">Long (Al-Sat)</option>
+              <option value="short">Short (Sat-Al)</option>
+              <option value="auto">Otomatik (BB)</option>
             </select>
           </div>
 

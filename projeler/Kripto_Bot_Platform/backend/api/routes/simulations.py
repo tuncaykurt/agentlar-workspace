@@ -299,6 +299,7 @@ async def hft_start(data: dict):
         "grid_count": data.get("grid_count", hft_settings.get("grid_count", 20)),
         # BB modu parametreleri
         "grid_mode": data.get("grid_mode", "manual"),
+        "grid_direction": data.get("grid_direction", "long"),
         "bb_timeframe": data.get("bb_timeframe", "5m"),
         "bb_period": data.get("bb_period", 20),
         "bb_std_dev": data.get("bb_std_dev", 2.0),

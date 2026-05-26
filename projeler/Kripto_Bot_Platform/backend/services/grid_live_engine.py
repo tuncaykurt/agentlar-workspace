@@ -89,6 +89,7 @@ class GridLiveEngine:
 
         # BB modu parametreleri
         grid_mode = config.get("grid_mode", "manual")  # "manual" / "bollinger" / "hybrid"
+        grid_direction = config.get("grid_direction", "long")  # "long" / "short" / "auto"
         bb_timeframe = config.get("bb_timeframe", "5m")
         bb_period = int(config.get("bb_period", 20))
         bb_std_dev = float(config.get("bb_std_dev", 2.0))
@@ -126,15 +127,8 @@ class GridLiveEngine:
             if not bb_data:
                 return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamıyor."}
 
-            # Orta çizgi filtresi — fiyat BB ortasının altındaysa başlatma
-            if filters.get("midline_filter") and not bb_data.get("above_midline", True):
-                return {"error": f"BB orta çizgisi (${bb_data.get('bb_mid', 0):.2f}) altında — "
-                                 f"trend uygun değil. Fiyat orta çizgiyi geçince tekrar deneyin."}
-
-            # Squeeze filtresi — bantlar çok darsa başlatma
-            if filters.get("squeeze_filter") and bb_data.get("is_squeeze", False):
-                return {"error": f"BB squeeze tespit edildi (genişlik: %{bb_data.get('bb_width', 0) * 100:.2f}). "
-                                 f"Breakout bekleniyor, bantlar genişleyince tekrar deneyin."}
+            # Filtreler artık başlatmayı ENGELLEMİYOR — bot "avda bekle" modunda başlar
+            # ve koşullar uygun olduğunda otomatik işlem yapar
 
             upper = bb_data["bb_upper"]
             lower = bb_data["bb_lower"]
@@ -221,6 +215,7 @@ class GridLiveEngine:
             "bb_rsi": bb_data.get("rsi", 0),
             "bb_adx": bb_data.get("adx", 0),
             "bb_paused": False,
+            "grid_direction": grid_direction,  # "long" / "short" / "auto"
         }
 
         await redis.set("grid_live:state", json.dumps(state))
@@ -510,6 +505,10 @@ class GridLiveEngine:
         grid_mode = state.get("grid_mode", "manual")
         filters = state.get("filters", {})
 
+        # Aktif yön hesapla
+        grid_direction = state.get("grid_direction", "long")
+        active_dir = grid_direction  # "long" veya "short"
+
         if grid_mode in ("bollinger", "hybrid"):
             ccxt_sym = state.get("ccxt_symbol", "")
             bb_meta_raw = await redis.get(f"bb_grid:meta:{ccxt_sym}")
@@ -518,6 +517,7 @@ class GridLiveEngine:
                     bb_meta = json.loads(bb_meta_raw)
                     rsi = bb_meta.get("rsi", 50)
                     is_squeeze = bb_meta.get("is_squeeze", False)
+                    above_mid = bb_meta.get("above_midline", True)
 
                     # State'e güncel BB verilerini yaz (frontend için)
                     state["bb_rsi"] = rsi
@@ -525,103 +525,138 @@ class GridLiveEngine:
                     state["bb_mid"] = bb_meta.get("bb_mid", 0)
                     state["bb_adx"] = bb_meta.get("adx", 0)
 
-                    # RSI filtresi
+                    # Auto yön: BB midline'a göre
+                    if grid_direction == "auto":
+                        active_dir = "long" if above_mid else "short"
+                        state["active_direction"] = active_dir
+
+                    # RSI filtresi — yön bazlı
                     if filters.get("rsi_filter"):
-                        if rsi > 70:
-                            skip_buy = True  # Aşırı alım → BUY yapma
-                        if rsi < 30:
-                            skip_sell = True  # Aşırı satım → SELL yapma (daha iyi fiyat bekle)
+                        if active_dir == "long":
+                            if rsi > 70: skip_buy = True
+                            if rsi < 30: skip_sell = True
+                        else:
+                            if rsi < 30: skip_buy = True
+                            if rsi > 70: skip_sell = True
 
                     # Squeeze filtresi
                     if filters.get("squeeze_filter") and is_squeeze:
-                        skip_buy = True  # Squeeze → yeni pozisyon açma
+                        skip_buy = True
                         state["bb_paused"] = True
                     else:
                         state["bb_paused"] = False
 
-                    # Orta çizgi filtresi (çalışma sırasında)
+                    # Orta çizgi filtresi — yön bazlı
                     if filters.get("midline_filter"):
-                        above_mid = bb_meta.get("above_midline", True)
-                        if not above_mid:
-                            skip_buy = True  # Orta çizgi altında → BUY yapma
+                        if active_dir == "long" and not above_mid:
+                            skip_buy = True
+                        elif active_dir == "short" and above_mid:
+                            skip_buy = True
 
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-        if current_level < last_level:
-            # Fiyat DÜŞTÜ → BUY (pozisyon aç)
-            if skip_buy:
-                filter_reasons = []
-                if filters.get("rsi_filter") and state.get("bb_rsi", 50) > 70:
-                    filter_reasons.append(f"RSI={state.get('bb_rsi', 0):.0f}>70")
-                if filters.get("squeeze_filter") and state.get("bb_paused"):
-                    filter_reasons.append("Squeeze")
-                if filters.get("midline_filter"):
-                    filter_reasons.append("Orta çizgi altı")
-                print(f"[GridLive] ⏸ BUY atlandı (filtre: {', '.join(filter_reasons)})")
-            else:
-                buy_levels = []
-                for lvl in range(last_level - 1, current_level - 1, -1):
-                    if lvl not in filled and 0 <= lvl < grid_count:
-                        buy_levels.append(lvl)
-                        filled.add(lvl)
-                        entry_prices[str(lvl)] = current_price  # Gerçek giriş fiyatını kaydet
-
-                if buy_levels:
-                    trade = await self._execute_order(
-                        state, "buy", current_price, buy_levels, len(buy_levels)
-                    )
-                    trades.append(trade)
-
-        elif current_level > last_level:
-            # Fiyat YÜKSELDİ → SELL (kâr al)
-            sell_levels = []
-            for lvl in range(last_level, current_level):
-                if lvl in filled:
-                    sell_levels.append(lvl)
-
-            if sell_levels:
-                # PnL hesapla — GERÇEK giriş fiyatlarından
-                cs = state.get("contract_size", 0.01)
-                contracts_per_lvl = state.get("contracts_per_level", 1)
-                total_contracts = contracts_per_lvl * len(sell_levels)
-
-                # Her seviyenin gerçek giriş fiyatını bul, ortalama al
-                total_price_diff = 0.0
-                for lvl in sell_levels:
-                    entry_price = entry_prices.get(str(lvl), current_price - step)
-                    price_diff = current_price - entry_price
-                    total_price_diff += price_diff
-
-                avg_price_diff = total_price_diff / len(sell_levels) if sell_levels else 0
-                gross_pnl = total_contracts * cs * avg_price_diff
-                notional = total_contracts * cs * current_price
-                fee_total = notional * 0.0006 * 2  # MEXC taker fee %0.06 giriş+çıkış
-                net_pnl = round(gross_pnl - fee_total, 6)
-
-                # RSI filtresi — aşırı satımda SELL yapma (daha iyi fiyat bekle)
-                if skip_sell and mode == "live":
-                    print(f"[GridLive] ⏸ SELL atlandı (RSI filtresi: RSI={state.get('bb_rsi', 0):.0f}<30)")
-                # Minimum kâr kontrolü — fee'yi karşılamayan SELL yapma
-                # Kâr < fee × 1.5 ise bekle (churn engelleme)
-                elif net_pnl < 0:
-                    min_profit_price = fee_total / (total_contracts * cs) * 1.5
-                    print(f"[GridLive] ⏸ SELL atlandı: net_pnl=${net_pnl:.4f} < 0 | "
-                          f"fark=${avg_price_diff:.4f} < min ${min_profit_price:.4f} | "
-                          f"seviyeler={sell_levels} — fee'yi karşılamıyor, bekleniyor")
-                    # Seviyeleri dolu bırak, fiyat daha yükselince tekrar denenecek
+        if active_dir == "long":
+            # ═══ LONG GRID: düşüşte al, yükselişte sat ═══
+            if current_level < last_level:
+                if skip_buy:
+                    print(f"[GridLive] ⏸ LONG BUY atlandı (filtre aktif)")
                 else:
-                    trade = await self._execute_order(
-                        state, "sell", current_price, sell_levels, len(sell_levels), net_pnl
-                    )
-                    trades.append(trade)
+                    buy_levels = []
+                    for lvl in range(last_level - 1, current_level - 1, -1):
+                        if lvl not in filled and 0 <= lvl < grid_count:
+                            buy_levels.append(lvl)
+                            filled.add(lvl)
+                            entry_prices[str(lvl)] = current_price
 
-                    # Sadece başarılı SELL'lerde seviyeleri boşalt
-                    if trade.get("exchange_status") != "error":
-                        for lvl in sell_levels:
-                            filled.discard(lvl)
-                            entry_prices.pop(str(lvl), None)
-                    # Başarısız → seviyeler dolu kalır, tekrar SELL denemez BUY da yapılmaz
+                    if buy_levels:
+                        trade = await self._execute_order(
+                            state, "buy", current_price, buy_levels, len(buy_levels)
+                        )
+                        trades.append(trade)
+
+            elif current_level > last_level:
+                sell_levels = [lvl for lvl in range(last_level, current_level) if lvl in filled]
+
+                if sell_levels:
+                    cs = state.get("contract_size", 0.01)
+                    contracts_per_lvl = state.get("contracts_per_level", 1)
+                    total_contracts = contracts_per_lvl * len(sell_levels)
+                    total_price_diff = sum(
+                        current_price - entry_prices.get(str(lvl), current_price - step)
+                        for lvl in sell_levels
+                    )
+                    avg_price_diff = total_price_diff / len(sell_levels)
+                    gross_pnl = total_contracts * cs * avg_price_diff
+                    notional = total_contracts * cs * current_price
+                    fee_total = notional * 0.0006 * 2
+                    net_pnl = round(gross_pnl - fee_total, 6)
+
+                    if skip_sell and mode == "live":
+                        print(f"[GridLive] ⏸ SELL atlandı (RSI filtresi)")
+                    elif net_pnl < 0:
+                        print(f"[GridLive] ⏸ SELL atlandı: net_pnl=${net_pnl:.4f} < 0")
+                    else:
+                        trade = await self._execute_order(
+                            state, "sell", current_price, sell_levels, len(sell_levels), net_pnl
+                        )
+                        trades.append(trade)
+                        if trade.get("exchange_status") != "error":
+                            for lvl in sell_levels:
+                                filled.discard(lvl)
+                                entry_prices.pop(str(lvl), None)
+
+        else:
+            # ═══ SHORT GRID: yükselişte short aç, düşüşte kapat ═══
+            if current_level > last_level:
+                if skip_buy:
+                    print(f"[GridLive] ⏸ SHORT açma atlandı (filtre aktif)")
+                else:
+                    short_levels = []
+                    for lvl in range(last_level + 1, current_level + 1):
+                        if lvl not in filled and 0 <= lvl < grid_count:
+                            short_levels.append(lvl)
+                            filled.add(lvl)
+                            entry_prices[str(lvl)] = current_price
+
+                    if short_levels:
+                        trade = await self._execute_order(
+                            state, "sell", current_price, short_levels, len(short_levels)
+                        )
+                        trades.append(trade)
+
+            elif current_level < last_level:
+                # Düşüşte cover (short kapat)
+                cover_levels = [lvl for lvl in range(last_level, current_level, -1) if lvl in filled]
+
+                if cover_levels:
+                    cs = state.get("contract_size", 0.01)
+                    contracts_per_lvl = state.get("contracts_per_level", 1)
+                    total_contracts = contracts_per_lvl * len(cover_levels)
+                    # Short kâr = giriş - çıkış
+                    total_price_diff = sum(
+                        entry_prices.get(str(lvl), current_price + step) - current_price
+                        for lvl in cover_levels
+                    )
+                    avg_price_diff = total_price_diff / len(cover_levels)
+                    gross_pnl = total_contracts * cs * avg_price_diff
+                    notional = total_contracts * cs * current_price
+                    fee_total = notional * 0.0006 * 2
+                    net_pnl = round(gross_pnl - fee_total, 6)
+
+                    if skip_sell and mode == "live":
+                        print(f"[GridLive] ⏸ COVER atlandı (RSI filtresi)")
+                    elif net_pnl < 0:
+                        print(f"[GridLive] ⏸ COVER atlandı: net_pnl=${net_pnl:.4f} < 0")
+                    else:
+                        trade = await self._execute_order(
+                            state, "buy", current_price, cover_levels, len(cover_levels), net_pnl
+                        )
+                        trades.append(trade)
+                        if trade.get("exchange_status") != "error":
+                            for lvl in cover_levels:
+                                filled.discard(lvl)
+                                entry_prices.pop(str(lvl), None)
 
         state["entry_prices"] = entry_prices
 
@@ -920,6 +955,8 @@ class GridLiveEngine:
             "exchange_balance": exchange_balance,
             # BB modu bilgileri
             "grid_mode": state.get("grid_mode", "manual"),
+            "grid_direction": state.get("grid_direction", "long"),
+            "active_direction": state.get("active_direction", state.get("grid_direction", "long")),
             "bb_upper": state.get("bb_upper", 0),
             "bb_lower": state.get("bb_lower", 0),
             "bb_mid": state.get("bb_mid", 0),
