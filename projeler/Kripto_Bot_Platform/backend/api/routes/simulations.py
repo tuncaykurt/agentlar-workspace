@@ -249,6 +249,11 @@ async def get_hft_settings():
         "symbol": "BTCUSDT",
         "spread_pct": 5.0,
         "grid_count": 20,
+        "grid_mode": "manual",
+        "bb_timeframe": "5m",
+        "bb_period": 20,
+        "bb_std_dev": 2.0,
+        "min_spread_pct": 0.3,
     }
 
 
@@ -292,6 +297,13 @@ async def hft_start(data: dict):
         "order_size": data.get("order_size", hft_settings.get("order_size", 100)),
         "spread_pct": data.get("spread_pct", hft_settings.get("spread_pct", 0.5)),
         "grid_count": data.get("grid_count", hft_settings.get("grid_count", 20)),
+        # BB modu parametreleri
+        "grid_mode": data.get("grid_mode", "manual"),
+        "bb_timeframe": data.get("bb_timeframe", "5m"),
+        "bb_period": data.get("bb_period", 20),
+        "bb_std_dev": data.get("bb_std_dev", 2.0),
+        "min_spread_pct": data.get("min_spread_pct", 0.3),
+        "filters": data.get("filters", {}),
     }
 
     try:

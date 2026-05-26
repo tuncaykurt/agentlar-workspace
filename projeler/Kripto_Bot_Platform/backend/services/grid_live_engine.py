@@ -30,6 +30,7 @@ class GridLiveEngine:
         self._exchange = None
         self._poll_task: asyncio.Task | None = None
         self._tick_lock = asyncio.Lock()  # Çift emir önleme kilidi
+        self._bb_service = None  # Bollinger Grid Service (lazy init)
 
     # ─── Exchange ─────────────────────────────────────────────────────
 
@@ -86,6 +87,14 @@ class GridLiveEngine:
         grid_count = int(config.get("grid_count", 20))
         margin_per_level = round(total_budget / grid_count, 4)  # Kademe başına margin
 
+        # BB modu parametreleri
+        grid_mode = config.get("grid_mode", "manual")  # "manual" / "bollinger" / "hybrid"
+        bb_timeframe = config.get("bb_timeframe", "5m")
+        bb_period = int(config.get("bb_period", 20))
+        bb_std_dev = float(config.get("bb_std_dev", 2.0))
+        min_spread_pct = float(config.get("min_spread_pct", 0.3))
+        filters = config.get("filters", {})
+
         # Canlı fiyat al — SADECE MEXC kaynaklari (baska borsa fiyati kullanma!)
         current_price = 0.0
         price_raw = await redis.get(f"ticker:mexc:{ccxt_symbol}")
@@ -103,9 +112,42 @@ class GridLiveEngine:
         if current_price <= 0:
             return {"error": f"Fiyat bulunamadı: {ccxt_symbol}. MEXC bağlantısını kontrol edin."}
 
-        # Grid sınırlarını hesapla
-        upper = current_price * (1 + spread_pct / 100)
-        lower = current_price * (1 - spread_pct / 100)
+        # ─── Grid sınırlarını hesapla ─────────────────────────────────
+        bb_data = {}
+        if grid_mode in ("bollinger", "hybrid"):
+            # BB bantlarından dinamik grid sınırları
+            from services.bollinger_grid_service import BollingerGridService
+            self._bb_service = BollingerGridService()
+            bb_data = await self._bb_service.compute_grid_bounds(
+                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
+                min_spread_pct, current_price
+            )
+
+            if not bb_data:
+                return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamıyor."}
+
+            # Orta çizgi filtresi — fiyat BB ortasının altındaysa başlatma
+            if filters.get("midline_filter") and not bb_data.get("above_midline", True):
+                return {"error": f"BB orta çizgisi (${bb_data.get('bb_mid', 0):.2f}) altında — "
+                                 f"trend uygun değil. Fiyat orta çizgiyi geçince tekrar deneyin."}
+
+            # Squeeze filtresi — bantlar çok darsa başlatma
+            if filters.get("squeeze_filter") and bb_data.get("is_squeeze", False):
+                return {"error": f"BB squeeze tespit edildi (genişlik: %{bb_data.get('bb_width', 0) * 100:.2f}). "
+                                 f"Breakout bekleniyor, bantlar genişleyince tekrar deneyin."}
+
+            upper = bb_data["bb_upper"]
+            lower = bb_data["bb_lower"]
+            # Spread'i BB'den hesapla
+            spread_pct = round((upper - lower) / current_price * 100, 4)
+            print(f"[GridLive] BB Modu: upper=${upper:.2f} lower=${lower:.2f} "
+                  f"mid=${bb_data.get('bb_mid', 0):.2f} width={bb_data.get('bb_width', 0):.4f} "
+                  f"rsi={bb_data.get('rsi', 0):.1f} adx={bb_data.get('adx', 0):.1f}")
+        else:
+            # Manuel mod — mevcut mantık
+            upper = current_price * (1 + spread_pct / 100)
+            lower = current_price * (1 - spread_pct / 100)
+
         step = (upper - lower) / grid_count
         levels = [round(lower + i * step, 8) for i in range(grid_count + 1)]
 
@@ -165,6 +207,20 @@ class GridLiveEngine:
             "total_fees": 0.0,
             "started_at": datetime.now(timezone.utc).isoformat(),
             "trailing_count": 0,
+            # BB modu alanları
+            "grid_mode": grid_mode,
+            "bb_timeframe": bb_timeframe,
+            "bb_period": bb_period,
+            "bb_std_dev": bb_std_dev,
+            "min_spread_pct": min_spread_pct,
+            "filters": filters,
+            "bb_upper": bb_data.get("bb_upper", 0),
+            "bb_lower": bb_data.get("bb_lower", 0),
+            "bb_mid": bb_data.get("bb_mid", 0),
+            "bb_width": bb_data.get("bb_width", 0),
+            "bb_rsi": bb_data.get("rsi", 0),
+            "bb_adx": bb_data.get("adx", 0),
+            "bb_paused": False,
         }
 
         await redis.set("grid_live:state", json.dumps(state))
@@ -189,15 +245,25 @@ class GridLiveEngine:
             self._poll_task.cancel()
         self._poll_task = asyncio.create_task(self.run_standalone_loop())
 
+        # BB modunda arka plan recalc loop başlat
+        if grid_mode in ("bollinger", "hybrid") and self._bb_service:
+            self._bb_service._recalc_task = asyncio.create_task(
+                self._bb_service.start_recalc_loop(
+                    ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, min_spread_pct
+                )
+            )
+
+        mode_label = {"manual": "MANUEL", "bollinger": "BOLLINGER", "hybrid": "HİBRİT"}.get(grid_mode, "MANUEL")
         emoji = "🔴 CANLI" if mode == "live" else "📝 PAPER"
-        print(f"[GridLive] {emoji} Grid Bot Başlatıldı: {symbol_raw} | "
+        print(f"[GridLive] {emoji} [{mode_label}] Grid Bot Başlatıldı: {symbol_raw} | "
               f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | "
               f"{leverage}x | toplam=${total_budget} margin/kademe=${margin_per_level:.4f} | "
               f"{contracts_per_level} kontrat/kademe")
 
-        return {
+        result = {
             "success": True,
             "mode": mode,
+            "grid_mode": grid_mode,
             "symbol": symbol_raw,
             "price": current_price,
             "grid_range": f"${lower:.2f} - ${upper:.2f}",
@@ -212,11 +278,26 @@ class GridLiveEngine:
                 contracts_per_level * contract_size * step - contracts_per_level * contract_size * current_price * 0.0006 * 2, 6
             ),
         }
+        # BB modu ek bilgileri
+        if grid_mode in ("bollinger", "hybrid") and bb_data:
+            result["bb_upper"] = bb_data.get("bb_upper", 0)
+            result["bb_lower"] = bb_data.get("bb_lower", 0)
+            result["bb_mid"] = bb_data.get("bb_mid", 0)
+            result["bb_width"] = bb_data.get("bb_width", 0)
+            result["bb_rsi"] = bb_data.get("rsi", 0)
+            result["bb_adx"] = bb_data.get("adx", 0)
+            result["filters"] = filters
+        return result
 
     async def stop(self, close_positions: bool = False) -> dict:
         """Grid botunu durdur."""
         redis = get_redis()
         await redis.delete("grid_live:running")
+
+        # BB recalc loop'u durdur
+        if self._bb_service:
+            self._bb_service.stop()
+            self._bb_service = None
 
         # Polling loop'u durdur
         if self._poll_task and not self._poll_task.done():
@@ -423,20 +504,74 @@ class GridLiveEngine:
         # Giriş fiyatları takibi (level_index → entry_price)
         entry_prices = state.get("entry_prices", {})
 
+        # BB modu filtreleri — Redis'ten güncel BB meta oku
+        skip_buy = False
+        skip_sell = False
+        grid_mode = state.get("grid_mode", "manual")
+        filters = state.get("filters", {})
+
+        if grid_mode in ("bollinger", "hybrid"):
+            ccxt_sym = state.get("ccxt_symbol", "")
+            bb_meta_raw = await redis.get(f"bb_grid:meta:{ccxt_sym}")
+            if bb_meta_raw:
+                try:
+                    bb_meta = json.loads(bb_meta_raw)
+                    rsi = bb_meta.get("rsi", 50)
+                    is_squeeze = bb_meta.get("is_squeeze", False)
+
+                    # State'e güncel BB verilerini yaz (frontend için)
+                    state["bb_rsi"] = rsi
+                    state["bb_width"] = bb_meta.get("bb_width", 0)
+                    state["bb_mid"] = bb_meta.get("bb_mid", 0)
+                    state["bb_adx"] = bb_meta.get("adx", 0)
+
+                    # RSI filtresi
+                    if filters.get("rsi_filter"):
+                        if rsi > 70:
+                            skip_buy = True  # Aşırı alım → BUY yapma
+                        if rsi < 30:
+                            skip_sell = True  # Aşırı satım → SELL yapma (daha iyi fiyat bekle)
+
+                    # Squeeze filtresi
+                    if filters.get("squeeze_filter") and is_squeeze:
+                        skip_buy = True  # Squeeze → yeni pozisyon açma
+                        state["bb_paused"] = True
+                    else:
+                        state["bb_paused"] = False
+
+                    # Orta çizgi filtresi (çalışma sırasında)
+                    if filters.get("midline_filter"):
+                        above_mid = bb_meta.get("above_midline", True)
+                        if not above_mid:
+                            skip_buy = True  # Orta çizgi altında → BUY yapma
+
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
         if current_level < last_level:
             # Fiyat DÜŞTÜ → BUY (pozisyon aç)
-            buy_levels = []
-            for lvl in range(last_level - 1, current_level - 1, -1):
-                if lvl not in filled and 0 <= lvl < grid_count:
-                    buy_levels.append(lvl)
-                    filled.add(lvl)
-                    entry_prices[str(lvl)] = current_price  # Gerçek giriş fiyatını kaydet
+            if skip_buy:
+                filter_reasons = []
+                if filters.get("rsi_filter") and state.get("bb_rsi", 50) > 70:
+                    filter_reasons.append(f"RSI={state.get('bb_rsi', 0):.0f}>70")
+                if filters.get("squeeze_filter") and state.get("bb_paused"):
+                    filter_reasons.append("Squeeze")
+                if filters.get("midline_filter"):
+                    filter_reasons.append("Orta çizgi altı")
+                print(f"[GridLive] ⏸ BUY atlandı (filtre: {', '.join(filter_reasons)})")
+            else:
+                buy_levels = []
+                for lvl in range(last_level - 1, current_level - 1, -1):
+                    if lvl not in filled and 0 <= lvl < grid_count:
+                        buy_levels.append(lvl)
+                        filled.add(lvl)
+                        entry_prices[str(lvl)] = current_price  # Gerçek giriş fiyatını kaydet
 
-            if buy_levels:
-                trade = await self._execute_order(
-                    state, "buy", current_price, buy_levels, len(buy_levels)
-                )
-                trades.append(trade)
+                if buy_levels:
+                    trade = await self._execute_order(
+                        state, "buy", current_price, buy_levels, len(buy_levels)
+                    )
+                    trades.append(trade)
 
         elif current_level > last_level:
             # Fiyat YÜKSELDİ → SELL (kâr al)
@@ -464,9 +599,12 @@ class GridLiveEngine:
                 fee_total = notional * 0.0006 * 2  # MEXC taker fee %0.06 giriş+çıkış
                 net_pnl = round(gross_pnl - fee_total, 6)
 
+                # RSI filtresi — aşırı satımda SELL yapma (daha iyi fiyat bekle)
+                if skip_sell and mode == "live":
+                    print(f"[GridLive] ⏸ SELL atlandı (RSI filtresi: RSI={state.get('bb_rsi', 0):.0f}<30)")
                 # Minimum kâr kontrolü — fee'yi karşılamayan SELL yapma
                 # Kâr < fee × 1.5 ise bekle (churn engelleme)
-                if net_pnl < 0 and mode == "live":
+                elif net_pnl < 0 and mode == "live":
                     min_profit_price = fee_total / (total_contracts * cs) * 1.5
                     print(f"[GridLive] ⏸ SELL atlandı: net_pnl=${net_pnl:.4f} < 0 | "
                           f"fark=${avg_price_diff:.4f} < min ${min_profit_price:.4f} | "
@@ -502,8 +640,16 @@ class GridLiveEngine:
         lower = state["lower"]
         step = state["step"]
         grid_count = state["grid_count"]
+        grid_mode = state.get("grid_mode", "manual")
 
         if current_price >= upper:
+            # BB modunda: sınıra ulaşınca anlık BB recalc dene
+            if grid_mode in ("bollinger", "hybrid"):
+                recalced = await self._try_bb_recalc(state, current_price, redis)
+                if recalced:
+                    return True
+                # BB recalc başarısız → normal trailing fallback
+
             diff = current_price - upper
             state["upper"] = current_price
             state["lower"] = lower + diff
@@ -516,6 +662,11 @@ class GridLiveEngine:
             return True
 
         elif current_price <= lower:
+            if grid_mode in ("bollinger", "hybrid"):
+                recalced = await self._try_bb_recalc(state, current_price, redis)
+                if recalced:
+                    return True
+
             diff = lower - current_price
             state["lower"] = current_price
             state["upper"] = upper - diff
@@ -527,6 +678,57 @@ class GridLiveEngine:
             return True
 
         return False
+
+    async def _try_bb_recalc(self, state: dict, current_price: float, redis) -> bool:
+        """BB bantlarından grid'i yeniden hesapla. Başarılıysa True döner."""
+        try:
+            ccxt_symbol = state.get("ccxt_symbol", "")
+            bb_meta_raw = await redis.get(f"bb_grid:meta:{ccxt_symbol}")
+            if not bb_meta_raw:
+                return False
+
+            bb_meta = json.loads(bb_meta_raw)
+            new_upper = bb_meta.get("bb_upper", 0)
+            new_lower = bb_meta.get("bb_lower", 0)
+
+            if new_upper <= 0 or new_lower <= 0 or new_upper <= new_lower:
+                return False
+
+            # Min spread floor
+            min_spread_pct = state.get("min_spread_pct", 0.3)
+            bb_mid = bb_meta.get("bb_mid", current_price)
+            actual_spread = (new_upper - new_lower) / bb_mid * 100 if bb_mid > 0 else 0
+            if actual_spread < min_spread_pct:
+                half = min_spread_pct / 200
+                new_upper = round(current_price * (1 + half), 8)
+                new_lower = round(current_price * (1 - half), 8)
+
+            grid_count = state["grid_count"]
+            new_step = (new_upper - new_lower) / grid_count
+            new_levels = [round(new_lower + i * new_step, 8) for i in range(grid_count + 1)]
+
+            old_upper = state["upper"]
+            old_lower = state["lower"]
+
+            state["upper"] = new_upper
+            state["lower"] = new_lower
+            state["step"] = new_step
+            state["levels"] = new_levels
+            state["bb_upper"] = bb_meta.get("bb_upper", 0)
+            state["bb_lower"] = bb_meta.get("bb_lower", 0)
+            state["bb_mid"] = bb_meta.get("bb_mid", 0)
+            state["bb_width"] = bb_meta.get("bb_width", 0)
+            state["trailing_count"] = state.get("trailing_count", 0) + 1
+
+            print(f"[GridLive] 🔄 BB Recalc: ${old_lower:.2f}-${old_upper:.2f} → "
+                  f"${new_lower:.2f}-${new_upper:.2f} (width={bb_meta.get('bb_width', 0):.4f})")
+
+            await self._sync_hft_bounds(redis, state)
+            return True
+
+        except Exception as e:
+            print(f"[GridLive] BB recalc hatası: {e}")
+            return False
 
     async def _sync_hft_bounds(self, redis, state: dict):
         """HFT settings'deki grid sınırlarını güncelle (frontend grafik için)."""
@@ -685,7 +887,7 @@ class GridLiveEngine:
         total_trades = state.get("total_trades", 0)
         total_wins = state.get("total_wins", 0)
 
-        return {
+        result = {
             "running": bool(running),
             "mode": state.get("mode", "paper"),
             "symbol": state.get("symbol", ""),
@@ -712,7 +914,19 @@ class GridLiveEngine:
             "trades": trades,
             "exchange_positions": exchange_positions,
             "exchange_balance": exchange_balance,
+            # BB modu bilgileri
+            "grid_mode": state.get("grid_mode", "manual"),
+            "bb_upper": state.get("bb_upper", 0),
+            "bb_lower": state.get("bb_lower", 0),
+            "bb_mid": state.get("bb_mid", 0),
+            "bb_width": state.get("bb_width", 0),
+            "bb_rsi": state.get("bb_rsi", 0),
+            "bb_adx": state.get("bb_adx", 0),
+            "bb_paused": state.get("bb_paused", False),
+            "bb_timeframe": state.get("bb_timeframe", ""),
+            "filters": state.get("filters", {}),
         }
+        return result
 
 
     # ─── Kendi Kendine Çalışan Polling Loop ─────────────────────────────

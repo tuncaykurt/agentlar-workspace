@@ -16,6 +16,7 @@ function toChartSymbol(s: string): string {
 }
 
 type TradingMode = "sim" | "paper" | "live"
+type GridMode = "manual" | "bollinger" | "hybrid"
 
 interface SimTrade {
   id: number
@@ -61,6 +62,17 @@ export default function HftPage() {
   const [isKilling, setIsKilling] = useState(false)
   const [killConfirm, setKillConfirm] = useState(false)
   const [chartFullscreen, setChartFullscreen] = useState(false)
+
+  // BB modu state'leri
+  const [gridMode, setGridMode] = useState<GridMode>("manual")
+  const [bbTimeframe, setBbTimeframe] = useState("5m")
+  const [bbPeriod, setBbPeriod] = useState("20")
+  const [bbStdDev, setBbStdDev] = useState("2.0")
+  const [minSpread, setMinSpread] = useState("0.3")
+  const [filterRsi, setFilterRsi] = useState(true)
+  const [filterSqueeze, setFilterSqueeze] = useState(true)
+  const [filterMidline, setFilterMidline] = useState(true)
+  const [filterAtrStep, setFilterAtrStep] = useState(false)
 
   // ESC ile tam ekrandan cik
   useEffect(() => {
@@ -270,6 +282,17 @@ export default function HftPage() {
         order_size: orderSize,
         spread_pct: spreadPct,
         grid_count: gridCount,
+        grid_mode: gridMode,
+        bb_timeframe: bbTimeframe,
+        bb_period: Number(bbPeriod) || 20,
+        bb_std_dev: Number(bbStdDev) || 2.0,
+        min_spread_pct: Number(minSpread) || 0.3,
+        filters: {
+          rsi_filter: filterRsi,
+          squeeze_filter: filterSqueeze,
+          midline_filter: filterMidline,
+          atr_min_step: filterAtrStep,
+        },
       })
 
       if (result.error) {
@@ -372,10 +395,15 @@ export default function HftPage() {
               <span className="truncate">HFT Trailing Grid Motoru</span>
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-1 truncate">
-              {symbol} · ±{spreadPct}% · {gridCount} kademe · {leverage}x kaldirac
+              {symbol} · {gridMode === "manual" ? `±${spreadPct}%` : `BB ${bbTimeframe}`} · {gridCount} kademe · {leverage}x kaldirac
               <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold ${mc.badge}`}>
                 {mc.label}
               </span>
+              {gridMode !== "manual" && (
+                <span className="ml-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400">
+                  {gridMode === "bollinger" ? "BB" : "HIBRIT"}
+                </span>
+              )}
             </p>
           </div>
           {/* Canli Fiyat — sag ust */}
@@ -506,6 +534,25 @@ export default function HftPage() {
 
           <div className="w-px h-8 bg-slate-700/50 hidden md:block" />
 
+          {/* Strateji Secimi */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Strateji</span>
+            <select
+              value={gridMode}
+              onChange={e => setGridMode(e.target.value as GridMode)}
+              disabled={simRunning}
+              className="bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+            >
+              <option value="manual">Manuel Grid</option>
+              <option value="bollinger">Bollinger Grid</option>
+              <option value="hybrid">Hibrit (BB+Filtre)</option>
+            </select>
+          </div>
+
+          <div className="w-px h-8 bg-slate-700/50 hidden md:block" />
+
+          {/* Spread — sadece Manuel modda gosterilir */}
+          {gridMode === "manual" && (
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Spread (±%)</span>
             <input type="number" value={localSpread} onChange={e => setLocalSpread(e.target.value)}
@@ -515,6 +562,43 @@ export default function HftPage() {
               className="w-24 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />
           </div>
+          )}
+
+          {/* BB modu ayarlari */}
+          {gridMode !== "manual" && (
+          <>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Zaman Dilimi</span>
+            <select value={bbTimeframe} onChange={e => setBbTimeframe(e.target.value)} disabled={simRunning}
+              className="bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50">
+              <option value="5m">5 dk</option>
+              <option value="15m">15 dk</option>
+              <option value="1h">1 saat</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">BB Periyot</span>
+            <input type="number" value={bbPeriod} onChange={e => setBbPeriod(e.target.value)}
+              min={10} max={50} disabled={simRunning}
+              className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">BB Sapma</span>
+            <input type="number" value={bbStdDev} onChange={e => setBbStdDev(e.target.value)}
+              min={1} max={3} step={0.1} disabled={simRunning}
+              className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Min Spread %</span>
+            <input type="number" value={minSpread} onChange={e => setMinSpread(e.target.value)}
+              min={0.1} max={5} step={0.1} disabled={simRunning}
+              className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+            />
+          </div>
+          </>
+          )}
 
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Kademe</span>
@@ -550,6 +634,32 @@ export default function HftPage() {
             className="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-md transition-all">
             Agi Yeniden Kur
           </button>
+
+          {/* BB Filtre Toggle'lari */}
+          {gridMode !== "manual" && (
+            <div className="flex flex-wrap gap-2 w-full mt-2 pt-2 border-t border-indigo-500/20">
+              <label className="flex items-center gap-1.5 cursor-pointer group">
+                <input type="checkbox" checked={filterRsi} onChange={e => setFilterRsi(e.target.checked)} disabled={simRunning}
+                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
+                <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors">RSI Filtresi</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer group">
+                <input type="checkbox" checked={filterSqueeze} onChange={e => setFilterSqueeze(e.target.checked)} disabled={simRunning}
+                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
+                <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors">Squeeze Dedektoru</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer group">
+                <input type="checkbox" checked={filterMidline} onChange={e => setFilterMidline(e.target.checked)} disabled={simRunning}
+                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
+                <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors">Orta Cizgi Filtresi</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer group">
+                <input type="checkbox" checked={filterAtrStep} onChange={e => setFilterAtrStep(e.target.checked)} disabled={simRunning}
+                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
+                <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors">ATR Min Step</span>
+              </label>
+            </div>
+          )}
 
           {/* Alt/Ust Sinir */}
           <div className="flex gap-2 sm:gap-3 sm:ml-auto">
@@ -606,6 +716,48 @@ export default function HftPage() {
             </div>
           </div>
         </div>
+
+        {/* BB Modu Istatistikleri */}
+        {backendStatus?.grid_mode && backendStatus.grid_mode !== "manual" && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 relative z-10 mb-4">
+            <div className={`rounded-lg p-3 border ${
+              (backendStatus.bb_width || 0) < 0.005 ? 'bg-yellow-900/20 border-yellow-500/30' :
+              (backendStatus.bb_width || 0) > 0.05 ? 'bg-red-900/20 border-red-500/30' :
+              'bg-indigo-900/20 border-indigo-500/30'
+            }`}>
+              <div className="text-[10px] text-indigo-400 uppercase">BB Genisligi</div>
+              <div className="text-sm font-bold text-white font-mono">
+                %{((backendStatus.bb_width || 0) * 100).toFixed(2)}
+              </div>
+            </div>
+            <div className={`rounded-lg p-3 border ${
+              (backendStatus.bb_rsi || 50) > 70 ? 'bg-red-900/20 border-red-500/30' :
+              (backendStatus.bb_rsi || 50) < 30 ? 'bg-red-900/20 border-red-500/30' :
+              'bg-emerald-900/20 border-emerald-500/30'
+            }`}>
+              <div className="text-[10px] text-indigo-400 uppercase">RSI</div>
+              <div className={`text-sm font-bold font-mono ${
+                (backendStatus.bb_rsi || 50) > 70 || (backendStatus.bb_rsi || 50) < 30 ? 'text-red-400' : 'text-emerald-400'
+              }`}>
+                {(backendStatus.bb_rsi || 0).toFixed(1)}
+              </div>
+            </div>
+            <div className={`rounded-lg p-3 border ${
+              backendStatus.bb_paused ? 'bg-yellow-900/20 border-yellow-500/30' : 'bg-indigo-900/20 border-indigo-500/30'
+            }`}>
+              <div className="text-[10px] text-indigo-400 uppercase">BB Durum</div>
+              <div className={`text-sm font-bold ${backendStatus.bb_paused ? 'text-yellow-400' : 'text-indigo-400'}`}>
+                {backendStatus.bb_paused ? 'DURAKLADI' : 'Aktif'}
+              </div>
+            </div>
+            <div className="bg-indigo-900/20 rounded-lg p-3 border border-indigo-500/30">
+              <div className="text-[10px] text-indigo-400 uppercase">BB Orta</div>
+              <div className="text-sm font-bold text-white font-mono">
+                ${(backendStatus.bb_mid || 0).toFixed(2)}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Borsa Pozisyonlari (Live modda) */}
         {isBackendMode && backendStatus?.exchange_positions && backendStatus.exchange_positions.length > 0 && (

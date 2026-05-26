@@ -268,6 +268,66 @@ def _calc_supertrend(df: pd.DataFrame, period: int = 10, multiplier: float = 3.0
     df["supertrend_dir"] = direction
 
 
+def calculate_bb_for_grid(ohlcv: list, period: int = 20, std_dev: float = 2.0) -> dict:
+    """Grid bot için hafif BB + ATR + RSI hesaplayıcı.
+    calculate_all() 20+ indikatör hesaplıyor — grid recalc loop'u için ağır.
+    Bu fonksiyon sadece grid kararları için gereken 3 indikatörü hesaplar.
+    """
+    if len(ohlcv) < max(period, 14) + 5:
+        return {}
+
+    df = pd.DataFrame(ohlcv, columns=["ts", "open", "high", "low", "close", "volume"])
+
+    # ── Bollinger Bands ──────────────────────────────────────────────────
+    sma = df["close"].rolling(period).mean()
+    std = df["close"].rolling(period).std()
+    bb_upper = sma + (std * std_dev)
+    bb_lower = sma - (std * std_dev)
+    bb_mid = sma
+    bb_width = (bb_upper - bb_lower) / bb_mid  # Bant genişliği oranı
+
+    # ── ATR (min step hesabı için) ───────────────────────────────────────
+    prev_close = df["close"].shift(1)
+    tr = pd.concat([
+        df["high"] - df["low"],
+        (df["high"] - prev_close).abs(),
+        (df["low"] - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    atr = tr.ewm(span=14, adjust=False).mean()
+
+    # ── RSI (giriş/çıkış filtresi için) ─────────────────────────────────
+    delta = df["close"].diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    rs = gain / loss.replace(0, 1e-10)
+    rsi = 100 - (100 / (1 + rs))
+
+    # ── ADX (trend gücü — grid vs trend karar) ──────────────────────────
+    high = df["high"]
+    low = df["low"]
+    plus_dm = high.diff()
+    minus_dm = -low.diff()
+    plus_dm = plus_dm.where((plus_dm > minus_dm) & (plus_dm > 0), 0)
+    minus_dm = minus_dm.where((minus_dm > plus_dm) & (minus_dm > 0), 0)
+    plus_di = 100 * (plus_dm.ewm(span=14, adjust=False).mean() / atr)
+    minus_di = 100 * (minus_dm.ewm(span=14, adjust=False).mean() / atr)
+    dx = (abs(plus_di - minus_di) / (plus_di + minus_di).replace(0, 1e-10)) * 100
+    adx = dx.ewm(span=14, adjust=False).mean()
+
+    curr = df.iloc[-1]
+    return {
+        "bb_upper": round(float(bb_upper.iloc[-1]), 8),
+        "bb_lower": round(float(bb_lower.iloc[-1]), 8),
+        "bb_mid": round(float(bb_mid.iloc[-1]), 8),
+        "bb_width": round(float(bb_width.iloc[-1]), 6),
+        "atr": round(float(atr.iloc[-1]), 8),
+        "rsi": round(float(rsi.iloc[-1]), 2),
+        "adx": round(float(adx.iloc[-1]), 2),
+        "close": float(curr["close"]),
+        "candle_ts": int(curr["ts"]),
+    }
+
+
 def calculate_custom(ohlcv: list, indicator_name: str, **params) -> dict | None:
     """İsme göre indikatör hesapla."""
     df = pd.DataFrame(ohlcv, columns=["ts", "open", "high", "low", "close", "volume"])
