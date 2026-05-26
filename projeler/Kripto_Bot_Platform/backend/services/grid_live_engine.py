@@ -88,7 +88,7 @@ class GridLiveEngine:
         margin_per_level = round(total_budget / grid_count, 4)  # Kademe başına margin
 
         # BB modu parametreleri
-        grid_mode = config.get("grid_mode", "manual")  # "manual" / "bollinger" / "hybrid"
+        grid_mode = config.get("grid_mode", "manual")  # "manual" / "bollinger" / "hybrid" / "bb_direction"
         grid_direction = config.get("grid_direction", "long")  # "long" / "short" / "auto"
         bb_timeframe = config.get("bb_timeframe", "5m")
         bb_period = int(config.get("bb_period", 20))
@@ -216,6 +216,10 @@ class GridLiveEngine:
             "bb_adx": bb_data.get("adx", 0),
             "bb_paused": False,
             "grid_direction": grid_direction,  # "long" / "short" / "auto"
+            # BB Yön modu ek alanları
+            "bb_dir_paused": False,       # Bant dokunusu sonrası duraklama
+            "bb_dir_wait_cross": False,   # Orta çizgi kesimi bekleniyor
+            "bb_dir_last_mid_side": "",   # Son orta çizgi tarafı ("above" / "below")
         }
 
         await redis.set("grid_live:state", json.dumps(state))
@@ -241,14 +245,14 @@ class GridLiveEngine:
         self._poll_task = asyncio.create_task(self.run_standalone_loop())
 
         # BB modunda arka plan recalc loop başlat
-        if grid_mode in ("bollinger", "hybrid") and self._bb_service:
+        if grid_mode in ("bollinger", "hybrid", "bb_direction") and self._bb_service:
             self._bb_service._recalc_task = asyncio.create_task(
                 self._bb_service.start_recalc_loop(
                     ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, min_spread_pct
                 )
             )
 
-        mode_label = {"manual": "MANUEL", "bollinger": "BOLLINGER", "hybrid": "HİBRİT"}.get(grid_mode, "MANUEL")
+        mode_label = {"manual": "MANUEL", "bollinger": "BOLLINGER", "hybrid": "HİBRİT", "bb_direction": "BB YÖN"}.get(grid_mode, "MANUEL")
         emoji = "🔴 CANLI" if mode == "live" else "📝 PAPER"
         print(f"[GridLive] {emoji} [{mode_label}] Grid Bot Başlatıldı: {symbol_raw} | "
               f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | "
@@ -274,7 +278,7 @@ class GridLiveEngine:
             ),
         }
         # BB modu ek bilgileri
-        if grid_mode in ("bollinger", "hybrid") and bb_data:
+        if grid_mode in ("bollinger", "hybrid", "bb_direction") and bb_data:
             result["bb_upper"] = bb_data.get("bb_upper", 0)
             result["bb_lower"] = bb_data.get("bb_lower", 0)
             result["bb_mid"] = bb_data.get("bb_mid", 0)
@@ -509,7 +513,7 @@ class GridLiveEngine:
         grid_direction = state.get("grid_direction", "long")
         active_dir = grid_direction  # "long" veya "short"
 
-        if grid_mode in ("bollinger", "hybrid"):
+        if grid_mode in ("bollinger", "hybrid", "bb_direction"):
             ccxt_sym = state.get("ccxt_symbol", "")
             bb_meta_raw = await redis.get(f"bb_grid:meta:{ccxt_sym}")
             if bb_meta_raw:
@@ -525,10 +529,51 @@ class GridLiveEngine:
                     state["bb_mid"] = bb_meta.get("bb_mid", 0)
                     state["bb_adx"] = bb_meta.get("adx", 0)
 
-                    # Auto yön: BB midline'a göre
-                    if grid_direction == "auto":
+                    # Auto yön: BB midline'a göre (auto veya bb_direction modu)
+                    if grid_mode == "bb_direction" or grid_direction == "auto":
                         active_dir = "long" if above_mid else "short"
                         state["active_direction"] = active_dir
+
+                    # BB Yön modu lifecycle kontrolleri
+                    if grid_mode == "bb_direction":
+                        bb_dir_paused = state.get("bb_dir_paused", False)
+                        bb_dir_wait_cross = state.get("bb_dir_wait_cross", False)
+                        bb_dir_last_mid_side = state.get("bb_dir_last_mid_side", "")
+                        current_mid_side = "above" if current_price > state.get("bb_mid", 0) else "below"
+
+                        if bb_dir_wait_cross:
+                            # Orta çizgi kesimi bekleniyor
+                            if bb_dir_last_mid_side and current_mid_side != bb_dir_last_mid_side:
+                                # Orta çizgi kesildi! Grid'i yeniden başlat
+                                state["bb_dir_wait_cross"] = False
+                                state["bb_dir_paused"] = False
+                                state["band_exited"] = False
+                                state["band_exit_side"] = None
+                                bb_upper_new = bb_meta.get("bb_upper", state.get("upper", 0))
+                                bb_lower_new = bb_meta.get("bb_lower", state.get("lower", 0))
+                                if bb_upper_new > bb_lower_new:
+                                    state["upper"] = bb_upper_new
+                                    state["lower"] = bb_lower_new
+                                    new_step = (bb_upper_new - bb_lower_new) / grid_count
+                                    state["step"] = new_step
+                                    state["levels"] = [round(bb_lower_new + i * new_step, 8) for i in range(grid_count + 1)]
+                                state["filled_levels"] = []
+                                state["entry_prices"] = {}
+                                state["last_level"] = -1
+                                await self._sync_hft_bounds(redis, state)
+                                print(f"[GridLive] BB Yön: Orta çizgi kesildi ({bb_dir_last_mid_side} -> {current_mid_side}), grid yeniden başlatıldı")
+                            state["bb_dir_last_mid_side"] = current_mid_side
+                            await redis.set("grid_live:state", json.dumps(state))
+                            return None  # Bekleme modunda
+
+                        if bb_dir_paused:
+                            state["bb_dir_wait_cross"] = True
+                            state["bb_dir_last_mid_side"] = current_mid_side
+                            await redis.set("grid_live:state", json.dumps(state))
+                            return None
+
+                        if not bb_dir_last_mid_side:
+                            state["bb_dir_last_mid_side"] = current_mid_side
 
                     # RSI filtresi — yön bazlı
                     if filters.get("rsi_filter"):
@@ -659,7 +704,7 @@ class GridLiveEngine:
                                 entry_prices.pop(str(lvl), None)
 
         # ═══ BAND EXIT CLOSE — bant dışına çık + geri gir = tüm pozisyonları kapat ═══
-        if grid_mode in ("bollinger", "hybrid") and filled:
+        if grid_mode in ("bollinger", "hybrid", "bb_direction") and filled:
             bb_upper = state.get("bb_upper", 0)
             bb_lower = state.get("bb_lower", 0)
             band_exited = state.get("band_exited", False)
@@ -719,6 +764,11 @@ class GridLiveEngine:
                     print(f"[GridLive] 🔄 Band RE-ENTRY: tüm pozisyonlar kapatıldı | "
                           f"pnl=${net_pnl:.4f} | {len(close_levels)} seviye")
 
+                    # BB Yön modunda → grid'i duraklat, orta çizgi kesimi bekle
+                    if grid_mode == "bb_direction":
+                        state["bb_dir_paused"] = True
+                        print(f"[GridLive] ⏸ BB Yön: Bant dokunusu sonrası durduruldu, orta çizgi kesimi bekleniyor")
+
         state["entry_prices"] = entry_prices
 
         state["filled_levels"] = list(filled)
@@ -741,7 +791,7 @@ class GridLiveEngine:
 
         if current_price >= upper:
             # BB modunda: sınıra ulaşınca anlık BB recalc dene
-            if grid_mode in ("bollinger", "hybrid"):
+            if grid_mode in ("bollinger", "hybrid", "bb_direction"):
                 recalced = await self._try_bb_recalc(state, current_price, redis)
                 if recalced:
                     return True
@@ -759,7 +809,7 @@ class GridLiveEngine:
             return True
 
         elif current_price <= lower and not state.get("filled_levels"):
-            if grid_mode in ("bollinger", "hybrid"):
+            if grid_mode in ("bollinger", "hybrid", "bb_direction"):
                 recalced = await self._try_bb_recalc(state, current_price, redis)
                 if recalced:
                     return True

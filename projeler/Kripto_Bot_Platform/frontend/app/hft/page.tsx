@@ -47,7 +47,7 @@ function toChartSymbol(s: string): string {
 }
 
 type TradingMode = "sim" | "paper" | "live"
-type GridMode = "manual" | "bollinger" | "hybrid"
+type GridMode = "manual" | "bollinger" | "hybrid" | "bb_direction"
 type GridDirection = "long" | "short" | "auto"
 
 interface SimTrade {
@@ -107,6 +107,11 @@ export default function HftPage() {
   // Band exit tracking — fiyat BB bant disina cikip geri girince pozisyon kapat
   const bandExitRef = useRef<{ exited: boolean; side: "upper" | "lower" | null }>({ exited: false, side: null })
 
+  // BB Yön modu — bant dokunusu sonrasi grid durduruldu, orta çizgi kesimi bekleniyor
+  const [bbDirPaused, setBbDirPaused] = useState(false) // bant dokunusu sonrasi duraklama
+  const [bbDirWaitCross, setBbDirWaitCross] = useState(false) // orta cizgi kesimi bekleniyor
+  const bbDirLastMidSideRef = useRef<"above" | "below" | null>(null) // son orta cizgi yonu
+
   // Sim BB state — backend'den alinan BB meta verisi
   const simBbRef = useRef<{
     bb_upper: number; bb_lower: number; bb_mid: number; bb_width: number;
@@ -135,12 +140,14 @@ export default function HftPage() {
           tradeIdRef.current = s.tradeId ?? 0
           if (Array.isArray(s.filled)) simFilledRef.current = new Set(s.filled)
           if (Array.isArray(s.entryPrices)) simEntryPricesRef.current = new Map(s.entryPrices)
-          if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid") {
+          if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid" || s.gridMode === "bb_direction") {
             setGridMode(s.gridMode)
           }
           if (s.gridDirection === "long" || s.gridDirection === "short" || s.gridDirection === "auto") {
             setGridDirection(s.gridDirection)
           }
+          if (typeof s.bbDirPaused === "boolean") setBbDirPaused(s.bbDirPaused)
+          if (typeof s.bbDirWaitCross === "boolean") setBbDirWaitCross(s.bbDirWaitCross)
         }
       }
     } catch {
@@ -169,6 +176,8 @@ export default function HftPage() {
           entryPrices: Array.from(simEntryPricesRef.current.entries()),
           gridMode,
           gridDirection,
+          bbDirPaused,
+          bbDirWaitCross,
         }))
       } else {
         // Durmus ama verileri gostermek icin sakla
@@ -323,16 +332,21 @@ export default function HftPage() {
 
   // Aktif yon hesapla — auto modda BB midline'a gore, degilse sabit
   const activeDirection = useMemo((): "long" | "short" => {
-    if (gridDirection === "auto") {
+    if (gridMode === "bb_direction" || gridDirection === "auto") {
       const bb = simBbMeta
       if (bb) return bb.above_midline ? "long" : "short"
       return "long" // BB verisi yoksa default long
     }
     return gridDirection === "short" ? "short" : "long"
-  }, [gridDirection, simBbMeta])
+  }, [gridDirection, gridMode, simBbMeta])
 
   const isSimWaiting = useMemo(() => {
     if (!simRunning || tradingMode !== "sim" || gridMode === "manual") return false
+    // BB Yön modunda duraklama/bekleme durumları
+    if (gridMode === "bb_direction") {
+      if (bbDirPaused || bbDirWaitCross) return true
+      return false
+    }
     const bb = simBbMeta
     if (!bb) return false
     if (filterSqueeze && bb.is_squeeze) return true
@@ -341,7 +355,7 @@ export default function HftPage() {
       if (activeDirection === "short" && bb.above_midline) return true
     }
     return false
-  }, [simRunning, tradingMode, gridMode, simBbMeta, filterSqueeze, filterMidline, activeDirection])
+  }, [simRunning, tradingMode, gridMode, simBbMeta, filterSqueeze, filterMidline, activeDirection, bbDirPaused, bbDirWaitCross])
 
   const isBackendWaiting = useMemo(() => {
     if (!simRunning || !isBackendMode || !backendStatus) return false
@@ -359,6 +373,43 @@ export default function HftPage() {
   // LONG: duste al, yukseliste sat | SHORT: yukseliste short ac, duste kapat
   useEffect(() => {
     if (tradingMode !== "sim" || !simRunning || !gridBounds || livePrice <= 0 || gridLines.length < 2) return
+
+    // ═══ BB YÖN MODU — orta çizgi kesimi ve bant dokunusu lifecycle ═══
+    if (gridMode === "bb_direction") {
+      const bb = simBbRef.current
+      if (!bb) return // BB verisi yok, henüz hesaplanmadı
+
+      // 1. Grid durdurulmuş ve orta çizgi kesimi bekleniyor
+      if (bbDirWaitCross) {
+        const currentSide = livePrice > bb.bb_mid ? "above" : "below"
+        const lastSide = bbDirLastMidSideRef.current
+        if (lastSide && currentSide !== lastSide) {
+          // Orta çizgi kesildi! Grid'i yeniden başlat
+          setBbDirWaitCross(false)
+          setBbDirPaused(false)
+          bandExitRef.current = { exited: false, side: null }
+          // Grid bounds'u güncel BB'ye güncelle
+          setGridBounds({ upper: bb.bb_upper, lower: bb.bb_lower })
+          lastGridHitRef.current = -1
+          simFilledRef.current = new Set()
+          simEntryPricesRef.current = new Map()
+        }
+        bbDirLastMidSideRef.current = currentSide
+        return // Bekleme modunda — işlem yapma
+      }
+
+      // 2. Grid duraklatılmış (bant dokunusu sonrası) — orta çizgi bekleme moduna geç
+      if (bbDirPaused) {
+        setBbDirWaitCross(true)
+        bbDirLastMidSideRef.current = livePrice > bb.bb_mid ? "above" : "below"
+        return
+      }
+
+      // 3. Midline takibi — ilk başlangıçta set et
+      if (!bbDirLastMidSideRef.current) {
+        bbDirLastMidSideRef.current = livePrice > bb.bb_mid ? "above" : "below"
+      }
+    }
 
     const step = (gridBounds.upper - gridBounds.lower) / gridCount
     const currentLevel = Math.floor((livePrice - gridBounds.lower) / step)
@@ -553,6 +604,11 @@ export default function HftPage() {
           }
           // Band exit sifirla
           bandExitRef.current = { exited: false, side: null }
+
+          // BB Yön modunda → grid'i duraklat, orta çizgi kesimi bekle
+          if (gridMode === "bb_direction") {
+            setBbDirPaused(true)
+          }
         }
       }
     }
@@ -700,8 +756,14 @@ export default function HftPage() {
       simEntryPricesRef.current = new Map()
       localStorage.removeItem("hft_sim_state")
 
+      // BB Yön modunda duraklama/bekleme state'lerini sıfırla
+      setBbDirPaused(false)
+      setBbDirWaitCross(false)
+      bbDirLastMidSideRef.current = null
+      bandExitRef.current = { exited: false, side: null }
+
       if (gridMode !== "manual") {
-        // BB/Hibrit: backend'den BB bantlarini al
+        // BB/Hibrit/BB Yön: backend'den BB bantlarini al
         setIsStarting(true)
         const ok = await fetchBbData()
         setIsStarting(false)
@@ -995,6 +1057,7 @@ export default function HftPage() {
               <option value="manual">Manuel Grid</option>
               <option value="bollinger">Bollinger Grid</option>
               <option value="hybrid">Hibrit (BB+Filtre)</option>
+              <option value="bb_direction">BB Yön (Oto Long/Short)</option>
             </select>
           </div>
 
@@ -1204,8 +1267,10 @@ export default function HftPage() {
               'text-emerald-400'
             }`}>
               {!simRunning ? '○ Durdu' :
+               gridMode === "bb_direction" && bbDirPaused && !bbDirWaitCross ? '● Durduruldu (Bant Dokunusu)' :
+               gridMode === "bb_direction" && bbDirWaitCross ? '● Bekliyor (Orta Çizgi Kesimi)' :
                isWaiting ? `● Avda (Bekliyor)` :
-               `● Çalışıyor (${mc.label})`}
+               `● ${activeDirection === 'long' ? '↑ LONG' : '↓ SHORT'} Çalışıyor (${mc.label})`}
             </div>
           </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
