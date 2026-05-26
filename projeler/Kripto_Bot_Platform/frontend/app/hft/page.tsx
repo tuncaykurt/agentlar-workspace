@@ -66,20 +66,25 @@ export default function HftPage() {
       const saved = localStorage.getItem("hft_sim_state")
       if (!saved) return
       const s = JSON.parse(saved)
-      if (s.simRunning) {
+      if (s && s.simRunning) {
         setSimRunning(true)
         setTradingMode(s.tradingMode || "sim")
-        setTrades(s.trades || [])
-        setTotalPnl(s.totalPnl || 0)
-        setTradeCount(s.tradeCount || 0)
-        if (s.gridBounds) setGridBounds(s.gridBounds)
+        setTrades(Array.isArray(s.trades) ? s.trades : [])
+        setTotalPnl(Number(s.totalPnl) || 0)
+        setTradeCount(Number(s.tradeCount) || 0)
+        if (s.gridBounds && typeof s.gridBounds.upper === "number") setGridBounds(s.gridBounds)
         lastGridHitRef.current = s.lastLevel ?? -1
         tradeIdRef.current = s.tradeId ?? 0
-        if (s.filled) simFilledRef.current = new Set(s.filled)
-        if (s.entryPrices) simEntryPricesRef.current = new Map(s.entryPrices)
-        if (s.gridMode) setGridMode(s.gridMode)
+        if (Array.isArray(s.filled)) simFilledRef.current = new Set(s.filled)
+        if (Array.isArray(s.entryPrices)) simEntryPricesRef.current = new Map(s.entryPrices)
+        if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid") {
+          setGridMode(s.gridMode)
+        }
       }
-    } catch {}
+    } catch {
+      // Bozuk localStorage verisi — temizle
+      localStorage.removeItem("hft_sim_state")
+    }
   }, [])
 
   // Sim state degistiginde localStorage'a kaydet
@@ -1043,7 +1048,7 @@ export default function HftPage() {
                           {t.side}
                         </span>
                       </td>
-                      <td className="px-3 py-1.5 text-white font-mono text-right">${t.price.toFixed(2)}</td>
+                      <td className="px-3 py-1.5 text-white font-mono text-right">${(t.price ?? 0).toFixed(2)}</td>
                       <td className="px-3 py-1.5 text-slate-400 text-right">
                         {t.grid_levels ? `#${t.grid_levels.join(',')}` : `#${t.gridLevel}`}
                         {t.level_count && t.level_count > 1 && (
@@ -1063,8 +1068,8 @@ export default function HftPage() {
                           </span>
                         </td>
                       )}
-                      <td className={`px-3 py-1.5 font-mono text-right font-semibold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {t.pnl >= 0 ? '+' : ''}{t.pnl.toFixed(4)}
+                      <td className={`px-3 py-1.5 font-mono text-right font-semibold ${(t.pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {(t.pnl ?? 0) >= 0 ? '+' : ''}{(t.pnl ?? 0).toFixed(4)}
                       </td>
                     </tr>
                   ))}

@@ -353,6 +353,38 @@ async def hft_live_status():
     return await grid_engine.get_status()
 
 
+@router.post("/hft-bb-data")
+async def hft_bb_data(data: dict):
+    """
+    BB bantlarını hesapla ve döndür (bot başlatmadan).
+    Sim modu için: frontend grid sınırlarını BB'den alır.
+    Body: symbol, bb_timeframe, bb_period, bb_std_dev, min_spread_pct
+    """
+    from services.bollinger_grid_service import BollingerGridService
+
+    symbol_raw = data.get("symbol", "ETHUSDT")
+    base = symbol_raw.replace("USDT", "")
+    ccxt_symbol = f"{base}/USDT:USDT"
+
+    bb_timeframe = data.get("bb_timeframe", "5m")
+    bb_period = int(data.get("bb_period", 20))
+    bb_std_dev = float(data.get("bb_std_dev", 2.0))
+    min_spread_pct = float(data.get("min_spread_pct", 0.3))
+    current_price = float(data.get("current_price", 0))
+
+    try:
+        bb_service = BollingerGridService()
+        bb_data = await bb_service.compute_grid_bounds(
+            ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
+            min_spread_pct, current_price
+        )
+        if not bb_data:
+            return {"error": "BB hesaplanamadı — OHLCV verisi alınamıyor."}
+        return bb_data
+    except Exception as e:
+        return {"error": f"BB hesaplama hatası: {str(e)}"}
+
+
 @router.get("/hft-trades")
 async def hft_trades(limit: int = 50):
     """Grid bot işlem geçmişi."""
