@@ -705,13 +705,14 @@ export default function HftPage() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Islem ($)</span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Toplam Butce ($)</span>
             <input type="number" value={localOrder} onChange={e => setLocalOrder(e.target.value)}
               onBlur={() => commitSetting("order_size", localOrder, 100)}
               onKeyDown={e => e.key === "Enter" && commitSetting("order_size", localOrder, 100)}
               min={1} step={5} disabled={simRunning}
               className="w-24 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />
+            <span className="text-[9px] text-slate-500">Kademe: ${(orderSize / gridCount).toFixed(2)}</span>
           </div>
 
           <button onClick={recalcGrid} disabled={simRunning}
@@ -763,7 +764,12 @@ export default function HftPage() {
         </div>
 
         {/* Performans & Simulasyon Durumu */}
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2 sm:gap-3 relative z-10 mb-4">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-8 gap-2 sm:gap-3 relative z-10 mb-4">
+          <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
+            <div className="text-[10px] text-slate-500 uppercase">Kademe Margin</div>
+            <div className="text-sm font-bold text-cyan-400 font-mono">${marginPerLevel.toFixed(2)}</div>
+            <div className="text-[9px] text-slate-500 mt-0.5">{contracts} kontrat</div>
+          </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
             <div className="text-[10px] text-slate-500 uppercase">Kademe Araligi</div>
             <div className="text-sm font-bold text-white font-mono">${gridStep.toFixed(4)}</div>
