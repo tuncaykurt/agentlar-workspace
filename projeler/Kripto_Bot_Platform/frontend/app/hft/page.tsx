@@ -1196,7 +1196,7 @@ export default function HftPage() {
           </button>
 
           {/* BB Filtre Toggle'lari */}
-          {gridMode !== "manual" && (
+          {gridMode !== "manual" && gridMode !== "bb_direction" && (
             <div className="flex flex-wrap gap-2 w-full mt-2 pt-2 border-t border-indigo-500/20">
               <label className="flex items-center gap-1.5 cursor-pointer group">
                 <input type="checkbox" checked={filterRsi} onChange={e => setFilterRsi(e.target.checked)} disabled={simRunning}
