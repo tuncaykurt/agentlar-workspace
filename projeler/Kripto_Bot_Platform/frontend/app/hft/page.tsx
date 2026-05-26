@@ -88,6 +88,17 @@ export default function HftPage() {
   const simFilledRef = useRef<Set<number>>(new Set())       // Sim: dolu seviyeler
   const simEntryPricesRef = useRef<Map<number, number>>(new Map()) // Sim: entry fiyatları
 
+  // BB modu state'leri — localStorage useEffect'inden ONCE tanimlanmali
+  const [gridMode, setGridMode] = useState<GridMode>("manual")
+  const [bbTimeframe, setBbTimeframe] = useState("5m")
+  const [bbPeriod, setBbPeriod] = useState("20")
+  const [bbStdDev, setBbStdDev] = useState("2.0")
+  const [minSpread, setMinSpread] = useState("0.3")
+  const [filterRsi, setFilterRsi] = useState(true)
+  const [filterSqueeze, setFilterSqueeze] = useState(true)
+  const [filterMidline, setFilterMidline] = useState(true)
+  const [filterAtrStep, setFilterAtrStep] = useState(false)
+
   // Sim verilerini localStorage'dan yukle (sayfa yenilemede kaybolmasin)
   const simRestoredRef = useRef(false)
   useEffect(() => {
@@ -155,17 +166,6 @@ export default function HftPage() {
   const [isKilling, setIsKilling] = useState(false)
   const [killConfirm, setKillConfirm] = useState(false)
   const [chartFullscreen, setChartFullscreen] = useState(false)
-
-  // BB modu state'leri
-  const [gridMode, setGridMode] = useState<GridMode>("manual")
-  const [bbTimeframe, setBbTimeframe] = useState("5m")
-  const [bbPeriod, setBbPeriod] = useState("20")
-  const [bbStdDev, setBbStdDev] = useState("2.0")
-  const [minSpread, setMinSpread] = useState("0.3")
-  const [filterRsi, setFilterRsi] = useState(true)
-  const [filterSqueeze, setFilterSqueeze] = useState(true)
-  const [filterMidline, setFilterMidline] = useState(true)
-  const [filterAtrStep, setFilterAtrStep] = useState(false)
 
   // ESC ile tam ekrandan cik
   useEffect(() => {
