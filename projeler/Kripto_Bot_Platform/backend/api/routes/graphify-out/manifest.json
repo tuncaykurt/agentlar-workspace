@@ -1,0 +1,82 @@
+{
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\ai_analysis.py": {
+    "mtime": 1778358987.7687335,
+    "ast_hash": "270d0c55f40cad2f50a761463f8a7b64",
+    "semantic_hash": "270d0c55f40cad2f50a761463f8a7b64"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\ai_chat.py": {
+    "mtime": 1778871493.963361,
+    "ast_hash": "59b9ede29ae42f17b9661fc0f7194fd2",
+    "semantic_hash": "59b9ede29ae42f17b9661fc0f7194fd2"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\analytics.py": {
+    "mtime": 1779126549.9937956,
+    "ast_hash": "18bf1698b402ff7fd077f5ddb676281f",
+    "semantic_hash": "18bf1698b402ff7fd077f5ddb676281f"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\auth.py": {
+    "mtime": 1778358966.8125799,
+    "ast_hash": "226c9d48c6a9b141b5a4be5cb9e2cbab",
+    "semantic_hash": "226c9d48c6a9b141b5a4be5cb9e2cbab"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\backtest.py": {
+    "mtime": 1778358987.7692432,
+    "ast_hash": "0e57db7dbe76de1761eba49089035820",
+    "semantic_hash": "0e57db7dbe76de1761eba49089035820"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\bots.py": {
+    "mtime": 1779635357.595498,
+    "ast_hash": "b1116de87467694f1914060518987429",
+    "semantic_hash": "b1116de87467694f1914060518987429"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\calendar.py": {
+    "mtime": 1778523192.3301375,
+    "ast_hash": "c0235cdd43fb8a990c57245f9109a46a",
+    "semantic_hash": "c0235cdd43fb8a990c57245f9109a46a"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\chart.py": {
+    "mtime": 1778358987.773334,
+    "ast_hash": "fc6dd1f9ce0aed4859c5da0cf7245fc6",
+    "semantic_hash": "fc6dd1f9ce0aed4859c5da0cf7245fc6"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\coins.py": {
+    "mtime": 1779125152.1990948,
+    "ast_hash": "109a65b95a380f5042f1861a4c6be187",
+    "semantic_hash": "109a65b95a380f5042f1861a4c6be187"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\data.py": {
+    "mtime": 1778358987.773854,
+    "ast_hash": "43f5d5bc94eae5d282ca940bbf86aaf1",
+    "semantic_hash": "43f5d5bc94eae5d282ca940bbf86aaf1"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\exchanges.py": {
+    "mtime": 1779032825.2296593,
+    "ast_hash": "b359e80c01a867d9888a811d136abbbb",
+    "semantic_hash": "b359e80c01a867d9888a811d136abbbb"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\freqtrade.py": {
+    "mtime": 1778672760.7861335,
+    "ast_hash": "8b42277b2bf64d034c37fc504d9136c8",
+    "semantic_hash": "8b42277b2bf64d034c37fc504d9136c8"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\market.py": {
+    "mtime": 1778358987.773854,
+    "ast_hash": "36fcbd7031eed0b2f6b1cc3e108733f7",
+    "semantic_hash": "36fcbd7031eed0b2f6b1cc3e108733f7"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\signals.py": {
+    "mtime": 1779752070.6653476,
+    "ast_hash": "72f9989ff1a3785172c37bf1c43bc9d8",
+    "semantic_hash": "72f9989ff1a3785172c37bf1c43bc9d8"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\simulations.py": {
+    "mtime": 1779691242.3089983,
+    "ast_hash": "12bc8f8c38bd8ea742f6e482ad35b739",
+    "semantic_hash": "12bc8f8c38bd8ea742f6e482ad35b739"
+  },
+  "C:\\Users\\user\\Desktop\\Antigravity\\projeler\\Kripto_Bot_Platform\\backend\\api\\routes\\trades.py": {
+    "mtime": 1778868075.284999,
+    "ast_hash": "7db759ef43b56606ebdbc3e9cc605d78",
+    "semantic_hash": "7db759ef43b56606ebdbc3e9cc605d78"
+  }
+}

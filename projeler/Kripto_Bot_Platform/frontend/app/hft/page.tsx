@@ -319,11 +319,11 @@ export default function HftPage() {
     }
 
     if (clampedLevel === lastGridHitRef.current) {
-      // Trailing kontrolu
+      // Trailing kontrolu (Sadece acik pozisyon yoksa asagi trailing yapilabilir)
       if (livePrice >= gridBounds.upper) {
         const diff = livePrice - gridBounds.upper
         setGridBounds(prev => prev ? { upper: prev.upper + diff, lower: prev.lower + diff } : null)
-      } else if (livePrice <= gridBounds.lower) {
+      } else if (livePrice <= gridBounds.lower && simFilledRef.current.size === 0) {
         const diff = gridBounds.lower - livePrice
         setGridBounds(prev => prev ? { upper: prev.upper - diff, lower: prev.lower - diff } : null)
       }
@@ -398,6 +398,11 @@ export default function HftPage() {
         const feeBothSides = notional * 0.0006 * 2 // MEXC taker fee %0.06 giris+cikis
         const netPnl = grossPnl - feeBothSides
 
+        if (netPnl < 0) {
+          // Komisyonu karsilamayan veya zararda olan satisi atla (fiyatin yukselmesini bekle)
+          return
+        }
+
         // Seviyeleri bosalt
         for (const lvl of sellLevels) {
           filled.delete(lvl)
@@ -427,11 +432,11 @@ export default function HftPage() {
 
     lastGridHitRef.current = clampedLevel
 
-    // Trailing
+    // Trailing (Sadece acik pozisyon yoksa asagi trailing yapilabilir)
     if (livePrice >= gridBounds.upper) {
       const diff = livePrice - gridBounds.upper
       setGridBounds(prev => prev ? { upper: prev.upper + diff, lower: prev.lower + diff } : null)
-    } else if (livePrice <= gridBounds.lower) {
+    } else if (livePrice <= gridBounds.lower && simFilledRef.current.size === 0) {
       const diff = gridBounds.lower - livePrice
       setGridBounds(prev => prev ? { upper: prev.upper - diff, lower: prev.lower - diff } : null)
     }

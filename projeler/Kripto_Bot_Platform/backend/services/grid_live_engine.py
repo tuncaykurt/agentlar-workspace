@@ -604,7 +604,7 @@ class GridLiveEngine:
                     print(f"[GridLive] ⏸ SELL atlandı (RSI filtresi: RSI={state.get('bb_rsi', 0):.0f}<30)")
                 # Minimum kâr kontrolü — fee'yi karşılamayan SELL yapma
                 # Kâr < fee × 1.5 ise bekle (churn engelleme)
-                elif net_pnl < 0 and mode == "live":
+                elif net_pnl < 0:
                     min_profit_price = fee_total / (total_contracts * cs) * 1.5
                     print(f"[GridLive] ⏸ SELL atlandı: net_pnl=${net_pnl:.4f} < 0 | "
                           f"fark=${avg_price_diff:.4f} < min ${min_profit_price:.4f} | "
@@ -661,7 +661,7 @@ class GridLiveEngine:
             await self._sync_hft_bounds(redis, state)
             return True
 
-        elif current_price <= lower:
+        elif current_price <= lower and not state.get("filled_levels"):
             if grid_mode in ("bollinger", "hybrid"):
                 recalced = await self._try_bb_recalc(state, current_price, redis)
                 if recalced:
@@ -682,6 +682,9 @@ class GridLiveEngine:
     async def _try_bb_recalc(self, state: dict, current_price: float, redis) -> bool:
         """BB bantlarından grid'i yeniden hesapla. Başarılıysa True döner."""
         try:
+            # Açık pozisyon varken ızgara sınırlarının değişmesini (kaymasını) engelle
+            if state.get("filled_levels"):
+                return False
             ccxt_symbol = state.get("ccxt_symbol", "")
             bb_meta_raw = await redis.get(f"bb_grid:meta:{ccxt_symbol}")
             if not bb_meta_raw:
