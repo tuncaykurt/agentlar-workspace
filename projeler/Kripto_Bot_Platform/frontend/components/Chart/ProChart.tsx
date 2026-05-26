@@ -889,13 +889,13 @@ export default function ProChart({
 
         const pl = series.createPriceLine({
           price,
-          color: "rgba(99,102,241,0.25)",
+          color: "rgba(129,140,248,0.5)",
           lineWidth: 1,
-          lineStyle: LineStyle.Dotted,
+          lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
           title: `$${price.toFixed(2)}  +${pctDiff}%`,
-          axisLabelColor: "rgba(99,102,241,0.85)",
-          axisLabelTextColor: "#cbd5e1",
+          axisLabelColor: "rgba(129,140,248,0.9)",
+          axisLabelTextColor: "#e2e8f0",
         })
         gridPriceLinesRef.current.push(pl)
       })

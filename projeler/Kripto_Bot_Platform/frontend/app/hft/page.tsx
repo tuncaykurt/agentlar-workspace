@@ -57,6 +57,61 @@ export default function HftPage() {
   const simFilledRef = useRef<Set<number>>(new Set())       // Sim: dolu seviyeler
   const simEntryPricesRef = useRef<Map<number, number>>(new Map()) // Sim: entry fiyatları
 
+  // Sim verilerini localStorage'dan yukle (sayfa yenilemede kaybolmasin)
+  const simRestoredRef = useRef(false)
+  useEffect(() => {
+    if (simRestoredRef.current) return
+    simRestoredRef.current = true
+    try {
+      const saved = localStorage.getItem("hft_sim_state")
+      if (!saved) return
+      const s = JSON.parse(saved)
+      if (s.simRunning) {
+        setSimRunning(true)
+        setTradingMode(s.tradingMode || "sim")
+        setTrades(s.trades || [])
+        setTotalPnl(s.totalPnl || 0)
+        setTradeCount(s.tradeCount || 0)
+        if (s.gridBounds) setGridBounds(s.gridBounds)
+        lastGridHitRef.current = s.lastLevel ?? -1
+        tradeIdRef.current = s.tradeId ?? 0
+        if (s.filled) simFilledRef.current = new Set(s.filled)
+        if (s.entryPrices) simEntryPricesRef.current = new Map(s.entryPrices)
+        if (s.gridMode) setGridMode(s.gridMode)
+      }
+    } catch {}
+  }, [])
+
+  // Sim state degistiginde localStorage'a kaydet
+  useEffect(() => {
+    if (!simRestoredRef.current) return
+    try {
+      if (simRunning) {
+        localStorage.setItem("hft_sim_state", JSON.stringify({
+          simRunning: true,
+          tradingMode,
+          trades: trades.slice(0, 50), // Son 50 islem yeterli
+          totalPnl,
+          tradeCount,
+          gridBounds,
+          lastLevel: lastGridHitRef.current,
+          tradeId: tradeIdRef.current,
+          filled: Array.from(simFilledRef.current),
+          entryPrices: Array.from(simEntryPricesRef.current.entries()),
+          gridMode,
+        }))
+      } else {
+        // Durmus ama verileri gostermek icin sakla
+        const existing = localStorage.getItem("hft_sim_state")
+        if (existing) {
+          const s = JSON.parse(existing)
+          s.simRunning = false
+          localStorage.setItem("hft_sim_state", JSON.stringify(s))
+        }
+      }
+    } catch {}
+  }, [simRunning, trades, totalPnl, tradeCount, gridBounds, tradingMode, gridMode])
+
   // Backend status (paper/live modlar icin)
   const [backendStatus, setBackendStatus] = useState<any>(null)
   const [isStarting, setIsStarting] = useState(false)
@@ -352,6 +407,7 @@ export default function HftPage() {
       lastGridHitRef.current = -1
       simFilledRef.current = new Set()
       simEntryPricesRef.current = new Map()
+      localStorage.removeItem("hft_sim_state")
       setSimRunning(true)
       return
     }
