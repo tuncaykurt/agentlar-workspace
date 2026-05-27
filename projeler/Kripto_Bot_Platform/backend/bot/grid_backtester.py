@@ -252,6 +252,8 @@ class GridBacktestEngine:
             "total_pnl": round(sum(pnls), 2),
             "total_pnl_pct": round((sum(pnls) / self.initial_balance) * 100, 2) if self.initial_balance>0 else 0,
             "win_rate": round(len(wins) / len(pnls) * 100, 1) if pnls else 0,
+            "wins": len(wins),
+            "losses": len(losses),
             "max_drawdown_pct": 0,
             "sharpe_ratio": 0,
             "profit_factor": round(sum(wins)/abs(sum(losses)), 2) if sum(losses)!=0 else (99 if wins else 0),
