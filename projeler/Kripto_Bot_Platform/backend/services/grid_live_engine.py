@@ -1141,6 +1141,9 @@ class GridLiveEngine:
             "bb_paused": state.get("bb_paused", False),
             "bb_timeframe": state.get("bb_timeframe", ""),
             "filters": state.get("filters", {}),
+            "bb_dir_paused": state.get("bb_dir_paused", False),
+            "bb_dir_wait_cross": state.get("bb_dir_wait_cross", False),
+            "bb_dir_last_mid_side": state.get("bb_dir_last_mid_side", ""),
         }
         return result
 

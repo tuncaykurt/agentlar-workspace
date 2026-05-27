@@ -1301,8 +1301,8 @@ export default function HftPage() {
               'text-emerald-400'
             }`}>
               {!simRunning ? '○ Durdu' :
-               gridMode === "bb_direction" && bbDirPaused && !bbDirWaitCross ? '● Durduruldu (Bant Dokunusu)' :
-               gridMode === "bb_direction" && bbDirWaitCross ? '● Bekliyor (Orta Çizgi Kesimi)' :
+               gridMode === "bb_direction" && bbDirPaused && !bbDirWaitCross ? '● Grid Kapalı (Avda Bekliyor)' :
+               gridMode === "bb_direction" && bbDirWaitCross ? '● Avda Bekliyor (Orta Çizgi)' :
                isWaiting ? `● Avda (Bekliyor)` :
                `● ${activeDirection === 'long' ? '↑ LONG' : '↓ SHORT'} Çalışıyor (${mc.label})`}
             </div>
