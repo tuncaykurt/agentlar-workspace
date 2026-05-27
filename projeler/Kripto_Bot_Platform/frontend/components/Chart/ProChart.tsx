@@ -500,6 +500,9 @@ export default function ProChart({
   const obRafRef           = useRef<number>(0)
   const cdRafRef           = useRef<number>(0)
   const countdownDivRef    = useRef<HTMLDivElement>(null)
+  
+  // Canlı fiyat referansı (countdown hizalaması için)
+  const livePriceRef       = useRef<number>(0)
   const overlaySeriesRefs  = useRef<{id: string; name: string; color: string; series: ISeriesApi<"Line">}[]>([])
 
   const [data,      setData]      = useState<ChartData | null>(null)
@@ -662,6 +665,7 @@ export default function ProChart({
         ).then(r => r.json())
         const price = parseFloat(ticker?.last)
         if (ticker?.last == null || isNaN(price) || price <= 0) return
+        livePriceRef.current = price
 
         // Son tarihsel mumun zamanını referans al
         const lastCandle = data.candles[data.candles.length - 1]
@@ -1230,14 +1234,15 @@ export default function ProChart({
   useEffect(() => {
     cancelAnimationFrame(cdRafRef.current)
     if (!data) return
-    const lastClose = data.candles[data.candles.length - 1]?.close
-    if (!lastClose) return
     const loop = () => {
       if (candleSeriesRef.current && countdownDivRef.current) {
-        const y = candleSeriesRef.current.priceToCoordinate(lastClose)
-        if (y !== null) {
-          // Lightweight Charts fiyat etiketi y eksenini tam ortalar (yükseklik ~22px). Altına yapışması için +12px ekliyoruz.
-          countdownDivRef.current.style.top = `${(y as number) + 12}px`
+        const currentPrice = livePriceRef.current || data.candles[data.candles.length - 1]?.close
+        if (currentPrice) {
+          const y = candleSeriesRef.current.priceToCoordinate(currentPrice)
+          if (y !== null) {
+            // Lightweight Charts fiyat etiketi y eksenini tam ortalar (yükseklik ~22px). Altına yapışması için +12px ekliyoruz.
+            countdownDivRef.current.style.top = `${(y as number) + 12}px`
+          }
         }
       }
       cdRafRef.current = requestAnimationFrame(loop)
@@ -1885,8 +1890,9 @@ export default function ProChart({
           style={{ top: 0, paddingRight: '1px' }}
         >
           {countdown && data && data.candles && data.candles.length > 0 && (() => {
-            const lastC = data.candles[data.candles.length - 1]
-            const isUp = lastC && lastC.close >= lastC.open
+            const currentPrice = livePriceRef.current || data.candles[data.candles.length - 1]?.close || 0
+            const openPrice = liveCandleRef.current?.open || data.candles[data.candles.length - 1]?.open || 0
+            const isUp = currentPrice >= openPrice
             const bgColor = isUp ? "bg-[#089981]" : "bg-[#f23645]"
             return (
               <div className={`text-[11px] font-mono text-white ${bgColor} px-1.5 py-[2px] font-medium shadow-sm flex items-center justify-center min-w-[45px]`}>
