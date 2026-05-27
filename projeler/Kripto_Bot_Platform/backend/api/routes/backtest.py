@@ -131,6 +131,7 @@ async def run_backtest(req: BacktestRequest):
             "order_size": req.params.get("budget", 1000),
             "leverage": req.leverage,
             "fee_pct": req.fee_pct,
+            "min_spread_pct": req.params.get("min_spread_pct", 0.3),
             "filters": req.params.get("filters", {"rsi_filter": True, "squeeze_filter": True, "midline_filter": True}),
         })
     else:

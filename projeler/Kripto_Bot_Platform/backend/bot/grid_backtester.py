@@ -89,6 +89,13 @@ class GridBacktestEngine:
                     if state["bb_dir_last_mid"] and current_mid_side != state["bb_dir_last_mid"]:
                         state["bb_dir_wait_cross"] = False
                         state["bb_dir_paused"] = False
+                        
+                        min_sp = self.config.get("min_spread_pct", 0.3) / 100
+                        if (bb_upper - bb_lower) / bb_mid < min_sp:
+                            diff = (bb_mid * min_sp) / 2
+                            bb_upper = bb_mid + diff
+                            bb_lower = bb_mid - diff
+                            
                         if bb_upper > bb_lower:
                             state["upper"], state["lower"] = bb_upper, bb_lower
                             state["step"] = (bb_upper - bb_lower) / self.grid_count
@@ -122,6 +129,12 @@ class GridBacktestEngine:
 
             # Init bounds if 0
             if state["upper"] == 0 and bb_upper > bb_lower:
+                min_sp = self.config.get("min_spread_pct", 0.3) / 100
+                if (bb_upper - bb_lower) / bb_mid < min_sp:
+                    diff = (bb_mid * min_sp) / 2
+                    bb_upper = bb_mid + diff
+                    bb_lower = bb_mid - diff
+                    
                 state["upper"], state["lower"] = bb_upper, bb_lower
                 state["step"] = (bb_upper - bb_lower) / self.grid_count
                 state["levels"] = [state["lower"] + j * state["step"] for j in range(self.grid_count + 1)]

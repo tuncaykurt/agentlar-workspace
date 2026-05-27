@@ -72,9 +72,9 @@ const STRATEGIES = [
       exit_at_bands: true,
     },
   },
-  { id: "grid_bollinger",   name: "Bollinger Grid",   params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0 } },
-  { id: "grid_hybrid",      name: "Hibrit Grid (BB+Filtre)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0 } },
-  { id: "grid_bb_direction",name: "BB Yön (Oto Long/Short)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0 } },
+  { id: "grid_bollinger",   name: "Bollinger Grid",   params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0, Min_Spread_Pct: 0.3 } },
+  { id: "grid_hybrid",      name: "Hibrit Grid (BB+Filtre)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0, Min_Spread_Pct: 0.3 } },
+  { id: "grid_bb_direction",name: "BB Yön (Oto Long/Short)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0, Min_Spread_Pct: 0.3 } },
 ]
 
 const PARAM_OPTIONS: Record<string, Record<string, string[]>> = {
@@ -293,6 +293,7 @@ export default function StrategyViewPage() {
         if (mergedParams.Kademe) { mergedParams.grid_count = mergedParams.Kademe; delete mergedParams.Kademe }
         if (mergedParams.BB_Periyot) { mergedParams.bb_period = mergedParams.BB_Periyot; delete mergedParams.BB_Periyot }
         if (mergedParams.BB_Sapma) { mergedParams.bb_std_dev = mergedParams.BB_Sapma; delete mergedParams.BB_Sapma }
+        if (mergedParams.Min_Spread_Pct) { mergedParams.min_spread_pct = mergedParams.Min_Spread_Pct; delete mergedParams.Min_Spread_Pct }
       }
       
       const res = await api.post("/backtest/run", {
