@@ -1386,7 +1386,7 @@ export default function HftPage() {
           <div className="mb-4 relative z-10">
             <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              Borsa Pozisyonlari (MEXC)
+              {tradingMode === "live" ? "Borsa Pozisyonlari (MEXC)" : "Sanal Pozisyonlar (Paper Mode)"}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {backendStatus.exchange_positions.map((pos: ExchangePosition, i: number) => (
@@ -1421,6 +1421,69 @@ export default function HftPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Sim Modu Sanal Pozisyonlari */}
+        {!isBackendMode && simRunning && simFilledRef.current.size > 0 && (
+          <div className="mb-4 relative z-10">
+            <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              Sanal Pozisyonlar (Frontend Sim)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {(() => {
+                const filled = Array.from(simFilledRef.current)
+                const entryPrices = simEntryPricesRef.current
+                const totalEp = filled.reduce((acc, lvl) => acc + (entryPrices.get(lvl) ?? livePrice), 0)
+                const avgEntry = totalEp / filled.length
+                
+                const totalContracts = contracts * filled.length
+                const totalMargin = marginPerLevel * filled.length
+                let unrealizedPnl = 0
+                if (activeDirection === "long") {
+                  unrealizedPnl = totalContracts * contractSize * (livePrice - avgEntry)
+                } else {
+                  unrealizedPnl = totalContracts * contractSize * (avgEntry - livePrice)
+                }
+                const notional = totalContracts * contractSize * livePrice
+                const fee = notional * 0.0006 * 2
+                const netPnl = unrealizedPnl - fee
+
+                return (
+                  <div className={`rounded-lg p-3 border ${
+                    netPnl >= 0 ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-red-900/20 border-red-500/30'
+                  }`}>
+                    <div className="flex justify-between items-center">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        activeDirection === 'long' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                      }`}>
+                        {activeDirection.toUpperCase()} {leverage}x
+                      </span>
+                      <span className={`text-sm font-bold font-mono ${
+                        netPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        {netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+                      <div>
+                        <span className="text-slate-500">Kontrat</span>
+                        <div className="text-white font-mono">{totalContracts}</div>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Ort. Giris</span>
+                        <div className="text-white font-mono">${avgEntry.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Margin</span>
+                        <div className="text-cyan-400 font-mono">${totalMargin.toFixed(2)}</div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           </div>
         )}
@@ -1501,8 +1564,8 @@ export default function HftPage() {
                 <span className="text-[10px] text-slate-600">{trades.length} islem gosteriliyor</span>
               </div>
             </div>
-            <div className="max-h-[250px] overflow-y-auto rounded-lg border border-slate-700/50">
-              <table className="w-full text-xs">
+            <div className="max-h-[250px] overflow-y-auto overflow-x-auto rounded-lg border border-slate-700/50">
+              <table className="w-full text-xs min-w-[500px]">
                 <thead className="bg-slate-800/80 sticky top-0">
                   <tr className="text-slate-500">
                     <th className="px-3 py-2 text-left">Saat</th>

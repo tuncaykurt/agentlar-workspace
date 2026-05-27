@@ -1034,6 +1034,44 @@ class GridLiveEngine:
                 exchange_balance = await ex.get_balance()
             except Exception:
                 pass
+        elif state.get("mode") == "paper":
+            filled_levels = state.get("filled_levels", [])
+            if filled_levels:
+                entry_prices = state.get("entry_prices", {})
+                current_price = state.get("current_price", 0)
+                cs = state.get("contract_size", 0.01)
+                contracts_per_level = state.get("contracts_per_level", 1)
+                leverage = state.get("leverage", 10)
+                active_dir = state.get("active_direction", state.get("grid_direction", "long"))
+                
+                total_contracts = contracts_per_level * len(filled_levels)
+                grid_count = state.get("grid_count", 20)
+                margin_per_level = state.get("order_size", 0) / max(1, grid_count)
+                total_margin = margin_per_level * len(filled_levels)
+                
+                total_ep = sum(entry_prices.get(str(lvl), current_price) for lvl in filled_levels)
+                avg_entry = total_ep / len(filled_levels) if filled_levels else current_price
+                
+                if active_dir == "long":
+                    unrealized_pnl = total_contracts * cs * (current_price - avg_entry)
+                else:
+                    unrealized_pnl = total_contracts * cs * (avg_entry - current_price)
+                    
+                notional = total_contracts * cs * current_price
+                fee = notional * 0.0006 * 2
+                unrealized_net_pnl = round(unrealized_pnl - fee, 4)
+                
+                exchange_positions = [
+                    {
+                        "side": active_dir,
+                        "contracts": total_contracts,
+                        "entry_price": round(avg_entry, 6),
+                        "unrealized_pnl": unrealized_net_pnl,
+                        "leverage": int(leverage),
+                        "margin": round(total_margin, 2),
+                        "liquidation_price": 0.0,
+                    }
+                ]
 
         total_trades = state.get("total_trades", 0)
         total_wins = state.get("total_wins", 0)
