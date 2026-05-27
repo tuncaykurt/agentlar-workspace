@@ -90,7 +90,6 @@ export default function HftPage() {
   const simFilledRef = useRef<Set<number>>(new Set())       // Sim: dolu seviyeler
   const simEntryPricesRef = useRef<Map<number, number>>(new Map()) // Sim: entry fiyatları
 
-  // BB modu state'leri — localStorage useEffect'inden ONCE tanimlanmali
   const [gridMode, setGridMode] = useState<GridMode>("manual")
   const [bbTimeframe, setBbTimeframe] = useState("5m")
   const [bbPeriod, setBbPeriod] = useState("20")
@@ -228,7 +227,17 @@ export default function HftPage() {
     if (hftSettings.grid_count != null) setLocalGrid(String(hftSettings.grid_count))
     if (hftSettings.leverage != null) setLocalLev(String(hftSettings.leverage))
     if (hftSettings.order_size != null) setLocalOrder(String(hftSettings.order_size))
-  }, [hftSettings.spread_pct, hftSettings.grid_count, hftSettings.leverage, hftSettings.order_size])
+    
+    // Strateji ve BB parametrelerini backend'den senkronize et
+    if (hftSettings.grid_mode) setGridMode(hftSettings.grid_mode as GridMode)
+    if (hftSettings.bb_timeframe) setBbTimeframe(hftSettings.bb_timeframe)
+    if (hftSettings.bb_period != null) setBbPeriod(String(hftSettings.bb_period))
+    if (hftSettings.bb_std_dev != null) setBbStdDev(String(hftSettings.bb_std_dev))
+    if (hftSettings.min_spread_pct != null) setMinSpread(String(hftSettings.min_spread_pct))
+  }, [
+    hftSettings.spread_pct, hftSettings.grid_count, hftSettings.leverage, hftSettings.order_size,
+    hftSettings.grid_mode, hftSettings.bb_timeframe, hftSettings.bb_period, hftSettings.bb_std_dev, hftSettings.min_spread_pct
+  ])
 
   const spreadPct = Number(localSpread) || hftSettings.spread_pct || 1.5
   const gridCount = Number(localGrid) || hftSettings.grid_count || 20
@@ -747,6 +756,31 @@ export default function HftPage() {
   }
 
   const handleStart = async () => {
+    // Tüm local ayarları başlatmadan önce kalıcı hale getir ki SWR geriye döndürmesin
+    const _spread = Number(localSpread) || 1.5
+    const _grid = Number(localGrid) || 20
+    const _lev = Number(localLev) || 10
+    const _order = Number(localOrder) || 100
+
+    setLocalSpread(String(_spread))
+    setLocalGrid(String(_grid))
+    setLocalLev(String(_lev))
+    setLocalOrder(String(_order))
+
+    await api.post("/simulations/hft-settings", {
+      spread_pct: _spread,
+      grid_count: _grid,
+      leverage: _lev,
+      order_size: _order,
+      grid_mode: gridMode,
+      grid_direction: gridDirection,
+      bb_timeframe: bbTimeframe,
+      bb_period: Number(bbPeriod) || 20,
+      bb_std_dev: Number(bbStdDev) || 2.0,
+      min_spread_pct: Number(minSpread) || 0.3,
+    })
+    mutateHftSettings()
+
     if (tradingMode === "sim") {
       setTrades([])
       setTotalPnl(0)
