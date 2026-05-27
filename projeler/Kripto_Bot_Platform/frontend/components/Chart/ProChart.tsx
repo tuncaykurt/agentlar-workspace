@@ -915,6 +915,19 @@ export default function ProChart({
         gridPriceLinesRef.current.push(pl)
       })
     }
+
+    // TP ve SL cizgileri gorunur olsun diye autoscale'i zorla
+    series.applyOptions({
+      autoscaleInfoProvider: (original) => {
+        const res = original()
+        if (res !== null && tp && sl && res.priceRange) {
+          const padding = (tp - sl) * 0.1 // %10 ust/alt bosluk
+          res.priceRange.minValue = Math.min(res.priceRange.minValue, sl - padding)
+          res.priceRange.maxValue = Math.max(res.priceRange.maxValue, tp + padding)
+        }
+        return res
+      }
+    })
   }, [tp, sl, gridLines])
 
   // ── Birleşik marker useEffect (UT Bot + strateji sinyalleri) ──
