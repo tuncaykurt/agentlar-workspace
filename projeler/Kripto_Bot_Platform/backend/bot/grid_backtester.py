@@ -54,7 +54,7 @@ class GridBacktestEngine:
             "upper": 0, "lower": 0, "step": 0, "levels": [],
             "filled": set(), "entry_prices": {},
             "last_level": -1,
-            "bb_dir_paused": False, "bb_dir_wait_cross": False,
+            "bb_dir_paused": False, "bb_dir_wait_cross": self.grid_mode == "bb_direction",
             "bb_dir_last_mid": ""
         }
         
@@ -96,9 +96,11 @@ class GridBacktestEngine:
                             bb_upper = bb_mid + diff
                             bb_lower = bb_mid - diff
                             
-                        if bb_upper > bb_lower:
-                            state["upper"], state["lower"] = bb_upper, bb_lower
-                            state["step"] = (bb_upper - bb_lower) / self.grid_count
+                        if bb_upper > bb_lower and price > 0:
+                            bb_spread_pct = (bb_upper - bb_lower) / price * 100
+                            state["upper"] = price * (1 + bb_spread_pct / 200)
+                            state["lower"] = price * (1 - bb_spread_pct / 200)
+                            state["step"] = (state["upper"] - state["lower"]) / self.grid_count
                             state["levels"] = [state["lower"] + j * state["step"] for j in range(self.grid_count + 1)]
                             trades.append({"entry_ts": ts, "side": "grid_start", "entry": price, "exit": 0, "pnl": 0, "status": "info", "lvl": 0, "qty": 0})
                         state["filled"] = set()
