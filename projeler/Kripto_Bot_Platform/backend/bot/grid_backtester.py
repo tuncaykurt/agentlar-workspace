@@ -100,6 +100,7 @@ class GridBacktestEngine:
                             state["upper"], state["lower"] = bb_upper, bb_lower
                             state["step"] = (bb_upper - bb_lower) / self.grid_count
                             state["levels"] = [state["lower"] + j * state["step"] for j in range(self.grid_count + 1)]
+                            trades.append({"entry_ts": ts, "side": "grid_start", "entry": price, "exit": 0, "pnl": 0, "status": "info", "lvl": 0, "qty": 0})
                         state["filled"] = set()
                         state["entry_prices"] = {}
                         state["last_level"] = -1
@@ -138,6 +139,7 @@ class GridBacktestEngine:
                 state["upper"], state["lower"] = bb_upper, bb_lower
                 state["step"] = (bb_upper - bb_lower) / self.grid_count
                 state["levels"] = [state["lower"] + j * state["step"] for j in range(self.grid_count + 1)]
+                trades.append({"entry_ts": ts, "side": "grid_start", "entry": price, "exit": 0, "pnl": 0, "status": "info", "lvl": 0, "qty": 0})
                 
             if not state["levels"]: continue
             
@@ -211,6 +213,7 @@ class GridBacktestEngine:
                         trades.append({"entry_ts": ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": price, "pnl": net_pnl, "status": "band_exit", "lvl": lvl, "qty": contracts*cs})
                     if self.grid_mode == "bb_direction":
                         state["bb_dir_paused"] = True
+                    trades.append({"entry_ts": ts, "side": "grid_end", "entry": price, "exit": 0, "pnl": 0, "status": "info", "lvl": 0, "qty": 0})
 
             # Trailing
             if not state.get("bb_dir_paused"):

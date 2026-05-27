@@ -199,10 +199,22 @@ export default function BacktestChart({
         return best
       }
 
-      // Markers — entry + exit her trade için
       const rawMarkers: { time: number; position: string; color: string; shape: string; text: string; size: number }[] = []
       trades.forEach((t, idx) => {
         const entryTime = snap(Math.floor(t.entry_ts / 1000))
+        
+        if (t.side === "grid_start" || t.side === "grid_end") {
+          rawMarkers.push({
+            time: entryTime,
+            position: t.side === "grid_start" ? "aboveBar" : "belowBar",
+            color: t.side === "grid_start" ? "#3b82f6" : "#6b7280",
+            shape: "square",
+            text: t.side === "grid_start" ? "GRID BAŞLATILDI" : "GRID KAPATILDI",
+            size: 1.5,
+          })
+          return
+        }
+
         const exitTime = snap(Math.floor(t.exit_ts / 1000))
 
         rawMarkers.push({

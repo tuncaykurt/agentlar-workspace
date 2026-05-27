@@ -1131,8 +1131,8 @@ export default function HftPage() {
           </>
           )}
 
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-col gap-1 justify-end">
+            <div className="flex items-center gap-1.5 h-[15px]">
               <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Kademe</span>
               {gridMode !== "manual" && (
                 <button
@@ -1163,11 +1163,6 @@ export default function HftPage() {
                 autoGridCount && gridMode !== "manual" ? "border-cyan-500/30 text-cyan-400" : "border-slate-700 text-white"
               }`}
             />
-            {gridMode !== "manual" && suggestedGrid && (
-              <span className="text-[9px] text-slate-500">
-                ATR: {suggestedGrid.count} kademe · %{suggestedGrid.stepPct.toFixed(2)}/kademe
-              </span>
-            )}
           </div>
 
           <div className="flex flex-col gap-1">
@@ -1246,8 +1241,11 @@ export default function HftPage() {
             <div className="text-[9px] text-slate-500 mt-0.5">{contracts} kontrat</div>
           </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
-            <div className="text-[10px] text-slate-500 uppercase">Kademe Araligi</div>
+            <div className="text-[10px] text-slate-500 uppercase">Kademe Aralığı</div>
             <div className="text-sm font-bold text-white font-mono">${gridStep.toFixed(4)}</div>
+            <div className="text-[9px] text-slate-500 mt-0.5">
+              %{livePrice > 0 ? ((gridStep / livePrice) * 100).toFixed(2) : "0.00"}
+            </div>
           </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
             <div className="text-[10px] text-slate-500 uppercase">Maks Kademe Kari</div>
