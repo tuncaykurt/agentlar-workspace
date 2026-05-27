@@ -799,8 +799,8 @@ class GridLiveEngine:
         state["filled_levels"] = list(filled)
         state["last_level"] = current_level
 
-        # Trailing kontrol — band exit durumunda trailing yapma
-        if not state.get("band_exited", False):
+        # Trailing kontrol — BB Yön modunda grid sabit kalır, kaydırılmaz!
+        if grid_mode != "bb_direction" and not state.get("band_exited", False):
             await self._check_trailing(state, current_price, redis)
 
         await redis.set("grid_live:state", json.dumps(state))
