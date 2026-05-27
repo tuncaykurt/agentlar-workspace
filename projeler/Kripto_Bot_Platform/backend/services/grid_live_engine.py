@@ -115,7 +115,7 @@ class GridLiveEngine:
 
         # ─── Grid sınırlarını hesapla ─────────────────────────────────
         bb_data = {}
-        if grid_mode in ("bollinger", "hybrid"):
+        if grid_mode in ("bollinger", "hybrid", "bb_direction"):
             # BB bantlarından dinamik grid sınırları
             from services.bollinger_grid_service import BollingerGridService
             self._bb_service = BollingerGridService()
