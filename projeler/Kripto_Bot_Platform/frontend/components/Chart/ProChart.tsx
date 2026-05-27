@@ -1236,8 +1236,8 @@ export default function ProChart({
       if (candleSeriesRef.current && countdownDivRef.current) {
         const y = candleSeriesRef.current.priceToCoordinate(lastClose)
         if (y !== null) {
-          // Lightweight Charts fiyat etiketi ~22px yüksekliğinde, hemen altına yerleştir
-          countdownDivRef.current.style.top = `${(y as number) + 20}px`
+          // Lightweight Charts fiyat etiketi y eksenini tam ortalar (yükseklik ~22px). Altına yapışması için +12px ekliyoruz.
+          countdownDivRef.current.style.top = `${(y as number) + 12}px`
         }
       }
       cdRafRef.current = requestAnimationFrame(loop)
@@ -1882,13 +1882,18 @@ export default function ProChart({
         <div
           ref={countdownDivRef}
           className="absolute right-0 z-10 pointer-events-none"
-          style={{ top: 0 }}
+          style={{ top: 0, paddingRight: '1px' }}
         >
-          {countdown && (
-            <div className="text-[10px] font-mono text-white bg-red-600 px-1.5 py-0.5 rounded-l font-bold">
-              {countdown}
-            </div>
-          )}
+          {countdown && (() => {
+            const lastC = data.candles[data.candles.length - 1]
+            const isUp = lastC && lastC.close >= lastC.open
+            const bgColor = isUp ? "bg-[#089981]" : "bg-[#f23645]"
+            return (
+              <div className={`text-[11px] font-mono text-white ${bgColor} px-1.5 py-[2px] font-medium shadow-sm flex items-center justify-center min-w-[45px]`}>
+                {countdown}
+              </div>
+            )
+          })()}
         </div>
 
         {/* VP efsanesi + Tablo */}
