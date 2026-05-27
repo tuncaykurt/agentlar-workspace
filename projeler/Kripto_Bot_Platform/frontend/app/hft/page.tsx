@@ -1328,16 +1328,21 @@ export default function HftPage() {
 
         {/* BB Modu Istatistikleri — sim + backend */}
         {(() => {
-          // BB verisini kaynagina gore sec
-          const bbSrc = isBackendMode
-            ? (backendStatus?.grid_mode && backendStatus.grid_mode !== "manual" ? {
+          if (gridMode === "manual") return null
+          
+          // BB verisini oncelikle backendStatus'ten, yoksa (veya bot duruyorsa) simBbMeta'dan al
+          const useBackend = isBackendMode && backendStatus?.running && backendStatus.grid_mode && backendStatus.grid_mode !== "manual"
+          
+          const bbSrc = useBackend 
+            ? {
                 width: backendStatus.bb_width || 0, rsi: backendStatus.bb_rsi || 50,
                 paused: backendStatus.bb_paused, mid: backendStatus.bb_mid || 0,
-              } : null)
-            : (gridMode !== "manual" && simBbMeta ? {
+              }
+            : (simBbMeta ? {
                 width: simBbMeta.bb_width || 0, rsi: simBbMeta.rsi || 50,
                 paused: simBbMeta.is_squeeze, mid: simBbMeta.bb_mid || 0,
               } : null)
+              
           if (!bbSrc) return null
           return (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 relative z-10 mb-4">
