@@ -238,7 +238,7 @@ class GridLiveEngine:
             "grid_direction": grid_direction,  # "long" / "short" / "auto"
             # BB Yön modu ek alanları
             "bb_dir_paused": False,       # Bant dokunusu sonrası duraklama
-            "bb_dir_wait_cross": False,   # Orta çizgi kesimi bekleniyor
+            "bb_dir_wait_cross": grid_mode == "bb_direction",   # BB Yön moduysa baştan Avda Bekle!
             "bb_dir_last_mid_side": "",   # Son orta çizgi tarafı ("above" / "below")
         }
 

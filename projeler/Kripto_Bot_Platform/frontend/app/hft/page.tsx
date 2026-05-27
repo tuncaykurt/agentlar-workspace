@@ -368,10 +368,20 @@ export default function HftPage() {
 
   const isBackendWaiting = useMemo(() => {
     if (!simRunning || !isBackendMode || !backendStatus) return false
+    
+    if (backendStatus.grid_mode === "bb_direction") {
+      if (backendStatus.bb_dir_paused || backendStatus.bb_dir_wait_cross) return true
+      return false
+    }
+
     if (backendStatus.bb_paused) return true
+    
     if (backendStatus.grid_mode && backendStatus.grid_mode !== "manual") {
       const filters = backendStatus.filters || {}
-      if (filters.midline_filter && backendStatus.bb_mid && livePrice < backendStatus.bb_mid) return true
+      if (filters.midline_filter && backendStatus.bb_mid) {
+        if (backendStatus.active_direction === "long" && livePrice < backendStatus.bb_mid) return true
+        if (backendStatus.active_direction === "short" && livePrice > backendStatus.bb_mid) return true
+      }
     }
     return false
   }, [simRunning, isBackendMode, backendStatus, livePrice])
