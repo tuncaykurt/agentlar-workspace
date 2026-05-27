@@ -1884,7 +1884,7 @@ export default function ProChart({
           className="absolute right-0 z-10 pointer-events-none"
           style={{ top: 0, paddingRight: '1px' }}
         >
-          {countdown && (() => {
+          {countdown && data && data.candles && data.candles.length > 0 && (() => {
             const lastC = data.candles[data.candles.length - 1]
             const isUp = lastC && lastC.close >= lastC.open
             const bgColor = isUp ? "bg-[#089981]" : "bg-[#f23645]"
