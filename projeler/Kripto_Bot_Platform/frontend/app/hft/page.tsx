@@ -1540,6 +1540,7 @@ export default function HftPage() {
                 hideVolume
                 gridMode={isBackendMode ? backendStatus?.grid_mode : gridMode}
                 trades={trades}
+                activeTimeframe={isBackendMode && backendStatus?.running ? backendStatus.bb_timeframe : (simRunning ? bbTimeframe : undefined)}
               />
             ) : (
               <div className="flex-1 flex items-center justify-center h-full">

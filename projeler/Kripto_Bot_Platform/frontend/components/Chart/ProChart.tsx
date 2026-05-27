@@ -482,10 +482,10 @@ function drawOBCanvas(
 //  Ana Bileşen
 // ═══════════════════════════════════════════════════════════════
 export default function ProChart({
-  symbol, onClose, tp, sl, gridLines, hideVolume, gridMode, trades
+  symbol, onClose, tp, sl, gridLines, hideVolume, gridMode, trades, activeTimeframe
 }: {
   symbol: string; onClose?: () => void; tp?: number; sl?: number; gridLines?: number[]
-  hideVolume?: boolean; gridMode?: string; trades?: any[]
+  hideVolume?: boolean; gridMode?: string; trades?: any[]; activeTimeframe?: string
 }) {
   const mainRef          = useRef<HTMLDivElement>(null)
   const chartRef         = useRef<IChartApi | null>(null)
@@ -589,6 +589,14 @@ export default function ProChart({
       }))
     }
   }, [gridMode])
+
+  // Disaridan aktif bot timeframe gelirse haritayi senkronize et
+  useEffect(() => {
+    if (activeTimeframe && activeTimeframe !== tf) {
+      setTf(activeTimeframe)
+      localStorage.setItem("prochart_tf", activeTimeframe)
+    }
+  }, [activeTimeframe, tf])
 
   const oscillators = inds.filter(i => i.type === "oscillator" && i.enabled)
   const paneRefs    = useRef<Record<string, HTMLDivElement | null>>({})
@@ -1556,7 +1564,7 @@ export default function ProChart({
     }>
 
       {/* ── Üst araç çubuğu ─────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border-b border-slate-800 shrink-0 flex-wrap">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border-b border-slate-800 shrink-0 overflow-x-auto whitespace-nowrap [&::-webkit-scrollbar]:hidden">
 
         {onClose && (
           <span className="text-white font-semibold text-sm mr-1">
