@@ -115,7 +115,7 @@ class GridLiveEngine:
 
         # ─── Grid sınırlarını hesapla ─────────────────────────────────
         bb_data = {}
-        if grid_mode in ("bollinger", "hybrid", "bb_direction"):
+        if grid_mode in ("bollinger", "hybrid"):
             # BB bantlarından dinamik grid sınırları
             from services.bollinger_grid_service import BollingerGridService
             self._bb_service = BollingerGridService()
@@ -127,9 +127,6 @@ class GridLiveEngine:
             if not bb_data:
                 return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamıyor."}
 
-            # Filtreler artık başlatmayı ENGELLEMİYOR — bot "avda bekle" modunda başlar
-            # ve koşullar uygun olduğunda otomatik işlem yapar
-
             upper = bb_data["bb_upper"]
             lower = bb_data["bb_lower"]
             # Spread'i BB'den hesapla
@@ -137,6 +134,29 @@ class GridLiveEngine:
             print(f"[GridLive] BB Modu: upper=${upper:.2f} lower=${lower:.2f} "
                   f"mid=${bb_data.get('bb_mid', 0):.2f} width={bb_data.get('bb_width', 0):.4f} "
                   f"rsi={bb_data.get('rsi', 0):.1f} adx={bb_data.get('adx', 0):.1f}")
+        
+        elif grid_mode == "bb_direction":
+            # BB Yön modu: Sadece sinyal ve genişlik için BB kullanılır, grid anlık fiyata ortalanır
+            from services.bollinger_grid_service import BollingerGridService
+            self._bb_service = BollingerGridService()
+            bb_data = await self._bb_service.compute_grid_bounds(
+                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
+                min_spread_pct, current_price
+            )
+
+            if not bb_data:
+                return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamıyor."}
+
+            # BB kanalının toplam genişliği
+            bb_spread_pct = round((bb_data["bb_upper"] - bb_data["bb_lower"]) / current_price * 100, 4)
+            spread_pct = bb_spread_pct
+            
+            # Anlık fiyata göre ortala (Toplam genişlik bb_spread_pct olacak şekilde)
+            upper = current_price * (1 + bb_spread_pct / 200)
+            lower = current_price * (1 - bb_spread_pct / 200)
+            
+            print(f"[GridLive] BB Yön Modu: Anlık fiyata ortalandı. upper=${upper:.2f} lower=${lower:.2f} width={bb_data.get('bb_width', 0):.4f}")
+
         else:
             # Manuel mod — mevcut mantık
             upper = current_price * (1 + spread_pct / 100)
@@ -549,14 +569,19 @@ class GridLiveEngine:
                                 state["bb_dir_paused"] = False
                                 state["band_exited"] = False
                                 state["band_exit_side"] = None
+                                
+                                # Grid'i sıfırla ve yeniden fiyata merkezle!
                                 bb_upper_new = bb_meta.get("bb_upper", state.get("upper", 0))
                                 bb_lower_new = bb_meta.get("bb_lower", state.get("lower", 0))
-                                if bb_upper_new > bb_lower_new:
-                                    state["upper"] = bb_upper_new
-                                    state["lower"] = bb_lower_new
-                                    new_step = (bb_upper_new - bb_lower_new) / grid_count
+                                if bb_upper_new > bb_lower_new and current_price > 0:
+                                    bb_spread_pct = (bb_upper_new - bb_lower_new) / current_price * 100
+                                    new_upper = current_price * (1 + bb_spread_pct / 200)
+                                    new_lower = current_price * (1 - bb_spread_pct / 200)
+                                    state["upper"] = new_upper
+                                    state["lower"] = new_lower
+                                    new_step = (new_upper - new_lower) / grid_count
                                     state["step"] = new_step
-                                    state["levels"] = [round(bb_lower_new + i * new_step, 8) for i in range(grid_count + 1)]
+                                    state["levels"] = [round(new_lower + i * new_step, 8) for i in range(grid_count + 1)]
                                 state["filled_levels"] = []
                                 state["entry_prices"] = {}
                                 state["last_level"] = -1
