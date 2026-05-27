@@ -799,8 +799,8 @@ class GridLiveEngine:
         state["filled_levels"] = list(filled)
         state["last_level"] = current_level
 
-        # Trailing kontrol — BB Yön modunda grid sabit kalır, kaydırılmaz!
-        if grid_mode != "bb_direction" and not state.get("band_exited", False):
+        # Trailing kontrol
+        if not state.get("band_exited", False):
             await self._check_trailing(state, current_price, redis)
 
         await redis.set("grid_live:state", json.dumps(state))
@@ -815,8 +815,8 @@ class GridLiveEngine:
         grid_mode = state.get("grid_mode", "manual")
 
         if current_price >= upper:
-            # BB modunda: sınıra ulaşınca anlık BB recalc dene
-            if grid_mode in ("bollinger", "hybrid", "bb_direction"):
+            # BB modunda (bb_direction hariç): sınıra ulaşınca anlık BB recalc dene
+            if grid_mode in ("bollinger", "hybrid"):
                 recalced = await self._try_bb_recalc(state, current_price, redis)
                 if recalced:
                     return True
@@ -834,7 +834,7 @@ class GridLiveEngine:
             return True
 
         elif current_price <= lower and not state.get("filled_levels"):
-            if grid_mode in ("bollinger", "hybrid", "bb_direction"):
+            if grid_mode in ("bollinger", "hybrid"):
                 recalced = await self._try_bb_recalc(state, current_price, redis)
                 if recalced:
                     return True
