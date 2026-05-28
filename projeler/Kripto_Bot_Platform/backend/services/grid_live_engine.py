@@ -136,7 +136,7 @@ class GridLiveEngine:
                   f"rsi={bb_data.get('rsi', 0):.1f} adx={bb_data.get('adx', 0):.1f}")
         
         elif grid_mode == "bb_direction":
-            # BB Yön modu: Sadece sinyal ve genişlik için BB kullanılır, grid anlık fiyata ortalanır
+            # BB Yön modu: Sadece sinyal ve genişlik için BB kullanılır, başlangıçta grid kapalıdır
             from services.bollinger_grid_service import BollingerGridService
             self._bb_service = BollingerGridService()
             bb_data = await self._bb_service.compute_grid_bounds(
@@ -147,23 +147,24 @@ class GridLiveEngine:
             if not bb_data:
                 return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamıyor."}
 
-            # BB kanalının toplam genişliği
-            bb_spread_pct = round((bb_data["bb_upper"] - bb_data["bb_lower"]) / current_price * 100, 4)
-            spread_pct = bb_spread_pct
+            upper = 0
+            lower = 0
             
-            # Anlık fiyata göre ortala (Toplam genişlik bb_spread_pct olacak şekilde)
-            upper = current_price * (1 + bb_spread_pct / 200)
-            lower = current_price * (1 - bb_spread_pct / 200)
-            
-            print(f"[GridLive] BB Yön Modu: Anlık fiyata ortalandı. upper=${upper:.2f} lower=${lower:.2f} width={bb_data.get('bb_width', 0):.4f}")
+            print(f"[GridLive] BB Yön Modu: Kesişim bekleniyor. upper=${upper} lower=${lower} width={bb_data.get('bb_width', 0):.4f}")
+
+        elif grid_mode == "ema_trend":
+            # EMA Trend modu: Kesişim bekleniyor, grid başlangıçta kapalı
+            upper = 0
+            lower = 0
+            print(f"[GridLive] EMA Trend Modu: Kesişim bekleniyor. Grid kapalı başlatıldı.")
 
         else:
             # Manuel mod — mevcut mantık
             upper = current_price * (1 + spread_pct / 100)
             lower = current_price * (1 - spread_pct / 100)
 
-        step = (upper - lower) / grid_count
-        levels = [round(lower + i * step, 8) for i in range(grid_count + 1)]
+        step = (upper - lower) / grid_count if upper > 0 else 0
+        levels = [round(lower + i * step, 8) for i in range(grid_count + 1)] if upper > 0 else []
 
         # Kontrat sayısını hesapla (her grid seviyesi için)
         contracts_per_level = 1
