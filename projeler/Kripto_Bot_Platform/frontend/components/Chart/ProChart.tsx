@@ -580,14 +580,16 @@ export default function ProChart({
 
   // Strateji secimine gore Bollinger ve RSI indikatörlerini otomatik ac/kapat
   useEffect(() => {
-    if (gridMode === "bollinger" || gridMode === "hybrid") {
+    if (gridMode === "bollinger" || gridMode === "hybrid" || gridMode === "bb_direction") {
       setInds(prev => prev.map(i => {
         if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: true }
+        if (i.id === "ema") return { ...i, enabled: false }
         return i
       }))
     } else if (gridMode === "manual") {
       setInds(prev => prev.map(i => {
         if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: false }
+        if (i.id === "ema") return { ...i, enabled: true }
         return i
       }))
     }
