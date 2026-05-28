@@ -1549,9 +1549,9 @@ export default function HftPage() {
             {livePrice > 0 ? (
               <ProChart
                 symbol={chartSymbol}
-                tp={gridBounds?.upper}
-                sl={gridBounds?.lower}
-                gridLines={gridLines}
+                tp={isWaiting ? undefined : gridBounds?.upper}
+                sl={isWaiting ? undefined : gridBounds?.lower}
+                gridLines={isWaiting ? [] : gridLines}
                 hideVolume
                 gridMode={isBackendMode ? backendStatus?.grid_mode : gridMode}
                 trades={trades}
