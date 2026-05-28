@@ -1094,7 +1094,7 @@ export default function HftPage() {
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Strateji</span>
             <select
               value={gridMode}
-              onChange={e => setGridMode(e.target.value as GridMode)}
+              onChange={e => { setGridMode(e.target.value as GridMode); updateHftSetting("grid_mode", e.target.value); }}
               disabled={simRunning}
               className="bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             >
@@ -1110,7 +1110,7 @@ export default function HftPage() {
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Yön</span>
             <select
               value={gridMode === "bb_direction" ? "auto" : gridDirection}
-              onChange={e => setGridDirection(e.target.value as GridDirection)}
+              onChange={e => { setGridDirection(e.target.value as GridDirection); updateHftSetting("grid_direction", e.target.value); }}
               disabled={simRunning || gridMode === "bb_direction"}
               className={`bg-[#020817] border rounded-md px-3 py-1.5 text-sm font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50 ${
                 (gridMode === "bb_direction" ? "auto" : activeDirection) === "long" ? "border-emerald-500/50 text-emerald-400" : 
@@ -1144,7 +1144,7 @@ export default function HftPage() {
           <>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Zaman Dilimi</span>
-            <select value={bbTimeframe} onChange={e => setBbTimeframe(e.target.value)} disabled={simRunning}
+            <select value={bbTimeframe} onChange={e => { setBbTimeframe(e.target.value); updateHftSetting("bb_timeframe", e.target.value); }} disabled={simRunning}
               className="bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50">
               <option value="5m">5 dk</option>
               <option value="15m">15 dk</option>
@@ -1153,21 +1153,21 @@ export default function HftPage() {
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">BB Periyot</span>
-            <input type="number" value={bbPeriod} onChange={e => setBbPeriod(e.target.value)}
+            <input type="number" value={bbPeriod} onChange={e => setBbPeriod(e.target.value)} onBlur={e => commitSetting("bb_period", e.target.value, 20)} onKeyDown={e => e.key === "Enter" && commitSetting("bb_period", e.target.value, 20)}
               min={10} max={50} disabled={simRunning}
               className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">BB Sapma</span>
-            <input type="number" value={bbStdDev} onChange={e => setBbStdDev(e.target.value)}
+            <input type="number" value={bbStdDev} onChange={e => setBbStdDev(e.target.value)} onBlur={e => commitSetting("bb_std_dev", e.target.value, 2.0)} onKeyDown={e => e.key === "Enter" && commitSetting("bb_std_dev", e.target.value, 2.0)}
               min={1} max={3} step={0.1} disabled={simRunning}
               className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Min Spread %</span>
-            <input type="number" value={minSpread} onChange={e => setMinSpread(e.target.value)}
+            <input type="number" value={minSpread} onChange={e => setMinSpread(e.target.value)} onBlur={e => commitSetting("min_spread_pct", e.target.value, 0.3)} onKeyDown={e => e.key === "Enter" && commitSetting("min_spread_pct", e.target.value, 0.3)}
               min={0.1} max={5} step={0.1} disabled={simRunning}
               className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             />

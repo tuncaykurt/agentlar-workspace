@@ -315,6 +315,13 @@ def calculate_bb_for_grid(ohlcv: list, period: int = 20, std_dev: float = 2.0) -
     adx = dx.ewm(span=14, adjust=False).mean()
 
     curr = df.iloc[-1]
+    
+    # ── EMAs (EMA Trend strategy için) ───────────────────────────────────
+    ema6 = df["close"].ewm(span=6, adjust=False).mean()
+    ema14 = df["close"].ewm(span=14, adjust=False).mean()
+    ema50 = df["close"].ewm(span=50, adjust=False).mean()
+    ema200 = df["close"].ewm(span=200, adjust=False).mean()
+
     return {
         "bb_upper": round(float(bb_upper.iloc[-1]), 8),
         "bb_lower": round(float(bb_lower.iloc[-1]), 8),
@@ -325,6 +332,10 @@ def calculate_bb_for_grid(ohlcv: list, period: int = 20, std_dev: float = 2.0) -
         "adx": round(float(adx.iloc[-1]), 2),
         "close": float(curr["close"]),
         "candle_ts": int(curr["ts"]),
+        "ema6": round(float(ema6.iloc[-1]), 8),
+        "ema14": round(float(ema14.iloc[-1]), 8),
+        "ema50": round(float(ema50.iloc[-1]), 8),
+        "ema200": round(float(ema200.iloc[-1]), 8),
     }
 
 
