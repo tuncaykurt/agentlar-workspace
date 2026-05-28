@@ -1143,10 +1143,10 @@ export default function HftPage() {
 
           <div className="w-px h-8 bg-slate-700/50 hidden md:block" />
 
-          {/* Spread — sadece Manuel modda gosterilir */}
-          {gridMode === "manual" && (
+          {/* Spread (Ağ Genişliği) */}
+          {(gridMode === "manual" || gridMode === "ema_trend") && (
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Spread (±%)</span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{gridMode === "ema_trend" ? "Ağ Genişliği (±%)" : "Spread (±%)"}</span>
             <input type="number" value={localSpread} onChange={e => setLocalSpread(e.target.value)}
               onBlur={() => commitSetting("spread_pct", localSpread, 1.5)}
               onKeyDown={e => e.key === "Enter" && commitSetting("spread_pct", localSpread, 1.5)}
