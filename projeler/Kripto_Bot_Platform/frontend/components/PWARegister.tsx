@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Bell } from 'lucide-react'
+import { api } from '@/lib/api'
 
 // VAPID Public Key - Backend'den de alabiliriz ama sabit olduğu için buraya ekledik
 const VAPID_PUBLIC_KEY = "BJ8TZYDjv-OHYrjJu0Y5xwEgNRfsrxdZ2sLi16Aj13PttTxfwrhtBs8j5OYkp1fIOc0qkPtMxnEr7rVNq1izPF8"
@@ -50,16 +51,13 @@ export function PWARegister() {
         })
 
         // Backend'e gönder
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/simulations/push/subscribe`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sub)
-        })
+        await api.post("/simulations/push/subscribe", sub)
 
         setIsSubscribed(true)
       }
     } catch (e) {
       console.error('Push error:', e)
+      alert("Bildirim izni alınırken hata oluştu.")
     }
   }
 
