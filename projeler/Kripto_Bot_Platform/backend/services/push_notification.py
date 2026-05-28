@@ -1,0 +1,144 @@
+"""
+Web Push Notification Service — PWA Bildirim Gönderici
+═══════════════════════════════════════════════════════
+Grid botundan işlem sinyalleri geldiğinde mobil PWA'ya
+native bildirim gönderir.
+
+Akış:
+1. Frontend: Kullanıcı bildirim izni verir → subscription Redis'e kaydedilir
+2. Backend: Grid trade gerçekleştiğinde → push_trade_notification() çağrılır
+3. PWA: Service Worker push event'i yakalar → native bildirim gösterir
+"""
+import json
+import traceback
+from core.redis_client import get_redis
+
+# ── VAPID Anahtarları ──────────────────────────────────────────────
+VAPID_PUBLIC_KEY = "BJ8TZYDjv-OHYrjJu0Y5xwEgNRfsrxdZ2sLi16Aj13PttTxfwrhtBs8j5OYkp1fIOc0qkPtMxnEr7rVNq1izPF8"
+VAPID_PRIVATE_KEY = "com3y1Bjr-4hokvARZrX9UzrzaAJmLS-VGQSMEyNz6o"
+VAPID_CLAIMS = {"sub": "mailto:tuncay@yapayzekaotomasyon.cloud"}
+
+REDIS_KEY = "push:subscriptions"
+
+
+async def save_subscription(subscription: dict) -> bool:
+    """Push subscription'ı Redis'e kaydet."""
+    redis = get_redis()
+    endpoint = subscription.get("endpoint", "")
+    if not endpoint:
+        return False
+
+    # Aynı endpoint varsa güncelle
+    existing = await redis.lrange(REDIS_KEY, 0, -1)
+    for item in existing:
+        try:
+            sub = json.loads(item)
+            if sub.get("endpoint") == endpoint:
+                # Zaten kayıtlı
+                return True
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    await redis.rpush(REDIS_KEY, json.dumps(subscription))
+    count = await redis.llen(REDIS_KEY)
+    print(f"[Push] Yeni subscription kaydedildi. Toplam: {count}")
+    return True
+
+
+async def remove_subscription(endpoint: str) -> bool:
+    """Subscription'ı kaldır."""
+    redis = get_redis()
+    existing = await redis.lrange(REDIS_KEY, 0, -1)
+    for item in existing:
+        try:
+            sub = json.loads(item)
+            if sub.get("endpoint") == endpoint:
+                await redis.lrem(REDIS_KEY, 1, item)
+                print(f"[Push] Subscription kaldırıldı: {endpoint[:50]}...")
+                return True
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return False
+
+
+async def send_push(title: str, body: str, data: dict = None, tag: str = "trade"):
+    """Tüm kayıtlı abonelere push bildirim gönder."""
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        print("[Push] pywebpush yüklü değil, bildirim gönderilemedi.")
+        return
+
+    redis = get_redis()
+    subs_raw = await redis.lrange(REDIS_KEY, 0, -1)
+    if not subs_raw:
+        return
+
+    payload = json.dumps({
+        "title": title,
+        "body": body,
+        "tag": tag,
+        "data": data or {},
+    })
+
+    dead_endpoints = []
+
+    for sub_raw in subs_raw:
+        try:
+            sub = json.loads(sub_raw)
+            webpush(
+                subscription_info=sub,
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims=VAPID_CLAIMS,
+            )
+        except Exception as e:
+            err_str = str(e)
+            # 404/410 = subscription expired/invalid
+            if "404" in err_str or "410" in err_str or "Gone" in err_str:
+                dead_endpoints.append(sub.get("endpoint", ""))
+            else:
+                print(f"[Push] Gönderim hatası: {err_str[:120]}")
+
+    # Geçersiz subscription'ları temizle
+    for ep in dead_endpoints:
+        await remove_subscription(ep)
+        print(f"[Push] Geçersiz subscription temizlendi: {ep[:50]}...")
+
+
+async def push_trade_notification(trade: dict):
+    """Grid trade gerçekleştiğinde bildirim gönder."""
+    side = trade.get("side", "buy")
+    pnl = trade.get("pnl", 0)
+    price = trade.get("price", 0)
+    symbol = trade.get("symbol", "ETH")
+    level_count = trade.get("level_count", 1)
+    mode = trade.get("mode", "paper")
+
+    if pnl != 0:
+        # Pozisyon kapatma (kâr/zarar)
+        emoji = "🟢" if pnl > 0 else "🔴"
+        title = f"{emoji} {symbol} {'Kâr' if pnl > 0 else 'Zarar'}: ${abs(pnl):.4f}"
+        body = f"{side.upper()} {level_count} kademe | Fiyat: ${price:.2f} | {'Paper' if mode == 'paper' else 'CANLI'}"
+    else:
+        # Pozisyon açma
+        emoji = "📈" if side == "buy" else "📉"
+        title = f"{emoji} {symbol} {side.upper()} Açıldı"
+        body = f"{level_count} kademe @ ${price:.2f} | {'Paper' if mode == 'paper' else 'CANLI'}"
+
+    await send_push(title, body, data={"url": "/hft"}, tag=f"trade-{side}")
+
+
+async def push_grid_event(event: str, details: str = ""):
+    """Grid lifecycle event bildirimi (başlama, durma, sinyal)."""
+    events = {
+        "grid_start": ("🚀 Grid Başlatıldı", details or "Bot aktif, işlemler başlıyor."),
+        "grid_stop": ("⏹️ Grid Durduruldu", details or "Bot durduruldu."),
+        "signal_long": ("📈 LONG Sinyali", details or "Orta çizgi yukarı kesildi."),
+        "signal_short": ("📉 SHORT Sinyali", details or "Orta çizgi aşağı kesildi."),
+        "band_exit": ("🔔 Bant Çıkışı", details or "Fiyat BB bandını aştı, grid kapatılıyor."),
+        "waiting": ("⏳ Avda Bekleniyor", details or "Yeni sinyal bekleniyor."),
+    }
+
+    title, body = events.get(event, ("📢 Grid Bildirimi", details or event))
+    await send_push(title, body, data={"url": "/hft"}, tag=f"grid-{event}")

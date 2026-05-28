@@ -957,3 +957,25 @@ async def scenario_analysis():
         "margin_per_trade": margin_per_trade,
         "max_concurrent": max_open,
     }
+
+
+# ─── Push Notifications ───────────────────────────────────────────
+
+from fastapi import Request
+
+@router.post("/push/subscribe")
+async def push_subscribe(req: Request):
+    """Mobil PWA cihazından gelen push subscription'ı kaydeder."""
+    try:
+        sub = await req.json()
+        from services.push_notification import save_subscription
+        success = await save_subscription(sub)
+        return {"success": success}
+    except Exception as e:
+        return {"error": str(e)}
+
+@router.get("/push/public-key")
+async def get_push_public_key():
+    """Frontend'in PWA aboneliği için VAPID Public Key'ini döner."""
+    from services.push_notification import VAPID_PUBLIC_KEY
+    return {"key": VAPID_PUBLIC_KEY}

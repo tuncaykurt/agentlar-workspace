@@ -23,6 +23,7 @@ import json
 import time
 from datetime import datetime, timezone
 from core.redis_client import get_redis
+from services.push_notification import push_trade_notification, push_grid_event
 
 
 class GridLiveEngine:
@@ -802,6 +803,7 @@ class GridLiveEngine:
                                     state["last_level"] = -1
                                     await self._sync_hft_bounds(redis, state)
                                     print(f"[GridLive] BB Yön: Orta çizgi kesildi ({bb_dir_last_mid_side} -> {current_mid_side}), grid yeniden başlatıldı")
+                                    asyncio.create_task(push_grid_event("signal_" + active_dir, f"Orta çizgi {current_mid_side} kesildi."))
                                 
                                 state["bb_dir_last_mid_side"] = current_mid_side
                                 await redis.set("grid_live:state", json.dumps(state))
@@ -866,6 +868,7 @@ class GridLiveEngine:
                                 state["last_level"] = -1
                                 await self._sync_hft_bounds(redis, state)
                                 print(f"[GridLive] EMA Trend: {active_dir.upper()} Sinyali! Grid başlatıldı.")
+                                asyncio.create_task(push_grid_event("signal_" + active_dir, f"EMA Trend Kesişimi!"))
                             await redis.set("grid_live:state", json.dumps(state))
                             return None # Sinyal bekleniyor
                             
@@ -1329,6 +1332,8 @@ class GridLiveEngine:
         redis = get_redis()
         await redis.lpush("grid_live:trades", json.dumps(trade))
         await redis.ltrim("grid_live:trades", 0, 199)
+        
+        asyncio.create_task(push_trade_notification(trade))
 
         return trade
 
