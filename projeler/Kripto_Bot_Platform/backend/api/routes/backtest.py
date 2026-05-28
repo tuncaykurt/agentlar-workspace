@@ -27,7 +27,7 @@ def _compute_indicators(ohlcv: list, strategy: str, params: dict, step: int, ext
                 out.append({"time": int(t), "value": round(float(v), 8)})
         return out[::step]
 
-    if strategy in ("bb_ema_cross", "bollinger_bounce") or strategy.startswith("grid_"):
+    if strategy in ("bb_ema_cross", "bollinger_bounce") or (strategy.startswith("grid_") and strategy != "grid_ema_trend"):
         period  = int(params.get("bb_period") or params.get("period") or 20)
         std_dev = float(params.get("bb_std") or params.get("std_dev") or 2.0)
         sma   = s.rolling(period).mean()
@@ -35,6 +35,22 @@ def _compute_indicators(ohlcv: list, strategy: str, params: dict, step: int, ext
         indicators["bb_upper"] = make_line(sma + std_dev * std)
         indicators["bb_mid"]   = make_line(sma)
         indicators["bb_lower"] = make_line(sma - std_dev * std)
+
+    if strategy == "grid_ema_trend":
+        indicators["custom_ema_6"] = make_line(s.ewm(span=6, adjust=False).mean())
+        indicators["custom_ema_14"] = make_line(s.ewm(span=14, adjust=False).mean())
+        indicators["custom_ema_50"] = make_line(s.ewm(span=50, adjust=False).mean())
+        indicators["custom_ema_200"] = make_line(s.ewm(span=200, adjust=False).mean())
+        
+        ema_exit_mode = params.get("ema_exit_mode", "ema_cross")
+        if ema_exit_mode == "bollinger":
+            period  = int(params.get("bb_period") or 20)
+            std_dev = float(params.get("bb_std") or 2.0)
+            sma   = s.rolling(period).mean()
+            std   = s.rolling(period).std()
+            indicators["bb_upper"] = make_line(sma + std_dev * std)
+            indicators["bb_mid"]   = make_line(sma)
+            indicators["bb_lower"] = make_line(sma - std_dev * std)
 
     if strategy == "bb_ema_cross":
         fast = int(params.get("ema_fast", 5))

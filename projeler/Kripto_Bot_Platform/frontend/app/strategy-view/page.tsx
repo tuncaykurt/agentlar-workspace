@@ -301,7 +301,7 @@ export default function StrategyViewPage() {
       const res = await api.post("/backtest/run", {
         symbol, timeframe, strategy, days,
         initial_balance: Number(initialBalance) || 10000,
-        risk_per_trade: strategy.startsWith("grid_") ? 0.02 : (Number(riskPct) || 2) / 100,
+        risk_per_trade: strategy.startsWith("grid_") ? (Number(riskPct) || 1000) : (Number(riskPct) || 2) / 100,
         leverage: Number(leverage) || 1,
         stop_loss_pct: Number(slPct) || 3,
         take_profit_pct: Number(tpPct) || 6,
