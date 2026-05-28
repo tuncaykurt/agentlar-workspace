@@ -371,20 +371,18 @@ export default function HftPage() {
   }, [simRunning, tradingMode, gridMode, simBbMeta, filterSqueeze, filterMidline, activeDirection, bbDirPaused, bbDirWaitCross])
 
   const isBackendWaiting = useMemo(() => {
-    if (!simRunning || !isBackendMode || !backendStatus) return false
-    
-    const state = backendStatus.state || {}
-    
+    if (!backendStatus?.running || !backendStatus?.state) return false
+    const state = backendStatus.state
     if (state.grid_mode === "bb_direction") {
-      if (state.bb_dir_paused || state.bb_dir_wait_cross) return true
+      if (state.bb_dir_paused || state.upper === 0) return true
       return false
     }
-
+    // ema_trend check
     if (state.grid_mode === "ema_trend") {
-      if (state.ema_paused || state.ema_wait_cross) return true
+      if (state.ema_paused || state.upper === 0) return true
       return false
     }
-
+    // bb_paused check
     if (state.bb_paused) return true
     
     if (state.grid_mode && state.grid_mode !== "manual") {
@@ -1354,10 +1352,10 @@ export default function HftPage() {
               'text-emerald-400'
             }`}>
               {!simRunning ? '○ Durdu' :
-               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.state?.bb_dir_paused && !backendStatus?.state?.bb_dir_wait_cross : bbDirPaused && !bbDirWaitCross) ? '● Grid Kapalı (Kesişim Bekleniyor)' :
-               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.state?.bb_dir_wait_cross : bbDirWaitCross) ? '● Avda Bekliyor (Orta Çizgi)' :
-               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.state?.ema_paused && !backendStatus?.state?.ema_wait_cross : false) ? '● Grid Kapalı (Yeni Kesişim)' :
-               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.state?.ema_wait_cross : false) ? '● Avda Bekliyor (EMA Trend)' :
+               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.state?.bb_dir_paused && backendStatus?.state?.upper > 0 : bbDirPaused && !bbDirWaitCross) ? '● Grid Kapalı (Kesişim Bekleniyor)' :
+               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.state?.upper === 0 : bbDirWaitCross) ? '● Avda Bekliyor (Orta Çizgi)' :
+               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.state?.ema_paused && backendStatus?.state?.upper > 0 : false) ? '● Grid Kapalı (Yeni Kesişim)' :
+               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.state?.upper === 0 : false) ? '● Avda Bekliyor (EMA Trend)' :
                isWaiting ? `● Avda (Bekliyor)` :
                `● ${activeDirection === 'long' ? '↑ LONG' : '↓ SHORT'} Çalışıyor (${mc.label})`}
             </div>

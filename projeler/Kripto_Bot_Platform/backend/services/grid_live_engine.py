@@ -576,6 +576,7 @@ class GridLiveEngine:
                         if bb_dir_wait_cross:
                             # Orta çizgi kesimi bekleniyor
                             if bb_dir_last_mid_side and current_mid_side != bb_dir_last_mid_side:
+                                print(f"[GridLive] BUG-CATCH: Cross triggered! last_side={bb_dir_last_mid_side}, current={current_mid_side}, price={current_price}, mid={state.get('bb_mid')}")
                                 # Orta çizgi kesildi! Grid'i yeniden başlat
                                 state["bb_dir_wait_cross"] = False
                                 state["bb_dir_paused"] = False
