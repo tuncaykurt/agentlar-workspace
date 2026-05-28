@@ -95,6 +95,7 @@ export default function HftPage() {
   const [bbPeriod, setBbPeriod] = useState("20")
   const [bbStdDev, setBbStdDev] = useState("2.0")
   const [minSpread, setMinSpread] = useState("0.3")
+  const [minEmaPct, setMinEmaPct] = useState("1.0")
   const [filterRsi, setFilterRsi] = useState(true)
   const [filterSqueeze, setFilterSqueeze] = useState(true)
   const [filterMidline, setFilterMidline] = useState(true)
@@ -234,9 +235,10 @@ export default function HftPage() {
     if (hftSettings.bb_period != null) setBbPeriod(String(hftSettings.bb_period))
     if (hftSettings.bb_std_dev != null) setBbStdDev(String(hftSettings.bb_std_dev))
     if (hftSettings.min_spread_pct != null) setMinSpread(String(hftSettings.min_spread_pct))
+    if (hftSettings.min_ema_pct != null) setMinEmaPct(String(hftSettings.min_ema_pct))
   }, [
     hftSettings.spread_pct, hftSettings.grid_count, hftSettings.leverage, hftSettings.order_size,
-    hftSettings.grid_mode, hftSettings.bb_timeframe, hftSettings.bb_period, hftSettings.bb_std_dev, hftSettings.min_spread_pct
+    hftSettings.grid_mode, hftSettings.bb_timeframe, hftSettings.bb_period, hftSettings.bb_std_dev, hftSettings.min_spread_pct, hftSettings.min_ema_pct
   ])
 
   const spreadPct = Number(localSpread) || hftSettings.spread_pct || 1.5
@@ -661,9 +663,10 @@ export default function HftPage() {
         const res = await api.post("/simulations/hft-bb-data", {
           symbol,
           bb_timeframe: bbTimeframe,
-          bb_period: Number(bbPeriod) || 20,
-          bb_std_dev: Number(bbStdDev) || 2.0,
-          min_spread_pct: Number(minSpread) || 0.3,
+          bb_period: Number(bbPeriod),
+          bb_std_dev: Number(bbStdDev),
+          min_spread_pct: Number(minSpread),
+          filters: { min_ema_pct: Number(minEmaPct) },
           current_price: livePrice,
         })
         if (res.error || !res.bb_upper) return
@@ -696,7 +699,7 @@ export default function HftPage() {
       } catch {}
     }, 60000) // 60 saniye
     return () => clearInterval(interval)
-  }, [tradingMode, simRunning, gridMode, symbol, bbTimeframe, bbPeriod, bbStdDev, minSpread])
+  }, [tradingMode, simRunning, gridMode, symbol, bbTimeframe, bbPeriod, bbStdDev, minSpread, minEmaPct])
 
   const gridStep = gridBounds ? (gridBounds.upper - gridBounds.lower) / gridCount : 0
   // Kontrat bazlı tahmini kademe kari (margin bazli)
@@ -788,6 +791,7 @@ export default function HftPage() {
       bb_period: Number(bbPeriod) || 20,
       bb_std_dev: Number(bbStdDev) || 2.0,
       min_spread_pct: Number(minSpread) || 0.3,
+      min_ema_pct: Number(minEmaPct) || 1.0,
     })
     mutateHftSettings()
 
@@ -1102,6 +1106,7 @@ export default function HftPage() {
               <option value="bollinger">Bollinger Grid</option>
               <option value="hybrid">Hibrit (BB+Filtre)</option>
               <option value="bb_direction">BB Yön (Oto Long/Short)</option>
+              <option value="ema_trend">EMA Trend (Oto)</option>
             </select>
           </div>
 
@@ -1109,12 +1114,12 @@ export default function HftPage() {
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Yön</span>
             <select
-              value={gridMode === "bb_direction" ? "auto" : gridDirection}
+              value={["bb_direction", "ema_trend"].includes(gridMode) ? "auto" : gridDirection}
               onChange={e => { setGridDirection(e.target.value as GridDirection); updateHftSetting("grid_direction", e.target.value); }}
-              disabled={simRunning || gridMode === "bb_direction"}
+              disabled={simRunning || ["bb_direction", "ema_trend"].includes(gridMode)}
               className={`bg-[#020817] border rounded-md px-3 py-1.5 text-sm font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50 ${
-                (gridMode === "bb_direction" ? "auto" : activeDirection) === "long" ? "border-emerald-500/50 text-emerald-400" : 
-                (gridMode === "bb_direction" ? "auto" : activeDirection) === "short" ? "border-red-500/50 text-red-400" :
+                (["bb_direction", "ema_trend"].includes(gridMode) ? "auto" : activeDirection) === "long" ? "border-emerald-500/50 text-emerald-400" : 
+                (["bb_direction", "ema_trend"].includes(gridMode) ? "auto" : activeDirection) === "short" ? "border-red-500/50 text-red-400" :
                 "border-indigo-500/50 text-indigo-400"
               }`}
             >
@@ -1150,28 +1155,39 @@ export default function HftPage() {
               <option value="15m">15 dk</option>
               <option value="1h">1 saat</option>
             </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">BB Periyot</span>
-            <input type="number" value={bbPeriod} onChange={e => setBbPeriod(e.target.value)} onBlur={e => commitSetting("bb_period", e.target.value, 20)} onKeyDown={e => e.key === "Enter" && commitSetting("bb_period", e.target.value, 20)}
-              min={10} max={50} disabled={simRunning}
-              className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">BB Sapma</span>
-            <input type="number" value={bbStdDev} onChange={e => setBbStdDev(e.target.value)} onBlur={e => commitSetting("bb_std_dev", e.target.value, 2.0)} onKeyDown={e => e.key === "Enter" && commitSetting("bb_std_dev", e.target.value, 2.0)}
-              min={1} max={3} step={0.1} disabled={simRunning}
-              className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Min Spread %</span>
-            <input type="number" value={minSpread} onChange={e => setMinSpread(e.target.value)} onBlur={e => commitSetting("min_spread_pct", e.target.value, 0.3)} onKeyDown={e => e.key === "Enter" && commitSetting("min_spread_pct", e.target.value, 0.3)}
-              min={0.1} max={5} step={0.1} disabled={simRunning}
-              className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
-            />
-          </div>
+          {gridMode === "ema_trend" ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">%50-200 Fark</span>
+              <input type="number" value={minEmaPct} onChange={e => setMinEmaPct(e.target.value)} onBlur={e => commitSetting("min_ema_pct", e.target.value, 1.0)} onKeyDown={e => e.key === "Enter" && commitSetting("min_ema_pct", e.target.value, 1.0)}
+                min={0} max={10} step={0.1} disabled={simRunning}
+                className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+              />
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">BB Periyot</span>
+                <input type="number" value={bbPeriod} onChange={e => setBbPeriod(e.target.value)} onBlur={e => commitSetting("bb_period", e.target.value, 20)} onKeyDown={e => e.key === "Enter" && commitSetting("bb_period", e.target.value, 20)}
+                  min={10} max={50} disabled={simRunning}
+                  className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">BB Sapma</span>
+                <input type="number" value={bbStdDev} onChange={e => setBbStdDev(e.target.value)} onBlur={e => commitSetting("bb_std_dev", e.target.value, 2.0)} onKeyDown={e => e.key === "Enter" && commitSetting("bb_std_dev", e.target.value, 2.0)}
+                  min={1} max={3} step={0.1} disabled={simRunning}
+                  className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Min Spread %</span>
+                <input type="number" value={minSpread} onChange={e => setMinSpread(e.target.value)} onBlur={e => commitSetting("min_spread_pct", e.target.value, 0.3)} onKeyDown={e => e.key === "Enter" && commitSetting("min_spread_pct", e.target.value, 0.3)}
+                  min={0.1} max={5} step={0.1} disabled={simRunning}
+                  className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+                />
+              </div>
+            </>
+          )}
           </>
           )}
 

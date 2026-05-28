@@ -336,6 +336,8 @@ def calculate_bb_for_grid(ohlcv: list, period: int = 20, std_dev: float = 2.0) -
         "ema14": round(float(ema14.iloc[-1]), 8),
         "ema50": round(float(ema50.iloc[-1]), 8),
         "ema200": round(float(ema200.iloc[-1]), 8),
+        "prev_ema6": round(float(ema6.iloc[-2]), 8),
+        "prev_ema14": round(float(ema14.iloc[-2]), 8),
     }
 
 

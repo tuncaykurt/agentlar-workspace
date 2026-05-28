@@ -240,6 +240,9 @@ class GridLiveEngine:
             "bb_dir_paused": False,       # Bant dokunusu sonrası duraklama
             "bb_dir_wait_cross": grid_mode == "bb_direction",   # BB Yön moduysa baştan Avda Bekle!
             "bb_dir_last_mid_side": "",   # Son orta çizgi tarafı ("above" / "below")
+            # EMA Trend modu ek alanları
+            "ema_paused": False,
+            "ema_wait_cross": grid_mode == "ema_trend",
         }
 
         await redis.set("grid_live:state", json.dumps(state))
@@ -608,6 +611,64 @@ class GridLiveEngine:
                         if not bb_dir_last_mid_side:
                             state["bb_dir_last_mid_side"] = current_mid_side
 
+                    # EMA Trend lifecycle kontrolleri
+                    if grid_mode == "ema_trend":
+                        ema_paused = state.get("ema_paused", False)
+                        ema_wait_cross = state.get("ema_wait_cross", False)
+                        
+                        ema6 = bb_meta.get("ema6", 0)
+                        ema14 = bb_meta.get("ema14", 0)
+                        ema50 = bb_meta.get("ema50", 0)
+                        ema200 = bb_meta.get("ema200", 0)
+                        prev_ema6 = bb_meta.get("prev_ema6", 0)
+                        prev_ema14 = bb_meta.get("prev_ema14", 0)
+                        min_ema_pct = filters.get("min_ema_pct", 1.0)
+                        
+                        # Koşullar (Long)
+                        trend_long = (ema50 > ema200) and ((ema50 - ema200) / max(ema200, 1) * 100 >= min_ema_pct)
+                        cross_long = (ema6 > ema14) and (prev_ema6 <= prev_ema14)
+                        pullback_long = current_price > ema50
+                        long_cond = trend_long and cross_long and pullback_long
+                        
+                        # Koşullar (Short)
+                        trend_short = (ema50 < ema200) and ((ema200 - ema50) / max(ema50, 1) * 100 >= min_ema_pct)
+                        cross_short = (ema6 < ema14) and (prev_ema6 >= prev_ema14)
+                        pullback_short = current_price < ema50
+                        short_cond = trend_short and cross_short and pullback_short
+                        
+                        if ema_wait_cross:
+                            # Kesişim bekleniyor
+                            if long_cond or short_cond:
+                                # Sinyal geldi! Grid'i başlat!
+                                state["ema_wait_cross"] = False
+                                state["ema_paused"] = False
+                                state["band_exited"] = False
+                                state["band_exit_side"] = None
+                                state["active_direction"] = "long" if long_cond else "short"
+                                active_dir = state["active_direction"]
+                                
+                                # Grid'i sıfırla ve fiyata merkezle
+                                spread_pct = state.get("spread_pct", 5.0)
+                                new_upper = current_price * (1 + spread_pct / 200)
+                                new_lower = current_price * (1 - spread_pct / 200)
+                                state["upper"] = new_upper
+                                state["lower"] = new_lower
+                                new_step = (new_upper - new_lower) / grid_count
+                                state["step"] = new_step
+                                state["levels"] = [round(new_lower + i * new_step, 8) for i in range(grid_count + 1)]
+                                state["filled_levels"] = []
+                                state["entry_prices"] = {}
+                                state["last_level"] = -1
+                                await self._sync_hft_bounds(redis, state)
+                                print(f"[GridLive] EMA Trend: {active_dir.upper()} Sinyali! Grid başlatıldı.")
+                            await redis.set("grid_live:state", json.dumps(state))
+                            return None # Sinyal bekleniyor
+                            
+                        if ema_paused:
+                            state["ema_wait_cross"] = True
+                            await redis.set("grid_live:state", json.dumps(state))
+                            return None
+
                     # RSI filtresi — yön bazlı
                     if filters.get("rsi_filter"):
                         if active_dir == "long":
@@ -737,7 +798,7 @@ class GridLiveEngine:
                                 entry_prices.pop(str(lvl), None)
 
         # ═══ BAND EXIT CLOSE — bant dışına çık + geri gir = tüm pozisyonları kapat ═══
-        if grid_mode in ("bollinger", "hybrid", "bb_direction") and filled:
+        if grid_mode in ("bollinger", "hybrid", "bb_direction", "ema_trend") and filled:
             bb_upper = state.get("bb_upper", 0)
             bb_lower = state.get("bb_lower", 0)
             band_exited = state.get("band_exited", False)
@@ -797,10 +858,13 @@ class GridLiveEngine:
                     print(f"[GridLive] 🔄 Band RE-ENTRY: tüm pozisyonlar kapatıldı | "
                           f"pnl=${net_pnl:.4f} | {len(close_levels)} seviye")
 
-                    # BB Yön modunda → grid'i duraklat, orta çizgi kesimi bekle
+                    # BB Yön / EMA Trend modunda → grid'i duraklat, kesimi bekle
                     if grid_mode == "bb_direction":
                         state["bb_dir_paused"] = True
                         print(f"[GridLive] ⏸ BB Yön: Bant dokunusu sonrası durduruldu, orta çizgi kesimi bekleniyor")
+                    elif grid_mode == "ema_trend":
+                        state["ema_paused"] = True
+                        print(f"[GridLive] ⏸ EMA Trend: Bant dokunusu sonrası durduruldu, yeni kesişim bekleniyor")
 
         state["entry_prices"] = entry_prices
 

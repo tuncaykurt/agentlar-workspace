@@ -77,8 +77,10 @@ export const INDICATOR_LIBRARY: Indicator[] = [
   {
     id: "ema", name: "EMA", type: "overlay", lineWidth: 1, enabled: true,
     periods: [
-      { period: 9,   color: "#3b82f6" },
-      { period: 21,  color: "#f97316" },
+      { period: 6,   color: "#3b82f6" },
+      { period: 14,  color: "#f97316" },
+      { period: 50,  color: "#eab308" },
+      { period: 200, color: "#ef4444" },
     ],
   },
   { id: "sma20",   name: "SMA 20",           type: "overlay",    color: "#06b6d4", lineWidth: 1, enabled: false },
@@ -584,6 +586,12 @@ export default function ProChart({
       setInds(prev => prev.map(i => {
         if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: true }
         if (i.id === "ema") return { ...i, enabled: false }
+        return i
+      }))
+    } else if (gridMode === "ema_trend") {
+      setInds(prev => prev.map(i => {
+        if (i.id === "ema" || i.id === "rsi") return { ...i, enabled: true }
+        if (i.id === "bb") return { ...i, enabled: false }
         return i
       }))
     } else if (gridMode === "manual") {
