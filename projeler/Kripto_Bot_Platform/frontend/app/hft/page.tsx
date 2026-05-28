@@ -101,6 +101,7 @@ export default function HftPage() {
   const [filterSqueeze, setFilterSqueeze] = useState(true)
   const [filterMidline, setFilterMidline] = useState(true)
   const [filterAtrStep, setFilterAtrStep] = useState(false)
+  const [smartStartWait, setSmartStartWait] = useState(true)
   const [gridDirection, setGridDirection] = useState<GridDirection>("long")
   const [autoGridCount, setAutoGridCount] = useState(false) // Otomatik kademe sayisi
   const [suggestedGrid, setSuggestedGrid] = useState<{ count: number; step: number; stepPct: number; atrRatio: number } | null>(null)
@@ -744,6 +745,7 @@ export default function HftPage() {
         min_spread_pct: Number(minSpread) || 0.3,
         current_price: livePrice,
         grid_mode: gridMode,
+        smart_start_wait: smartStartWait,
       })
       if (res.error) {
         alert(`BB Hatasi: ${res.error}`)
@@ -882,6 +884,7 @@ export default function HftPage() {
           min_ema_pct: Number(minEmaPct) || 1.0,
           ema_exit_mode: emaExitMode,
         },
+        smart_start_wait: smartStartWait,
       })
 
       if (result.error) {
@@ -1337,6 +1340,16 @@ export default function HftPage() {
                 <input type="checkbox" checked={filterAtrStep} onChange={e => setFilterAtrStep(e.target.checked)} disabled={simRunning}
                   className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
                 <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors">ATR Min Step</span>
+              </label>
+            </div>
+          )}
+          
+          {(gridMode === "bb_direction" || gridMode === "ema_trend") && (
+            <div className="flex flex-wrap gap-2 w-full mt-2 pt-2 border-t border-indigo-500/20">
+              <label className="flex items-center gap-1.5 cursor-pointer group" title="Kesişim çok eskideyse bile hemen işlemlere başlar. Kapalıysa taze sinyal bekler.">
+                <input type="checkbox" checked={!smartStartWait} onChange={e => setSmartStartWait(!e.target.checked)} disabled={simRunning}
+                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
+                <span className="text-[10px] text-emerald-400 group-hover:text-emerald-300 transition-colors font-bold">Avda Bekleme (Anında Başla)</span>
               </label>
             </div>
           )}

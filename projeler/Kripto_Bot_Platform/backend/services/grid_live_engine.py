@@ -286,12 +286,20 @@ class GridLiveEngine:
 
             # ── Akıllı Başlangıç: son mumları kontrol et ──
             # Eğer son 3 mum içinde orta çizgi kesimi olduysa hemen başla
+            smart_start_wait = config.get("smart_start_wait", True)
+            
             recent_cross = await self._check_recent_midline_cross(
                 ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, lookback=3
             )
             
+            if not smart_start_wait:
+                recent_cross["crossed"] = True
+                recent_cross["direction"] = "long" if recent_cross.get("current_side", "above") == "above" else "short"
+                if recent_cross.get("current_side") in ["long", "short"]:
+                     recent_cross["direction"] = recent_cross["current_side"]
+            
             if recent_cross["crossed"]:
-                # Sinyal taze! Hemen grid kur ve başla
+                # Sinyal taze veya hemen başla seçili! Hemen grid kur ve başla
                 active_dir = recent_cross["direction"]
                 bb_upper_new = bb_data.get("bb_upper", 0)
                 bb_lower_new = bb_data.get("bb_lower", 0)

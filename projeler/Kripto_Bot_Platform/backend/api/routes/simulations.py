@@ -413,9 +413,18 @@ async def hft_bb_data(data: dict):
         grid_mode = data.get("grid_mode", "")
         if grid_mode == "bb_direction":
             from services.grid_live_engine import grid_engine
+            smart_start_wait = data.get("smart_start_wait", True)
+            
             recent_cross = await grid_engine._check_recent_midline_cross(
                 ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, lookback=3
             )
+            
+            if not smart_start_wait:
+                recent_cross["crossed"] = True
+                recent_cross["direction"] = "long" if recent_cross.get("current_side", "above") == "above" else "short"
+                if recent_cross.get("current_side") in ["long", "short"]:
+                     recent_cross["direction"] = recent_cross["current_side"]
+            
             bb_data["recent_cross"] = recent_cross.get("crossed", False)
             bb_data["recent_cross_direction"] = recent_cross.get("direction", "")
             bb_data["current_side"] = recent_cross.get("current_side", "above")
