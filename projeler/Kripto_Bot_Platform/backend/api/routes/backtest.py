@@ -92,7 +92,7 @@ class BacktestRequest(BaseModel):
     strategy: str = "ema_cross"
     days: int = Field(default=90, ge=7, le=365)
     initial_balance: float = Field(default=10000, ge=100)
-    risk_per_trade: float = Field(default=0.02, ge=0.005, le=0.1)
+    risk_per_trade: float = Field(default=0.02, ge=0.005, le=1000000.0)
     leverage: int = Field(default=3, ge=1, le=500)
     stop_loss_pct: float = Field(default=2.0, ge=0.1, le=50)
     take_profit_pct: float = Field(default=4.0, ge=0.1, le=200)
@@ -124,14 +124,17 @@ async def run_backtest(req: BacktestRequest):
             "symbol": req.symbol,
             "grid_mode": grid_mode,
             "grid_direction": "auto" if grid_mode in ("bollinger", "hybrid", "bb_direction") else "long",
-            "grid_count": req.params.get("grid_count", 20),
-            "bb_period": req.params.get("bb_period", 20),
-            "bb_std_dev": req.params.get("bb_std_dev", 2.0),
+            "grid_count": req.params.get("Kademe", 20),
+            "bb_period": req.params.get("BB_Periyot", 20),
+            "bb_std_dev": req.params.get("BB_Sapma", 2.0),
             "initial_balance": req.initial_balance,
-            "order_size": req.params.get("budget", 1000),
+            "order_size": req.risk_per_trade,
             "leverage": req.leverage,
             "fee_pct": req.fee_pct,
-            "min_spread_pct": req.params.get("min_spread_pct", 0.3),
+            "min_spread_pct": req.params.get("Min_Spread_Pct", 0.3),
+            "ema_exit_mode": req.params.get("ema_exit_mode", "ema_cross"),
+            "min_ema_pct": req.params.get("min_ema_pct", 1.0),
+            "spread_pct": req.params.get("Spread_Pct", 1.5),
             "filters": req.params.get("filters", {"rsi_filter": True, "squeeze_filter": True, "midline_filter": True}),
         })
     else:

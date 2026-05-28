@@ -75,10 +75,12 @@ const STRATEGIES = [
   { id: "grid_bollinger",   name: "Bollinger Grid",   params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0, Min_Spread_Pct: 0.3 } },
   { id: "grid_hybrid",      name: "Hibrit Grid (BB+Filtre)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0, Min_Spread_Pct: 0.3 } },
   { id: "grid_bb_direction",name: "BB Yön (Oto Long/Short)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0, Min_Spread_Pct: 0.3 } },
+  { id: "grid_ema_trend",   name: "EMA Trend (Oto)",  params: { min_ema_pct: 1.0, ema_exit_mode: "ema_cross", Kademe: 15, Spread_Pct: 1.5 } },
 ]
 
 const PARAM_OPTIONS: Record<string, Record<string, string[]>> = {
   bb_ema_cross: { direction: ["both", "long", "short"] },
+  grid_ema_trend: { ema_exit_mode: ["ema_cross", "bollinger", "touch_ema50", "touch_ema200"] },
 }
 
 const SYMBOLS   = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT", "XRP/USDT:USDT", "DOGE/USDT:USDT", "BNB/USDT:USDT"]
