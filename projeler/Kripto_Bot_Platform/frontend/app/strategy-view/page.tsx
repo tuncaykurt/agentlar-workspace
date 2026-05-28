@@ -214,6 +214,7 @@ export default function StrategyViewPage() {
   const [riskPct,        setRiskPct]        = useState("2")
   const [slPct,          setSlPct]          = useState("3")
   const [tpPct,          setTpPct]          = useState("6")
+  const [budgetMode,     setBudgetMode]     = useState("fixed") // "fixed" or "percent"
 
   useEffect(() => {
     setCustomInds(loadCustomInds().filter(i => i.producesSignals))
@@ -305,7 +306,7 @@ export default function StrategyViewPage() {
         leverage: Number(leverage) || 1,
         stop_loss_pct: Number(slPct) || 3,
         take_profit_pct: Number(tpPct) || 6,
-        params: mergedParams,
+        params: { ...mergedParams, budget_mode: budgetMode },
       })
       setResult(res)
     } catch (e) {
@@ -397,12 +398,24 @@ export default function StrategyViewPage() {
                 className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
             {strategy.startsWith("grid_") ? (
-              <label className="block">
-                <span className="text-xs text-slate-400">Toplam Grid Bütçesi ($)</span>
-                <input type="number" value={riskPct}
-                  onChange={e => setRiskPct(e.target.value)}
-                  className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
-              </label>
+              <>
+                <label className="block">
+                  <span className="text-xs text-slate-400">Bütçe Tipi</span>
+                  <select value={budgetMode} onChange={e => setBudgetMode(e.target.value)}
+                    className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white">
+                    <option value="fixed">Sabit Tutar ($)</option>
+                    <option value="percent">Kasa Yüzdesi (%)</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs text-slate-400">
+                    {budgetMode === "fixed" ? "Toplam Grid Bütçesi ($)" : "Grid Bütçesi (Kasa %)"}
+                  </span>
+                  <input type="number" value={riskPct}
+                    onChange={e => setRiskPct(e.target.value)}
+                    className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+                </label>
+              </>
             ) : (
               <>
                 <label className="block">

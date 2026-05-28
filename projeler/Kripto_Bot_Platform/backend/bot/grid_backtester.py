@@ -58,6 +58,7 @@ class GridBacktestEngine:
         
         state = {
             "upper": 0, "lower": 0, "step": 0, "levels": [],
+            "margin_per_level": self.margin_per_level,
             "filled": set(), "entry_prices": {},
             "last_level": -1,
             "bb_dir_paused": False, "bb_dir_wait_cross": self.grid_mode == "bb_direction",
@@ -126,6 +127,10 @@ class GridBacktestEngine:
                         state["lower"] = price * (1 - spread_pct / 200)
                         state["step"] = (state["upper"] - state["lower"]) / self.grid_count
                         state["levels"] = [state["lower"] + j * state["step"] for j in range(self.grid_count + 1)]
+                        if self.config.get("budget_mode") == "percent":
+                            state["margin_per_level"] = (balance * (self.order_size / 100)) / self.grid_count
+                        else:
+                            state["margin_per_level"] = self.margin_per_level
                         trades.append({"entry_ts": ts, "side": "grid_start", "entry": price, "exit": 0, "pnl": 0, "status": "info", "lvl": 0, "qty": 0})
                         
                         state["filled"] = set()
@@ -155,6 +160,10 @@ class GridBacktestEngine:
                             state["lower"] = price * (1 - bb_spread_pct / 200)
                             state["step"] = (state["upper"] - state["lower"]) / self.grid_count
                             state["levels"] = [state["lower"] + j * state["step"] for j in range(self.grid_count + 1)]
+                            if self.config.get("budget_mode") == "percent":
+                                state["margin_per_level"] = (balance * (self.order_size / 100)) / self.grid_count
+                            else:
+                                state["margin_per_level"] = self.margin_per_level
                             trades.append({"entry_ts": ts, "side": "grid_start", "entry": price, "exit": 0, "pnl": 0, "status": "info", "lvl": 0, "qty": 0})
                         state["filled"] = set()
                         state["entry_prices"] = {}
@@ -194,6 +203,10 @@ class GridBacktestEngine:
                 state["upper"], state["lower"] = bb_upper, bb_lower
                 state["step"] = (bb_upper - bb_lower) / self.grid_count
                 state["levels"] = [state["lower"] + j * state["step"] for j in range(self.grid_count + 1)]
+                if self.config.get("budget_mode") == "percent":
+                    state["margin_per_level"] = (balance * (self.order_size / 100)) / self.grid_count
+                else:
+                    state["margin_per_level"] = self.margin_per_level
                 trades.append({"entry_ts": ts, "side": "grid_start", "entry": price, "exit": 0, "pnl": 0, "status": "info", "lvl": 0, "qty": 0})
                 
             if not state["levels"]: continue
@@ -208,7 +221,7 @@ class GridBacktestEngine:
                 continue
                 
             cs = 0.01 if "BTC" not in self.config.get("symbol", "") else 0.0001
-            contracts = max(1, int((self.margin_per_level * self.leverage) / (price * cs)))
+            contracts = max(1, int((state["margin_per_level"] * self.leverage) / (price * cs)))
             
             if active_dir == "long":
                 if current_level < state["last_level"] and not skip_buy:
@@ -331,7 +344,7 @@ class GridBacktestEngine:
             last_price = float(df.iloc[-1]["close"])
             last_ts = int(df.iloc[-1]["time"])
             cs = 0.01 if "BTC" not in self.config.get("symbol", "") else 0.0001
-            contracts = max(1, int((self.margin_per_level * self.leverage) / (last_price * cs)))
+            contracts = max(1, int((state["margin_per_level"] * self.leverage) / (last_price * cs)))
             active_dir = state.get("active_direction", "long") if self.grid_mode == "ema_trend" else self.grid_direction
             
             for lvl in list(state["filled"]):
