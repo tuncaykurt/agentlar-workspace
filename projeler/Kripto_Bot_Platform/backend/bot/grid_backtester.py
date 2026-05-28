@@ -247,8 +247,8 @@ class GridBacktestEngine:
 
             state["last_level"] = current_level
             
-            # Band exit
-            if state["filled"]:
+            # Band exit (even if not filled, we should close the grid)
+            if state["upper"] > 0:
                 exited = False
                 side = None
                 
@@ -290,6 +290,10 @@ class GridBacktestEngine:
                     if self.grid_mode == "ema_trend":
                         state["ema_paused"] = True
                     trades.append({"entry_ts": ts, "side": "grid_end", "entry": price, "exit": 0, "pnl": 0, "status": "info", "lvl": 0, "qty": 0})
+                    state["upper"] = 0
+                    state["lower"] = 0
+                    state["levels"] = []
+                    continue
 
             # Trailing
             if not state.get("bb_dir_paused"):
@@ -308,6 +312,22 @@ class GridBacktestEngine:
             if state["upper"] > 0:
                 grid_upper_line.append({"time": ts // 1000, "value": round(state["upper"], 8)})
                 grid_lower_line.append({"time": ts // 1000, "value": round(state["lower"], 8)})
+
+        # Force close open positions at the end
+        if state["filled"]:
+            last_price = float(df.iloc[-1]["close"])
+            last_ts = int(df.iloc[-1]["time"])
+            cs = 0.01 if "BTC" not in self.config.get("symbol", "") else 0.0001
+            contracts = max(1, int((self.margin_per_level * self.leverage) / (last_price * cs)))
+            active_dir = state.get("active_direction", "long") if self.grid_mode == "ema_trend" else self.grid_direction
+            
+            for lvl in list(state["filled"]):
+                ep = state["entry_prices"].get(lvl, last_price)
+                gross = (last_price - ep) * contracts * cs if active_dir == "long" else (ep - last_price) * contracts * cs
+                notional = contracts * cs * last_price
+                net_pnl = gross - notional * self.fee_pct * 2
+                balance += net_pnl
+                trades.append({"entry_ts": last_ts, "exit_ts": last_ts, "side": active_dir, "entry": ep, "exit": last_price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": contracts*cs})
 
         # Calculate metrics
         closed = [t for t in trades if t["status"] in ("closed", "band_exit")]
