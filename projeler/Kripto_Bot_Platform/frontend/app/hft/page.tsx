@@ -743,6 +743,7 @@ export default function HftPage() {
         bb_std_dev: Number(bbStdDev) || 2.0,
         min_spread_pct: Number(minSpread) || 0.3,
         current_price: livePrice,
+        grid_mode: gridMode,
       })
       if (res.error) {
         alert(`BB Hatasi: ${res.error}`)
@@ -754,9 +755,29 @@ export default function HftPage() {
         rsi: res.rsi ?? 50, adx: res.adx ?? 0,
         is_squeeze: res.is_squeeze ?? false,
         above_midline: res.above_midline ?? true,
+        recent_cross: res.recent_cross ?? false,
+        recent_cross_direction: res.recent_cross_direction ?? "",
+        current_side: res.current_side ?? "above",
       }
       simBbRef.current = meta
       setSimBbMeta(meta)
+
+      // BB Yön Akıllı Başlangıç: sinyal tazeyse hemen başla, değilse avda bekle
+      if (gridMode === "bb_direction") {
+        if (meta.recent_cross) {
+          // Taze sinyal! Hemen başla
+          setBbDirWaitCross(false)
+          setBbDirPaused(false)
+          bbDirLastMidSideRef.current = meta.current_side
+          console.log(`[HFT Sim] Akıllı Başlangıç: Taze sinyal (${meta.recent_cross_direction}), hemen başlatılıyor`)
+        } else {
+          // Sinyal eski — avda bekle
+          setBbDirWaitCross(true)
+          bbDirLastMidSideRef.current = livePrice > meta.bb_mid ? "above" : "below"
+          console.log(`[HFT Sim] Akıllı Başlangıç: Taze sinyal yok, avda bekleniyor`)
+        }
+      }
+
       setGridBounds({ upper: res.bb_upper, lower: res.bb_lower })
 
       // Otomatik kademe onerisi
@@ -817,9 +838,9 @@ export default function HftPage() {
       simEntryPricesRef.current = new Map()
       localStorage.removeItem("hft_sim_state")
 
-      // BB Yön modunda duraklama/bekleme state'lerini sıfırla
+      // BB Yön modunda duraklama/bekleme state'lerini sıfırla (fetchBbData içinde akıllı başlangıç yapılır)
       setBbDirPaused(false)
-      setBbDirWaitCross(false)
+      if (gridMode !== "bb_direction") setBbDirWaitCross(false)
       bbDirLastMidSideRef.current = null
       bandExitRef.current = { exited: false, side: null }
 

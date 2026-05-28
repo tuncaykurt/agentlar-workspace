@@ -85,6 +85,103 @@ class GridLiveEngine:
               f"(gerçek margin=${actual_margin:.4f})")
         return contracts
 
+    # ─── Akıllı Başlangıç — Son Mumları Analiz Et ─────────────────────
+
+    async def _check_recent_midline_cross(
+        self, ccxt_symbol: str, timeframe: str, bb_period: int, bb_std: float, lookback: int = 3
+    ) -> dict:
+        """Son 'lookback' mum içinde BB orta çizgi kesimi olup olmadığını kontrol eder.
+        Eğer kesim varsa crossed=True ve direction (long/short) döner.
+        """
+        try:
+            ex = await self._get_exchange()
+            ohlcv = await ex.get_ohlcv(ccxt_symbol, timeframe, limit=max(bb_period + lookback + 5, 50))
+            if not ohlcv or len(ohlcv) < bb_period + lookback:
+                return {"crossed": False, "current_side": "long"}
+
+            import pandas as pd
+            df = pd.DataFrame(ohlcv, columns=["ts", "open", "high", "low", "close", "volume"])
+            sma = df["close"].rolling(bb_period).mean()
+
+            # Son N+1 mumun kapanış vs orta çizgi ilişkisini kontrol et
+            recent = df.tail(lookback + 1)
+            sma_recent = sma.tail(lookback + 1)
+
+            sides = []
+            for i in range(len(recent)):
+                c = float(recent.iloc[i]["close"])
+                m = float(sma_recent.iloc[i]) if not pd.isna(sma_recent.iloc[i]) else c
+                sides.append("above" if c > m else "below")
+
+            # Mevcut taraf
+            current_side = sides[-1]
+            current_dir = "long" if current_side == "above" else "short"
+
+            # Son N mumda kesim var mı? (side değişimi)
+            for i in range(1, len(sides)):
+                if sides[i] != sides[i - 1]:
+                    cross_dir = "long" if sides[i] == "above" else "short"
+                    print(f"[GridLive] Akıllı Başlangıç: Son {lookback} mumda orta çizgi kesimi bulundu! "
+                          f"Yön: {cross_dir.upper()} (mum #{i})")
+                    return {"crossed": True, "direction": cross_dir, "current_side": current_side}
+
+            return {"crossed": False, "current_side": current_dir}
+
+        except Exception as e:
+            print(f"[GridLive] Akıllı başlangıç BB kontrol hatası: {e}")
+            return {"crossed": False, "current_side": "long"}
+
+    async def _check_recent_ema_cross(
+        self, ccxt_symbol: str, timeframe: str, min_ema_pct: float = 1.0, lookback: int = 3
+    ) -> dict:
+        """Son 'lookback' mum içinde EMA6/EMA14 kesişimi olup olmadığını kontrol eder."""
+        try:
+            ex = await self._get_exchange()
+            ohlcv = await ex.get_ohlcv(ccxt_symbol, timeframe, limit=250)
+            if not ohlcv or len(ohlcv) < 200:
+                return {"crossed": False}
+
+            import pandas as pd
+            df = pd.DataFrame(ohlcv, columns=["ts", "open", "high", "low", "close", "volume"])
+            ema6 = df["close"].ewm(span=6, adjust=False).mean()
+            ema14 = df["close"].ewm(span=14, adjust=False).mean()
+            ema50 = df["close"].ewm(span=50, adjust=False).mean()
+            ema200 = df["close"].ewm(span=200, adjust=False).mean()
+
+            # Son N+1 mum kontrol et
+            for i in range(-lookback, 0):
+                e6_prev = float(ema6.iloc[i - 1])
+                e14_prev = float(ema14.iloc[i - 1])
+                e6_curr = float(ema6.iloc[i])
+                e14_curr = float(ema14.iloc[i])
+                e50 = float(ema50.iloc[i])
+                e200 = float(ema200.iloc[i])
+                price = float(df.iloc[i]["close"])
+
+                # Long cross
+                trend_long = (e50 > e200) and ((e50 - e200) / max(e200, 1) * 100 >= min_ema_pct)
+                cross_long = (e6_curr > e14_curr) and (e6_prev <= e14_prev)
+                pullback_long = price > e50
+
+                if trend_long and cross_long and pullback_long:
+                    print(f"[GridLive] Akıllı Başlangıç: Son {lookback} mumda EMA LONG kesişimi bulundu!")
+                    return {"crossed": True, "direction": "long"}
+
+                # Short cross
+                trend_short = (e50 < e200) and ((e200 - e50) / max(e50, 1) * 100 >= min_ema_pct)
+                cross_short = (e6_curr < e14_curr) and (e6_prev >= e14_prev)
+                pullback_short = price < e50
+
+                if trend_short and cross_short and pullback_short:
+                    print(f"[GridLive] Akıllı Başlangıç: Son {lookback} mumda EMA SHORT kesişimi bulundu!")
+                    return {"crossed": True, "direction": "short"}
+
+            return {"crossed": False}
+
+        except Exception as e:
+            print(f"[GridLive] Akıllı başlangıç EMA kontrol hatası: {e}")
+            return {"crossed": False}
+
     # ─── Başlat / Durdur ──────────────────────────────────────────────
 
     async def start(self, config: dict) -> dict:
@@ -175,7 +272,7 @@ class GridLiveEngine:
                   f"rsi={bb_data.get('rsi', 0):.1f} adx={bb_data.get('adx', 0):.1f}")
         
         elif grid_mode == "bb_direction":
-            # BB Yön modu: Sadece sinyal ve genişlik için BB kullanılır, başlangıçta grid kapalıdır
+            # BB Yön modu: Sinyal ve genişlik için BB kullanılır
             from services.bollinger_grid_service import BollingerGridService
             self._bb_service = BollingerGridService()
             bb_data = await self._bb_service.compute_grid_bounds(
@@ -186,16 +283,58 @@ class GridLiveEngine:
             if not bb_data:
                 return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamıyor."}
 
-            upper = 0
-            lower = 0
+            # ── Akıllı Başlangıç: son mumları kontrol et ──
+            # Eğer son 3 mum içinde orta çizgi kesimi olduysa hemen başla
+            recent_cross = await self._check_recent_midline_cross(
+                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, lookback=3
+            )
             
-            print(f"[GridLive] BB Yön Modu: Kesişim bekleniyor. upper=${upper} lower=${lower} width={bb_data.get('bb_width', 0):.4f}")
+            if recent_cross["crossed"]:
+                # Sinyal taze! Hemen grid kur ve başla
+                active_dir = recent_cross["direction"]
+                bb_upper_new = bb_data.get("bb_upper", 0)
+                bb_lower_new = bb_data.get("bb_lower", 0)
+                if bb_upper_new > bb_lower_new and current_price > 0:
+                    bb_spread_pct = (bb_upper_new - bb_lower_new) / current_price * 100
+                    upper = current_price * (1 + bb_spread_pct / 200)
+                    lower = current_price * (1 - bb_spread_pct / 200)
+                else:
+                    upper = 0
+                    lower = 0
+                print(f"[GridLive] BB Yön Modu: Taze sinyal bulundu ({active_dir.upper()})! "
+                      f"Grid anında başlatılıyor. upper=${upper:.2f} lower=${lower:.2f}")
+            else:
+                # Sinyal eski veya yok — avda bekle
+                upper = 0
+                lower = 0
+                active_dir = recent_cross.get("current_side", "long")
+                print(f"[GridLive] BB Yön Modu: Taze sinyal yok, avda bekleniyor. "
+                      f"width={bb_data.get('bb_width', 0):.4f}")
 
         elif grid_mode == "ema_trend":
-            # EMA Trend modu: Kesişim bekleniyor, grid başlangıçta kapalı
-            upper = 0
-            lower = 0
-            print(f"[GridLive] EMA Trend Modu: Kesişim bekleniyor. Grid kapalı başlatıldı.")
+            # EMA Trend modu: son mumları kontrol et
+            from services.bollinger_grid_service import BollingerGridService
+            self._bb_service = BollingerGridService()
+            bb_data = await self._bb_service.compute_grid_bounds(
+                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
+                min_spread_pct, current_price
+            ) or {}
+            
+            recent_ema = await self._check_recent_ema_cross(
+                ccxt_symbol, bb_timeframe, filters.get("min_ema_pct", 1.0), lookback=3
+            )
+            
+            if recent_ema["crossed"]:
+                active_dir = recent_ema["direction"]
+                ema_spread = float(config.get("spread_pct", 1.5))
+                upper = current_price * (1 + ema_spread / 200)
+                lower = current_price * (1 - ema_spread / 200)
+                print(f"[GridLive] EMA Trend Modu: Taze sinyal bulundu ({active_dir.upper()})! "
+                      f"Grid anında başlatılıyor.")
+            else:
+                upper = 0
+                lower = 0
+                print(f"[GridLive] EMA Trend Modu: Taze sinyal yok, avda bekleniyor.")
 
         else:
             # Manuel mod — mevcut mantık
@@ -294,13 +433,14 @@ class GridLiveEngine:
             "bb_adx": bb_data.get("adx", 0),
             "bb_paused": False,
             "grid_direction": grid_direction,  # "long" / "short" / "auto"
-            # BB Yön modu ek alanları
-            "bb_dir_paused": False,       # Bant dokunusu sonrası duraklama
-            "bb_dir_wait_cross": grid_mode == "bb_direction",   # BB Yön moduysa baştan Avda Bekle!
-            "bb_dir_last_mid_side": "",   # Son orta çizgi tarafı ("above" / "below")
+            # BB Yön modu ek alanları — Akıllı Başlangıç
+            "bb_dir_paused": False,
+            "bb_dir_wait_cross": grid_mode == "bb_direction" and upper == 0,  # Grid kurulduysa bekleme
+            "bb_dir_last_mid_side": ("above" if current_price > bb_data.get("bb_mid", 0) else "below") if grid_mode == "bb_direction" else "",
+            "active_direction": active_dir if grid_mode in ("bb_direction", "ema_trend") and upper > 0 else grid_direction,
             # EMA Trend modu ek alanları
             "ema_paused": False,
-            "ema_wait_cross": grid_mode == "ema_trend",
+            "ema_wait_cross": grid_mode == "ema_trend" and upper == 0,
         }
 
         await redis.set("grid_live:state", json.dumps(state))

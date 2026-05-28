@@ -409,6 +409,17 @@ async def hft_bb_data(data: dict):
             bb_data["suggested_step_pct"] = 0
             bb_data["atr_step_ratio"] = 0
 
+        # ── Akıllı Başlangıç: son mumları kontrol et ──
+        grid_mode = data.get("grid_mode", "")
+        if grid_mode == "bb_direction":
+            from services.grid_live_engine import grid_engine
+            recent_cross = await grid_engine._check_recent_midline_cross(
+                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, lookback=3
+            )
+            bb_data["recent_cross"] = recent_cross.get("crossed", False)
+            bb_data["recent_cross_direction"] = recent_cross.get("direction", "")
+            bb_data["current_side"] = recent_cross.get("current_side", "above")
+
         return bb_data
     except Exception as e:
         return {"error": f"BB hesaplama hatası: {str(e)}"}
