@@ -869,6 +869,8 @@ export default function HftPage() {
           const upper = livePrice * (1 + spreadPct / 100)
           const lower = livePrice * (1 - spreadPct / 100)
           setGridBounds({ upper, lower })
+        } else {
+          setGridBounds(null) // Grid henüz başlamadıysa temizle
         }
       }
     } catch (e: any) {
