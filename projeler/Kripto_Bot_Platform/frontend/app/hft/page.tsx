@@ -1160,6 +1160,7 @@ export default function HftPage() {
               <option value="15m">15 dk</option>
               <option value="1h">1 saat</option>
             </select>
+          </div>
           {gridMode === "ema_trend" ? (
             <>
               <div className="flex flex-col gap-1">
