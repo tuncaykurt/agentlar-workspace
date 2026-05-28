@@ -605,11 +605,11 @@ export default function ProChart({
 
   // Disaridan aktif bot timeframe gelirse haritayi senkronize et
   useEffect(() => {
-    if (activeTimeframe && activeTimeframe !== tf) {
+    if (activeTimeframe) {
       setTf(activeTimeframe)
       localStorage.setItem("prochart_tf", activeTimeframe)
     }
-  }, [activeTimeframe, tf])
+  }, [activeTimeframe])
 
   const oscillators = inds.filter(i => i.type === "oscillator" && i.enabled)
   const paneRefs    = useRef<Record<string, HTMLDivElement | null>>({})

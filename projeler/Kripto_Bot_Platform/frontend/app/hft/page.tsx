@@ -230,7 +230,6 @@ export default function HftPage() {
     if (hftSettings.leverage != null) setLocalLev(String(hftSettings.leverage))
     if (hftSettings.order_size != null) setLocalOrder(String(hftSettings.order_size))
     
-    // Strateji ve BB parametrelerini backend'den senkronize et
     if (hftSettings.grid_mode) setGridMode(hftSettings.grid_mode as GridMode)
     if (hftSettings.bb_timeframe) setBbTimeframe(hftSettings.bb_timeframe)
     if (hftSettings.bb_period != null) setBbPeriod(String(hftSettings.bb_period))
@@ -238,15 +237,17 @@ export default function HftPage() {
     if (hftSettings.min_spread_pct != null) setMinSpread(String(hftSettings.min_spread_pct))
     if (hftSettings.min_ema_pct != null) setMinEmaPct(String(hftSettings.min_ema_pct))
     if (hftSettings.ema_exit_mode != null) setEmaExitMode(hftSettings.ema_exit_mode)
+    if (hftSettings.budget_mode != null) setBudgetMode(hftSettings.budget_mode)
   }, [
     hftSettings.spread_pct, hftSettings.grid_count, hftSettings.leverage, hftSettings.order_size,
-    hftSettings.grid_mode, hftSettings.bb_timeframe, hftSettings.bb_period, hftSettings.bb_std_dev, hftSettings.min_spread_pct, hftSettings.min_ema_pct, hftSettings.ema_exit_mode
+    hftSettings.grid_mode, hftSettings.bb_timeframe, hftSettings.bb_period, hftSettings.bb_std_dev, hftSettings.min_spread_pct, hftSettings.min_ema_pct, hftSettings.ema_exit_mode, hftSettings.budget_mode
   ])
 
   const spreadPct = Number(localSpread) || hftSettings.spread_pct || 1.5
   const gridCount = Number(localGrid) || hftSettings.grid_count || 20
   const leverage = Number(localLev) || hftSettings.leverage || 10
   const orderSize = Number(localOrder) || hftSettings.order_size || 100
+  const [budgetMode, setBudgetMode] = useState(hftSettings.budget_mode || "fixed")
 
   const commitSetting = (key: string, raw: string, fallback: number) => {
     const v = Number(raw)
@@ -320,6 +321,9 @@ export default function HftPage() {
 
   // Grid sinirlarini SADECE ayar degistiginde veya kullanici "Baslat" dediginde guncelle
   const recalcGrid = () => {
+    setTrades([])
+    setTotalPnl(0)
+    setTradeCount(0)
     if (livePrice <= 0) return
     const upper = livePrice * (1 + spreadPct / 100)
     const lower = livePrice * (1 - spreadPct / 100)
@@ -728,6 +732,9 @@ export default function HftPage() {
 
   // BB verisi cek (sim modu icin)
   const fetchBbData = async (): Promise<boolean> => {
+    setTrades([])
+    setTotalPnl(0)
+    setTradeCount(0)
     try {
       const res = await api.post("/simulations/hft-bb-data", {
         symbol,
@@ -1261,13 +1268,25 @@ export default function HftPage() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Butce ($) <span className="text-slate-500 normal-case font-normal">· kademe ${(orderSize / gridCount).toFixed(2)}</span></span>
-            <input type="number" value={localOrder} onChange={e => setLocalOrder(e.target.value)}
-              onBlur={() => commitSetting("order_size", localOrder, 100)}
-              onKeyDown={e => e.key === "Enter" && commitSetting("order_size", localOrder, 100)}
-              min={1} step={5} disabled={simRunning}
-              className="w-24 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
-            />
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              {budgetMode === "fixed" ? "Bütçe ($)" : "Bütçe (%)"} 
+              <span className="text-slate-500 normal-case font-normal ml-1">
+                {budgetMode === "fixed" ? `· kademe ${(orderSize / gridCount).toFixed(2)}$` : ""}
+              </span>
+            </span>
+            <div className="flex gap-1">
+              <select value={budgetMode} onChange={e => { setBudgetMode(e.target.value); updateHftSetting("budget_mode", e.target.value); }} disabled={simRunning}
+                className="w-16 bg-[#020817] border border-slate-700 rounded-md px-1 py-1.5 text-sm text-slate-300 font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50 appearance-none text-center">
+                <option value="fixed">$</option>
+                <option value="percent">%</option>
+              </select>
+              <input type="number" value={localOrder} onChange={e => setLocalOrder(e.target.value)}
+                onBlur={() => commitSetting("order_size", localOrder, 100)}
+                onKeyDown={e => e.key === "Enter" && commitSetting("order_size", localOrder, 100)}
+                min={1} step={budgetMode === "fixed" ? 5 : 1} max={budgetMode === "fixed" ? 100000 : 100} disabled={simRunning}
+                className="w-16 sm:w-20 bg-[#020817] border border-slate-700 rounded-md px-2 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+              />
+            </div>
           </div>
 
           <button onClick={recalcGrid} disabled={simRunning}

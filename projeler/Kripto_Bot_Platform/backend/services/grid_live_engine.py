@@ -549,37 +549,39 @@ class GridLiveEngine:
             return None
 
         state = json.loads(state_raw)
-        levels = state.get("levels", [])
-        if not levels or len(levels) < 2:
-            return None
-
-        upper = state["upper"]
-        lower = state["lower"]
-        grid_count = state["grid_count"]
-        step = state["step"]
-        mode = state["mode"]
-
+        
+        upper = state.get("upper", 0)
+        lower = state.get("lower", 0)
+        grid_count = state.get("grid_count", 20)
+        step = state.get("step", 0)
+        mode = state.get("mode", "paper")
+        grid_mode = state.get("grid_mode", "manual")
+        
         state["current_price"] = current_price
+        
+        is_waiting = (upper == 0 or lower == 0 or step == 0)
 
-        # Fiyatın hangi grid seviyesinde olduğunu bul
-        if current_price <= lower:
-            current_level = 0
-        elif current_price >= upper:
-            current_level = grid_count
-        else:
-            current_level = int((current_price - lower) / step)
-            current_level = max(0, min(grid_count - 1, current_level))
+        current_level = -1
+        if not is_waiting:
+            # Fiyatın hangi grid seviyesinde olduğunu bul
+            if current_price <= lower:
+                current_level = 0
+            elif current_price >= upper:
+                current_level = grid_count
+            else:
+                current_level = int((current_price - lower) / step)
+                current_level = max(0, min(grid_count - 1, current_level))
 
         last_level = state.get("last_level", -1)
 
-        # İlk tick — sadece seviyeyi kaydet
-        if last_level == -1:
+        # İlk tick — sadece seviyeyi kaydet (eğer beklemiyorsak)
+        if last_level == -1 and not is_waiting:
             state["last_level"] = current_level
             await redis.set("grid_live:state", json.dumps(state))
             return None
 
         # Grid seviyesi değişmedi — sadece trailing kontrol et
-        if current_level == last_level:
+        if current_level == last_level and not is_waiting:
             changed = await self._check_trailing(state, current_price, redis)
             if changed:
                 await redis.set("grid_live:state", json.dumps(state))
@@ -966,10 +968,13 @@ class GridLiveEngine:
         state["entry_prices"] = entry_prices
 
         state["filled_levels"] = list(filled)
-        state["last_level"] = current_level
+        
+        # Sinyal bekleme durumunda değilsek (veya cross az önce gerçekleşmediyse) last_level'i güncelle
+        if not is_waiting:
+            state["last_level"] = current_level
 
-        # Trailing kontrol
-        if not state.get("band_exited", False):
+        # Trailing kontrol (bekleme modunda değilsek)
+        if not state.get("band_exited", False) and not is_waiting:
             await self._check_trailing(state, current_price, redis)
 
         await redis.set("grid_live:state", json.dumps(state))
