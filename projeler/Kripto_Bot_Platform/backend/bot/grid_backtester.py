@@ -216,7 +216,9 @@ class GridBacktestEngine:
                         if lvl not in state["filled"] and 0 <= lvl < self.grid_count:
                             state["filled"].add(lvl)
                             state["entry_prices"][lvl] = price
-                            trades.append({"entry_ts": ts, "side": "buy", "entry": price, "exit": 0, "pnl": 0, "status": "open", "lvl": lvl, "qty": contracts*cs})
+                            margin_used = (contracts * cs * price) / self.leverage
+                            pos_val = contracts * cs * price
+                            trades.append({"entry_ts": ts, "side": "buy", "entry": price, "exit": 0, "pnl": 0, "status": "open", "lvl": lvl, "qty": contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": 0})
                 elif current_level > state["last_level"] and not skip_sell:
                     for lvl in range(state["last_level"], current_level):
                         if lvl in state["filled"]:
@@ -226,14 +228,19 @@ class GridBacktestEngine:
                             notional = contracts * cs * price
                             net_pnl = gross - notional * self.fee_pct * 2
                             balance += net_pnl
-                            trades.append({"entry_ts": ts, "exit_ts": ts, "side": "buy", "entry": ep, "exit": price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": contracts*cs})
+                            margin_used = (contracts * cs * ep) / self.leverage
+                            pos_val = contracts * cs * ep
+                            pnl_pct = (net_pnl / margin_used * 100) if margin_used > 0 else 0
+                            trades.append({"entry_ts": ts, "exit_ts": ts, "side": "buy", "entry": ep, "exit": price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct})
             else: # short
                 if current_level > state["last_level"] and not skip_buy:
                     for lvl in range(state["last_level"] + 1, current_level + 1):
                         if lvl not in state["filled"] and 0 <= lvl < self.grid_count:
                             state["filled"].add(lvl)
                             state["entry_prices"][lvl] = price
-                            trades.append({"entry_ts": ts, "side": "sell", "entry": price, "exit": 0, "pnl": 0, "status": "open", "lvl": lvl, "qty": contracts*cs})
+                            margin_used = (contracts * cs * price) / self.leverage
+                            pos_val = contracts * cs * price
+                            trades.append({"entry_ts": ts, "side": "sell", "entry": price, "exit": 0, "pnl": 0, "status": "open", "lvl": lvl, "qty": contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": 0})
                 elif current_level < state["last_level"] and not skip_sell:
                     for lvl in range(state["last_level"], current_level, -1):
                         if lvl in state["filled"]:
@@ -243,7 +250,10 @@ class GridBacktestEngine:
                             notional = contracts * cs * price
                             net_pnl = gross - notional * self.fee_pct * 2
                             balance += net_pnl
-                            trades.append({"entry_ts": ts, "exit_ts": ts, "side": "sell", "entry": ep, "exit": price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": contracts*cs})
+                            margin_used = (contracts * cs * ep) / self.leverage
+                            pos_val = contracts * cs * ep
+                            pnl_pct = (net_pnl / margin_used * 100) if margin_used > 0 else 0
+                            trades.append({"entry_ts": ts, "exit_ts": ts, "side": "sell", "entry": ep, "exit": price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct})
 
             state["last_level"] = current_level
             
@@ -284,7 +294,10 @@ class GridBacktestEngine:
                         notional = contracts * cs * price
                         net_pnl = gross - notional * self.fee_pct * 2
                         balance += net_pnl
-                        trades.append({"entry_ts": ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": price, "pnl": net_pnl, "status": "band_exit", "lvl": lvl, "qty": contracts*cs})
+                        margin_used = (contracts * cs * ep) / self.leverage
+                        pos_val = contracts * cs * ep
+                        pnl_pct = (net_pnl / margin_used * 100) if margin_used > 0 else 0
+                        trades.append({"entry_ts": ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": price, "pnl": net_pnl, "status": "band_exit", "lvl": lvl, "qty": contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct, "exit_reason": "bb_upper_band" if side == "upper" else "bb_lower_band"})
                     if self.grid_mode == "bb_direction":
                         state["bb_dir_paused"] = True
                     if self.grid_mode == "ema_trend":
@@ -327,7 +340,10 @@ class GridBacktestEngine:
                 notional = contracts * cs * last_price
                 net_pnl = gross - notional * self.fee_pct * 2
                 balance += net_pnl
-                trades.append({"entry_ts": last_ts, "exit_ts": last_ts, "side": active_dir, "entry": ep, "exit": last_price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": contracts*cs})
+                margin_used = (contracts * cs * ep) / self.leverage
+                pos_val = contracts * cs * ep
+                pnl_pct = (net_pnl / margin_used * 100) if margin_used > 0 else 0
+                trades.append({"entry_ts": last_ts, "exit_ts": last_ts, "side": active_dir, "entry": ep, "exit": last_price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct, "exit_reason": "end_of_data"})
 
         # Calculate metrics
         closed = [t for t in trades if t["status"] in ("closed", "band_exit")]
