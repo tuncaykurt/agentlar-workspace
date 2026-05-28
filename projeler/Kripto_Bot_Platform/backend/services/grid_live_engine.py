@@ -56,10 +56,29 @@ class GridLiveEngine:
         contract_size = await self._get_contract_size(ccxt_symbol)
         if contract_size <= 0:
             contract_size = 0.001
+            
+        ex = await self._get_exchange()
+        if not ex.exchange.markets:
+            await ex.exchange.load_markets()
+        market = ex.exchange.market(ccxt_symbol)
+        amount_precision = market.get("precision", {}).get("amount", 1)
+        
         notional = margin_usdt * leverage
-        contracts = int(notional / (price * contract_size))
-        if contracts < 1:
-            contracts = 1
+        raw_contracts = notional / (price * contract_size)
+        
+        # Miktari borsa hassasiyetine gore (ornek: step_size) asagi yuvarla
+        # MEXC vadeli islemlerinde genellikle amount = 1, 2 (tam sayi) olur.
+        if isinstance(amount_precision, float) and amount_precision < 1:
+            decimals = len(str(amount_precision).split(".")[1])
+            factor = 10 ** decimals
+            contracts = int(raw_contracts * factor) / factor
+        else:
+            # integer precision (usually 1)
+            contracts = int(raw_contracts)
+
+        if contracts < amount_precision:
+            contracts = amount_precision if amount_precision > 0 else 1
+            
         actual_margin = contracts * price * contract_size / leverage
         print(f"[GridLive] Kontrat hesabı: margin=${margin_usdt:.2f} × {leverage}x = "
               f"notional=${notional:.2f} / (${price} × {contract_size}) = {contracts} kontrat "
@@ -82,7 +101,27 @@ class GridLiveEngine:
 
         mode = config.get("mode", "paper")  # "paper" veya "live"
         leverage = int(config.get("leverage", 10))
-        total_budget = float(config.get("order_size", 100))  # Toplam bütçe (USDT)
+        budget_mode = config.get("budget_mode", "fixed")
+        
+        # Calculate total budget
+        if budget_mode == "percent":
+            ex = await self._get_exchange()
+            try:
+                bal = await ex.exchange.fetch_balance()
+                total_balance = float(bal.get("total", {}).get("USDT", 0))
+                if total_balance <= 0:
+                    total_balance = float(bal.get("free", {}).get("USDT", 0))
+                # Fallback if no USDT found
+                if total_balance <= 0:
+                    total_balance = float(config.get("initial_balance", 1000))
+                total_budget = total_balance * (float(config.get("order_size", 100)) / 100)
+                print(f"[GridLive] Percent bütçe: Bakiye={total_balance} * %{config.get('order_size')} = {total_budget}")
+            except Exception as e:
+                print(f"[GridLive] Bakiye okuma hatası (Percent Mode), varsayılan kullanılıyor: {e}")
+                total_budget = float(config.get("order_size", 100))
+        else:
+            total_budget = float(config.get("order_size", 100))  # Toplam bütçe (USDT)
+            
         spread_pct = float(config.get("spread_pct", 0.5))
         grid_count = int(config.get("grid_count", 20))
         margin_per_level = round(total_budget / grid_count, 4)  # Kademe başına margin
@@ -164,7 +203,25 @@ class GridLiveEngine:
             lower = current_price * (1 - spread_pct / 100)
 
         step = (upper - lower) / grid_count if upper > 0 else 0
-        levels = [round(lower + i * step, 8) for i in range(grid_count + 1)] if upper > 0 else []
+        
+        # Fiyat hassasiyetini piyasadan al
+        ex = await self._get_exchange()
+        if not ex.exchange.markets:
+            await ex.exchange.load_markets()
+        market = ex.exchange.market(ccxt_symbol)
+        price_precision = market.get("precision", {}).get("price", 8)
+        # Convert step size to precision digits if it's a number
+        if isinstance(price_precision, float) and price_precision < 1:
+            price_decimals = len(str(price_precision).split(".")[1])
+        elif isinstance(price_precision, int) and price_precision > 0:
+            price_decimals = price_precision
+        else:
+            price_decimals = 4
+            
+        upper = round(upper, price_decimals)
+        lower = round(lower, price_decimals)
+        step = round(step, price_decimals)
+        levels = [round(lower + i * step, price_decimals) for i in range(grid_count + 1)] if upper > 0 else []
 
         # Kontrat sayısını hesapla (her grid seviyesi için)
         contracts_per_level = 1
