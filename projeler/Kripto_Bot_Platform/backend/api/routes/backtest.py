@@ -145,6 +145,7 @@ async def run_backtest(req: BacktestRequest):
             "bb_std_dev": req.params.get("BB_Sapma", 2.0),
             "initial_balance": req.initial_balance,
             "order_size": req.risk_per_trade,
+            "budget_mode": req.params.get("budget_mode", "fixed"),
             "leverage": req.leverage,
             "fee_pct": req.fee_pct,
             "min_spread_pct": req.params.get("Min_Spread_Pct", 0.3),
