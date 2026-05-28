@@ -96,6 +96,7 @@ export default function HftPage() {
   const [bbStdDev, setBbStdDev] = useState("2.0")
   const [minSpread, setMinSpread] = useState("0.3")
   const [minEmaPct, setMinEmaPct] = useState("1.0")
+  const [emaExitMode, setEmaExitMode] = useState("ema_cross")
   const [filterRsi, setFilterRsi] = useState(true)
   const [filterSqueeze, setFilterSqueeze] = useState(true)
   const [filterMidline, setFilterMidline] = useState(true)
@@ -236,9 +237,10 @@ export default function HftPage() {
     if (hftSettings.bb_std_dev != null) setBbStdDev(String(hftSettings.bb_std_dev))
     if (hftSettings.min_spread_pct != null) setMinSpread(String(hftSettings.min_spread_pct))
     if (hftSettings.min_ema_pct != null) setMinEmaPct(String(hftSettings.min_ema_pct))
+    if (hftSettings.ema_exit_mode != null) setEmaExitMode(hftSettings.ema_exit_mode)
   }, [
     hftSettings.spread_pct, hftSettings.grid_count, hftSettings.leverage, hftSettings.order_size,
-    hftSettings.grid_mode, hftSettings.bb_timeframe, hftSettings.bb_period, hftSettings.bb_std_dev, hftSettings.min_spread_pct, hftSettings.min_ema_pct
+    hftSettings.grid_mode, hftSettings.bb_timeframe, hftSettings.bb_period, hftSettings.bb_std_dev, hftSettings.min_spread_pct, hftSettings.min_ema_pct, hftSettings.ema_exit_mode
   ])
 
   const spreadPct = Number(localSpread) || hftSettings.spread_pct || 1.5
@@ -666,7 +668,7 @@ export default function HftPage() {
           bb_period: Number(bbPeriod),
           bb_std_dev: Number(bbStdDev),
           min_spread_pct: Number(minSpread),
-          filters: { min_ema_pct: Number(minEmaPct) },
+          filters: { min_ema_pct: Number(minEmaPct), ema_exit_mode: emaExitMode },
           current_price: livePrice,
         })
         if (res.error || !res.bb_upper) return
@@ -792,6 +794,7 @@ export default function HftPage() {
       bb_std_dev: Number(bbStdDev) || 2.0,
       min_spread_pct: Number(minSpread) || 0.3,
       min_ema_pct: Number(minEmaPct) || 1.0,
+      ema_exit_mode: emaExitMode,
     })
     mutateHftSettings()
 
@@ -845,6 +848,8 @@ export default function HftPage() {
           squeeze_filter: filterSqueeze,
           midline_filter: filterMidline,
           atr_min_step: filterAtrStep,
+          min_ema_pct: Number(minEmaPct) || 1.0,
+          ema_exit_mode: emaExitMode,
         },
       })
 
@@ -1156,13 +1161,27 @@ export default function HftPage() {
               <option value="1h">1 saat</option>
             </select>
           {gridMode === "ema_trend" ? (
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">%50-200 Fark</span>
-              <input type="number" value={minEmaPct} onChange={e => setMinEmaPct(e.target.value)} onBlur={e => commitSetting("min_ema_pct", e.target.value, 1.0)} onKeyDown={e => e.key === "Enter" && commitSetting("min_ema_pct", e.target.value, 1.0)}
-                min={0} max={10} step={0.1} disabled={simRunning}
-                className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
-              />
-            </div>
+            <>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">%50-200 Fark</span>
+                <input type="number" value={minEmaPct} onChange={e => setMinEmaPct(e.target.value)} onBlur={e => commitSetting("min_ema_pct", e.target.value, 1.0)} onKeyDown={e => e.key === "Enter" && commitSetting("min_ema_pct", e.target.value, 1.0)}
+                  min={0} max={10} step={0.1} disabled={simRunning}
+                  className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Kapatma Şartı</span>
+                <select value={emaExitMode} onChange={e => { setEmaExitMode(e.target.value); updateHftSetting("ema_exit_mode", e.target.value); }} disabled={simRunning}
+                  className="bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50">
+                  <option value="ema_cross">EMA Ters Kesişim (6-14)</option>
+                  <option value="bollinger">Bollinger Bant Dönüşü</option>
+                  <option value="touch_ema6">Fiyat Teması: EMA 6</option>
+                  <option value="touch_ema14">Fiyat Teması: EMA 14</option>
+                  <option value="touch_ema50">Fiyat Teması: EMA 50</option>
+                  <option value="touch_ema200">Fiyat Teması: EMA 200</option>
+                </select>
+              </div>
+            </>
           ) : (
             <>
               <div className="flex flex-col gap-1">

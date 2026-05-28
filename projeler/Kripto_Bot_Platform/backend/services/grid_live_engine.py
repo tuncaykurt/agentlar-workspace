@@ -797,32 +797,66 @@ class GridLiveEngine:
                                 filled.discard(lvl)
                                 entry_prices.pop(str(lvl), None)
 
-        # ═══ BAND EXIT CLOSE — bant dışına çık + geri gir = tüm pozisyonları kapat ═══
+        # ═══ AĞ KAPATMA MANTIĞI (EXIT TRIGGERS) ═══
+        should_close_grid = False
+        exit_reason = ""
+        
         if grid_mode in ("bollinger", "hybrid", "bb_direction", "ema_trend") and filled:
-            bb_upper = state.get("bb_upper", 0)
-            bb_lower = state.get("bb_lower", 0)
-            band_exited = state.get("band_exited", False)
-            band_exit_side = state.get("band_exit_side", None)
+            # Default exit mode is bollinger unless specified in filters
+            exit_mode = filters.get("ema_exit_mode", "bollinger") if grid_mode == "ema_trend" else "bollinger"
+            
+            # 1. Bollinger Dönüşü (Band Exit & Re-entry)
+            if exit_mode == "bollinger":
+                bb_upper = state.get("bb_upper", 0)
+                bb_lower = state.get("bb_lower", 0)
+                band_exited = state.get("band_exited", False)
+                band_exit_side = state.get("band_exit_side", None)
 
-            if not band_exited:
-                # Fiyat bant dışına çıktı mı?
-                if active_dir == "long" and current_price > bb_upper and bb_upper > 0:
-                    state["band_exited"] = True
-                    state["band_exit_side"] = "upper"
-                    print(f"[GridLive] 🔔 Band EXIT: fiyat ${current_price:.2f} > üst bant ${bb_upper:.2f}")
-                elif active_dir == "short" and current_price < bb_lower and bb_lower > 0:
-                    state["band_exited"] = True
-                    state["band_exit_side"] = "lower"
-                    print(f"[GridLive] 🔔 Band EXIT: fiyat ${current_price:.2f} < alt bant ${bb_lower:.2f}")
-            else:
-                # Fiyat geri girdi mi? → tüm pozisyonları kapat
-                re_entered = False
-                if band_exit_side == "upper" and current_price <= bb_upper:
-                    re_entered = True
-                elif band_exit_side == "lower" and current_price >= bb_lower:
-                    re_entered = True
+                if not band_exited:
+                    if active_dir == "long" and current_price > bb_upper and bb_upper > 0:
+                        state["band_exited"] = True
+                        state["band_exit_side"] = "upper"
+                        print(f"[GridLive] 🔔 Band EXIT: fiyat ${current_price:.2f} > üst bant ${bb_upper:.2f}")
+                    elif active_dir == "short" and current_price < bb_lower and bb_lower > 0:
+                        state["band_exited"] = True
+                        state["band_exit_side"] = "lower"
+                        print(f"[GridLive] 🔔 Band EXIT: fiyat ${current_price:.2f} < alt bant ${bb_lower:.2f}")
+                else:
+                    if band_exit_side == "upper" and current_price <= bb_upper:
+                        should_close_grid = True
+                        exit_reason = "Bollinger Dönüşü (Re-entry)"
+                    elif band_exit_side == "lower" and current_price >= bb_lower:
+                        should_close_grid = True
+                        exit_reason = "Bollinger Dönüşü (Re-entry)"
+            
+            # 2. EMA Ters Kesişim
+            elif exit_mode == "ema_cross":
+                ema6 = bb_meta.get("ema6", 0)
+                ema14 = bb_meta.get("ema14", 0)
+                prev_ema6 = bb_meta.get("prev_ema6", 0)
+                prev_ema14 = bb_meta.get("prev_ema14", 0)
+                
+                if active_dir == "long" and ema6 < ema14 and prev_ema6 >= prev_ema14:
+                    should_close_grid = True
+                    exit_reason = "EMA Ters Kesişim"
+                elif active_dir == "short" and ema6 > ema14 and prev_ema6 <= prev_ema14:
+                    should_close_grid = True
+                    exit_reason = "EMA Ters Kesişim"
+            
+            # 3. Fiyatın EMA'ya Teması
+            elif exit_mode.startswith("touch_"):
+                target_ema = bb_meta.get(exit_mode.replace("touch_", ""), 0)
+                if target_ema > 0:
+                    # Long isek fiyat düşüp EMA'ya çarparsa kapat
+                    if active_dir == "long" and current_price <= target_ema:
+                        should_close_grid = True
+                        exit_reason = f"Fiyattan {exit_mode.replace('touch_', '').upper()}'ye Temas"
+                    # Short isek fiyat yükselip EMA'ya çarparsa kapat
+                    elif active_dir == "short" and current_price >= target_ema:
+                        should_close_grid = True
+                        exit_reason = f"Fiyattan {exit_mode.replace('touch_', '').upper()}'ye Temas"
 
-                if re_entered:
+            if should_close_grid:
                     close_levels = list(filled)
                     cs = state.get("contract_size", 0.01)
                     contracts_per_lvl = state.get("contracts_per_level", 1)
@@ -855,16 +889,16 @@ class GridLiveEngine:
 
                     state["band_exited"] = False
                     state["band_exit_side"] = None
-                    print(f"[GridLive] 🔄 Band RE-ENTRY: tüm pozisyonlar kapatıldı | "
+                    print(f"[GridLive] 🔄 {exit_reason}: tüm pozisyonlar kapatıldı | "
                           f"pnl=${net_pnl:.4f} | {len(close_levels)} seviye")
 
                     # BB Yön / EMA Trend modunda → grid'i duraklat, kesimi bekle
                     if grid_mode == "bb_direction":
                         state["bb_dir_paused"] = True
-                        print(f"[GridLive] ⏸ BB Yön: Bant dokunusu sonrası durduruldu, orta çizgi kesimi bekleniyor")
+                        print(f"[GridLive] ⏸ BB Yön: Çıkış sonrası durduruldu, orta çizgi kesimi bekleniyor")
                     elif grid_mode == "ema_trend":
                         state["ema_paused"] = True
-                        print(f"[GridLive] ⏸ EMA Trend: Bant dokunusu sonrası durduruldu, yeni kesişim bekleniyor")
+                        print(f"[GridLive] ⏸ EMA Trend: Çıkış sonrası durduruldu, yeni giriş kesişimi bekleniyor")
 
         state["entry_prices"] = entry_prices
 
