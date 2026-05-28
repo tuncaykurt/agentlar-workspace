@@ -834,10 +834,10 @@ export default function ProChart({
         overlaySeriesRefs.current.push({ id: ind.id, name: ind.name, color: ind.color!, series: s as any })
       }
       if (ind.id === "bb") {
-        // Upper band: red line with faint blueish fill going down
-        addArea(data.bb_upper, "#ef4444", "rgba(59,130,246, 0.12)", "rgba(59,130,246, 0.12)")
-        // Lower band: green line with background color fill to mask the area below
-        addArea(data.bb_lower, "#10b981", "#020817", "#020817")
+        // Upper band: red line with faint blueish fill going down and fading out
+        addArea(data.bb_upper, "#ef4444", "rgba(59,130,246, 0.15)", "rgba(59,130,246, 0.0)")
+        // Lower band: just a green line (no solid fill mask)
+        addLine(data.bb_lower, "#10b981", 1, LineStyle.Solid)
         // Middle band: blue line on top
         addLine(data.bb_mid,   "#3b82f6", 1, LineStyle.Solid)
       }
