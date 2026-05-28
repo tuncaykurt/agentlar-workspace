@@ -247,7 +247,9 @@ class GridLiveEngine:
         await redis.delete("grid_live:trades")
 
         # HFT settings'i de güncelle (frontend grafik sınırları için)
-        hft_settings = {
+        old_hft_raw = await redis.get("hft_sim:settings")
+        hft_settings = json.loads(old_hft_raw) if old_hft_raw else {}
+        hft_settings.update({
             "symbol": symbol_raw,
             "spread_pct": spread_pct,
             "grid_count": grid_count,
@@ -256,7 +258,13 @@ class GridLiveEngine:
             "upper_price": upper,
             "lower_price": lower,
             "live_mode": mode,
-        }
+            "grid_mode": grid_mode,
+            "grid_direction": grid_direction,
+            "bb_timeframe": bb_timeframe,
+            "bb_period": bb_period,
+            "bb_std_dev": bb_std_dev,
+            "min_spread_pct": min_spread_pct,
+        })
         await redis.set("hft_sim:settings", json.dumps(hft_settings))
 
         # Standalone polling loop başlat (HFT Engine'e bağımlı olmadan)
