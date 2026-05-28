@@ -485,7 +485,9 @@ class GridLiveEngine:
         mode_label = {"manual": "MANUEL", "bollinger": "BOLLINGER", "hybrid": "HİBRİT", "bb_direction": "BB YÖN"}.get(grid_mode, "MANUEL")
         emoji = "🔴 CANLI" if mode == "live" else "📝 PAPER"
         print(f"[GridLive] {emoji} [{mode_label}] Grid Bot Başlatıldı: {symbol_raw} | "
-              f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | "
+              f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | ")
+              
+        asyncio.create_task(push_grid_event("grid_start", f"{emoji} {mode_label} modunda bot başlatıldı. Budget: ${total_budget}"))
               f"{leverage}x | toplam=${total_budget} margin/kademe=${margin_per_level:.4f} | "
               f"{contracts_per_level} kontrat/kademe")
 
@@ -550,6 +552,8 @@ class GridLiveEngine:
 
         print(f"[GridLive] Bot durduruldu. PnL: ${result['total_pnl']:.2f} | "
               f"İşlem: {result['total_trades']} | Açık seviye: {result['filled_levels']}")
+              
+        asyncio.create_task(push_grid_event("grid_stop", f"PnL: ${result['total_pnl']:.2f} | İşlem: {result['total_trades']}"))
         return result
 
     async def kill_switch(self) -> dict:
@@ -615,7 +619,8 @@ class GridLiveEngine:
             state["last_level"] = -1
             await redis.set("grid_live:state", json.dumps(state))
 
-        print(f"[GridLive] ⚡⚡⚡ KILL SWITCH AKTİF ⚡⚡⚡ Sonuç: {result}")
+        print(f"[GridLive] KILL SWITCH TETİKLENDİ. Mod: {state.get('mode')} PnL: ${result['total_pnl']:.2f}")
+        asyncio.create_task(push_grid_event("grid_stop", f"🚨 KILL SWITCH TETİKLENDİ! PnL: ${result['total_pnl']:.2f}"))
         return result
 
     async def _close_all_positions(self, state: dict) -> list:
