@@ -485,11 +485,11 @@ class GridLiveEngine:
         mode_label = {"manual": "MANUEL", "bollinger": "BOLLINGER", "hybrid": "HİBRİT", "bb_direction": "BB YÖN"}.get(grid_mode, "MANUEL")
         emoji = "🔴 CANLI" if mode == "live" else "📝 PAPER"
         print(f"[GridLive] {emoji} [{mode_label}] Grid Bot Başlatıldı: {symbol_raw} | "
-              f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | ")
-              
-        asyncio.create_task(push_grid_event("grid_start", f"{emoji} {mode_label} modunda bot başlatıldı. Budget: ${total_budget}"))
+              f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | "
               f"{leverage}x | toplam=${total_budget} margin/kademe=${margin_per_level:.4f} | "
               f"{contracts_per_level} kontrat/kademe")
+              
+        asyncio.create_task(push_grid_event("grid_start", f"{emoji} {mode_label} modunda bot başlatıldı. Budget: ${total_budget}"))
 
         result = {
             "success": True,
