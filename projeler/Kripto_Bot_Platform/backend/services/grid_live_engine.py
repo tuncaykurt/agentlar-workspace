@@ -571,47 +571,51 @@ class GridLiveEngine:
                         bb_dir_paused = state.get("bb_dir_paused", False)
                         bb_dir_wait_cross = state.get("bb_dir_wait_cross", False)
                         bb_dir_last_mid_side = state.get("bb_dir_last_mid_side", "")
-                        current_mid_side = "above" if current_price > state.get("bb_mid", 0) else "below"
+                        
+                        bb_mid = state.get("bb_mid", 0)
+                        if bb_mid > 0:
+                            current_mid_side = "above" if current_price > bb_mid else "below"
 
-                        if bb_dir_wait_cross:
-                            # Orta çizgi kesimi bekleniyor
-                            if bb_dir_last_mid_side and current_mid_side != bb_dir_last_mid_side:
-                                print(f"[GridLive] BUG-CATCH: Cross triggered! last_side={bb_dir_last_mid_side}, current={current_mid_side}, price={current_price}, mid={state.get('bb_mid')}")
-                                # Orta çizgi kesildi! Grid'i yeniden başlat
-                                state["bb_dir_wait_cross"] = False
-                                state["bb_dir_paused"] = False
-                                state["band_exited"] = False
-                                state["band_exit_side"] = None
+                            if bb_dir_wait_cross:
+                                # Orta çizgi kesimi bekleniyor
+                                if bb_dir_last_mid_side and current_mid_side != bb_dir_last_mid_side:
+                                    print(f"[GridLive] BUG-CATCH: Cross triggered! last_side={bb_dir_last_mid_side}, current={current_mid_side}, price={current_price}, mid={bb_mid}")
+                                    # Orta çizgi kesildi! Grid'i yeniden başlat
+                                    state["bb_dir_wait_cross"] = False
+                                    state["bb_dir_paused"] = False
+                                    state["band_exited"] = False
+                                    state["band_exit_side"] = None
+                                    
+                                    # Grid'i sıfırla ve yeniden fiyata merkezle!
+                                    bb_upper_new = bb_meta.get("bb_upper", state.get("upper", 0))
+                                    bb_lower_new = bb_meta.get("bb_lower", state.get("lower", 0))
+                                    if bb_upper_new > bb_lower_new and current_price > 0:
+                                        bb_spread_pct = (bb_upper_new - bb_lower_new) / current_price * 100
+                                        new_upper = current_price * (1 + bb_spread_pct / 200)
+                                        new_lower = current_price * (1 - bb_spread_pct / 200)
+                                        state["upper"] = new_upper
+                                        state["lower"] = new_lower
+                                        new_step = (new_upper - new_lower) / grid_count
+                                        state["step"] = new_step
+                                        state["levels"] = [round(new_lower + i * new_step, 8) for i in range(grid_count + 1)]
+                                    state["filled_levels"] = []
+                                    state["entry_prices"] = {}
+                                    state["last_level"] = -1
+                                    await self._sync_hft_bounds(redis, state)
+                                    print(f"[GridLive] BB Yön: Orta çizgi kesildi ({bb_dir_last_mid_side} -> {current_mid_side}), grid yeniden başlatıldı")
                                 
-                                # Grid'i sıfırla ve yeniden fiyata merkezle!
-                                bb_upper_new = bb_meta.get("bb_upper", state.get("upper", 0))
-                                bb_lower_new = bb_meta.get("bb_lower", state.get("lower", 0))
-                                if bb_upper_new > bb_lower_new and current_price > 0:
-                                    bb_spread_pct = (bb_upper_new - bb_lower_new) / current_price * 100
-                                    new_upper = current_price * (1 + bb_spread_pct / 200)
-                                    new_lower = current_price * (1 - bb_spread_pct / 200)
-                                    state["upper"] = new_upper
-                                    state["lower"] = new_lower
-                                    new_step = (new_upper - new_lower) / grid_count
-                                    state["step"] = new_step
-                                    state["levels"] = [round(new_lower + i * new_step, 8) for i in range(grid_count + 1)]
-                                state["filled_levels"] = []
-                                state["entry_prices"] = {}
-                                state["last_level"] = -1
-                                await self._sync_hft_bounds(redis, state)
-                                print(f"[GridLive] BB Yön: Orta çizgi kesildi ({bb_dir_last_mid_side} -> {current_mid_side}), grid yeniden başlatıldı")
-                            state["bb_dir_last_mid_side"] = current_mid_side
-                            await redis.set("grid_live:state", json.dumps(state))
-                            return None  # Bekleme modunda
+                                state["bb_dir_last_mid_side"] = current_mid_side
+                                await redis.set("grid_live:state", json.dumps(state))
+                                return None  # Bekleme modunda
 
-                        if bb_dir_paused:
-                            state["bb_dir_wait_cross"] = True
-                            state["bb_dir_last_mid_side"] = current_mid_side
-                            await redis.set("grid_live:state", json.dumps(state))
-                            return None
+                            if bb_dir_paused:
+                                state["bb_dir_wait_cross"] = True
+                                state["bb_dir_last_mid_side"] = current_mid_side
+                                await redis.set("grid_live:state", json.dumps(state))
+                                return None
 
-                        if not bb_dir_last_mid_side:
-                            state["bb_dir_last_mid_side"] = current_mid_side
+                            if not bb_dir_last_mid_side:
+                                state["bb_dir_last_mid_side"] = current_mid_side
 
                     # EMA Trend lifecycle kontrolleri
                     if grid_mode == "ema_trend":
