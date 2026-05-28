@@ -345,13 +345,11 @@ export default function HftPage() {
 
   // Aktif yon hesapla — auto modda BB midline'a gore, degilse sabit
   const activeDirection = useMemo((): "long" | "short" => {
-    if (gridMode === "bb_direction" || gridDirection === "auto") {
-      const bb = simBbMeta
-      if (bb) return bb.above_midline ? "long" : "short"
-      return "long" // BB verisi yoksa default long
+    if (gridMode === "bb_direction" || gridMode === "ema_trend") {
+      return (isBackendMode && backendStatus) ? backendStatus.active_direction : (simBbMeta?.above_midline ? "long" : "short")
     }
     return gridDirection === "short" ? "short" : "long"
-  }, [gridDirection, gridMode, simBbMeta])
+  }, [gridDirection, gridMode, simBbMeta, isBackendMode, backendStatus])
 
   const isSimWaiting = useMemo(() => {
     if (!simRunning || tradingMode !== "sim" || gridMode === "manual") return false
@@ -371,8 +369,8 @@ export default function HftPage() {
   }, [simRunning, tradingMode, gridMode, simBbMeta, filterSqueeze, filterMidline, activeDirection, bbDirPaused, bbDirWaitCross])
 
   const isBackendWaiting = useMemo(() => {
-    if (!backendStatus?.running || !backendStatus?.state) return false
-    const state = backendStatus.state
+    if (!backendStatus?.running) return false
+    const state = backendStatus
     if (state.grid_mode === "bb_direction") {
       if (state.bb_dir_paused || state.upper === 0) return true
       return false
@@ -1354,10 +1352,10 @@ export default function HftPage() {
               'text-emerald-400'
             }`}>
               {!simRunning ? '○ Durdu' :
-               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.state?.bb_dir_paused && backendStatus?.state?.upper > 0 : bbDirPaused && !bbDirWaitCross) ? '● Grid Kapalı (Kesişim Bekleniyor)' :
-               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.state?.upper === 0 : bbDirWaitCross) ? '● Avda Bekliyor (Orta Çizgi)' :
-               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.state?.ema_paused && backendStatus?.state?.upper > 0 : false) ? '● Grid Kapalı (Yeni Kesişim)' :
-               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.state?.upper === 0 : false) ? '● Avda Bekliyor (EMA Trend)' :
+               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.bb_dir_paused && backendStatus?.upper > 0 : bbDirPaused && !bbDirWaitCross) ? '● Grid Kapalı (Kesişim Bekleniyor)' :
+               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.upper === 0 : bbDirWaitCross) ? '● Avda Bekliyor (Orta Çizgi)' :
+               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.ema_paused && backendStatus?.upper > 0 : false) ? '● Grid Kapalı (Yeni Kesişim)' :
+               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.upper === 0 : false) ? '● Avda Bekliyor (EMA Trend)' :
                isWaiting ? `● Avda (Bekliyor)` :
                `● ${activeDirection === 'long' ? '↑ LONG' : '↓ SHORT'} Çalışıyor (${mc.label})`}
             </div>
