@@ -795,6 +795,15 @@ export default function ProChart({
       s.setData(d as any); return s
     }
 
+    const addArea = (d: Point[], lineColor: string, topColor: string, bottomColor: string) => {
+      const s = chart.addAreaSeries({
+        lineColor, topColor, bottomColor,
+        lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+        crosshairMarkerVisible: true,
+      })
+      s.setData(d as any); return s
+    }
+
     const closes = data.candles.map(c => c.close)
     const times  = data.candles.map(c => c.time)
 
@@ -825,9 +834,12 @@ export default function ProChart({
         overlaySeriesRefs.current.push({ id: ind.id, name: ind.name, color: ind.color!, series: s as any })
       }
       if (ind.id === "bb") {
-        addLine(data.bb_upper, "#64748b", 1, LineStyle.Solid)
-        addLine(data.bb_mid,   "#475569", 1, LineStyle.Dashed)
-        addLine(data.bb_lower, "#64748b", 1, LineStyle.Solid)
+        // Upper band: red line with faint blueish fill going down
+        addArea(data.bb_upper, "#ef4444", "rgba(59,130,246, 0.12)", "rgba(59,130,246, 0.12)")
+        // Lower band: green line with background color fill to mask the area below
+        addArea(data.bb_lower, "#10b981", "#020817", "#020817")
+        // Middle band: blue line on top
+        addLine(data.bb_mid,   "#3b82f6", 1, LineStyle.Solid)
       }
     })
 
