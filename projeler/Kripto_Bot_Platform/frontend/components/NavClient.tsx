@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
+import { useAuth } from "@/components/AuthProvider"
 
 const LINKS = [
   { href: "/dashboard",     label: "Dashboard" },
@@ -17,13 +18,26 @@ const LINKS = [
   { href: "/ai-chat",       label: "AI Chat" },
   { href: "/news",           label: "Haberler" },
   { href: "/freqtrade",      label: "Freqtrade" },
-  { href: "/settings",      label: "Borsa Bağlantısı" },
-  { href: "/calculator",    label: "Hesaplama" },
+  { href: "/settings",       label: "Borsa Bağlantısı" },
+  { href: "/calculator",     label: "Hesaplama" },
+  { href: "/billing",        label: "Abonelik" },
 ]
 
 export default function NavClient() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const { user, logout, isLoading } = useAuth()
+
+  // Login sayfasinda NavGosterme
+  if (pathname === "/login") return null
+  if (isLoading || !user) return null
+
+  // Linkleri filtrele (Kullanicinin allowed_pages listesine gore)
+  const filteredLinks = LINKS.filter(link => {
+    // Ornegin "/dashboard" -> "dashboard"
+    const pageName = link.href.split("/")[1]
+    return user.role === "admin" || (user.allowed_pages && user.allowed_pages.includes(pageName))
+  })
 
   return (
     <nav className="border-b border-slate-800 bg-slate-950 shrink-0 z-50">
@@ -35,7 +49,7 @@ export default function NavClient() {
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-1 mx-4 flex-1">
-          {LINKS.map(l => (
+          {filteredLinks.map(l => (
             <Link key={l.href} href={l.href}
               className={`text-sm transition-colors px-3 py-1.5 rounded whitespace-nowrap hover:bg-slate-800 ${
                 pathname === l.href ? "text-white bg-slate-800" : "text-slate-400 hover:text-white"
@@ -43,13 +57,25 @@ export default function NavClient() {
               {l.label}
             </Link>
           ))}
+          {user?.role === "admin" && (
+            <Link href="/admin/users"
+              className={`text-sm transition-colors px-3 py-1.5 rounded whitespace-nowrap hover:bg-slate-800 ${
+                pathname.startsWith("/admin") ? "text-emerald-400 bg-slate-800" : "text-emerald-500 hover:text-emerald-400"
+              }`}>
+              👑 Müşteriler
+            </Link>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs mr-2">
+            <span className="text-slate-300 font-medium">{user.email.split("@")[0]}</span>
+            <button onClick={logout} className="text-red-400 hover:text-red-300 bg-red-500/10 px-2 py-1 rounded">Çıkış</button>
+          </div>
           {/* Canlı göstergesi */}
-          <div className="flex items-center gap-1.5 text-xs shrink-0">
+          <div className="flex items-center gap-1.5 text-xs shrink-0 hidden lg:flex">
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-slate-400 hidden sm:inline">Canlı · Bitget</span>
+            <span className="text-slate-400">Canlı · Borsa</span>
           </div>
           {/* Hamburger (mobile) */}
           <button
@@ -73,7 +99,7 @@ export default function NavClient() {
       {/* Mobile dropdown */}
       {open && (
         <div className="md:hidden border-t border-slate-800 py-2 px-2 flex flex-col gap-0.5">
-          {LINKS.map(l => (
+          {filteredLinks.map(l => (
             <Link key={l.href} href={l.href} onClick={() => setOpen(false)}
               className={`text-sm px-4 py-2.5 rounded-lg transition-colors ${
                 pathname === l.href
@@ -83,6 +109,12 @@ export default function NavClient() {
               {l.label}
             </Link>
           ))}
+          {user?.role === "admin" && (
+            <Link href="/admin/users" onClick={() => setOpen(false)}
+              className="text-sm px-4 py-2.5 rounded-lg transition-colors text-emerald-400 hover:bg-slate-800">
+              👑 Müşteriler
+            </Link>
+          )}
         </div>
       )}
     </nav>

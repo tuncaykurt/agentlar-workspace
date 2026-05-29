@@ -20,6 +20,7 @@ class Bot(Base):
     __tablename__ = "bots"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, default=1, index=True)
     name = Column(String, nullable=False)
     symbol = Column(String, nullable=False)          # BTCUSDT
     strategy = Column(String, nullable=False)         # ema_cross, grid, funding
@@ -39,6 +40,7 @@ class Trade(Base):
     __tablename__ = "trades"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, default=1, index=True)
     bot_id = Column(Integer, nullable=False)
     symbol = Column(String, nullable=False)
     side = Column(String, nullable=False)             # buy / sell
@@ -92,6 +94,7 @@ class BotFilter(Base):
     __tablename__ = "bot_filters"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, default=1, index=True)
     bot_id = Column(Integer, nullable=False, unique=True)
     # Toggle'lar
     smart_hours_enabled = Column(Boolean, default=False)       # Akıllı saat filtresi
@@ -112,6 +115,7 @@ class SignalLog(Base):
     __tablename__ = "signal_logs"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, default=1, index=True)
     bot_id = Column(Integer, nullable=False)
     symbol = Column(String, nullable=False)
     signal_type = Column(String, nullable=False)          # buy, sell
@@ -166,6 +170,7 @@ class WebhookProfile(Base):
     __tablename__ = "webhook_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, default=1, index=True)
     username = Column(String, nullable=False, default="default")  # kullanıcıya özel
     token = Column(String, nullable=False, unique=True, index=True)
     name = Column(String, nullable=True)                   # profil adı (opsiyonel)

@@ -9,7 +9,8 @@ from sqlalchemy import select, text
 from core.config import settings
 from core.database import async_session
 from core.database import engine, Base
-from api.routes import bots, market, ai_analysis, chart, signals, auth, exchanges, data, backtest, calendar, analytics, freqtrade, trades, ai_chat, coins
+from models.user import User, UserExchangeKey
+from api.routes import bots, market, ai_analysis, chart, signals, auth, admin, exchanges, data, backtest, calendar, analytics, freqtrade, trades, ai_chat, coins
 from api.websocket import market_ws, bot_status_ws
 from exchange.bitget_client import bitget
 from services.data_fetcher import DataFetcher
@@ -38,9 +39,11 @@ async def _init_db():
         ("bots", "params", "TEXT"),
         ("bots", "risk_per_trade", "FLOAT DEFAULT 0.01"),
         ("bots", "max_daily_loss", "FLOAT DEFAULT 0.05"),
+        ("bots", "user_id", "INTEGER DEFAULT 1"),
         ("trades", "exchange", "VARCHAR"),
         ("trades", "session_type", "VARCHAR"),
         ("trades", "exit_reason", "VARCHAR"),
+        ("trades", "user_id", "INTEGER DEFAULT 1"),
         ("trades", "volatility_1h", "FLOAT"),
         ("trades", "volume_ratio", "FLOAT"),
         ("trades", "funding_rate", "FLOAT"),
@@ -49,8 +52,10 @@ async def _init_db():
         ("trades", "leverage_used", "INTEGER"),
         ("trades", "duration_minutes", "INTEGER"),
         ("bot_filters", "volatility_filter_enabled", "BOOLEAN DEFAULT FALSE"),
+        ("bot_filters", "user_id", "INTEGER DEFAULT 1"),
         ("signal_logs", "raw_payload", "TEXT"),
         ("signal_logs", "outcome", "VARCHAR"),
+        ("signal_logs", "user_id", "INTEGER DEFAULT 1"),
         ("signal_logs", "outcome_price", "FLOAT"),
         ("signal_logs", "outcome_pnl_pct", "FLOAT"),
         ("signal_logs", "outcome_at", "TIMESTAMPTZ"),
@@ -61,6 +66,7 @@ async def _init_db():
         ("signal_logs", "timeframe", "VARCHAR"),
         ("webhook_profiles", "username", "VARCHAR DEFAULT 'default'"),
         ("webhook_profiles", "leverage", "INTEGER DEFAULT 20"),
+        ("webhook_profiles", "user_id", "INTEGER DEFAULT 1"),
         ("signal_logs", "max_price_in_range", "FLOAT"),
         ("signal_logs", "min_price_in_range", "FLOAT"),
         ("signal_logs", "max_favorable_pct", "FLOAT"),
@@ -151,6 +157,38 @@ async def _init_db():
         print(f"[Migration] {len(_migrations)} kolon kontrolü tamamlandı (tek transaction).")
     except Exception as e:
         print(f"[Migration] Toplu migration hatası (devam ediliyor): {e}")
+
+    # --- SÜPER ADMİN OLUŞTUR ---
+    try:
+        from core.security import hash_password
+        async with async_session() as session:
+            admin_email = "dvtkurt@gmail.com"
+            result = await session.execute(select(User).where(User.email == admin_email))
+            admin = result.scalar_one_or_none()
+            if not admin:
+                new_admin = User(
+                    email=admin_email,
+                    password_hash=hash_password("Yacnut5061710"),
+                    role="admin",
+                    is_active=True,
+                    fee_type="fixed",
+                    fee_amount=0.0,
+                    fee_active=False,
+                    allowed_pages=["dashboard", "grid_bots", "smart_scanner", "backtest", "admin", "calculator", "settings"]
+                )
+                session.add(new_admin)
+                await session.commit()
+                print(f"[Main] Süper Admin oluşturuldu: {admin_email}")
+            else:
+                # Sifreyi ve yetkileri her acilista garanti et
+                admin.password_hash = hash_password("Yacnut5061710")
+                admin.role = "admin"
+                admin.fee_active = False
+                admin.allowed_pages = ["dashboard", "grid_bots", "smart_scanner", "backtest", "admin", "calculator", "settings"]
+                await session.commit()
+                print(f"[Main] Süper Admin güncellendi: {admin_email}")
+    except Exception as e:
+        print(f"[Main] Süper Admin oluşturma hatası: {e}")
 
 
 async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
@@ -394,6 +432,7 @@ app.add_middleware(TimeoutMiddleware)  # ASGI raw middleware — 25s global time
 # REST routes — /api ve /api/api prefix'leri (frontend double-prefix workaround)
 for _prefix in ["/api", "/api/api"]:
     app.include_router(auth.router, prefix=_prefix)
+    app.include_router(admin.router, prefix=_prefix)
     app.include_router(exchanges.router, prefix=_prefix)
     app.include_router(bots.router, prefix=_prefix)
     app.include_router(market.router, prefix=_prefix)

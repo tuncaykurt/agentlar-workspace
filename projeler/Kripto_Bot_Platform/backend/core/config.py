@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me"
     ENVIRONMENT: str = "development"
     FRONTEND_URL: str = "http://localhost:3000"
+    
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
 
     class Config:
         env_file = ".env"
