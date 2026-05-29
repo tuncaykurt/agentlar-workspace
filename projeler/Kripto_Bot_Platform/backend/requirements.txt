@@ -16,3 +16,5 @@ aiosqlite
 numpy
 blankly
 pywebpush
+google-auth
+cryptography
