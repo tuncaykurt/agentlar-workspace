@@ -10,7 +10,8 @@ class GridBacktestEngine:
         self.initial_balance = float(config.get("initial_balance", 10000))
         self.order_size = float(config.get("order_size", 100)) # Toplam bütçe
         self.leverage = int(config.get("leverage", 10))
-        self.fee_pct = float(config.get("fee_pct", 0.06)) / 100
+        self.maker_fee_pct = 0.0  # MEXC Maker Fee is 0%
+        self.taker_fee_pct = float(config.get("fee_pct", 0.01)) / 100  # MEXC Taker Fee is 0.01%
         
         self.bb_period = int(config.get("bb_period", 20))
         self.bb_std = float(config.get("bb_std_dev", 2.0))
@@ -202,11 +203,11 @@ class GridBacktestEngine:
             for lvl in list(state["filled"]):
                 ep = state["entry_prices"][lvl]
                 if active_dir == "long":
-                    liq_price = ep * (1 - 1/self.leverage + self.fee_pct)
+                    liq_price = ep * (1 - 1/self.leverage + self.taker_fee_pct)
                     if low <= liq_price:
                         liquidated_lvls.append((lvl, liq_price))
                 else:
-                    liq_price = ep * (1 + 1/self.leverage - self.fee_pct)
+                    liq_price = ep * (1 + 1/self.leverage - self.taker_fee_pct)
                     if high >= liq_price:
                         liquidated_lvls.append((lvl, liq_price))
                         
@@ -217,7 +218,7 @@ class GridBacktestEngine:
                 entry_ts = state["entry_times"].pop(lvl, ts)
                 margin_used = (lvl_contracts * cs * ep) / self.leverage
                 pos_val = lvl_contracts * cs * ep
-                fee = pos_val * self.fee_pct * 2 # Open + Close fee estimation
+                fee = pos_val * (self.maker_fee_pct + self.taker_fee_pct) # Open + Close fee estimation
                 net_pnl = -margin_used
                 balance += net_pnl
                 trades.append({
@@ -279,7 +280,7 @@ class GridBacktestEngine:
                             lvl_contracts = state["contracts"].pop(lvl, contracts)
                             entry_ts = state["entry_times"].pop(lvl, ts)
                             gross = (price - ep) * lvl_contracts * cs
-                            fee = (lvl_contracts * cs * ep * self.fee_pct) + (lvl_contracts * cs * price * self.fee_pct)
+                            fee = (lvl_contracts * cs * ep * self.maker_fee_pct) + (lvl_contracts * cs * price * self.taker_fee_pct)
                             net_pnl = gross - fee
                             balance += net_pnl
                             margin_used = (lvl_contracts * cs * ep) / self.leverage
@@ -304,7 +305,7 @@ class GridBacktestEngine:
                             lvl_contracts = state["contracts"].pop(lvl, contracts)
                             entry_ts = state["entry_times"].pop(lvl, ts)
                             gross = (ep - price) * lvl_contracts * cs
-                            fee = (lvl_contracts * cs * ep * self.fee_pct) + (lvl_contracts * cs * price * self.fee_pct)
+                            fee = (lvl_contracts * cs * ep * self.maker_fee_pct) + (lvl_contracts * cs * price * self.taker_fee_pct)
                             net_pnl = gross - fee
                             balance += net_pnl
                             margin_used = (lvl_contracts * cs * ep) / self.leverage
@@ -350,7 +351,7 @@ class GridBacktestEngine:
                         lvl_contracts = state["contracts"].pop(lvl, contracts)
                         entry_ts = state["entry_times"].pop(lvl, ts)
                         gross = (price - ep) * lvl_contracts * cs if active_dir == "long" else (ep - price) * lvl_contracts * cs
-                        fee = (lvl_contracts * cs * ep * self.fee_pct) + (lvl_contracts * cs * price * self.fee_pct)
+                        fee = (lvl_contracts * cs * ep * self.maker_fee_pct) + (lvl_contracts * cs * price * self.taker_fee_pct)
                         net_pnl = gross - fee
                         balance += net_pnl
                         margin_used = (lvl_contracts * cs * ep) / self.leverage
@@ -397,7 +398,7 @@ class GridBacktestEngine:
                 ep = state["entry_prices"].get(lvl, last_price)
                 lvl_contracts = state["contracts"].get(lvl, contracts)
                 gross = (last_price - ep) * lvl_contracts * cs if active_dir == "long" else (ep - last_price) * lvl_contracts * cs
-                fee = (lvl_contracts * cs * ep * self.fee_pct) + (lvl_contracts * cs * last_price * self.fee_pct)
+                fee = (lvl_contracts * cs * ep * self.maker_fee_pct) + (lvl_contracts * cs * last_price * self.taker_fee_pct)
                 net_pnl = gross - fee
                 balance += net_pnl
                 margin_used = (lvl_contracts * cs * ep) / self.leverage
