@@ -186,9 +186,10 @@ def send_reset_email(to_email: str, reset_link: str):
         return
 
     msg = MIMEMultipart()
-    msg['From'] = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
+    from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
+    msg['From'] = f"Kripto Bot Platformu <{from_email}>"
     msg['To'] = to_email
-    msg['Subject'] = "KriptoBot - Şifre Sıfırlama"
+    msg['Subject'] = "Kripto Bot Platformu - Şifre Sıfırlama"
 
     html = f"""
     <html>
