@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bell } from 'lucide-react'
+import { Bell, Download } from 'lucide-react'
 import { api } from '@/lib/api'
 
 // VAPID Public Key - Backend'den de alabiliriz ama sabit olduğu için buraya ekledik
@@ -21,6 +21,7 @@ function urlBase64ToUint8Array(base64String: string) {
 export function PWARegister() {
   const [permission, setPermission] = useState<NotificationPermission>('default')
   const [isSubscribed, setIsSubscribed] = useState(false)
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -33,6 +34,17 @@ export function PWARegister() {
     }
     if ('Notification' in window) {
       setPermission(Notification.permission)
+    }
+
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     }
   }, [])
 
@@ -61,17 +73,44 @@ export function PWARegister() {
     }
   }
 
-  if (permission === 'granted' && isSubscribed) return null
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null)
+    }
+  }
+
+  const showPushBtn = permission !== 'granted' || !isSubscribed
+  const showInstallBtn = !!deferredPrompt
+
+  if (!showPushBtn && !showInstallBtn) return null
 
   return (
-    <button
-      onClick={subscribeToPush}
-      className="fixed bottom-4 right-4 z-50 bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-full shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2 group"
-      title="Mobil Bildirimleri Aç"
-    >
-      <Bell className="w-5 h-5 group-hover:animate-ping" />
-      <span className="text-sm font-medium pr-1 hidden group-hover:block">Bildirimleri Aç</span>
-    </button>
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-3">
+      {showInstallBtn && (
+        <button
+          onClick={handleInstallClick}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white p-3 rounded-full shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 group"
+          title="Telefona Yükle"
+        >
+          <Download className="w-5 h-5 group-hover:-translate-y-1 transition-transform" />
+          <span className="text-sm font-medium pr-1 hidden group-hover:block whitespace-nowrap">Telefona Yükle</span>
+        </button>
+      )}
+
+      {showPushBtn && (
+        <button
+          onClick={subscribeToPush}
+          className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-full shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 group"
+          title="Mobil Bildirimleri Aç"
+        >
+          <Bell className="w-5 h-5 group-hover:animate-ping" />
+          <span className="text-sm font-medium pr-1 hidden group-hover:block whitespace-nowrap">Bildirimleri Aç</span>
+        </button>
+      )}
+    </div>
   )
 }
 
