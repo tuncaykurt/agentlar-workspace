@@ -6,8 +6,8 @@ export default function BillingPage() {
   const { user, isLoading } = useAuth()
   const [copied, setCopied] = useState(false)
 
-  // Bu adresi siz kendi gercek USDT TRC20 adresinizle degistirin
-  const USDT_TRC20_ADDRESS = "TXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" 
+  // Bu adresi Coolify panelinizden NEXT_PUBLIC_USDT_TRC20_ADDRESS seklinde ayarlayabilirsiniz.
+  const USDT_TRC20_ADDRESS = process.env.NEXT_PUBLIC_USDT_TRC20_ADDRESS || "TXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" 
 
   const handleCopy = () => {
     navigator.clipboard.writeText(USDT_TRC20_ADDRESS)

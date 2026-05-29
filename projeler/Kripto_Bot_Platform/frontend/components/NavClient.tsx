@@ -5,23 +5,34 @@ import { usePathname } from "next/navigation"
 import { useState } from "react"
 import { useAuth } from "@/components/AuthProvider"
 
-const LINKS = [
+const CORE_LINKS = [
   { href: "/dashboard",     label: "Dashboard" },
   { href: "/bots",          label: "Botlar" },
   { href: "/trades",        label: "Islemler" },
-  { href: "/backtest",      label: "Backtest" },
+]
+
+const TRADE_LINKS = [
   { href: "/strategy-view", label: "Strateji" },
   { href: "/analytics",     label: "Analiz" },
   { href: "/scanner",       label: "Tarayıcı" },
   { href: "/simulations",   label: "Simülasyon" },
   { href: "/hft",           label: "HFT Grid" },
-  { href: "/ai-chat",       label: "AI Chat" },
-  { href: "/news",           label: "Haberler" },
-  { href: "/freqtrade",      label: "Freqtrade" },
-  { href: "/settings",       label: "Borsa Bağlantısı" },
-  { href: "/calculator",     label: "Hesaplama" },
-  { href: "/billing",        label: "Abonelik" },
+  { href: "/backtest",      label: "Backtest" },
 ]
+
+const TOOLS_LINKS = [
+  { href: "/ai-chat",       label: "AI Chat" },
+  { href: "/news",          label: "Haberler" },
+  { href: "/freqtrade",     label: "Freqtrade" },
+  { href: "/calculator",    label: "Hesaplama" },
+]
+
+const SETTINGS_LINKS = [
+  { href: "/settings",      label: "Borsa Bağlantısı" },
+  { href: "/billing",       label: "Abonelik" },
+]
+
+const ALL_LINKS = [...CORE_LINKS, ...TRADE_LINKS, ...TOOLS_LINKS, ...SETTINGS_LINKS]
 
 export default function NavClient() {
   const pathname = usePathname()
@@ -49,7 +60,7 @@ export default function NavClient() {
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-1 mx-4 flex-1">
-          {filteredLinks.map(l => (
+          {CORE_LINKS.filter(l => user.role === "admin" || (user.allowed_pages && user.allowed_pages.includes(l.href.split("/")[1]))).map(l => (
             <Link key={l.href} href={l.href}
               className={`text-sm transition-colors px-3 py-1.5 rounded whitespace-nowrap hover:bg-slate-800 ${
                 pathname === l.href ? "text-white bg-slate-800" : "text-slate-400 hover:text-white"
@@ -57,6 +68,58 @@ export default function NavClient() {
               {l.label}
             </Link>
           ))}
+          
+          {/* Trade & Analiz Dropdown */}
+          <div className="relative group">
+            <button className={`text-sm px-3 py-1.5 rounded whitespace-nowrap transition-colors ${TRADE_LINKS.some(l => pathname === l.href) ? "text-white bg-slate-800" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}>
+              Trade & Analiz ▾
+            </button>
+            <div className="absolute top-full left-0 mt-1 w-48 bg-slate-900 border border-slate-800 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all flex flex-col p-1 z-50">
+              {TRADE_LINKS.filter(l => user.role === "admin" || (user.allowed_pages && user.allowed_pages.includes(l.href.split("/")[1]))).map(l => (
+                <Link key={l.href} href={l.href}
+                  className={`text-sm transition-colors px-3 py-2 rounded-md ${
+                    pathname === l.href ? "text-white bg-slate-800" : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                  }`}>
+                  {l.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Araçlar Dropdown */}
+          <div className="relative group">
+            <button className={`text-sm px-3 py-1.5 rounded whitespace-nowrap transition-colors ${TOOLS_LINKS.some(l => pathname === l.href) ? "text-white bg-slate-800" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}>
+              Araçlar ▾
+            </button>
+            <div className="absolute top-full left-0 mt-1 w-48 bg-slate-900 border border-slate-800 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all flex flex-col p-1 z-50">
+              {TOOLS_LINKS.filter(l => user.role === "admin" || (user.allowed_pages && user.allowed_pages.includes(l.href.split("/")[1]))).map(l => (
+                <Link key={l.href} href={l.href}
+                  className={`text-sm transition-colors px-3 py-2 rounded-md ${
+                    pathname === l.href ? "text-white bg-slate-800" : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                  }`}>
+                  {l.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Ayarlar Dropdown */}
+          <div className="relative group">
+            <button className={`text-sm px-3 py-1.5 rounded whitespace-nowrap transition-colors ${SETTINGS_LINKS.some(l => pathname === l.href) ? "text-white bg-slate-800" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}>
+              Ayarlar ▾
+            </button>
+            <div className="absolute top-full left-0 mt-1 w-48 bg-slate-900 border border-slate-800 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all flex flex-col p-1 z-50">
+              {SETTINGS_LINKS.filter(l => user.role === "admin" || (user.allowed_pages && user.allowed_pages.includes(l.href.split("/")[1]))).map(l => (
+                <Link key={l.href} href={l.href}
+                  className={`text-sm transition-colors px-3 py-2 rounded-md ${
+                    pathname === l.href ? "text-white bg-slate-800" : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                  }`}>
+                  {l.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
           {user?.role === "admin" && (
             <Link href="/admin/users"
               className={`text-sm transition-colors px-3 py-1.5 rounded whitespace-nowrap hover:bg-slate-800 ${
@@ -99,7 +162,7 @@ export default function NavClient() {
       {/* Mobile dropdown */}
       {open && (
         <div className="md:hidden border-t border-slate-800 py-2 px-2 flex flex-col gap-0.5">
-          {filteredLinks.map(l => (
+          {ALL_LINKS.filter(l => user.role === "admin" || (user.allowed_pages && user.allowed_pages.includes(l.href.split("/")[1]))).map(l => (
             <Link key={l.href} href={l.href} onClick={() => setOpen(false)}
               className={`text-sm px-4 py-2.5 rounded-lg transition-colors ${
                 pathname === l.href
