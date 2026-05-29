@@ -188,9 +188,25 @@ export default function SettingsPage() {
           </div>
 
           <div className="text-xs text-slate-400 bg-slate-800 rounded-lg px-3 py-2 space-y-1">
-            <p>• API key sadece <strong className="text-white">Futures/Swap</strong> iznine sahip olmalı</p>
-            <p>• IP kısıtlaması opsiyonel ama önerilir</p>
-            <p>• Key'ler şifreli şekilde sunucunuzda saklanır</p>
+            <p>• API key sadece <strong className="text-white">Futures/Swap</strong> ve <strong className="text-white">Spot</strong> okuma/yazma iznine sahip olmalı</p>
+            <div className="flex items-center gap-2">
+              <span>• IP kısıtlaması (İşlem hızı ve güvenlik için bu IP'yi kopyalayıp borsaya ekleyin):</span>
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigator.clipboard.writeText("72.60.129.158");
+                  const btn = e.currentTarget;
+                  const originalText = btn.innerText;
+                  btn.innerText = "Kopyalandı!";
+                  setTimeout(() => btn.innerText = originalText, 1500);
+                }}
+                className="bg-slate-950 px-2 py-0.5 rounded border border-slate-700 text-emerald-400 cursor-pointer hover:bg-slate-700 hover:text-white transition-colors"
+                title="Kopyalamak için tıkla"
+              >
+                72.60.129.158
+              </button>
+            </div>
+            <p>• Key'ler AES-256 ile veritabanında şifreli saklanır</p>
           </div>
 
           <form onSubmit={save} className="space-y-3">
@@ -257,7 +273,7 @@ export default function SettingsPage() {
       {/* Güvenlik notu */}
       <div className="glass-card p-4 space-y-1 text-xs text-slate-600">
         <p className="font-semibold text-slate-500 flex items-center gap-1.5">🔒 Güvenlik Notu</p>
-        <p>API key&apos;ler sunucunuzdaki Redis&apos;te şifreli olarak saklanır. Asla para çekme yetkisi vermeyin.</p>
+        <p>API key&apos;ler sunucunuzdaki veritabanında banka standartlarında AES-256 ile şifreli olarak saklanır. Güvenliğiniz için API key oluştururken asla para çekme yetkisi vermeyin.</p>
       </div>
     </div>
   )
