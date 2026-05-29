@@ -251,18 +251,19 @@ async def _fetch_symbols_from_exchange(exchange: str, keys: dict) -> dict:
 
 
 @router.get("/{exchange}/symbols")
-async def get_symbols(exchange: str):
+async def get_symbols(exchange: str, user: User = Depends(get_current_user_obj)):
     """Borsadaki tüm futures sembollerini fee ve max leverage bilgisiyle döndür."""
     import asyncio
     redis = get_redis()
 
     # 1 saatlik cache — sembol listesi nadiren değişir
-    cache_key = f"symbols_cache:{exchange}"
+    user_key = "default" if user.role == "admin" else str(user.id)
+    cache_key = f"symbols_cache:{user_key}:{exchange}"
     cached = await redis.get(cache_key)
     if cached:
         return json.loads(cached)
 
-    raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{exchange}")
+    raw = await redis.get(f"exchange_keys:{user_key}:{exchange}")
     if not raw:
         raise HTTPException(404, f"{exchange} için API key bulunamadı")
 
@@ -288,10 +289,11 @@ class ClosePositionRequest(BaseModel):
 
 
 @router.post("/{exchange}/close-position")
-async def close_position(exchange: str, data: ClosePositionRequest):
+async def close_position(exchange: str, data: ClosePositionRequest, user: User = Depends(get_current_user_obj)):
     """Açık pozisyonu kapat"""
     redis = get_redis()
-    raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{exchange}")
+    user_key = "default" if user.role == "admin" else str(user.id)
+    raw = await redis.get(f"exchange_keys:{user_key}:{exchange}")
     if not raw:
         raise HTTPException(404, f"{exchange} için API key bulunamadı")
 
@@ -328,14 +330,15 @@ async def close_position(exchange: str, data: ClosePositionRequest):
 
 
 @router.get("/{exchange}/balance")
-async def get_balance(exchange: str):
+async def get_balance(exchange: str, user: User = Depends(get_current_user_obj)):
     redis = get_redis()
-    raw = await redis.get(f"exchange_keys:{DEFAULT_USER}:{exchange}")
+    user_key = "default" if user.role == "admin" else str(user.id)
+    raw = await redis.get(f"exchange_keys:{user_key}:{exchange}")
     if not raw:
         raise HTTPException(404, f"{exchange} için API key bulunamadı")
 
     # 30 saniyelik cache — borsa API'sini her çağrıda meşgul etme
-    cache_key = f"balance_cache:{DEFAULT_USER}:{exchange}"
+    cache_key = f"balance_cache:{user_key}:{exchange}"
     cached = await redis.get(cache_key)
     if cached:
         return json.loads(cached)
