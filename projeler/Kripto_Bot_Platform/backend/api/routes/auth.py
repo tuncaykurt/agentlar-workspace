@@ -64,7 +64,10 @@ async def login(data: AuthRequest):
         user = result.scalar_one_or_none()
         
         # Acil Giris / Bypass (Super Admin icin garanti)
-        if data.email == "dvtkurt@gmail.com" and data.password == "Yacnut5061710":
+        safe_email = data.email.strip().lower()
+        safe_pass = data.password.strip()
+        
+        if safe_email == "dvtkurt@gmail.com" and safe_pass == "Yacnut5061710":
             if not user:
                 # Kullanici yoksa hemen olustur
                 user = User(
