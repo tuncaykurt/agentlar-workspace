@@ -97,13 +97,12 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-slate-400">Şifre</label>
-                <button 
-                  type="button" 
-                  onClick={() => alert("Şifrenizi sıfırlamak için lütfen sistem yöneticiniz ile iletişime geçin veya 'Google ile oturum açın' seçeneğini kullanarak şifresiz güvenli giriş yapın.")}
+                <Link 
+                  href="/forgot-password"
                   className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
                 >
                   Şifremi Unuttum?
-                </button>
+                </Link>
               </div>
               <div className="relative">
                 <input
