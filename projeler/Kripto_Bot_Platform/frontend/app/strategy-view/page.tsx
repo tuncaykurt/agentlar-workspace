@@ -18,6 +18,7 @@ interface Trade {
   position_value?: number
   leverage?: number
   pnl: number
+  fee?: number
   pnl_pct: number
   exit_reason: string
 }
@@ -35,6 +36,7 @@ interface BacktestResult {
   total_trades: number
   final_balance: number
   total_pnl: number
+  total_fees?: number
   total_pnl_pct: number
   win_rate: number
   max_drawdown_pct: number
@@ -547,6 +549,11 @@ export default function StrategyViewPage() {
                     ({result.total_pnl_pct >= 0 ? "+" : ""}{result.total_pnl_pct}%)
                   </span>
                 </p>
+                {result.total_fees !== undefined && (
+                  <p className="text-[10px] text-orange-400 mt-1">
+                    Komisyon: ${result.total_fees.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </p>
+                )}
               </div>
               <div className="border-l border-slate-700 pl-4 md:pl-8 text-xs text-slate-500 space-y-0.5">
                 <p>Kaldıraç: <span className="text-white">{leverage}x</span></p>
@@ -608,6 +615,7 @@ export default function StrategyViewPage() {
                     <th className="text-right py-1.5 px-2">Giriş</th>
                     <th className="text-right py-1.5 px-2">Çıkış</th>
                     <th className="text-right py-1.5 px-2">PnL ($)</th>
+                    <th className="text-right py-1.5 px-2">Fee</th>
                     <th className="text-right py-1.5 px-2">PnL %</th>
                     <th className="text-left py-1.5 px-2">Neden</th>
                   </tr>
@@ -638,6 +646,9 @@ export default function StrategyViewPage() {
                       </td>
                       <td className={`py-1.5 px-2 text-right font-medium ${t.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
                         {t.pnl >= 0 ? "+" : ""}${t.pnl.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-1.5 px-2 text-right text-orange-400">
+                        {t.fee !== undefined ? `$${t.fee.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"}
                       </td>
                       <td className={`py-1.5 px-2 text-right ${t.pnl_pct >= 0 ? "text-green-400" : "text-red-400"}`}>
                         {t.pnl_pct > 0 ? "+" : ""}{t.pnl_pct}%

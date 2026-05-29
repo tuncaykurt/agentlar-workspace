@@ -584,14 +584,14 @@ export default function ProChart({
   useEffect(() => {
     if (gridMode === "bollinger" || gridMode === "hybrid" || gridMode === "bb_direction") {
       setInds(prev => prev.map(i => {
-        if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: true }
-        if (i.id === "ema") return { ...i, enabled: false }
+        if (i.id === "bb") return { ...i, enabled: true }
+        if (i.id === "ema" || i.id === "rsi") return { ...i, enabled: false }
         return i
       }))
     } else if (gridMode === "ema_trend") {
       setInds(prev => prev.map(i => {
-        if (i.id === "ema" || i.id === "rsi") return { ...i, enabled: true }
-        if (i.id === "bb") return { ...i, enabled: false }
+        if (i.id === "ema") return { ...i, enabled: true }
+        if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: false }
         return i
       }))
     } else if (gridMode === "manual") {

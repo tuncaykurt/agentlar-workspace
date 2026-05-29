@@ -248,7 +248,7 @@ class GridBacktestEngine:
                             margin_used = (lvl_contracts * cs * ep) / self.leverage
                             pos_val = lvl_contracts * cs * ep
                             pnl_pct = (net_pnl / margin_used * 100) if margin_used > 0 else 0
-                            trades.append({"entry_ts": ts, "exit_ts": ts, "side": "buy", "entry": ep, "exit": price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct})
+                            trades.append({"entry_ts": ts, "exit_ts": ts, "side": "buy", "entry": ep, "exit": price, "pnl": net_pnl, "fee": fee, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct})
             else: # short
                 if current_level > state["last_level"] and not skip_buy:
                     for lvl in range(state["last_level"] + 1, current_level + 1):
@@ -272,7 +272,7 @@ class GridBacktestEngine:
                             margin_used = (lvl_contracts * cs * ep) / self.leverage
                             pos_val = lvl_contracts * cs * ep
                             pnl_pct = (net_pnl / margin_used * 100) if margin_used > 0 else 0
-                            trades.append({"entry_ts": ts, "exit_ts": ts, "side": "sell", "entry": ep, "exit": price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct})
+                            trades.append({"entry_ts": ts, "exit_ts": ts, "side": "sell", "entry": ep, "exit": price, "pnl": net_pnl, "fee": fee, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct})
 
             state["last_level"] = current_level
             
@@ -317,7 +317,7 @@ class GridBacktestEngine:
                         margin_used = (lvl_contracts * cs * ep) / self.leverage
                         pos_val = lvl_contracts * cs * ep
                         pnl_pct = (net_pnl / margin_used * 100) if margin_used > 0 else 0
-                        trades.append({"entry_ts": ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": price, "pnl": net_pnl, "status": "band_exit", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct, "exit_reason": "bb_upper_band" if side == "upper" else "bb_lower_band"})
+                        trades.append({"entry_ts": ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": price, "pnl": net_pnl, "fee": fee, "status": "band_exit", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct, "exit_reason": "bb_upper_band" if side == "upper" else "bb_lower_band"})
                     if self.grid_mode == "bb_direction":
                         state["bb_dir_paused"] = True
                     if self.grid_mode == "ema_trend":
@@ -364,7 +364,7 @@ class GridBacktestEngine:
                 margin_used = (lvl_contracts * cs * ep) / self.leverage
                 pos_val = lvl_contracts * cs * ep
                 pnl_pct = (net_pnl / margin_used * 100) if margin_used > 0 else 0
-                trades.append({"entry_ts": last_ts, "exit_ts": last_ts, "side": active_dir, "entry": ep, "exit": last_price, "pnl": net_pnl, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct, "exit_reason": "end_of_data"})
+                trades.append({"entry_ts": last_ts, "exit_ts": last_ts, "side": active_dir, "entry": ep, "exit": last_price, "pnl": net_pnl, "fee": fee, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct, "exit_reason": "end_of_data"})
 
         # Calculate metrics
         closed = [t for t in trades if t["status"] in ("closed", "band_exit")]
@@ -377,10 +377,13 @@ class GridBacktestEngine:
             indicators["grid_upper"] = grid_upper_line
             indicators["grid_lower"] = grid_lower_line
 
+        fees = [t.get("fee", 0) for t in closed]
+
         return {
             "total_trades": len(closed),
             "final_balance": round(balance, 2),
             "total_pnl": round(sum(pnls), 2),
+            "total_fees": round(sum(fees), 2),
             "total_pnl_pct": round((sum(pnls) / self.initial_balance) * 100, 2) if self.initial_balance>0 else 0,
             "win_rate": round(len(wins) / len(pnls) * 100, 1) if pnls else 0,
             "win_count": len(wins),
@@ -390,7 +393,7 @@ class GridBacktestEngine:
             "profit_factor": round(sum(wins)/abs(sum(losses)), 2) if sum(losses)!=0 else (99 if wins else 0),
             "best_trade": round(max(pnls), 2) if pnls else 0,
             "worst_trade": round(min(pnls), 2) if pnls else 0,
-            "trades": [{"entry_ts": t["entry_ts"], "exit_ts": t.get("exit_ts", t["entry_ts"]), "side": t["side"], "entry": t["entry"], "exit": t["exit"], "pnl": t["pnl"], "qty": t["qty"], "exit_reason": t["status"]} for t in closed],
+            "trades": [{"entry_ts": t["entry_ts"], "exit_ts": t.get("exit_ts", t["entry_ts"]), "side": t["side"], "entry": t["entry"], "exit": t["exit"], "pnl": t["pnl"], "fee": t.get("fee", 0), "qty": t["qty"], "exit_reason": t["status"]} for t in closed],
             "equity_curve": equity_curve,
             "indicators": indicators,
         }

@@ -308,6 +308,8 @@ export default function HftPage() {
                 level_count: t.level_count,
                 timestamp: t.timestamp || (t.time ? Math.floor(new Date(t.time).getTime() / 1000) : undefined),
               })))
+            } else {
+              setTrades([])
             }
           } else {
             setSimRunning(false)

@@ -84,6 +84,7 @@ class BacktestEngine:
                         "position_value": round(position["margin"] * self.leverage, 2),
                         "leverage": self.leverage,
                         "pnl": round(net_pnl, 2),
+                        "fee": exit_fee + entry_fee,
                         "pnl_pct": round((net_pnl / position["margin"]) * 100, 2) if position["margin"] > 0 else 0,
                         "exit_reason": hit["reason"],
                     })
@@ -123,6 +124,7 @@ class BacktestEngine:
                         "position_value": round(position["margin"] * self.leverage, 2),
                         "leverage": self.leverage,
                         "pnl": round(net_pnl, 2),
+                        "fee": exit_fee + entry_fee,
                         "pnl_pct": round((net_pnl / position["margin"]) * 100, 2) if position["margin"] > 0 else 0,
                         "exit_reason": "reverse",
                     })
@@ -213,6 +215,7 @@ class BacktestEngine:
                 "position_value": round(position["margin"] * self.leverage, 2),
                 "leverage": self.leverage,
                 "pnl": round(net_pnl, 2),
+                "fee": exit_fee + entry_fee,
                 "pnl_pct": round((net_pnl / position["margin"]) * 100, 2) if position["margin"] > 0 else 0,
                 "exit_reason": "end_of_data",
             })
@@ -381,6 +384,7 @@ class BacktestEngine:
             "total_trades": len(trades),
             "final_balance": round(final_balance, 2),
             "total_pnl": round(total_pnl, 2),
+            "total_fees": round(sum(t.get("fee", 0) for t in trades), 2),
             "total_pnl_pct": round((total_pnl / self.initial_balance) * 100, 2),
             "win_rate": round(win_rate, 1),
             "max_drawdown_pct": round(max_drawdown * 100, 2),

@@ -17,6 +17,7 @@ interface Trade {
   position_value?: number
   leverage?: number
   pnl: number
+  fee?: number
   pnl_pct: number
   exit_reason: string
 }
@@ -38,6 +39,7 @@ interface BacktestResult {
   total_trades: number
   final_balance: number
   total_pnl: number
+  total_fees?: number
   total_pnl_pct: number
   win_rate: number
   max_drawdown_pct: number
@@ -365,8 +367,11 @@ export default function BacktestPage() {
             <div className="space-y-2">
               <MetricRow label="Toplam Trade" value={result.total_trades} />
               <MetricRow label="Final Bakiye" value={`$${result.final_balance.toLocaleString()}`} />
+              {result.total_fees !== undefined && (
+                <MetricRow label="Toplam Komisyon" value={`$${result.total_fees.toLocaleString()}`} color="text-orange-400" />
+              )}
               <MetricRow
-                label="Toplam PnL"
+                label="Toplam PnL (Net)"
                 value={`$${result.total_pnl.toLocaleString()} (${result.total_pnl_pct > 0 ? "+" : ""}${result.total_pnl_pct}%)`}
                 color={result.total_pnl >= 0 ? "text-green-400" : "text-red-400"}
               />
@@ -441,6 +446,7 @@ export default function BacktestPage() {
                   <th className="text-right py-1.5 px-2">Marjin</th>
                   <th className="text-right py-1.5 px-2">Poz.Deger</th>
                   <th className="text-right py-1.5 px-2">PnL</th>
+                  <th className="text-right py-1.5 px-2">Fee</th>
                   <th className="text-right py-1.5 px-2">PnL % (marjin)</th>
                   <th className="text-left py-1.5 px-2">Neden</th>
                 </tr>
@@ -461,6 +467,9 @@ export default function BacktestPage() {
                     <td className="py-1.5 px-2 text-right text-slate-400">{t.position_value !== undefined ? `$${t.position_value.toFixed(2)}` : "-"}</td>
                     <td className={`py-1.5 px-2 text-right font-medium ${t.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
                       ${t.pnl.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-1.5 px-2 text-right text-orange-400">
+                      {t.fee !== undefined ? `$${t.fee.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "-"}
                     </td>
                     <td className={`py-1.5 px-2 text-right ${t.pnl_pct >= 0 ? "text-green-400" : "text-red-400"}`}>
                       {t.pnl_pct > 0 ? "+" : ""}{t.pnl_pct}%
