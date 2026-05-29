@@ -220,25 +220,8 @@ async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
 
 
 async def _exchange_balance_cache():
-    """Borsa bakiyesini 60 saniyede bir Redis'e cache'le (auto_exchange modu için)."""
-    import json as _json
-    from core.redis_client import get_redis
-
-    await asyncio.sleep(45)  # Diğer servisler hazır olsun
-    while True:
-        try:
-            redis = get_redis()
-            raw_keys = await redis.get("exchange_keys:default:mexc")
-            if raw_keys:
-                keys = _json.loads(raw_keys)
-                from exchange.exchange_factory import fetch_balance_for
-                balance = await fetch_balance_for(
-                    "mexc", keys["api_key"], keys["secret"], keys.get("passphrase", "")
-                )
-                await redis.set("exchange:mexc:balance", _json.dumps(balance), ex=120)
-        except Exception as e:
-            print(f"[BalanceCache] Bakiye alınamadı: {e}")
-        await asyncio.sleep(60)
+    """Borsa bakiyesini 60 saniyede bir Redis'e cache'le (İPTAL - Multi-tenant mimari)"""
+    pass
 
 
 @asynccontextmanager
@@ -307,7 +290,7 @@ async def lifespan(app: FastAPI):
             tasks.append(asyncio.create_task(start_coin_collector()))
             tasks.append(asyncio.create_task(start_scanner_simulator()))
             tasks.append(asyncio.create_task(start_mexc_ws_feeder()))
-            tasks.append(asyncio.create_task(_exchange_balance_cache()))
+            # tasks.append(asyncio.create_task(_exchange_balance_cache()))
             tasks.append(asyncio.create_task(run_hft_engine()))
             print("[Main] Coin veri toplayıcı + MEXC WS + HFT Engine + bakiye cache başlatıldı.")
         except Exception as e:

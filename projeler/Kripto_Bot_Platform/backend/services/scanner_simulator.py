@@ -105,18 +105,8 @@ async def _calculate_margin(cfg: dict, portfolio: dict, leverage: int) -> float:
         equity = portfolio["balance"] + portfolio["reserved"]
         margin = equity * value / 100
     elif mode in ["auto_exchange", "exchange_pct"]:
-        # Borsadan çekilen gerçek bakiyenin yüzdesi (Redis cache)
-        try:
-            from core.redis_client import get_redis
-            redis = get_redis()
-            raw = await redis.get("exchange:mexc:balance")
-            if raw:
-                ex_bal = json.loads(raw)
-                margin = float(ex_bal.get("free", 0)) * value / 100
-            else:
-                margin = value  # Fallback sabit
-        except Exception:
-            margin = value
+        # Global simülatör gerçek bir borsaya bağlı değil, sanal portföyü baz al
+        margin = portfolio["balance"] * value / 100
     else:
         # Sabit miktar
         margin = float(value)

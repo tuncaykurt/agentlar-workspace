@@ -131,6 +131,7 @@ class BollingerGridService:
     async def start_recalc_loop(
         self,
         ccxt_symbol: str,
+        user_id: str,
         timeframe: str = "5m",
         bb_period: int = 20,
         bb_std: float = 2.0,
@@ -148,13 +149,13 @@ class BollingerGridService:
         while self._running:
             try:
                 # Grid hâlâ çalışıyor mu?
-                running = await redis.get("grid_live:running")
+                running = await redis.get(f"grid_live:running:{user_id}")
                 if not running:
                     print("[BB-Service] Grid durmuş, recalc loop sonlandırılıyor")
                     break
 
                 # Mevcut fiyatı al (min_spread_pct floor için)
-                state_raw = await redis.get("grid_live:state")
+                state_raw = await redis.get(f"grid_live:state:{user_id}")
                 current_price = 0
                 if state_raw:
                     state = json.loads(state_raw)

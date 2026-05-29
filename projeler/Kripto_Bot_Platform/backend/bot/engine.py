@@ -3390,17 +3390,8 @@ class BotEngine:
                     # Bakiyenin %'si
                     margin_usdt = self.risk.current_balance * (trade_size_value / 100)
                 elif trade_size_mode == "auto_exchange" and trade_size_value > 0:
-                    # Borsa bakiyesinin %'si — Redis'ten al
-                    try:
-                        import json as _json
-                        _bal_raw = await redis.get("exchange:mexc:balance")
-                        if _bal_raw:
-                            _bal = _json.loads(_bal_raw)
-                            margin_usdt = float(_bal.get("free", 0)) * (trade_size_value / 100)
-                        else:
-                            margin_usdt = self.risk.current_balance * (trade_size_value / 100)
-                    except Exception:
-                        margin_usdt = self.risk.current_balance * (trade_size_value / 100)
+                    # Borsa bakiyesinin %'si (self.risk.current_balance periyodik güncellenir)
+                    margin_usdt = self.risk.current_balance * (trade_size_value / 100)
                 else:
                     # Fallback: risk_per_trade kullan
                     rpt = self.risk.risk_per_trade

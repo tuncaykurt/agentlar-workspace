@@ -615,17 +615,18 @@ async def trigger_simulation():
 
 
 @router.get("/portfolio")
-async def get_portfolio():
+async def get_portfolio(user = Depends(get_current_user_obj)):
     """Sanal portföy durumunu getir + borsa bakiyesi."""
     from services.scanner_simulator import _get_portfolio
     redis = get_redis()
+    user_id = str(user.id)
     portfolio = await _get_portfolio(redis)
     equity = portfolio["balance"] + portfolio["reserved"]
 
     # Borsa bakiyesini Redis cache'ten oku
     exchange_balance = None
     try:
-        raw = await redis.get("exchange:mexc:balance")
+        raw = await redis.get(f"exchange:mexc:balance:{user_id}")
         if raw:
             exchange_balance = json.loads(raw)
     except Exception:
@@ -641,10 +642,11 @@ async def get_portfolio():
 
 
 @router.post("/portfolio/sync-exchange")
-async def sync_exchange_balance():
+async def sync_exchange_balance(user = Depends(get_current_user_obj)):
     """Borsadaki gerçek bakiyeyi Redis'e cache'le."""
     redis = get_redis()
-    raw_keys = await redis.get("exchange_keys:default:mexc")
+    user_id = str(user.id)
+    raw_keys = await redis.get(f"exchange_keys:{user_id}:mexc")
     if not raw_keys:
         return {"error": "MEXC API key bulunamadı"}
 
@@ -652,7 +654,7 @@ async def sync_exchange_balance():
     try:
         from exchange.exchange_factory import fetch_balance_for
         balance = await fetch_balance_for("mexc", keys["api_key"], keys["secret"], keys.get("passphrase", ""))
-        await redis.set("exchange:mexc:balance", json.dumps(balance), ex=120)
+        await redis.set(f"exchange:mexc:balance:{user_id}", json.dumps(balance), ex=120)
         return balance
     except Exception as e:
         return {"error": str(e)}
@@ -856,7 +858,7 @@ async def clear_simulations(status: str = None):
 
 
 @router.get("/stats/scenarios")
-async def scenario_analysis():
+async def scenario_analysis(user = Depends(get_current_user_obj)):
     """
     3 farklı senaryo ile simülasyon performansını karşılaştır.
     1. Tüm sinyallere girseydik (all-in)
@@ -869,7 +871,8 @@ async def scenario_analysis():
     # Borsa bakiyesi
     exchange_bal = None
     try:
-        raw = await redis.get("exchange:mexc:balance")
+        user_id = str(user.id)
+        raw = await redis.get(f"exchange:mexc:balance:{user_id}")
         if raw:
             exchange_bal = json.loads(raw)
     except Exception:

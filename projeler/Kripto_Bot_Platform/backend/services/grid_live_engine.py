@@ -486,7 +486,7 @@ class GridLiveEngine:
         if grid_mode in ("bollinger", "hybrid", "bb_direction") and user_id in self._bb_services:
             self._bb_services[user_id]._recalc_task = asyncio.create_task(
                 self._bb_services[user_id].start_recalc_loop(
-                    ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, min_spread_pct
+                    ccxt_symbol, user_id, bb_timeframe, bb_period, bb_std_dev, min_spread_pct
                 )
             )
 
@@ -1400,8 +1400,8 @@ class GridLiveEngine:
 
         # İşlem geçmişine ekle
         redis = get_redis()
-        await redis.lpush("grid_live:trades", json.dumps(trade))
-        await redis.ltrim("grid_live:trades", 0, 199)
+        await redis.lpush(f"grid_live:trades:{user_id}", json.dumps(trade))
+        await redis.ltrim(f"grid_live:trades:{user_id}", 0, 199)
         
         asyncio.create_task(push_trade_notification(trade, user_id))
 
