@@ -18,18 +18,19 @@ VAPID_PUBLIC_KEY = "BJ8TZYDjv-OHYrjJu0Y5xwEgNRfsrxdZ2sLi16Aj13PttTxfwrhtBs8j5OYk
 VAPID_PRIVATE_KEY = "com3y1Bjr-4hokvARZrX9UzrzaAJmLS-VGQSMEyNz6o"
 VAPID_CLAIMS = {"sub": "mailto:tuncay@yapayzekaotomasyon.cloud"}
 
-REDIS_KEY = "push:subscriptions"
+REDIS_KEY_PREFIX = "push:subscriptions:"
 
 
-async def save_subscription(subscription: dict) -> bool:
+async def save_subscription(subscription: dict, user_id: str) -> bool:
     """Push subscription'ı Redis'e kaydet."""
     redis = get_redis()
+    redis_key = f"{REDIS_KEY_PREFIX}{user_id}"
     endpoint = subscription.get("endpoint", "")
     if not endpoint:
         return False
 
     # Aynı endpoint varsa güncelle
-    existing = await redis.lrange(REDIS_KEY, 0, -1)
+    existing = await redis.lrange(redis_key, 0, -1)
     for item in existing:
         try:
             sub = json.loads(item)
@@ -39,21 +40,22 @@ async def save_subscription(subscription: dict) -> bool:
         except (json.JSONDecodeError, TypeError):
             pass
 
-    await redis.rpush(REDIS_KEY, json.dumps(subscription))
-    count = await redis.llen(REDIS_KEY)
+    await redis.rpush(redis_key, json.dumps(subscription))
+    count = await redis.llen(redis_key)
     print(f"[Push] Yeni subscription kaydedildi. Toplam: {count}")
     return True
 
 
-async def remove_subscription(endpoint: str) -> bool:
+async def remove_subscription(endpoint: str, user_id: str) -> bool:
     """Subscription'ı kaldır."""
     redis = get_redis()
-    existing = await redis.lrange(REDIS_KEY, 0, -1)
+    redis_key = f"{REDIS_KEY_PREFIX}{user_id}"
+    existing = await redis.lrange(redis_key, 0, -1)
     for item in existing:
         try:
             sub = json.loads(item)
             if sub.get("endpoint") == endpoint:
-                await redis.lrem(REDIS_KEY, 1, item)
+                await redis.lrem(redis_key, 1, item)
                 print(f"[Push] Subscription kaldırıldı: {endpoint[:50]}...")
                 return True
         except (json.JSONDecodeError, TypeError):
@@ -61,8 +63,8 @@ async def remove_subscription(endpoint: str) -> bool:
     return False
 
 
-async def send_push(title: str, body: str, data: dict = None, tag: str = "trade"):
-    """Tüm kayıtlı abonelere push bildirim gönder."""
+async def send_push(title: str, body: str, data: dict = None, tag: str = "trade", user_id: str = "default"):
+    """Sadece ilgili kullanıcının abonelerine push bildirim gönder."""
     try:
         from pywebpush import webpush, WebPushException
     except ImportError:
@@ -70,7 +72,8 @@ async def send_push(title: str, body: str, data: dict = None, tag: str = "trade"
         return
 
     redis = get_redis()
-    subs_raw = await redis.lrange(REDIS_KEY, 0, -1)
+    redis_key = f"{REDIS_KEY_PREFIX}{user_id}"
+    subs_raw = await redis.lrange(redis_key, 0, -1)
     if not subs_raw:
         return
 
@@ -102,12 +105,12 @@ async def send_push(title: str, body: str, data: dict = None, tag: str = "trade"
 
     # Geçersiz subscription'ları temizle
     for ep in dead_endpoints:
-        await remove_subscription(ep)
+        await remove_subscription(ep, user_id)
         print(f"[Push] Geçersiz subscription temizlendi: {ep[:50]}...")
 
 
-async def push_trade_notification(trade: dict):
-    """Grid trade gerçekleştiğinde bildirim gönder."""
+async def push_trade_notification(trade: dict, user_id: str = "default"):
+    """Grid trade gerçekleştiğinde ilgili kullanıcıya bildirim gönder."""
     side = trade.get("side", "buy")
     pnl = trade.get("pnl", 0)
     price = trade.get("price", 0)
@@ -126,11 +129,11 @@ async def push_trade_notification(trade: dict):
         title = f"{emoji} {symbol} {side.upper()} Açıldı"
         body = f"{level_count} kademe @ ${price:.2f} | {'Paper' if mode == 'paper' else 'CANLI'}"
 
-    await send_push(title, body, data={"url": "/hft"}, tag=f"trade-{side}")
+    await send_push(title, body, data={"url": "/hft"}, tag=f"trade-{side}", user_id=user_id)
 
 
-async def push_grid_event(event: str, details: str = ""):
-    """Grid lifecycle event bildirimi (başlama, durma, sinyal)."""
+async def push_grid_event(event: str, details: str = "", user_id: str = "default"):
+    """Grid lifecycle event bildirimi (başlama, durma, sinyal) ilgili kullanıcıya gönder."""
     events = {
         "grid_start": ("🚀 Grid Başlatıldı", details or "Bot aktif, işlemler başlıyor."),
         "grid_stop": ("⏹️ Grid Durduruldu", details or "Bot durduruldu."),
@@ -141,4 +144,4 @@ async def push_grid_event(event: str, details: str = ""):
     }
 
     title, body = events.get(event, ("📢 Grid Bildirimi", details or event))
-    await send_push(title, body, data={"url": "/hft"}, tag=f"grid-{event}")
+    await send_push(title, body, data={"url": "/hft"}, tag=f"grid-{event}", user_id=user_id)

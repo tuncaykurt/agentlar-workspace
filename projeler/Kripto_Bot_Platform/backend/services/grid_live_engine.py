@@ -497,7 +497,7 @@ class GridLiveEngine:
               f"{leverage}x | toplam=${total_budget} margin/kademe=${margin_per_level:.4f} | "
               f"{contracts_per_level} kontrat/kademe")
               
-        asyncio.create_task(push_grid_event("grid_start", f"{emoji} {mode_label} modunda bot başlatıldı. Budget: ${total_budget}"))
+        asyncio.create_task(push_grid_event("grid_start", f"{emoji} {mode_label} modunda bot başlatıldı. Budget: ${total_budget}", user_id))
 
         result = {
             "success": True,
@@ -561,7 +561,7 @@ class GridLiveEngine:
         print(f"[GridLive] Bot durduruldu. PnL: ${result['total_pnl']:.2f} | "
               f"İşlem: {result['total_trades']} | Açık seviye: {result['filled_levels']}")
               
-        asyncio.create_task(push_grid_event("grid_stop", f"PnL: ${result['total_pnl']:.2f} | İşlem: {result['total_trades']}"))
+        asyncio.create_task(push_grid_event("grid_stop", f"PnL: ${result['total_pnl']:.2f} | İşlem: {result['total_trades']}", user_id))
         return result
 
     async def kill_switch(self, user_id: str = "default") -> dict:
@@ -628,7 +628,7 @@ class GridLiveEngine:
             await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
 
         print(f"[GridLive] KILL SWITCH TETİKLENDİ. Mod: {state.get('mode')} PnL: ${result['total_pnl']:.2f}")
-        asyncio.create_task(push_grid_event("grid_stop", f"🚨 KILL SWITCH TETİKLENDİ! PnL: ${result['total_pnl']:.2f}"))
+        asyncio.create_task(push_grid_event("grid_stop", f"🚨 KILL SWITCH TETİKLENDİ! PnL: ${result['total_pnl']:.2f}", user_id))
         return result
 
     async def _close_all_positions(self, state: dict, user_id: str) -> list:
@@ -819,16 +819,16 @@ class GridLiveEngine:
                                     state["last_level"] = -1
                                     await self._sync_hft_bounds(redis, state)
                                     print(f"[GridLive] BB Yön: Orta çizgi kesildi ({bb_dir_last_mid_side} -> {current_mid_side}), grid yeniden başlatıldı")
-                                    asyncio.create_task(push_grid_event("signal_" + active_dir, f"Orta çizgi {current_mid_side} kesildi."))
+                                    asyncio.create_task(push_grid_event("signal_" + active_dir, f"Orta çizgi {current_mid_side} kesildi.", user_id))
                                 
                                 state["bb_dir_last_mid_side"] = current_mid_side
-                                await redis.set("grid_live:state", json.dumps(state))
+                                await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
                                 return None  # Bekleme modunda
 
                             if bb_dir_paused:
                                 state["bb_dir_wait_cross"] = True
                                 state["bb_dir_last_mid_side"] = current_mid_side
-                                await redis.set("grid_live:state", json.dumps(state))
+                                await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
                                 return None
 
                             if not bb_dir_last_mid_side:
@@ -892,7 +892,7 @@ class GridLiveEngine:
                                 await self._sync_hft_bounds(redis, state)
                                 print(f"[GridLive] BB Yön: Midline cross aktif çalışırken ({bb_dir_last_mid_side} -> {current_mid_side}), "
                                       f"yön {active_dir.upper()}, grid sıfırlandı")
-                                asyncio.create_task(push_grid_event("signal_" + active_dir, f"Aktif midline cross: {active_dir.upper()}"))
+                                asyncio.create_task(push_grid_event("signal_" + active_dir, f"Aktif midline cross: {active_dir.upper()}", user_id))
 
                             state["bb_dir_last_mid_side"] = current_mid_side
 
@@ -946,13 +946,13 @@ class GridLiveEngine:
                                 state["last_level"] = -1
                                 await self._sync_hft_bounds(redis, state)
                                 print(f"[GridLive] EMA Trend: {active_dir.upper()} Sinyali! Grid başlatıldı.")
-                                asyncio.create_task(push_grid_event("signal_" + active_dir, f"EMA Trend Kesişimi!"))
-                            await redis.set("grid_live:state", json.dumps(state))
+                                asyncio.create_task(push_grid_event("signal_" + active_dir, f"EMA Trend Kesişimi!", user_id))
+                            await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
                             return None # Sinyal bekleniyor
                             
                         if ema_paused:
                             state["ema_wait_cross"] = True
-                            await redis.set("grid_live:state", json.dumps(state))
+                            await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
                             return None
 
                     # RSI filtresi — yön bazlı
@@ -1190,7 +1190,7 @@ class GridLiveEngine:
         if not state.get("band_exited", False) and not is_waiting:
             await self._check_trailing(state, current_price, redis)
 
-        await redis.set("grid_live:state", json.dumps(state))
+        await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
         return trades if trades else None
 
     async def _check_trailing(self, state: dict, current_price: float, redis) -> bool:
@@ -1403,7 +1403,7 @@ class GridLiveEngine:
         await redis.lpush("grid_live:trades", json.dumps(trade))
         await redis.ltrim("grid_live:trades", 0, 199)
         
-        asyncio.create_task(push_trade_notification(trade))
+        asyncio.create_task(push_trade_notification(trade, user_id))
 
         return trade
 

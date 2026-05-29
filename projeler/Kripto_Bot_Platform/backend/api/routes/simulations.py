@@ -985,12 +985,12 @@ async def scenario_analysis():
 from fastapi import Request
 
 @router.post("/push/subscribe")
-async def push_subscribe(req: Request):
+async def push_subscribe(req: Request, user=Depends(get_current_user_obj)):
     """Mobil PWA cihazından gelen push subscription'ı kaydeder."""
     try:
         sub = await req.json()
         from services.push_notification import save_subscription
-        success = await save_subscription(sub)
+        success = await save_subscription(sub, str(user.id))
         return {"success": success}
     except Exception as e:
         return {"error": str(e)}
