@@ -2,6 +2,7 @@
 import React, { useState } from "react"
 import { useAuth } from "@/components/AuthProvider"
 import { GoogleLogin } from "@react-oauth/google"
+import Link from "next/link"
 
 export default function LoginPage() {
   const { login } = useAuth()
