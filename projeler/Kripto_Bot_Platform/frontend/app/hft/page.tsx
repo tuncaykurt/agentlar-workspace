@@ -288,7 +288,8 @@ export default function HftPage() {
           setBackendStatus(status)
           if (status.running) {
             setSimRunning(true)
-            setTotalPnl(status.total_pnl || 0)
+            const unrealized = status.exchange_positions?.reduce((sum: number, p: any) => sum + (p.unrealized_pnl || 0), 0) || 0
+            setTotalPnl((status.total_pnl || 0) + unrealized)
             setTradeCount(status.total_trades || 0)
             if (status.upper && status.lower) {
               setGridBounds({ upper: status.upper, lower: status.lower })
