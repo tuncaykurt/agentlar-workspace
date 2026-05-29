@@ -30,6 +30,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [pwdForm, setPwdForm] = useState({ old_pwd: "", new_pwd: "" })
+  const [pwdLoading, setPwdLoading] = useState(false)
+  const [pwdMessage, setPwdMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   useEffect(() => {
     loadExchanges()
@@ -96,6 +99,24 @@ export default function SettingsPage() {
       await loadExchanges()
       setMessage({ type: "success", text: `${exchange.toUpperCase()} bağlantısı kaldırıldı` })
     } catch {}
+  }
+
+  const changePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPwdLoading(true)
+    setPwdMessage(null)
+    try {
+      await api.post("/auth/change-password", {
+        old_password: pwdForm.old_pwd,
+        new_password: pwdForm.new_pwd
+      })
+      setPwdMessage({ type: "success", text: "Şifreniz başarıyla değiştirildi." })
+      setPwdForm({ old_pwd: "", new_pwd: "" })
+    } catch (err: any) {
+      setPwdMessage({ type: "error", text: err.message || "Şifre değiştirilemedi." })
+    } finally {
+      setPwdLoading(false)
+    }
   }
 
   const selectedInfo = exchanges.find((e) => e.exchange === selected)
@@ -270,8 +291,57 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Şifre Değiştirme */}
+      <div className="glass-card p-5 space-y-4 fade-in-up mt-8">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="section-header-icon !w-8 !h-8 !text-base">🔑</div>
+          <h2 className="font-semibold text-white">Şifre Değiştir</h2>
+        </div>
+        
+        {pwdMessage && (
+          <div className={`p-3 text-sm rounded-lg flex items-center gap-2 ${
+            pwdMessage.type === "success"
+              ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+              : "bg-red-500/10 border border-red-500/20 text-red-400"
+          }`}>
+            {pwdMessage.type === "success" ? "✓" : "✕"} {pwdMessage.text}
+          </div>
+        )}
+
+        <form onSubmit={changePassword} className="space-y-3">
+          <div>
+            <label className="text-xs text-slate-400 block mb-1.5">Mevcut Şifre</label>
+            <input
+              type="password"
+              value={pwdForm.old_pwd}
+              onChange={(e) => setPwdForm({ ...pwdForm, old_pwd: e.target.value })}
+              required
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 block mb-1.5">Yeni Şifre</label>
+            <input
+              type="password"
+              value={pwdForm.new_pwd}
+              onChange={(e) => setPwdForm({ ...pwdForm, new_pwd: e.target.value })}
+              required
+              minLength={6}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={pwdLoading}
+            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-2 rounded-lg text-sm transition-colors mt-2"
+          >
+            {pwdLoading ? "Değiştiriliyor..." : "Şifreyi Güncelle"}
+          </button>
+        </form>
+      </div>
+
       {/* Güvenlik notu */}
-      <div className="glass-card p-4 space-y-1 text-xs text-slate-600">
+      <div className="glass-card p-4 space-y-1 text-xs text-slate-600 mt-8">
         <p className="font-semibold text-slate-500 flex items-center gap-1.5">🔒 Güvenlik Notu</p>
         <p>API key&apos;ler sunucunuzdaki veritabanında banka standartlarında AES-256 ile şifreli olarak saklanır. Güvenliğiniz için API key oluştururken asla para çekme yetkisi vermeyin.</p>
       </div>

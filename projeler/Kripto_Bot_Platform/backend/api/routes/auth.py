@@ -20,6 +20,10 @@ class AuthRequest(BaseModel):
 class GoogleAuthRequest(BaseModel):
     credential: str  # Google JWT Token
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
 async def get_current_user_obj(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
     if not credentials:
         raise HTTPException(401, "Giriş yapmanız gerekiyor")
@@ -146,3 +150,22 @@ async def me(user: User = Depends(get_current_user_obj)):
         "fee_active": user.fee_active,
         "allowed_pages": user.allowed_pages
     }
+
+@router.post("/change-password")
+async def change_password(data: ChangePasswordRequest, current_user: User = Depends(get_current_user_obj)):
+    if not current_user.password_hash:
+        pass
+    elif not verify_password(data.old_password, current_user.password_hash):
+        raise HTTPException(400, "Mevcut şifreniz hatalı")
+
+    if len(data.new_password) < 6:
+        raise HTTPException(400, "Yeni şifre en az 6 karakter olmalıdır")
+
+    async with async_session() as session:
+        result = await session.execute(select(User).where(User.id == current_user.id))
+        user = result.scalar_one_or_none()
+        if user:
+            user.password_hash = hash_password(data.new_password)
+            await session.commit()
+    
+    return {"message": "Şifre başarıyla güncellendi"}
