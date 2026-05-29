@@ -1,7 +1,7 @@
 """
 Bot Yönetimi API — PostgreSQL Persistent
 """
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Depends
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
@@ -15,6 +15,7 @@ from core.database import async_session
 from core.config import settings
 from models.trade import Bot, BotStatus
 from sqlalchemy import select, update, delete
+from api.routes.auth import get_current_user, get_current_admin
 
 class _ExClient:
     """CCXT exchange'i BotEngine interface'ine saran wrapper."""
@@ -512,10 +513,10 @@ class BotCreate(BaseModel):
 
 
 @router.get("")
-async def list_bots():
+async def list_bots(user_id: int = Depends(get_current_user)):
     try:
         async with async_session() as session:
-            result = await session.execute(select(Bot).order_by(Bot.id.desc()))
+            result = await session.execute(select(Bot).where(Bot.user_id == user_id).order_by(Bot.id.desc()))
             bots = result.scalars().all()
             return [
                 {
@@ -542,7 +543,7 @@ async def list_bots():
 
 
 @router.post("")
-async def create_bot(data: BotCreate):
+async def create_bot(data: BotCreate, user_id: int = Depends(get_current_user)):
     try:
         async with async_session() as session:
             # params (margin_type gibi bot ayarları) + strategy_params (strateji özel) merge
@@ -579,6 +580,7 @@ async def create_bot(data: BotCreate):
                     effective_params["webhook_token"] = token
 
             bot = Bot(
+                user_id=user_id,
                 name=data.name,
                 symbol=data.symbol,
                 strategy=strategy,
@@ -630,9 +632,9 @@ async def create_bot(data: BotCreate):
 
 
 @router.post("/{bot_id}/start")
-async def start_bot(bot_id: int):
+async def start_bot(bot_id: int, user_id: int = Depends(get_current_user)):
     async with async_session() as session:
-        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        result = await session.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user_id))
         bot = result.scalar_one_or_none()
         if not bot:
             raise HTTPException(404, "Bot bulunamadi")
@@ -677,7 +679,7 @@ async def start_bot(bot_id: int):
 
 
 @router.get("/{bot_id}/debug")
-async def debug_bot(bot_id: int):
+async def debug_bot(bot_id: int, user_id: int = Depends(get_current_user)):
     """Engine durumu + Redis + Exchange bağlantı testi."""
     from core.redis_client import get_redis
     result = {
@@ -703,7 +705,7 @@ async def debug_bot(bot_id: int):
 
     # Bot config
     async with async_session() as session:
-        bot_result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot_result = await session.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user_id))
         bot = bot_result.scalar_one_or_none()
     if bot:
         params = json.loads(bot.params) if bot.params else {}
@@ -777,14 +779,14 @@ async def debug_bot(bot_id: int):
 
 
 @router.get("/{bot_id}/test-cycle")
-async def test_cycle(bot_id: int):
+async def test_cycle(bot_id: int, user_id: int = Depends(get_current_user)):
     """Tek bir sinyal cycle'ını çalıştırıp sonucu döndür (debug)."""
     from core.redis_client import get_redis
     import traceback as tb
     steps = []
 
     async with async_session() as session:
-        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        result = await session.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user_id))
         bot = result.scalar_one_or_none()
     if not bot:
         raise HTTPException(404, "Bot bulunamadı")
@@ -1169,10 +1171,10 @@ async def test_order(data: TestOrderRequest):
 
 
 @router.get("/{bot_id}/position")
-async def get_bot_position(bot_id: int):
+async def get_bot_position(bot_id: int, user_id: int = Depends(get_current_user)):
     """Borsadan canlı pozisyon ve fiyat bilgisi döndürür (engine'den bağımsız)."""
     async with async_session() as session:
-        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        result = await session.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user_id))
         bot = result.scalar_one_or_none()
     if not bot:
         raise HTTPException(404, "Bot bulunamadı")
@@ -1313,7 +1315,7 @@ async def get_bot_position(bot_id: int):
 
 
 @router.get("/{bot_id}/restart")
-async def restart_bot(bot_id: int):
+async def restart_bot(bot_id: int, user_id: int = Depends(get_current_user)):
     """Botu durdur ve yeniden başlat (GET — browser'dan çağrılabilir)."""
     # Durdur
     if bot_id in _running_bots:
@@ -1324,7 +1326,7 @@ async def restart_bot(bot_id: int):
 
     # DB'den bot bilgisi al
     async with async_session() as session:
-        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        result = await session.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user_id))
         bot = result.scalar_one_or_none()
     if not bot:
         raise HTTPException(404, "Bot bulunamadı")
@@ -1369,7 +1371,13 @@ async def restart_bot(bot_id: int):
 
 
 @router.post("/{bot_id}/stop")
-async def stop_bot(bot_id: int):
+async def stop_bot(bot_id: int, user_id: int = Depends(get_current_user)):
+    async with async_session() as session:
+        result = await session.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user_id))
+        bot = result.scalar_one_or_none()
+    if not bot:
+        raise HTTPException(404, "Bot bulunamadı")
+
     if bot_id not in _running_bots:
         raise HTTPException(400, "Bot çalışmıyor")
 
@@ -1428,7 +1436,7 @@ async def _retry_bot_status_update(bot_id: int, status, retries: int = 3):
 
 
 @router.delete("/{bot_id}")
-async def delete_bot(bot_id: int):
+async def delete_bot(bot_id: int, user_id: int = Depends(get_current_user)):
     if bot_id in _running_bots:
         _running_bots[bot_id].stop()
         _bot_tasks[bot_id].cancel()
@@ -1436,7 +1444,7 @@ async def delete_bot(bot_id: int):
         del _bot_tasks[bot_id]
 
     async with async_session() as session:
-        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        result = await session.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user_id))
         bot = result.scalar_one_or_none()
         if not bot:
             raise HTTPException(404, "Bot bulunamadi")
@@ -1447,12 +1455,12 @@ async def delete_bot(bot_id: int):
 
 
 @router.patch("/{bot_id}")
-async def update_bot(bot_id: int, data: BotCreate):
+async def update_bot(bot_id: int, data: BotCreate, user_id: int = Depends(get_current_user)):
     if bot_id in _running_bots:
         raise HTTPException(400, "Calisan botu duzenleyemezsiniz. Once durdurun.")
 
     async with async_session() as session:
-        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        result = await session.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user_id))
         bot = result.scalar_one_or_none()
         if not bot:
             raise HTTPException(404, "Bot bulunamadi")

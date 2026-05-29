@@ -1,11 +1,12 @@
 """
 Bot İşlem Kayıtları API — Her botun trade geçmişi
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy import select, delete, func, case, and_
 from core.database import async_session
 from models.trade import Trade, TradeStatus, Bot
 import json
+from api.routes.auth import get_current_user
 
 router = APIRouter(prefix="/trades", tags=["trades"])
 
@@ -16,10 +17,11 @@ async def list_trades(
     status: str = Query(None, description="open, closed, cancelled"),
     limit: int = Query(100, le=500),
     offset: int = Query(0),
+    user_id: int = Depends(get_current_user),
 ):
     """Tüm işlemleri listele — bot_id ile filtrelenebilir."""
     async with async_session() as session:
-        q = select(Trade).order_by(Trade.opened_at.desc())
+        q = select(Trade).where(Trade.user_id == user_id).order_by(Trade.opened_at.desc())
         if bot_id is not None:
             q = q.where(Trade.bot_id == bot_id)
         if status:
@@ -29,7 +31,7 @@ async def list_trades(
         trades = result.scalars().all()
 
         # Count
-        cq = select(func.count(Trade.id))
+        cq = select(func.count(Trade.id)).where(Trade.user_id == user_id)
         if bot_id is not None:
             cq = cq.where(Trade.bot_id == bot_id)
         if status:
@@ -44,11 +46,11 @@ async def list_trades(
 
 
 @router.get("/bots-summary")
-async def bots_trade_summary():
+async def bots_trade_summary(user_id: int = Depends(get_current_user)):
     """Her bot için trade özeti — kart görünümü için."""
     async with async_session() as session:
         # Tüm botlar
-        bots_result = await session.execute(select(Bot).order_by(Bot.id))
+        bots_result = await session.execute(select(Bot).where(Bot.user_id == user_id).order_by(Bot.id))
         bots = bots_result.scalars().all()
 
         summaries = []
@@ -101,12 +103,13 @@ async def get_bot_trades(
     bot_id: int,
     limit: int = Query(100, le=500),
     offset: int = Query(0),
+    user_id: int = Depends(get_current_user),
 ):
     """Belirli bir botun tüm işlemlerini getir."""
     async with async_session() as session:
         q = (
             select(Trade)
-            .where(Trade.bot_id == bot_id)
+            .where(Trade.bot_id == bot_id, Trade.user_id == user_id)
             .order_by(Trade.opened_at.desc())
             .limit(limit)
             .offset(offset)
@@ -114,7 +117,7 @@ async def get_bot_trades(
         result = await session.execute(q)
         trades = result.scalars().all()
 
-        cq = select(func.count(Trade.id)).where(Trade.bot_id == bot_id)
+        cq = select(func.count(Trade.id)).where(Trade.bot_id == bot_id, Trade.user_id == user_id)
         count_result = await session.execute(cq)
         total = count_result.scalar() or 0
 
@@ -126,30 +129,30 @@ async def get_bot_trades(
 
 
 @router.delete("/bot/{bot_id}")
-async def delete_bot_trades(bot_id: int):
+async def delete_bot_trades(bot_id: int, user_id: int = Depends(get_current_user)):
     """Belirli bir bota ait tüm işlem kayıtlarını sil."""
     async with async_session() as session:
-        count_q = select(func.count(Trade.id)).where(Trade.bot_id == bot_id)
+        count_q = select(func.count(Trade.id)).where(Trade.bot_id == bot_id, Trade.user_id == user_id)
         count_result = await session.execute(count_q)
         total = count_result.scalar() or 0
 
         if total == 0:
             return {"deleted": 0, "message": "Bu bota ait kayıt bulunamadı."}
 
-        await session.execute(delete(Trade).where(Trade.bot_id == bot_id))
+        await session.execute(delete(Trade).where(Trade.bot_id == bot_id, Trade.user_id == user_id))
         await session.commit()
         return {"deleted": total, "message": f"{total} işlem kaydı silindi."}
 
 
 @router.get("/bot/{bot_id}/ai-analysis")
-async def ai_analyze_bot_trades(bot_id: int):
+async def ai_analyze_bot_trades(bot_id: int, user_id: int = Depends(get_current_user)):
     """Bir botun trade geçmişini AI ile analiz et."""
     from ai.openrouter import _call
     from core.config import settings
 
     async with async_session() as session:
         # Bot bilgisi
-        bot_result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot_result = await session.execute(select(Bot).where(Bot.id == bot_id, Bot.user_id == user_id))
         bot = bot_result.scalar_one_or_none()
         if not bot:
             raise HTTPException(status_code=404, detail="Bot bulunamadı")
@@ -157,7 +160,7 @@ async def ai_analyze_bot_trades(bot_id: int):
         # Son 50 kapanmış trade
         q = (
             select(Trade)
-            .where(Trade.bot_id == bot_id, Trade.status == "closed")
+            .where(Trade.bot_id == bot_id, Trade.user_id == user_id, Trade.status == "closed")
             .order_by(Trade.closed_at.desc())
             .limit(50)
         )

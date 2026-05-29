@@ -14,7 +14,26 @@ interface UserRow {
   balance: number
   has_api_key: boolean
   created_at: string
+  allowed_pages: string[]
 }
+
+const AVAILABLE_PAGES = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "bots", label: "Botlar" },
+  { id: "trades", label: "İşlemler" },
+  { id: "strategy-view", label: "Strateji" },
+  { id: "analytics", label: "Analiz" },
+  { id: "scanner", label: "Tarayıcı" },
+  { id: "simulations", label: "Simülasyon" },
+  { id: "hft", label: "HFT Grid" },
+  { id: "backtest", label: "Backtest" },
+  { id: "ai-chat", label: "AI Chat" },
+  { id: "news", label: "Haberler" },
+  { id: "freqtrade", label: "Freqtrade" },
+  { id: "calculator", label: "Hesaplama" },
+  { id: "settings", label: "Borsa Bağlantısı" },
+  { id: "billing", label: "Abonelik" }
+]
 
 export default function AdminUsersPage() {
   const { user, token, isLoading } = useAuth()
@@ -59,7 +78,17 @@ export default function AdminUsersPage() {
       fee_type: u.fee_type,
       fee_amount: u.fee_amount,
       fee_active: u.fee_active,
+      allowed_pages: u.allowed_pages || [],
     })
+  }
+
+  const togglePage = (pageId: string) => {
+    const pages = editForm.allowed_pages || []
+    if (pages.includes(pageId)) {
+      setEditForm({ ...editForm, allowed_pages: pages.filter(p => p !== pageId) })
+    } else {
+      setEditForm({ ...editForm, allowed_pages: [...pages, pageId] })
+    }
   }
 
   const handleSave = async (id: number) => {
@@ -99,6 +128,7 @@ export default function AdminUsersPage() {
                 <th className="p-4 font-medium">Üyelik Durumu</th>
                 <th className="p-4 font-medium">Ücret Tipi</th>
                 <th className="p-4 font-medium">Ücret Miktarı / Oranı</th>
+                <th className="p-4 font-medium">Erişim İzinleri (Sayfalar)</th>
                 <th className="p-4 font-medium">Kayıt Tarihi</th>
                 <th className="p-4 font-medium text-right">İşlemler</th>
               </tr>
@@ -178,6 +208,33 @@ export default function AdminUsersPage() {
                           <span className={`text-xs ${u.fee_active ? 'text-amber-400' : 'text-slate-500'}`}>
                             {u.fee_active ? 'Tahsilat Açık' : 'Ücretsiz'}
                           </span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      {isEditing ? (
+                        <div className="flex flex-wrap gap-1 max-w-[250px]">
+                          {AVAILABLE_PAGES.map(page => (
+                            <label key={page.id} className="flex items-center gap-1 text-xs bg-slate-950 border border-slate-700 rounded px-2 py-1 cursor-pointer hover:bg-slate-800">
+                              <input 
+                                type="checkbox" 
+                                checked={(editForm.allowed_pages || []).includes(page.id)}
+                                onChange={() => togglePage(page.id)}
+                                className="w-3 h-3"
+                              />
+                              {page.label}
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {(u.allowed_pages || []).slice(0, 3).map(p => (
+                            <span key={p} className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded border border-blue-500/20">{p}</span>
+                          ))}
+                          {(u.allowed_pages || []).length > 3 && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-800 text-slate-400 rounded">+{u.allowed_pages.length - 3}</span>
+                          )}
+                          {(u.allowed_pages || []).length === 0 && <span className="text-xs text-slate-500">Sayfa Yok</span>}
                         </div>
                       )}
                     </td>

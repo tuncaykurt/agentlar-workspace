@@ -138,7 +138,7 @@ async def google_login(data: GoogleAuthRequest):
                     fee_type="percentage",
                     fee_amount=20.0,  # Default kar payi %20
                     fee_active=True,
-                    allowed_pages=["dashboard", "grid_bots", "smart_scanner", "calculator"]
+                    allowed_pages=["settings", "billing"]
                 )
                 session.add(user)
                 await session.commit()
