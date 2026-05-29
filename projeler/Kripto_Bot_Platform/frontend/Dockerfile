@@ -1,7 +1,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install --frozen-lockfile || npm install
+# --legacy-peer-deps ve --no-audit eklenerek NPM ERESOLVE/Network hataları (Exit 228) engellendi
+RUN npm install --no-audit --legacy-peer-deps
 
 FROM node:20-alpine AS builder
 WORKDIR /app
