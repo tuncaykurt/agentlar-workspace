@@ -258,7 +258,7 @@ class GridLiveEngine:
             self._bb_service = BollingerGridService()
             bb_data = await self._bb_service.compute_grid_bounds(
                 ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
-                min_spread_pct, current_price
+                min_spread_pct, current_price, grid_count
             )
 
             if not bb_data:
@@ -278,7 +278,7 @@ class GridLiveEngine:
             self._bb_service = BollingerGridService()
             bb_data = await self._bb_service.compute_grid_bounds(
                 ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
-                min_spread_pct, current_price
+                min_spread_pct, current_price, grid_count
             )
 
             if not bb_data:
@@ -326,7 +326,7 @@ class GridLiveEngine:
             self._bb_service = BollingerGridService()
             bb_data = await self._bb_service.compute_grid_bounds(
                 ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
-                min_spread_pct, current_price
+                min_spread_pct, current_price, grid_count
             ) or {}
             
             recent_ema = await self._check_recent_ema_cross(
@@ -831,6 +831,68 @@ class GridLiveEngine:
                             if not bb_dir_last_mid_side:
                                 state["bb_dir_last_mid_side"] = current_mid_side
 
+                            # 4. Aktif çalışırken orta çizgi geçişi — yön anında güncellenir
+                            elif bb_dir_last_mid_side and current_mid_side != bb_dir_last_mid_side:
+                                # Yön değişti! Açık pozisyonları kapat ve grid'i sıfırla
+                                old_dir = active_dir
+                                active_dir = "long" if current_mid_side == "above" else "short"
+                                state["active_direction"] = active_dir
+                                
+                                # Açık pozisyonları kapat
+                                if filled:
+                                    close_levels = list(filled)
+                                    cs_val = state.get("contract_size", 0.01)
+                                    contracts_per_lvl = state.get("contracts_per_level", 1)
+                                    total_contracts = contracts_per_lvl * len(close_levels)
+                                    margin_per_lvl = state.get("order_size", 100) / max(1, grid_count)
+                                    lev = state.get("leverage", 10)
+                                    
+                                    total_net_pnl = 0.0
+                                    for lvl in close_levels:
+                                        ep = entry_prices.get(str(lvl), current_price)
+                                        if old_dir == "long":
+                                            price_diff_pct = (current_price - ep) / ep if ep > 0 else 0
+                                        else:
+                                            price_diff_pct = (ep - current_price) / ep if ep > 0 else 0
+                                        lvl_gross = margin_per_lvl * lev * price_diff_pct
+                                        lvl_notional = margin_per_lvl * lev
+                                        lvl_fee = lvl_notional * 0.0006 * 2
+                                        total_net_pnl += (lvl_gross - lvl_fee)
+                                    
+                                    close_side = "sell" if old_dir == "long" else "buy"
+                                    trade = await self._execute_order(
+                                        state, close_side, current_price, close_levels, len(close_levels), round(total_net_pnl, 4)
+                                    )
+                                    trades.append(trade)
+                                    if trade.get("exchange_status") != "error":
+                                        for lvl in close_levels:
+                                            filled.discard(lvl)
+                                            entry_prices.pop(str(lvl), None)
+                                
+                                # Grid'i sıfırla ve yeniden fiyata merkezle
+                                bb_upper_new = bb_meta.get("bb_upper", state.get("upper", 0))
+                                bb_lower_new = bb_meta.get("bb_lower", state.get("lower", 0))
+                                if bb_upper_new > bb_lower_new and current_price > 0:
+                                    bb_spread_pct = (bb_upper_new - bb_lower_new) / current_price * 100
+                                    new_upper = current_price * (1 + bb_spread_pct / 200)
+                                    new_lower = current_price * (1 - bb_spread_pct / 200)
+                                    state["upper"] = new_upper
+                                    state["lower"] = new_lower
+                                    new_step = (new_upper - new_lower) / grid_count
+                                    state["step"] = new_step
+                                    state["levels"] = [round(new_lower + i * new_step, 8) for i in range(grid_count + 1)]
+                                state["filled_levels"] = []
+                                state["entry_prices"] = {}
+                                state["last_level"] = -1
+                                state["band_exited"] = False
+                                state["band_exit_side"] = None
+                                await self._sync_hft_bounds(redis, state)
+                                print(f"[GridLive] BB Yön: Midline cross aktif çalışırken ({bb_dir_last_mid_side} -> {current_mid_side}), "
+                                      f"yön {active_dir.upper()}, grid sıfırlandı")
+                                asyncio.create_task(push_grid_event("signal_" + active_dir, f"Aktif midline cross: {active_dir.upper()}"))
+
+                            state["bb_dir_last_mid_side"] = current_mid_side
+
                     # EMA Trend lifecycle kontrolleri
                     if grid_mode == "ema_trend":
                         ema_paused = state.get("ema_paused", False)
@@ -939,18 +1001,16 @@ class GridLiveEngine:
                 sell_levels = [lvl for lvl in range(last_level, current_level) if lvl in filled]
 
                 if sell_levels:
-                    cs = state.get("contract_size", 0.01)
                     contracts_per_lvl = state.get("contracts_per_level", 1)
-                    total_contracts = contracts_per_lvl * len(sell_levels)
-                    total_price_diff = sum(
-                        current_price - entry_prices.get(str(lvl), current_price - step)
-                        for lvl in sell_levels
-                    )
-                    avg_price_diff = total_price_diff / len(sell_levels)
-                    gross_pnl = total_contracts * cs * avg_price_diff
-                    notional = total_contracts * cs * current_price
-                    fee_total = notional * 0.0006 * 2
-                    net_pnl = round(gross_pnl - fee_total, 6)
+                    cs = state.get("contract_size", 0.01)
+                    # Gerçekçi PnL: borsa standart formülü
+                    total_net_pnl = 0.0
+                    for lvl in sell_levels:
+                        ep = entry_prices.get(str(lvl), current_price - step)
+                        lvl_gross = contracts_per_lvl * cs * (current_price - ep)
+                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0006) + (contracts_per_lvl * cs * current_price * 0.0006)
+                        total_net_pnl += (lvl_gross - lvl_fee)
+                    net_pnl = round(total_net_pnl, 6)
 
                     if skip_sell and mode == "live":
                         print(f"[GridLive] ⏸ SELL atlandı (RSI filtresi)")
@@ -990,19 +1050,16 @@ class GridLiveEngine:
                 cover_levels = [lvl for lvl in range(last_level, current_level, -1) if lvl in filled]
 
                 if cover_levels:
-                    cs = state.get("contract_size", 0.01)
                     contracts_per_lvl = state.get("contracts_per_level", 1)
-                    total_contracts = contracts_per_lvl * len(cover_levels)
-                    # Short kâr = giriş - çıkış
-                    total_price_diff = sum(
-                        entry_prices.get(str(lvl), current_price + step) - current_price
-                        for lvl in cover_levels
-                    )
-                    avg_price_diff = total_price_diff / len(cover_levels)
-                    gross_pnl = total_contracts * cs * avg_price_diff
-                    notional = total_contracts * cs * current_price
-                    fee_total = notional * 0.0006 * 2
-                    net_pnl = round(gross_pnl - fee_total, 6)
+                    cs = state.get("contract_size", 0.01)
+                    # Gerçekçi PnL: borsa standart formülü (short)
+                    total_net_pnl = 0.0
+                    for lvl in cover_levels:
+                        ep = entry_prices.get(str(lvl), current_price + step)
+                        lvl_gross = contracts_per_lvl * cs * (ep - current_price)
+                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0006) + (contracts_per_lvl * cs * current_price * 0.0006)
+                        total_net_pnl += (lvl_gross - lvl_fee)
+                    net_pnl = round(total_net_pnl, 6)
 
                     if skip_sell and mode == "live":
                         print(f"[GridLive] ⏸ COVER atlandı (RSI filtresi)")
@@ -1079,23 +1136,20 @@ class GridLiveEngine:
 
             if should_close_grid:
                     close_levels = list(filled)
-                    cs = state.get("contract_size", 0.01)
                     contracts_per_lvl = state.get("contracts_per_level", 1)
-                    total_contracts = contracts_per_lvl * len(close_levels)
+                    cs = state.get("contract_size", 0.01)
 
-                    total_price_diff = 0.0
+                    # Gerçekçi PnL: borsa standart formülü (exit trigger)
+                    total_net_pnl = 0.0
                     for lvl in close_levels:
                         ep = entry_prices.get(str(lvl), current_price)
                         if active_dir == "long":
-                            total_price_diff += (current_price - ep)
+                            lvl_gross = contracts_per_lvl * cs * (current_price - ep)
                         else:
-                            total_price_diff += (ep - current_price)
-
-                    avg_diff = total_price_diff / len(close_levels) if close_levels else 0
-                    gross_pnl = total_contracts * cs * avg_diff
-                    notional = total_contracts * cs * current_price
-                    fee_total = notional * 0.0006 * 2
-                    net_pnl = round(gross_pnl - fee_total, 6)
+                            lvl_gross = contracts_per_lvl * cs * (ep - current_price)
+                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0006) + (contracts_per_lvl * cs * current_price * 0.0006)
+                        total_net_pnl += (lvl_gross - lvl_fee)
+                    net_pnl = round(total_net_pnl, 6)
 
                     close_side = "sell" if active_dir == "long" else "buy"
                     trade = await self._execute_order(
@@ -1409,12 +1463,16 @@ class GridLiveEngine:
                 total_ep = sum(entry_prices.get(str(lvl), current_price) for lvl in filled_levels)
                 avg_entry = total_ep / len(filled_levels) if filled_levels else current_price
                 
-                if active_dir == "long":
-                    unrealized_pnl = total_contracts * cs * (current_price - avg_entry)
+                # Gerçekçi PnL: borsa standart formülü
+                if avg_entry > 0:
+                    if active_dir == "long":
+                        unrealized_pnl = total_contracts * cs * (current_price - avg_entry)
+                    else:
+                        unrealized_pnl = total_contracts * cs * (avg_entry - current_price)
                 else:
-                    unrealized_pnl = total_contracts * cs * (avg_entry - current_price)
+                    unrealized_pnl = 0
                     
-                notional = total_contracts * cs * current_price
+                notional = total_margin * leverage
                 fee = notional * 0.0006 * 2
                 unrealized_net_pnl = round(unrealized_pnl - fee, 4)
                 

@@ -78,6 +78,7 @@ class BollingerGridService:
         bb_std: float = 2.0,
         min_spread_pct: float = 0.3,
         current_price: float = 0,
+        grid_count: int = 15,
     ) -> dict:
         """BB bantlarından grid sınırlarını hesapla + Redis'e cache'le."""
         redis = get_redis()
@@ -109,13 +110,14 @@ class BollingerGridService:
         else:
             actual_spread_pct = 0
 
-        # Eğer BB bantları çok dar ise min_spread_pct floor uygula
-        if actual_spread_pct < min_spread_pct and current_price > 0:
-            half = min_spread_pct / 200  # /100 çünkü ±, /2 çünkü iki taraf
+        # Kullanıcının "Min Spread %" ayarı, "Kademe Aralığı" (Grid Step) içindir.
+        required_spread_pct = min_spread_pct * grid_count
+        if actual_spread_pct < required_spread_pct and current_price > 0:
+            half = required_spread_pct / 200  # /100 çünkü ±, /2 çünkü iki taraf
             bb_data["bb_upper"] = round(current_price * (1 + half), 8)
             bb_data["bb_lower"] = round(current_price * (1 - half), 8)
             bb_data["min_spread_applied"] = True
-            actual_spread_pct = min_spread_pct
+            actual_spread_pct = required_spread_pct
         else:
             bb_data["min_spread_applied"] = False
 

@@ -372,12 +372,13 @@ async def hft_bb_data(data: dict):
     bb_std_dev = float(data.get("bb_std_dev", 2.0))
     min_spread_pct = float(data.get("min_spread_pct", 0.3))
     current_price = float(data.get("current_price", 0))
+    grid_count = int(data.get("grid_count", 20))
 
     try:
         bb_service = BollingerGridService()
         bb_data = await bb_service.compute_grid_bounds(
             ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
-            min_spread_pct, current_price
+            min_spread_pct, current_price, grid_count
         )
         if not bb_data:
             return {"error": "BB hesaplanamadı — OHLCV verisi alınamıyor."}

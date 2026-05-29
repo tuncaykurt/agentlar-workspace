@@ -440,6 +440,65 @@ export default function HftPage() {
       if (!bbDirLastMidSideRef.current) {
         bbDirLastMidSideRef.current = livePrice > bb.bb_mid ? "above" : "below"
       }
+
+      // 4. Aktif çalışırken orta çizgi geçişi — yön değişimi anında algıla
+      const currentMidSide = livePrice > bb.bb_mid ? "above" : "below"
+      const prevMidSide = bbDirLastMidSideRef.current
+      if (prevMidSide && currentMidSide !== prevMidSide) {
+        // Orta çizgi kesildi! Yönü güncelle
+        const newAboveMidline = currentMidSide === "above"
+        // simBbMeta'yı güncelle ki activeDirection hemen değişsin
+        if (simBbRef.current) {
+          simBbRef.current = { ...simBbRef.current, above_midline: newAboveMidline }
+          setSimBbMeta({ ...simBbRef.current })
+        }
+        
+        // Açık pozisyonları kapat (yön değişti, mevcut pozisyonlar ters kalır)
+        const filled = simFilledRef.current
+        const entryPrices = simEntryPricesRef.current
+        const cs = symbol.includes("BTC") ? 0.0001 : 0.01
+        const marginPerLvl = orderSize / gridCount
+        const contractsPerLvl = Math.max(1, Math.floor((marginPerLvl * leverage) / (livePrice * cs)))
+        if (filled.size > 0) {
+          const closeLevels = Array.from(filled)
+          const oldDir = newAboveMidline ? "short" : "long" // önceki yön
+          // Gerçekçi PnL: borsa standart formülü (exit trigger)
+          let totalNetPnl = 0
+          for (const lvl of closeLevels) {
+            const ep = entryPrices.get(lvl) ?? livePrice
+            const lvlGrossPnl = activeDirection === "long" 
+              ? contractsPerLvl * cs * (livePrice - ep)
+              : contractsPerLvl * cs * (ep - livePrice)
+            const lvlFee = (contractsPerLvl * cs * ep * 0.0006) + (contractsPerLvl * cs * livePrice * 0.0006)
+            totalNetPnl += (lvlGrossPnl - lvlFee)
+          }
+          for (const lvl of closeLevels) { filled.delete(lvl); entryPrices.delete(lvl) }
+          
+          const newTrade: SimTrade = {
+            id: ++tradeIdRef.current,
+            side: oldDir === "long" ? "SELL" : "BUY",
+            price: livePrice,
+            gridLevel: closeLevels[0],
+            grid_levels: closeLevels,
+            level_count: closeLevels.length,
+            pnl: Number(totalNetPnl.toFixed(4)),
+            time: new Date().toLocaleTimeString("tr-TR"),
+            mode: "sim",
+            timestamp: Math.floor(Date.now() / 1000),
+          }
+          setTrades(prev => [newTrade, ...prev].slice(0, 100))
+          setTotalPnl(prev => prev + totalNetPnl)
+          setTradeCount(prev => prev + 1)
+        }
+        
+        // Grid'i yeniden fiyata merkezle
+        setGridBounds({ upper: bb.bb_upper, lower: bb.bb_lower })
+        lastGridHitRef.current = -1
+        simFilledRef.current = new Set()
+        simEntryPricesRef.current = new Map()
+        console.log(`[HFT Sim] Midline cross: ${prevMidSide} → ${currentMidSide}, yön ${newAboveMidline ? 'LONG' : 'SHORT'} olarak değişti`)
+      }
+      bbDirLastMidSideRef.current = currentMidSide
     }
 
     const step = (gridBounds.upper - gridBounds.lower) / gridCount
@@ -516,20 +575,20 @@ export default function HftPage() {
           if (filled.has(lvl)) sellLevels.push(lvl)
         }
         if (sellLevels.length > 0) {
-          const totalContracts = contractsPerLvl * sellLevels.length
-          let totalPriceDiff = 0
+          // Gerçekçi PnL: borsa standart formülü
+          let totalNetPnl = 0
           for (const lvl of sellLevels) {
-            totalPriceDiff += (livePrice - (entryPrices.get(lvl) ?? (livePrice - step)))
+            const ep = entryPrices.get(lvl) ?? (livePrice - step)
+            const lvlGrossPnl = contractsPerLvl * cs * (livePrice - ep)
+            const lvlFee = (contractsPerLvl * cs * ep * 0.0006) + (contractsPerLvl * cs * livePrice * 0.0006)
+            totalNetPnl += (lvlGrossPnl - lvlFee)
           }
-          const grossPnl = totalContracts * cs * (totalPriceDiff / sellLevels.length)
-          const notional = totalContracts * cs * livePrice
-          const netPnl = grossPnl - notional * 0.0006 * 2
-          if (netPnl < 0) { lastGridHitRef.current = clampedLevel; return }
+          if (totalNetPnl < 0) { lastGridHitRef.current = clampedLevel; return }
           for (const lvl of sellLevels) { filled.delete(lvl); entryPrices.delete(lvl) }
           newTrades.push({
             id: ++tradeIdRef.current, side: "SELL", price: livePrice,
             gridLevel: sellLevels[0], grid_levels: sellLevels, level_count: sellLevels.length,
-            pnl: Number(netPnl.toFixed(4)), time: new Date().toLocaleTimeString("tr-TR"),
+            pnl: Number(totalNetPnl.toFixed(4)), time: new Date().toLocaleTimeString("tr-TR"),
             mode: "sim", timestamp: Math.floor(Date.now() / 1000),
           })
         }
@@ -561,21 +620,20 @@ export default function HftPage() {
           if (filled.has(lvl)) coverLevels.push(lvl)
         }
         if (coverLevels.length > 0) {
-          const totalContracts = contractsPerLvl * coverLevels.length
-          let totalPriceDiff = 0
+          // Gerçekçi PnL: borsa standart formülü (short)
+          let totalNetPnl = 0
           for (const lvl of coverLevels) {
-            // Short kar = giris - cikis (fiyat dustugunde kar)
-            totalPriceDiff += ((entryPrices.get(lvl) ?? (livePrice + step)) - livePrice)
+            const ep = entryPrices.get(lvl) ?? (livePrice + step)
+            const lvlGrossPnl = contractsPerLvl * cs * (ep - livePrice)
+            const lvlFee = (contractsPerLvl * cs * ep * 0.0006) + (contractsPerLvl * cs * livePrice * 0.0006)
+            totalNetPnl += (lvlGrossPnl - lvlFee)
           }
-          const grossPnl = totalContracts * cs * (totalPriceDiff / coverLevels.length)
-          const notional = totalContracts * cs * livePrice
-          const netPnl = grossPnl - notional * 0.0006 * 2
-          if (netPnl < 0) { lastGridHitRef.current = clampedLevel; return }
+          if (totalNetPnl < 0) { lastGridHitRef.current = clampedLevel; return }
           for (const lvl of coverLevels) { filled.delete(lvl); entryPrices.delete(lvl) }
           newTrades.push({
             id: ++tradeIdRef.current, side: "BUY", price: livePrice,
             gridLevel: coverLevels[0], grid_levels: coverLevels, level_count: coverLevels.length,
-            pnl: Number(netPnl.toFixed(4)), time: new Date().toLocaleTimeString("tr-TR"),
+            pnl: Number(totalNetPnl.toFixed(4)), time: new Date().toLocaleTimeString("tr-TR"),
             mode: "sim", timestamp: Math.floor(Date.now() / 1000),
           })
         }
@@ -604,19 +662,22 @@ export default function HftPage() {
           // Tum acik pozisyonlari kapat
           const closeLevels = Array.from(filled)
           if (closeLevels.length > 0) {
-            const totalContracts = contractsPerLvl * closeLevels.length
-            let totalPriceDiff = 0
+            // Gerçekçi PnL: margin × leverage × fiyat_değişim_yüzdesi (band exit)
+            let totalNetPnl = 0
             for (const lvl of closeLevels) {
               const ep = entryPrices.get(lvl) ?? livePrice
+              let priceDiffPct = 0
               if (dir === "long") {
-                totalPriceDiff += (livePrice - ep)
+                priceDiffPct = (livePrice - ep) / ep
               } else {
-                totalPriceDiff += (ep - livePrice)
+                priceDiffPct = (ep - livePrice) / ep
               }
+              const lvlGrossPnl = marginPerLvl * leverage * priceDiffPct
+              const lvlNotional = marginPerLvl * leverage
+              const lvlFee = lvlNotional * 0.0006 * 2
+              totalNetPnl += (lvlGrossPnl - lvlFee)
             }
-            const grossPnl = totalContracts * cs * (totalPriceDiff / closeLevels.length)
-            const notional = totalContracts * cs * livePrice
-            const netPnl = grossPnl - notional * 0.0006 * 2
+            const netPnl = totalNetPnl
 
             for (const lvl of closeLevels) { filled.delete(lvl); entryPrices.delete(lvl) }
 
@@ -678,6 +739,7 @@ export default function HftPage() {
           min_spread_pct: Number(minSpread),
           filters: { min_ema_pct: Number(minEmaPct), ema_exit_mode: emaExitMode },
           current_price: livePrice,
+          grid_count: gridCount,
         })
         if (res.error || !res.bb_upper) return
         const meta = {
@@ -746,6 +808,7 @@ export default function HftPage() {
         current_price: livePrice,
         grid_mode: gridMode,
         smart_start_wait: smartStartWait,
+        grid_count: gridCount,
       })
       if (res.error) {
         alert(`BB Hatasi: ${res.error}`)
@@ -1038,18 +1101,51 @@ export default function HftPage() {
 
           {/* Baslat / Durdur */}
           {!simRunning ? (
-            <button
-              onClick={handleStart}
-              disabled={livePrice <= 0 || isStarting}
-              className={`px-4 sm:px-6 py-2 sm:py-2.5 bg-gradient-to-r ${mc.color} hover:brightness-110 disabled:opacity-50 text-white font-bold rounded-lg shadow-lg transition-all flex items-center gap-2 text-sm`}
-            >
-              {isStarting ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleStart}
+                disabled={livePrice <= 0 || isStarting}
+                className={`px-4 sm:px-6 py-2 sm:py-2.5 bg-gradient-to-r ${mc.color} hover:brightness-110 disabled:opacity-50 text-white font-bold rounded-lg shadow-lg transition-all flex items-center justify-center gap-2 text-sm w-full`}
+              >
+                {isStarting ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                )}
+                {tradingMode === "live" ? "CANLI BASLAT" : "Baslat"}
+              </button>
+              {/* Toggle: Avda Başlat / Anında Başlat */}
+              {(gridMode === "bb_direction" || gridMode === "ema_trend") && (
+                <div className="flex items-center justify-center gap-3 w-full bg-slate-800/40 py-1.5 rounded-lg border border-slate-700/40 mt-1">
+                  <span 
+                    className={`text-[10px] font-bold transition-colors cursor-pointer ${smartStartWait ? 'text-amber-400' : 'text-slate-500 hover:text-slate-400'}`}
+                    onClick={() => setSmartStartWait(true)}
+                  >
+                    Avda Başlat
+                  </span>
+                  <button
+                    onClick={() => setSmartStartWait(!smartStartWait)}
+                    disabled={simRunning}
+                    className={`relative w-10 h-5 rounded-full transition-all duration-300 focus:outline-none disabled:opacity-50 ${
+                      !smartStartWait
+                        ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30'
+                        : 'bg-amber-500 shadow-lg shadow-amber-500/30'
+                    }`}
+                    title={smartStartWait ? 'Avda Başlat: Taze sinyal bekler' : 'Anında Başlat: Hemen işlemlere başlar'}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 ${
+                      !smartStartWait ? 'left-[22px]' : 'left-0.5'
+                    }`} />
+                  </button>
+                  <span 
+                    className={`text-[10px] font-bold transition-colors cursor-pointer ${!smartStartWait ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-400'}`}
+                    onClick={() => setSmartStartWait(false)}
+                  >
+                    Anında Başlat
+                  </span>
+                </div>
               )}
-              {tradingMode === "live" ? "CANLI BASLAT" : "Baslat"}
-            </button>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <button
@@ -1344,15 +1440,7 @@ export default function HftPage() {
             </div>
           )}
           
-          {(gridMode === "bb_direction" || gridMode === "ema_trend") && (
-            <div className="flex flex-wrap gap-2 w-full mt-2 pt-2 border-t border-indigo-500/20">
-              <label className="flex items-center gap-1.5 cursor-pointer group" title="Kesişim çok eskideyse bile hemen işlemlere başlar. Kapalıysa taze sinyal bekler.">
-                <input type="checkbox" checked={!smartStartWait} onChange={e => setSmartStartWait(!e.target.checked)} disabled={simRunning}
-                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
-                <span className="text-[10px] text-emerald-400 group-hover:text-emerald-300 transition-colors font-bold">Avda Bekleme (Anında Başla)</span>
-              </label>
-            </div>
-          )}
+
 
           {/* Alt/Ust Sinir */}
           <div className="flex gap-2 sm:gap-3 sm:ml-auto">
@@ -1500,7 +1588,10 @@ export default function HftPage() {
               {tradingMode === "live" ? "Borsa Pozisyonlari (MEXC)" : "Sanal Pozisyonlar (Paper Mode)"}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {backendStatus.exchange_positions.map((pos: ExchangePosition, i: number) => (
+              {backendStatus.exchange_positions.map((pos: ExchangePosition, i: number) => {
+                const posContractSize = symbol.includes("BTC") ? 0.0001 : 0.01;
+                const posNotional = pos.contracts * posContractSize * (pos.entry_price || livePrice);
+                return (
                 <div key={i} className={`rounded-lg p-3 border ${
                   pos.unrealized_pnl >= 0 ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-red-900/20 border-red-500/30'
                 }`}>
@@ -1513,13 +1604,14 @@ export default function HftPage() {
                     <span className={`text-sm font-bold font-mono ${
                       pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                     }`}>
-                      {pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(2)}
+                      {pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(4)}
                     </span>
                   </div>
                   <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
                     <div>
                       <span className="text-slate-500">Kontrat</span>
                       <div className="text-white font-mono">{pos.contracts}</div>
+                      <div className="text-cyan-400 font-mono text-[9px]">${posNotional.toFixed(2)}</div>
                     </div>
                     <div>
                       <span className="text-slate-500">Giris</span>
@@ -1531,7 +1623,8 @@ export default function HftPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -1552,14 +1645,13 @@ export default function HftPage() {
                 
                 const totalContracts = contracts * filled.length
                 const totalMargin = marginPerLevel * filled.length
-                let unrealizedPnl = 0
-                if (activeDirection === "long") {
-                  unrealizedPnl = totalContracts * contractSize * (livePrice - avgEntry)
-                } else {
-                  unrealizedPnl = totalContracts * contractSize * (avgEntry - livePrice)
-                }
-                const notional = totalContracts * contractSize * livePrice
-                const fee = notional * 0.0006 * 2
+                const posNotional = totalContracts * contractSize * avgEntry
+                
+                // Gerçekçi PnL: borsa standart formülü
+                const unrealizedPnl = activeDirection === "long"
+                  ? totalContracts * contractSize * (livePrice - avgEntry)
+                  : totalContracts * contractSize * (avgEntry - livePrice)
+                const fee = posNotional * 0.0006 * 2
                 const netPnl = unrealizedPnl - fee
 
                 return (
@@ -1575,13 +1667,14 @@ export default function HftPage() {
                       <span className={`text-sm font-bold font-mono ${
                         netPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
                       }`}>
-                        {netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}
+                        {netPnl >= 0 ? '+' : ''}${netPnl.toFixed(4)}
                       </span>
                     </div>
                     <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
                       <div>
                         <span className="text-slate-500">Kontrat</span>
                         <div className="text-white font-mono">{totalContracts}</div>
+                        <div className="text-cyan-400 font-mono text-[9px]">${posNotional.toFixed(2)}</div>
                       </div>
                       <div>
                         <span className="text-slate-500">Ort. Giris</span>
