@@ -196,6 +196,40 @@ class GridBacktestEngine:
                 if active_dir == "long" and not above_mid: skip_buy = True
                 elif active_dir == "short" and above_mid: skip_buy = True
 
+            # Check liquidation
+            cs = 0.01 if "BTC" not in self.config.get("symbol", "") else 0.0001
+            liquidated_lvls = []
+            for lvl in list(state["filled"]):
+                ep = state["entry_prices"][lvl]
+                if active_dir == "long":
+                    liq_price = ep * (1 - 1/self.leverage + self.fee_pct)
+                    if low <= liq_price:
+                        liquidated_lvls.append((lvl, liq_price))
+                else:
+                    liq_price = ep * (1 + 1/self.leverage - self.fee_pct)
+                    if high >= liq_price:
+                        liquidated_lvls.append((lvl, liq_price))
+                        
+            for lvl, liq_price in liquidated_lvls:
+                state["filled"].discard(lvl)
+                ep = state["entry_prices"].pop(lvl)
+                lvl_contracts = state["contracts"].pop(lvl)
+                entry_ts = state["entry_times"].pop(lvl, ts)
+                margin_used = (lvl_contracts * cs * ep) / self.leverage
+                pos_val = lvl_contracts * cs * ep
+                fee = pos_val * self.fee_pct * 2 # Open + Close fee estimation
+                net_pnl = -margin_used
+                balance += net_pnl
+                trades.append({
+                    "entry_ts": entry_ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": liq_price,
+                    "pnl": net_pnl, "fee": fee, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs,
+                    "margin": margin_used, "position_value": pos_val, "pnl_pct": -100, "exit_reason": "liquidation"
+                })
+                
+            if balance <= 0:
+                balance = 0
+                break # Account blown up
+
             # Init bounds if 0 (non-ema)
             if state["upper"] == 0 and self.grid_mode != "ema_trend" and bb_upper > bb_lower:
                 min_sp = self.config.get("min_spread_pct", 0.3) / 100
