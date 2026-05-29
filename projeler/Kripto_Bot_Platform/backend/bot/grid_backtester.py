@@ -310,6 +310,7 @@ class GridBacktestEngine:
                     
                 if exited:
                     close_lvls = list(state["filled"])
+                    for lvl in close_lvls:
                         state["filled"].discard(lvl)
                         ep = state["entry_prices"].pop(lvl, price)
                         lvl_contracts = state["contracts"].pop(lvl, contracts)
