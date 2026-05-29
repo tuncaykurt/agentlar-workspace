@@ -424,10 +424,10 @@ class _ExClient:
         await self.exchange.close()
 
 
-async def _get_exchange_client(exchange: str, margin_type: str = "isolated"):
+async def _get_exchange_client(exchange: str, margin_type: str = "isolated", user_id: int = 1):
     """Redis'teki kullanıcı API key'leri ile doğru exchange client oluşturur."""
     redis = get_redis()
-    raw = await redis.get(f"exchange_keys:default:{exchange}")
+    raw = await redis.get(f"exchange_keys:{user_id}:{exchange}")
     if raw:
         keys = json.loads(raw)
         ex = create_exchange_client(
@@ -655,7 +655,7 @@ async def start_bot(bot_id: int, user_id: int = Depends(get_current_user)):
         }
 
         margin_type = config["params"].get("margin_type", "isolated")
-        exchange_client = await _get_exchange_client(bot.exchange or "bitget", margin_type=margin_type)
+        exchange_client = await _get_exchange_client(bot.exchange or "bitget", margin_type=margin_type, user_id=bot.user_id)
         engine = BotEngine(config, exchange_client)
         _running_bots[bot_id] = engine
 
@@ -763,7 +763,7 @@ async def debug_bot(bot_id: int, user_id: int = Depends(get_current_user)):
         # Exchange testi — smart_scanner (AUTO) için skip, timeout 5s
         if bot.symbol and bot.symbol not in ("AUTO", "MULTI"):
             try:
-                ex_client = await _get_exchange_client(bot.exchange or "bitget")
+                ex_client = await _get_exchange_client(bot.exchange or "bitget", user_id=bot.user_id)
                 ticker = await asyncio.wait_for(
                     ex_client.exchange.fetch_ticker(bot.symbol), timeout=5
                 )
@@ -797,7 +797,7 @@ async def test_cycle(bot_id: int, user_id: int = Depends(get_current_user)):
 
     # Exchange client oluştur
     try:
-        ex_client = await _get_exchange_client(bot.exchange or "bitget")
+        ex_client = await _get_exchange_client(bot.exchange or "bitget", user_id=bot.user_id)
         steps.append("2. Exchange client oluşturuldu ✓")
     except Exception as e:
         steps.append(f"2. Exchange client HATASI: {e}")
@@ -889,7 +889,7 @@ async def test_tpsl_methods(data: TestOrderRequest):
     ex_client = None
     m = data.method if data.method is not None else 1
     try:
-        ex_client = await _get_exchange_client(data.exchange, margin_type=data.margin_type)
+        ex_client = await _get_exchange_client(data.exchange, margin_type=data.margin_type, user_id=user_id)
         await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=15)
         ticker = await asyncio.wait_for(ex_client.exchange.fetch_ticker(data.symbol), timeout=10)
         price = float(ticker["last"])
@@ -1185,7 +1185,7 @@ async def get_bot_position(bot_id: int, user_id: int = Depends(get_current_user)
 
     ex_client = None
     try:
-        ex_client = await _get_exchange_client(bot.exchange or "bitget")
+        ex_client = await _get_exchange_client(bot.exchange or "bitget", user_id=bot.user_id)
         await asyncio.wait_for(ex_client.exchange.load_markets(), timeout=10)
 
         # Fiyat
@@ -1346,7 +1346,7 @@ async def restart_bot(bot_id: int, user_id: int = Depends(get_current_user)):
     }
 
     margin_type = config["params"].get("margin_type", "isolated")
-    exchange_client = await _get_exchange_client(bot.exchange or "bitget", margin_type=margin_type)
+    exchange_client = await _get_exchange_client(bot.exchange or "bitget", margin_type=margin_type, user_id=bot.user_id)
     engine = BotEngine(config, exchange_client)
     _running_bots[bot_id] = engine
 
