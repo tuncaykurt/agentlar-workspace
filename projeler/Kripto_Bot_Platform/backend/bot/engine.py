@@ -1887,11 +1887,11 @@ class BotEngine:
         exit_price = new_signal_price
         if entry_price > 0:
             if is_long:
-                pnl_pct = (exit_price - entry_price) / entry_price * 100
+                pnl_pct = ((exit_price - entry_price) / entry_price * 100) - 0.02  # Deduct 0.02% MEXC Taker fee (Open+Close)
                 max_favorable_pct = (max_high - entry_price) / entry_price * 100
                 max_adverse_pct = (min_low - entry_price) / entry_price * 100
             else:
-                pnl_pct = (entry_price - exit_price) / entry_price * 100
+                pnl_pct = ((entry_price - exit_price) / entry_price * 100) - 0.02  # Deduct 0.02% MEXC Taker fee (Open+Close)
                 max_favorable_pct = (entry_price - min_low) / entry_price * 100
                 max_adverse_pct = (entry_price - max_high) / entry_price * 100
         else:
@@ -2702,9 +2702,9 @@ class BotEngine:
 
                 # PnL hesapla
                 if side == "long":
-                    trade.pnl_pct = round((exit_price - trade.entry_price) / trade.entry_price * 100, 4)
+                    trade.pnl_pct = round(((exit_price - trade.entry_price) / trade.entry_price * 100) - 0.02, 4)
                 else:
-                    trade.pnl_pct = round((trade.entry_price - exit_price) / trade.entry_price * 100, 4)
+                    trade.pnl_pct = round(((trade.entry_price - exit_price) / trade.entry_price * 100) - 0.02, 4)
 
                 # PnL USDT: pnl_pct * notional / 100
                 # quantity = kontrat sayısı, contract_size ile çarparak gerçek pozisyon bulunur

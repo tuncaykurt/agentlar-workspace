@@ -16,7 +16,8 @@ class GridStrategy:
         self.grid_count      = max(2, int(params.get("grid_count", 20)))
         self.grid_type       = params.get("grid_type", "arithmetic")
         self.per_grid_usdt   = float(params.get("per_grid_usdt", 10))
-        self.trading_fee_pct = float(params.get("trading_fee_pct", 0.06)) / 100
+        self.maker_fee_pct = 0.0  # MEXC Maker Limit Emir (0%)
+        self.taker_fee_pct = float(params.get("trading_fee_pct", 0.01)) / 100  # MEXC Taker Market Emir (0.01%)
         self.price_range_mode = params.get("price_range_mode", "pct")
 
         # Stop Loss — fiyat önceliği, yoksa yüzde
@@ -55,7 +56,7 @@ class GridStrategy:
 
         self.initialized = True
         step_pct = (self.levels[1] - self.levels[0]) / self.levels[0] * 100 if len(self.levels) > 1 else 0
-        net_per_grid = self.per_grid_usdt * step_pct / 100 - self.per_grid_usdt * self.trading_fee_pct * 2
+        net_per_grid = self.per_grid_usdt * step_pct / 100 - self.per_grid_usdt * (self.maker_fee_pct + self.taker_fee_pct)
         print(
             f"[Grid] Başlatıldı: {self.grid_count} seviye, "
             f"${lower:.2f} — ${upper:.2f}, "
@@ -104,7 +105,7 @@ class GridStrategy:
             elif current_price >= sell_level and i in self.bought:
                 self.bought.discard(i)
                 gross = self.per_grid_usdt * (sell_level - buy_level) / buy_level
-                fee   = self.per_grid_usdt * self.trading_fee_pct * 2
+                fee   = self.per_grid_usdt * (self.maker_fee_pct + self.taker_fee_pct)
                 self.realized_pnl += gross - fee
                 print(f"[Grid] SAT — seviye {i}→{i+1}: ${sell_level:.2f}, net ≈ ${gross - fee:.3f}")
                 return "sell"
