@@ -40,7 +40,7 @@ export default function SettingsPage() {
 
   const loadExchanges = async () => {
     try {
-      const data = await api.get("/exchanges/")
+      const data = await api.get("/exchanges")
       setExchanges(data)
       setLoadError(false)
     } catch {
