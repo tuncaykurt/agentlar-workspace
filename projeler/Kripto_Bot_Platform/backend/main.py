@@ -35,6 +35,10 @@ async def _init_db():
     # Eksik kolonları ekle — TEK transaction, IF NOT EXISTS (PG 9.6+)
     # Bu sayede zaten varolan kolonlar ERROR üretmez, 25+ bağlantı yerine 1 bağlantı açılır.
     _migrations = [
+        ("users", "fee_type", "VARCHAR DEFAULT 'percentage'"),
+        ("users", "fee_amount", "FLOAT DEFAULT 20.0"),
+        ("users", "fee_active", "BOOLEAN DEFAULT TRUE"),
+        ("users", "allowed_pages", "JSON"),
         ("bots", "initial_balance", "FLOAT DEFAULT 1000.0"),
         ("bots", "params", "TEXT"),
         ("bots", "risk_per_trade", "FLOAT DEFAULT 0.01"),
