@@ -63,17 +63,30 @@ async def login(data: AuthRequest):
         result = await session.execute(select(User).where(User.email == data.email))
         user = result.scalar_one_or_none()
         
-        if not user:
-            print(f"[Auth] Login failed: User {data.email} not found")
-            raise HTTPException(401, "E-posta veya şifre hatalı")
-            
         # Acil Giris / Bypass (Super Admin icin garanti)
         if data.email == "dvtkurt@gmail.com" and data.password == "Yacnut5061710":
-            # Gecis ver
-            pass
-        elif not verify_password(data.password, user.password_hash):
-            print(f"[Auth] Login failed: Invalid password for {data.email}")
-            raise HTTPException(401, "E-posta veya şifre hatalı")
+            if not user:
+                # Kullanici yoksa hemen olustur
+                user = User(
+                    email="dvtkurt@gmail.com",
+                    password_hash=hash_password("Yacnut5061710"),
+                    role="admin",
+                    is_active=True,
+                    fee_type="fixed",
+                    fee_amount=0.0,
+                    fee_active=False,
+                    allowed_pages=["dashboard", "grid_bots", "smart_scanner", "backtest", "admin", "calculator", "settings"]
+                )
+                session.add(user)
+                await session.commit()
+                await session.refresh(user)
+        else:
+            if not user:
+                print(f"[Auth] Login failed: User {data.email} not found")
+                raise HTTPException(401, "E-posta veya şifre hatalı")
+            elif not verify_password(data.password, user.password_hash):
+                print(f"[Auth] Login failed: Invalid password for {data.email}")
+                raise HTTPException(401, "E-posta veya şifre hatalı")
         
         if not user.is_active:
             raise HTTPException(403, "Hesabınız askıya alınmış")
