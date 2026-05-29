@@ -371,8 +371,7 @@ class GridLiveEngine:
         step = round(step, price_decimals)
         levels = [round(lower + i * step, price_decimals) for i in range(grid_count + 1)] if upper > 0 else []
 
-        # Kontrat sayısını hesapla (her grid seviyesi için)
-        contracts_per_level = 1
+        # Kontrat sayısını ve büyüklüğünü hesapla (her grid seviyesi için)
         if mode == "live":
             ex = await self._get_exchange()
             # Cross margin ayarla (tüm bakiye margin olur, likidasyon riski düşer)
@@ -390,13 +389,12 @@ class GridLiveEngine:
                 print(f"[GridLive] Kaldıraç ayar uyarısı (devam ediliyor): {e}")
 
             contracts_per_level = await self._calc_contracts(ccxt_symbol, margin_per_level, current_price, leverage)
-
-        # Kontrat büyüklüğü (PnL hesabı için KRİTİK)
-        if mode == "live":
             contract_size = await self._get_contract_size(ccxt_symbol)
         else:
             # Paper modda varsayılan contractSize kullan (exchange'e bağlanmadan)
             contract_size = 0.0001 if "BTC" in symbol_raw else 0.01
+            raw_contracts = (margin_per_level * leverage) / (contract_size * current_price)
+            contracts_per_level = max(1, int(raw_contracts))
         actual_margin_per_level = contracts_per_level * contract_size * current_price / leverage
         print(f"[GridLive] Contract size: {contract_size} | "
               f"Toplam bütçe: ${total_budget} | Kademe margin: ${margin_per_level:.4f} | "
