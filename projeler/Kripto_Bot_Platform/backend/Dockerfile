@@ -2,8 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Retry apt-get update to handle transient Coolify/VPS network errors
-RUN for i in 1 2 3 4 5; do apt-get update && break || sleep 5; done && \
+# Fix IPv6 issues on VPS/Coolify and retry apt-get
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4 && \
+    apt-get clean && \
+    (apt-get update --allow-releaseinfo-change || apt-get update --allow-releaseinfo-change || apt-get update --allow-releaseinfo-change) && \
     apt-get install -y gcc libpq-dev curl && \
     rm -rf /var/lib/apt/lists/*
 
