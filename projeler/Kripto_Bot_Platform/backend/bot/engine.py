@@ -538,9 +538,9 @@ class BotEngine:
                         )
                     except Exception:
                         pass
-                    raise
+                    return
                 else:
-                    raise
+                    return
             except Exception as order_err:
                 print(f"[Bot {bot_name}] ✗ Order HATASI: {order_err}")
                 # Redis'e hata yaz (frontend görsün)
@@ -554,7 +554,7 @@ class BotEngine:
                     )
                 except Exception:
                     pass
-                raise
+                return
 
         self.signal_history.append(trade)
 
