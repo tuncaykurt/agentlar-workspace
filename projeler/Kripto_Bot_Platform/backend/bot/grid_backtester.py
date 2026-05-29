@@ -59,7 +59,7 @@ class GridBacktestEngine:
         state = {
             "upper": 0, "lower": 0, "step": 0, "levels": [],
             "margin_per_level": self.margin_per_level,
-            "filled": set(), "entry_prices": {}, "contracts": {},
+            "filled": set(), "entry_prices": {}, "contracts": {}, "entry_times": {},
             "last_level": -1,
             "bb_dir_paused": False, "bb_dir_wait_cross": self.grid_mode == "bb_direction",
             "bb_dir_last_mid": "",
@@ -398,7 +398,7 @@ class GridBacktestEngine:
             "profit_factor": round(sum(wins)/abs(sum(losses)), 2) if sum(losses)!=0 else (99 if wins else 0),
             "best_trade": round(max(pnls), 2) if pnls else 0,
             "worst_trade": round(min(pnls), 2) if pnls else 0,
-            "trades": [{"entry_ts": t["entry_ts"], "exit_ts": t.get("exit_ts", t["entry_ts"]), "side": t["side"], "entry": t["entry"], "exit": t["exit"], "pnl": t["pnl"], "fee": t.get("fee", 0), "qty": t["qty"], "exit_reason": t["status"]} for t in closed],
+            "trades": [{"entry_ts": t["entry_ts"], "exit_ts": t.get("exit_ts", t["entry_ts"]), "side": t["side"], "entry": t["entry"], "exit": t["exit"], "pnl": t["pnl"], "fee": t.get("fee", 0), "qty": t["qty"], "margin": t.get("margin", 0), "position_value": t.get("position_value", 0), "pnl_pct": t.get("pnl_pct", 0), "exit_reason": t.get("exit_reason", t["status"])} for t in closed],
             "equity_curve": equity_curve,
             "indicators": indicators,
         }
