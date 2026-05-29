@@ -43,12 +43,7 @@ export default function NavClient() {
   if (pathname === "/login") return null
   if (isLoading || !user) return null
 
-  // Linkleri filtrele (Kullanicinin allowed_pages listesine gore)
-  const filteredLinks = LINKS.filter(link => {
-    // Ornegin "/dashboard" -> "dashboard"
-    const pageName = link.href.split("/")[1]
-    return user.role === "admin" || (user.allowed_pages && user.allowed_pages.includes(pageName))
-  })
+  // Linkleri doğrudan render içinde filtreliyoruz
 
   return (
     <nav className="border-b border-slate-800 bg-slate-950 shrink-0 z-50">
