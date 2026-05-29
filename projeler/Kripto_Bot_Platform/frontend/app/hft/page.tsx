@@ -1614,7 +1614,7 @@ export default function HftPage() {
                     <div>
                       <span className="text-slate-500">Kontrat</span>
                       <div className="text-white font-mono">{pos.contracts}</div>
-                      <div className="text-cyan-400 font-mono text-[9px]">${posNotional.toFixed(2)}</div>
+                      <div className="text-cyan-400 font-mono text-[9px]">${(pos.margin || 0).toFixed(2)}</div>
                     </div>
                     <div>
                       <span className="text-slate-500">Giris</span>
@@ -1677,7 +1677,7 @@ export default function HftPage() {
                       <div>
                         <span className="text-slate-500">Kontrat</span>
                         <div className="text-white font-mono">{totalContracts}</div>
-                        <div className="text-cyan-400 font-mono text-[9px]">${posNotional.toFixed(2)}</div>
+                        <div className="text-cyan-400 font-mono text-[9px]">${totalMargin.toFixed(2)}</div>
                       </div>
                       <div>
                         <span className="text-slate-500">Ort. Giris</span>
