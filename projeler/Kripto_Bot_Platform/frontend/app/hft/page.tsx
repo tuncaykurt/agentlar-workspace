@@ -1741,8 +1741,8 @@ export default function HftPage() {
             {livePrice > 0 ? (
               <ProChart
                 symbol={chartSymbol}
-                tp={isWaiting ? undefined : gridBounds?.upper}
-                sl={isWaiting ? undefined : gridBounds?.lower}
+                tp={isWaiting ? undefined : (activeDirection === "long" ? gridBounds?.upper : gridBounds?.lower)}
+                sl={isWaiting ? undefined : (activeDirection === "long" ? gridBounds?.lower : gridBounds?.upper)}
                 gridLines={isWaiting ? [] : gridLines}
                 hideVolume
                 gridMode={isBackendMode ? backendStatus?.grid_mode : gridMode}

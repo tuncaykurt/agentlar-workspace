@@ -1,7 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from core.redis_client import get_redis
 from exchange.bitget_client import bitget
 import json
+from api.routes.auth import get_current_user_obj
+from models.user import User
+from exchange.exchange_factory import SUPPORTED_EXCHANGES
 
 router = APIRouter(prefix="/market", tags=["market"])
 
@@ -272,13 +275,51 @@ async def get_funding_rate(symbol: str = "BTC/USDT:USDT"):
 
 
 @router.get("/balance")
-async def get_balance():
-    return await bitget.get_balance()
+async def get_balance(user: User = Depends(get_current_user_obj)):
+    from api.routes.bots import _get_exchange_client
+    redis = get_redis()
+    user_key = "default" if user.role == "admin" else str(user.id)
+    
+    total_usdt = 0.0
+    free_usdt = 0.0
+    used_usdt = 0.0
+    
+    for exchange in SUPPORTED_EXCHANGES.keys():
+        raw = await redis.get(f"exchange_keys:{user_key}:{exchange}")
+        if raw:
+            try:
+                ex = await _get_exchange_client(exchange, user_id=None if user.role == "admin" else int(user.id))
+                bal = await ex.exchange.fetch_balance({"type": "swap" if exchange != "binance" else "future"})
+                total_usdt += float(bal["total"].get("USDT", 0) or 0)
+                free_usdt += float(bal["free"].get("USDT", 0) or 0)
+                used_usdt += float(bal["used"].get("USDT", 0) or 0)
+            except Exception as e:
+                print(f"[Market] Bakiye okunamadı ({exchange}): {e}")
+                
+    return {"total": total_usdt, "free": free_usdt, "used": used_usdt}
 
 
 @router.get("/positions")
-async def get_positions():
-    return await bitget.get_positions()
+async def get_positions(user: User = Depends(get_current_user_obj)):
+    from api.routes.bots import _get_exchange_client
+    redis = get_redis()
+    user_key = "default" if user.role == "admin" else str(user.id)
+    
+    all_positions = []
+    for exchange in SUPPORTED_EXCHANGES.keys():
+        raw = await redis.get(f"exchange_keys:{user_key}:{exchange}")
+        if raw:
+            try:
+                ex = await _get_exchange_client(exchange, user_id=None if user.role == "admin" else int(user.id))
+                # For bitget, the method is get_positions. But _get_exchange_client returns _ExClient which has `get_positions`!
+                positions = await ex.get_positions()
+                for p in positions:
+                    p["exchange"] = exchange
+                    all_positions.append(p)
+            except Exception as e:
+                print(f"[Market] Pozisyonlar okunamadı ({exchange}): {e}")
+                
+    return all_positions
 
 
 @router.get("/levels")

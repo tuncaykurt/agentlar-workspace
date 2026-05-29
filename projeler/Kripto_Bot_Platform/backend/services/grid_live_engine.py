@@ -28,37 +28,39 @@ from services.push_notification import push_trade_notification, push_grid_event
 
 class GridLiveEngine:
     def __init__(self):
-        self._exchange = None
-        self._poll_task: asyncio.Task | None = None
-        self._tick_lock = asyncio.Lock()  # Çift emir önleme kilidi
-        self._bb_service = None  # Bollinger Grid Service (lazy init)
+        self._exchanges = {}  # user_id -> exchange
+        self._poll_tasks = {} # user_id -> task
+        self._tick_locks = {} # user_id -> lock
+        self._bb_services = {} # user_id -> service
 
     # ─── Exchange ─────────────────────────────────────────────────────
 
-    async def _get_exchange(self):
-        if not self._exchange:
-            from exchange.mexc_client import MEXCClient
-            self._exchange = MEXCClient()
-        return self._exchange
+    async def _get_exchange(self, user_id: str):
+        if user_id not in self._exchanges:
+            from api.routes.bots import _get_exchange_client
+            # user_id 'default' ise admin key'i çeker
+            parsed_user_id = None if user_id == "default" else int(user_id)
+            self._exchanges[user_id] = await _get_exchange_client("mexc", "cross", user_id=parsed_user_id)
+        return self._exchanges[user_id]
 
-    async def _get_contract_size(self, ccxt_symbol: str) -> float:
-        ex = await self._get_exchange()
+    async def _get_contract_size(self, ccxt_symbol: str, user_id: str) -> float:
+        ex = await self._get_exchange(user_id)
         if not ex.exchange.markets:
             await ex.exchange.load_markets()
         market = ex.exchange.market(ccxt_symbol)
         return float(market.get("contractSize", 0.001))
 
-    async def _calc_contracts(self, ccxt_symbol: str, margin_usdt: float, price: float, leverage: int) -> int:
+    async def _calc_contracts(self, ccxt_symbol: str, margin_usdt: float, price: float, leverage: int, user_id: str) -> int:
         """Margin tutarından kontrat sayısı hesapla. KRİTİK: Doğru hesaplama şart!
         margin_usdt: Kademe başına kullanılacak margin (USDT)
         leverage: Kaldıraç çarpanı
         Formül: notional = margin × leverage → contracts = notional / (price × contractSize)
         """
-        contract_size = await self._get_contract_size(ccxt_symbol)
+        contract_size = await self._get_contract_size(ccxt_symbol, user_id)
         if contract_size <= 0:
             contract_size = 0.001
             
-        ex = await self._get_exchange()
+        ex = await self._get_exchange(user_id)
         if not ex.exchange.markets:
             await ex.exchange.load_markets()
         market = ex.exchange.market(ccxt_symbol)
@@ -89,13 +91,13 @@ class GridLiveEngine:
     # ─── Akıllı Başlangıç — Son Mumları Analiz Et ─────────────────────
 
     async def _check_recent_midline_cross(
-        self, ccxt_symbol: str, timeframe: str, bb_period: int, bb_std: float, lookback: int = 3
+        self, ccxt_symbol: str, timeframe: str, bb_period: int, bb_std: float, user_id: str, lookback: int = 3
     ) -> dict:
         """Son 'lookback' mum içinde BB orta çizgi kesimi olup olmadığını kontrol eder.
         Eğer kesim varsa crossed=True ve direction (long/short) döner.
         """
         try:
-            ex = await self._get_exchange()
+            ex = await self._get_exchange(user_id)
             ohlcv = await ex.get_ohlcv(ccxt_symbol, timeframe, limit=max(bb_period + lookback + 5, 50))
             if not ohlcv or len(ohlcv) < bb_period + lookback:
                 return {"crossed": False, "current_side": "long"}
@@ -133,11 +135,11 @@ class GridLiveEngine:
             return {"crossed": False, "current_side": "long"}
 
     async def _check_recent_ema_cross(
-        self, ccxt_symbol: str, timeframe: str, min_ema_pct: float = 1.0, lookback: int = 3
+        self, ccxt_symbol: str, timeframe: str, user_id: str, min_ema_pct: float = 1.0, lookback: int = 3
     ) -> dict:
         """Son 'lookback' mum içinde EMA6/EMA14 kesişimi olup olmadığını kontrol eder."""
         try:
-            ex = await self._get_exchange()
+            ex = await self._get_exchange(user_id)
             ohlcv = await ex.get_ohlcv(ccxt_symbol, timeframe, limit=250)
             if not ohlcv or len(ohlcv) < 200:
                 return {"crossed": False}
@@ -185,13 +187,13 @@ class GridLiveEngine:
 
     # ─── Başlat / Durdur ──────────────────────────────────────────────
 
-    async def start(self, config: dict) -> dict:
+    async def start(self, config: dict, user_id: str = "default") -> dict:
         """Grid botunu başlat."""
         redis = get_redis()
 
         # Zaten çalışıyorsa durdur
-        if await redis.get("grid_live:running"):
-            await self.stop(close_positions=False)
+        if await redis.get(f"grid_live:running:{user_id}"):
+            await self.stop(user_id=user_id, close_positions=False)
 
         symbol_raw = config.get("symbol", "ETHUSDT")
         base = symbol_raw.replace("USDT", "")
@@ -203,7 +205,7 @@ class GridLiveEngine:
         
         # Calculate total budget
         if budget_mode == "percent":
-            ex = await self._get_exchange()
+            ex = await self._get_exchange(user_id)
             try:
                 bal = await ex.exchange.fetch_balance()
                 total_balance = float(bal.get("total", {}).get("USDT", 0))
@@ -242,7 +244,7 @@ class GridLiveEngine:
         if current_price <= 0:
             # MEXC WS yoksa MEXC API'den direkt cek
             try:
-                ex = await self._get_exchange()
+                ex = await self._get_exchange(user_id)
                 ticker = await ex.exchange.fetch_ticker(ccxt_symbol)
                 current_price = float(ticker.get("last", 0))
             except Exception as e:
@@ -255,8 +257,8 @@ class GridLiveEngine:
         if grid_mode in ("bollinger", "hybrid"):
             # BB bantlarından dinamik grid sınırları
             from services.bollinger_grid_service import BollingerGridService
-            self._bb_service = BollingerGridService()
-            bb_data = await self._bb_service.compute_grid_bounds(
+            self._bb_services[user_id] = BollingerGridService()
+            bb_data = await self._bb_services[user_id].compute_grid_bounds(
                 ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
                 min_spread_pct, current_price, grid_count
             )
@@ -275,8 +277,8 @@ class GridLiveEngine:
         elif grid_mode == "bb_direction":
             # BB Yön modu: Sinyal ve genişlik için BB kullanılır
             from services.bollinger_grid_service import BollingerGridService
-            self._bb_service = BollingerGridService()
-            bb_data = await self._bb_service.compute_grid_bounds(
+            self._bb_services[user_id] = BollingerGridService()
+            bb_data = await self._bb_services[user_id].compute_grid_bounds(
                 ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
                 min_spread_pct, current_price, grid_count
             )
@@ -289,7 +291,7 @@ class GridLiveEngine:
             smart_start_wait = config.get("smart_start_wait", True)
             
             recent_cross = await self._check_recent_midline_cross(
-                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, lookback=3
+                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, user_id, lookback=3
             )
             
             if not smart_start_wait:
@@ -323,14 +325,14 @@ class GridLiveEngine:
         elif grid_mode == "ema_trend":
             # EMA Trend modu: son mumları kontrol et
             from services.bollinger_grid_service import BollingerGridService
-            self._bb_service = BollingerGridService()
-            bb_data = await self._bb_service.compute_grid_bounds(
+            self._bb_services[user_id] = BollingerGridService()
+            bb_data = await self._bb_services[user_id].compute_grid_bounds(
                 ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
                 min_spread_pct, current_price, grid_count
             ) or {}
             
             recent_ema = await self._check_recent_ema_cross(
-                ccxt_symbol, bb_timeframe, filters.get("min_ema_pct", 1.0), lookback=3
+                ccxt_symbol, bb_timeframe, user_id, filters.get("min_ema_pct", 1.0), lookback=3
             )
             
             if recent_ema["crossed"]:
@@ -353,7 +355,7 @@ class GridLiveEngine:
         step = (upper - lower) / grid_count if upper > 0 else 0
         
         # Fiyat hassasiyetini piyasadan al
-        ex = await self._get_exchange()
+        ex = await self._get_exchange(user_id)
         if not ex.exchange.markets:
             await ex.exchange.load_markets()
         market = ex.exchange.market(ccxt_symbol)
@@ -373,7 +375,7 @@ class GridLiveEngine:
 
         # Kontrat sayısını ve büyüklüğünü hesapla (her grid seviyesi için)
         if mode == "live":
-            ex = await self._get_exchange()
+            ex = await self._get_exchange(user_id)
             # Cross margin ayarla (tüm bakiye margin olur, likidasyon riski düşer)
             try:
                 mexc_sym = ccxt_symbol.split("/")[0] + "_" + ccxt_symbol.split("/")[1].split(":")[0]
@@ -388,8 +390,8 @@ class GridLiveEngine:
             except Exception as e:
                 print(f"[GridLive] Kaldıraç ayar uyarısı (devam ediliyor): {e}")
 
-            contracts_per_level = await self._calc_contracts(ccxt_symbol, margin_per_level, current_price, leverage)
-            contract_size = await self._get_contract_size(ccxt_symbol)
+            contracts_per_level = await self._calc_contracts(ccxt_symbol, margin_per_level, current_price, leverage, user_id)
+            contract_size = await self._get_contract_size(ccxt_symbol, user_id)
         else:
             # Paper modda varsayılan contractSize kullan (exchange'e bağlanmadan)
             contract_size = 0.0001 if "BTC" in symbol_raw else 0.01
@@ -450,12 +452,12 @@ class GridLiveEngine:
             "ema_wait_cross": grid_mode == "ema_trend" and upper == 0,
         }
 
-        await redis.set("grid_live:state", json.dumps(state))
-        await redis.set("grid_live:running", "1")
-        await redis.delete("grid_live:trades")
+        await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
+        await redis.set(f"grid_live:running:{user_id}", "1")
+        await redis.delete(f"grid_live:trades:{user_id}")
 
         # HFT settings'i de güncelle (frontend grafik sınırları için)
-        old_hft_raw = await redis.get("hft_sim:settings")
+        old_hft_raw = await redis.get(f"hft_sim:settings:{user_id}")
         hft_settings = json.loads(old_hft_raw) if old_hft_raw else {}
         hft_settings.update({
             "symbol": symbol_raw,
@@ -473,17 +475,17 @@ class GridLiveEngine:
             "bb_std_dev": bb_std_dev,
             "min_spread_pct": min_spread_pct,
         })
-        await redis.set("hft_sim:settings", json.dumps(hft_settings))
+        await redis.set(f"hft_sim:settings:{user_id}", json.dumps(hft_settings))
 
         # Standalone polling loop başlat (HFT Engine'e bağımlı olmadan)
-        if self._poll_task and not self._poll_task.done():
-            self._poll_task.cancel()
-        self._poll_task = asyncio.create_task(self.run_standalone_loop())
+        if user_id in self._poll_tasks and not self._poll_tasks[user_id].done():
+            self._poll_tasks[user_id].cancel()
+        self._poll_tasks[user_id] = asyncio.create_task(self.run_standalone_loop(user_id))
 
         # BB modunda arka plan recalc loop başlat
-        if grid_mode in ("bollinger", "hybrid", "bb_direction") and self._bb_service:
-            self._bb_service._recalc_task = asyncio.create_task(
-                self._bb_service.start_recalc_loop(
+        if grid_mode in ("bollinger", "hybrid", "bb_direction") and user_id in self._bb_services:
+            self._bb_services[user_id]._recalc_task = asyncio.create_task(
+                self._bb_services[user_id].start_recalc_loop(
                     ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, min_spread_pct
                 )
             )
@@ -526,22 +528,22 @@ class GridLiveEngine:
             result["filters"] = filters
         return result
 
-    async def stop(self, close_positions: bool = False) -> dict:
+    async def stop(self, close_positions: bool = False, user_id: str = "default") -> dict:
         """Grid botunu durdur."""
         redis = get_redis()
-        await redis.delete("grid_live:running")
+        await redis.delete(f"grid_live:running:{user_id}")
 
         # BB recalc loop'u durdur
-        if self._bb_service:
-            self._bb_service.stop()
-            self._bb_service = None
+        if user_id in self._bb_services:
+            self._bb_services[user_id].stop()
+            del self._bb_services[user_id]
 
         # Polling loop'u durdur
-        if self._poll_task and not self._poll_task.done():
-            self._poll_task.cancel()
-            self._poll_task = None
+        if user_id in self._poll_tasks and not self._poll_tasks[user_id].done():
+            self._poll_tasks[user_id].cancel()
+            del self._poll_tasks[user_id]
 
-        state_raw = await redis.get("grid_live:state")
+        state_raw = await redis.get(f"grid_live:state:{user_id}")
         state = json.loads(state_raw) if state_raw else {}
 
         result = {
@@ -554,7 +556,7 @@ class GridLiveEngine:
         }
 
         if close_positions and state.get("mode") == "live":
-            result["positions_closed"] = await self._close_all_positions(state)
+            result["positions_closed"] = await self._close_all_positions(state, user_id)
 
         print(f"[GridLive] Bot durduruldu. PnL: ${result['total_pnl']:.2f} | "
               f"İşlem: {result['total_trades']} | Açık seviye: {result['filled_levels']}")
@@ -562,17 +564,17 @@ class GridLiveEngine:
         asyncio.create_task(push_grid_event("grid_stop", f"PnL: ${result['total_pnl']:.2f} | İşlem: {result['total_trades']}"))
         return result
 
-    async def kill_switch(self) -> dict:
+    async def kill_switch(self, user_id: str = "default") -> dict:
         """ACİL DURDURMA: Tüm emirleri iptal et + tüm pozisyonları kapat."""
         redis = get_redis()
-        await redis.delete("grid_live:running")
+        await redis.delete(f"grid_live:running:{user_id}")
 
         # Polling loop'u durdur
-        if self._poll_task and not self._poll_task.done():
-            self._poll_task.cancel()
-            self._poll_task = None
+        if user_id in self._poll_tasks and not self._poll_tasks[user_id].done():
+            self._poll_tasks[user_id].cancel()
+            del self._poll_tasks[user_id]
 
-        state_raw = await redis.get("grid_live:state")
+        state_raw = await redis.get(f"grid_live:state:{user_id}")
         state = json.loads(state_raw) if state_raw else {}
 
         result = {
@@ -588,7 +590,7 @@ class GridLiveEngine:
             mexc_symbol = ccxt_symbol.split("/")[0] + "_" + ccxt_symbol.split("/")[1].split(":")[0]
 
             try:
-                ex = await self._get_exchange()
+                ex = await self._get_exchange(user_id)
 
                 # 1. Tüm açık emirleri iptal et
                 try:
@@ -613,7 +615,7 @@ class GridLiveEngine:
                     pass
 
                 # 4. Tüm açık pozisyonları kapat
-                result["positions_closed"] = await self._close_all_positions(state)
+                result["positions_closed"] = await self._close_all_positions(state, user_id)
 
             except Exception as e:
                 result["error"] = str(e)
@@ -623,13 +625,13 @@ class GridLiveEngine:
         if state:
             state["filled_levels"] = []
             state["last_level"] = -1
-            await redis.set("grid_live:state", json.dumps(state))
+            await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
 
         print(f"[GridLive] KILL SWITCH TETİKLENDİ. Mod: {state.get('mode')} PnL: ${result['total_pnl']:.2f}")
         asyncio.create_task(push_grid_event("grid_stop", f"🚨 KILL SWITCH TETİKLENDİ! PnL: ${result['total_pnl']:.2f}"))
         return result
 
-    async def _close_all_positions(self, state: dict) -> list:
+    async def _close_all_positions(self, state: dict, user_id: str) -> list:
         """Tüm açık pozisyonları market order ile kapat."""
         ccxt_symbol = state.get("ccxt_symbol", "")
         if not ccxt_symbol:
@@ -639,7 +641,7 @@ class GridLiveEngine:
         closed = []
 
         try:
-            ex = await self._get_exchange()
+            ex = await self._get_exchange(user_id)
             positions = await ex.get_positions(ccxt_symbol)
 
             for pos in positions:
@@ -676,27 +678,30 @@ class GridLiveEngine:
 
     # ─── Fiyat Tick İşleme ────────────────────────────────────────────
 
-    async def process_tick(self, current_price: float) -> list | None:
+    async def process_tick(self, current_price: float, user_id: str = "default") -> list | None:
         """
         Her fiyat tick'inde HFT Engine tarafından çağrılır.
         Grid seviyesi geçişi varsa işlem yapar.
         Dönen: trade listesi veya None
         """
         # Çift emir önleme: aynı anda sadece bir tick işlenebilir
-        if self._tick_lock.locked():
+        if user_id not in self._tick_locks:
+            self._tick_locks[user_id] = asyncio.Lock()
+            
+        if self._tick_locks[user_id].locked():
             return None  # Zaten işleniyor, atla
-        async with self._tick_lock:
-            return await self._process_tick_inner(current_price)
+        async with self._tick_locks[user_id]:
+            return await self._process_tick_inner(current_price, user_id)
 
-    async def _process_tick_inner(self, current_price: float) -> list | None:
+    async def _process_tick_inner(self, current_price: float, user_id: str) -> list | None:
         """process_tick'in asıl mantığı (lock içinden çağrılır)."""
         redis = get_redis()
 
-        running = await redis.get("grid_live:running")
+        running = await redis.get(f"grid_live:running:{user_id}")
         if not running:
             return None
 
-        state_raw = await redis.get("grid_live:state")
+        state_raw = await redis.get(f"grid_live:state:{user_id}")
         if not state_raw:
             return None
 
@@ -729,14 +734,14 @@ class GridLiveEngine:
         # İlk tick — sadece seviyeyi kaydet (eğer beklemiyorsak)
         if last_level == -1 and not is_waiting:
             state["last_level"] = current_level
-            await redis.set("grid_live:state", json.dumps(state))
+            await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
             return None
 
         # Grid seviyesi değişmedi — sadece trailing kontrol et
         if current_level == last_level and not is_waiting:
             changed = await self._check_trailing(state, current_price, redis)
             if changed:
-                await redis.set("grid_live:state", json.dumps(state))
+                await redis.set(f"grid_live:state:{user_id}", json.dumps(state))
             return None
 
         # ─── Grid seviyesi değişti → İşlem yap ───────────────────────
@@ -1404,16 +1409,16 @@ class GridLiveEngine:
 
     # ─── Durum Sorgula ────────────────────────────────────────────────
 
-    async def get_status(self) -> dict:
+    async def get_status(self, user_id: str = "default") -> dict:
         """Grid botunun tam durumunu döner."""
         redis = get_redis()
 
-        running = await redis.get("grid_live:running")
-        state_raw = await redis.get("grid_live:state")
+        running = await redis.get(f"grid_live:running:{user_id}")
+        state_raw = await redis.get(f"grid_live:state:{user_id}")
         state = json.loads(state_raw) if state_raw else {}
 
         # Son işlemleri al
-        trades_raw = await redis.lrange("grid_live:trades", 0, 49)
+        trades_raw = await redis.lrange(f"grid_live:trades:{user_id}", 0, 49)
         trades = [json.loads(t) for t in trades_raw] if trades_raw else []
 
         # Live modda borsa pozisyonlarını da çek
@@ -1421,7 +1426,7 @@ class GridLiveEngine:
         exchange_balance = None
         if state.get("mode") == "live" and state.get("ccxt_symbol"):
             try:
-                ex = await self._get_exchange()
+                ex = await self._get_exchange(user_id)
                 positions = await ex.get_positions(state["ccxt_symbol"])
                 exchange_positions = [
                     {
@@ -1439,7 +1444,7 @@ class GridLiveEngine:
                 print(f"[GridLive] Pozisyon sorgulama hatası: {e}")
 
             try:
-                ex = await self._get_exchange()
+                ex = await self._get_exchange(user_id)
                 exchange_balance = await ex.get_balance()
             except Exception:
                 pass
@@ -1538,23 +1543,23 @@ class GridLiveEngine:
 
     # ─── Kendi Kendine Çalışan Polling Loop ─────────────────────────────
 
-    async def run_standalone_loop(self):
+    async def run_standalone_loop(self, user_id: str):
         """
         HFT Engine çalışmasa bile grid motoru kendi kendine çalışır.
         Redis'ten fiyat okur ve process_tick çağırır.
         start() tarafından arka plan task'ı olarak başlatılır.
         """
         redis = get_redis()
-        print("[GridLive] Standalone polling loop başlatıldı (0.5s interval)")
+        print(f"[GridLive] Standalone polling loop başlatıldı (0.5s interval) - User: {user_id}")
 
         while True:
             try:
-                running = await redis.get("grid_live:running")
+                running = await redis.get(f"grid_live:running:{user_id}")
                 if not running:
-                    print("[GridLive] Standalone loop: grid_live:running yok, durduruluyor.")
+                    print(f"[GridLive] Standalone loop: grid_live:running:{user_id} yok, durduruluyor.")
                     break
 
-                state_raw = await redis.get("grid_live:state")
+                state_raw = await redis.get(f"grid_live:state:{user_id}")
                 if not state_raw:
                     await asyncio.sleep(1)
                     continue
@@ -1575,7 +1580,7 @@ class GridLiveEngine:
                 # MEXC WS yoksa MEXC API'den direkt cek (Bitget/Binance KULLANMA)
                 if current_price <= 0:
                     try:
-                        ex = await self._get_exchange()
+                        ex = await self._get_exchange(user_id)
                         ticker = await ex.exchange.fetch_ticker(ccxt_symbol)
                         current_price = float(ticker.get("last", 0))
                     except Exception:
@@ -1586,7 +1591,7 @@ class GridLiveEngine:
                     continue
 
                 # process_tick çağır
-                await self.process_tick(current_price)
+                await self.process_tick(current_price, user_id)
 
                 await asyncio.sleep(0.5)  # 500ms interval
 

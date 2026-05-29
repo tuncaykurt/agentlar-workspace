@@ -29,20 +29,24 @@ async def list_users(admin: User = Depends(get_current_admin)):
         import json
         redis = get_redis()
         
+        from exchange.exchange_factory import SUPPORTED_EXCHANGES
+        
         user_list = []
         for u in users:
             user_key = "default" if u.role == "admin" else str(u.id)
-            raw = await redis.get(f"exchange_keys:{user_key}:mexc")
-            has_api_key = raw is not None
-            
+            has_api_key = False
             balance = 0.0
-            if has_api_key:
-                try:
-                    keys = json.loads(raw)
-                    bal_data = await fetch_balance_for("mexc", keys["api_key"], keys["secret"], keys.get("passphrase", ""))
-                    balance = bal_data.get("total", 0.0)
-                except Exception as e:
-                    print(f"Bakiye cekilemedi User {u.id}: {e}")
+            
+            for exchange in SUPPORTED_EXCHANGES.keys():
+                raw = await redis.get(f"exchange_keys:{user_key}:{exchange}")
+                if raw:
+                    has_api_key = True
+                    try:
+                        keys = json.loads(raw)
+                        bal_data = await fetch_balance_for(exchange, keys["api_key"], keys["secret"], keys.get("passphrase", ""))
+                        balance += bal_data.get("total", 0.0)
+                    except Exception as e:
+                        print(f"Bakiye cekilemedi User {u.id} ({exchange}): {e}")
                     
             user_list.append({
                 "id": u.id,
