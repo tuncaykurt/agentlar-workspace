@@ -22,6 +22,8 @@ export function PWARegister() {
   const [permission, setPermission] = useState<NotificationPermission>('default')
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [isIOS, setIsIOS] = useState(false)
+  const [isStandalone, setIsStandalone] = useState(false)
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -42,6 +44,15 @@ export function PWARegister() {
     }
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+
+    // iOS Tespiti
+    const userAgent = window.navigator.userAgent.toLowerCase()
+    const ios = /iphone|ipad|ipod/.test(userAgent)
+    setIsIOS(ios)
+    
+    // Yüklü mü Tespiti
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in navigator && (navigator as any).standalone)
+    setIsStandalone(standalone)
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
@@ -74,6 +85,11 @@ export function PWARegister() {
   }
 
   const handleInstallClick = async () => {
+    if (isIOS) {
+      alert("iPhone/iPad'de uygulamayı yüklemek için:\n\n1. Safari'nin altındaki 'Paylaş' (Kare içinden çıkan ok) ikonuna dokunun.\n2. Listeden 'Ana Ekrana Ekle' (Add to Home Screen) seçeneğini seçin.")
+      return
+    }
+    
     if (!deferredPrompt) return
     deferredPrompt.prompt()
     const { outcome } = await deferredPrompt.userChoice
@@ -83,7 +99,7 @@ export function PWARegister() {
   }
 
   const showPushBtn = permission !== 'granted' || !isSubscribed
-  const showInstallBtn = !!deferredPrompt
+  const showInstallBtn = !!deferredPrompt || (isIOS && !isStandalone)
 
   if (!showPushBtn && !showInstallBtn) return null
 
