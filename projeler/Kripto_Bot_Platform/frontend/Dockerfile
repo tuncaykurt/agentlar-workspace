@@ -10,7 +10,8 @@ COPY --from=deps /app/node_modules ./node_modules
 RUN echo "cache-bust-v22"
 COPY . .
 ENV NEXT_PUBLIC_API_URL=""
-ENV NODE_OPTIONS="--max-old-space-size=2048"
+# RAM kısıtlaması eklenerek OOM (Out Of Memory) Killer'ın build'i patlatması engellendi (2048 -> 768)
+ENV NODE_OPTIONS="--max-old-space-size=768"
 RUN rm -rf .next && npm run build
 # Standalone output dogrulama
 RUN ls -la .next/standalone/server.js || (echo "STANDALONE BUILD FAILED" && exit 1)
