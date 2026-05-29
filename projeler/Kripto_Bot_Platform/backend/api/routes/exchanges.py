@@ -11,7 +11,8 @@ import json
 
 router = APIRouter(prefix="/exchanges", tags=["exchanges"])
 
-from api.routes.auth import get_current_user
+from api.routes.auth import get_current_user_obj
+from models.user import User
 
 
 class ExchangeKeysRequest(BaseModel):
@@ -22,11 +23,12 @@ class ExchangeKeysRequest(BaseModel):
 
 
 @router.get("")
-async def list_exchanges(user_id: int = Depends(get_current_user)):
+async def list_exchanges(user: User = Depends(get_current_user_obj)):
     redis = get_redis()
+    user_key = "default" if user.role == "admin" else str(user.id)
     result = []
     for name, cfg in SUPPORTED_EXCHANGES.items():
-        raw = await redis.get(f"exchange_keys:{user_id}:{name}")
+        raw = await redis.get(f"exchange_keys:{user_key}:{name}")
         result.append({
             "exchange": name,
             "label": cfg["label"],
@@ -37,7 +39,7 @@ async def list_exchanges(user_id: int = Depends(get_current_user)):
 
 
 @router.post("/save")
-async def save_keys(data: ExchangeKeysRequest, user_id: int = Depends(get_current_user)):
+async def save_keys(data: ExchangeKeysRequest, user: User = Depends(get_current_user_obj)):
     if data.exchange not in SUPPORTED_EXCHANGES:
         raise HTTPException(400, f"Desteklenmeyen borsa. Desteklenenler: {list(SUPPORTED_EXCHANGES)}")
 
@@ -47,21 +49,24 @@ async def save_keys(data: ExchangeKeysRequest, user_id: int = Depends(get_curren
         "secret": data.secret,
         "passphrase": data.passphrase or "",
     }
-    await redis.set(f"exchange_keys:{user_id}:{data.exchange}", json.dumps(keys))
+    user_key = "default" if user.role == "admin" else str(user.id)
+    await redis.set(f"exchange_keys:{user_key}:{data.exchange}", json.dumps(keys))
     return {"status": "ok", "exchange": data.exchange}
 
 
 @router.delete("/{exchange}")
-async def delete_keys(exchange: str, user_id: int = Depends(get_current_user)):
+async def delete_keys(exchange: str, user: User = Depends(get_current_user_obj)):
     redis = get_redis()
-    await redis.delete(f"exchange_keys:{user_id}:{exchange}")
+    user_key = "default" if user.role == "admin" else str(user.id)
+    await redis.delete(f"exchange_keys:{user_key}:{exchange}")
     return {"status": "deleted", "exchange": exchange}
 
 
 @router.post("/{exchange}/test")
-async def test_connection(exchange: str, user_id: int = Depends(get_current_user)):
+async def test_connection(exchange: str, user: User = Depends(get_current_user_obj)):
     redis = get_redis()
-    raw = await redis.get(f"exchange_keys:{user_id}:{exchange}")
+    user_key = "default" if user.role == "admin" else str(user.id)
+    raw = await redis.get(f"exchange_keys:{user_key}:{exchange}")
     if not raw:
         raise HTTPException(404, f"{exchange} için API key bulunamadı.")
 
@@ -88,10 +93,11 @@ class TestOrderRequest(BaseModel):
 
 
 @router.post("/{exchange}/test-order")
-async def test_order(exchange: str, data: TestOrderRequest, user_id: int = Depends(get_current_user)):
+async def test_order(exchange: str, data: TestOrderRequest, user: User = Depends(get_current_user_obj)):
     """Gerçek test emri — MEXC/Bitget/Binance üzerinde pozisyon aç"""
     redis = get_redis()
-    raw = await redis.get(f"exchange_keys:{user_id}:{exchange}")
+    user_key = "default" if user.role == "admin" else str(user.id)
+    raw = await redis.get(f"exchange_keys:{user_key}:{exchange}")
     if not raw:
         raise HTTPException(404, f"{exchange} için API key bulunamadı")
 

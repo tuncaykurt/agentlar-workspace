@@ -16,6 +16,17 @@ function getWsBase() {
   return "ws://backend:8000";
 }
 
+function getAuthHeaders(extraHeaders: Record<string, string> = {}) {
+  const headers: Record<string, string> = { ...extraHeaders }
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("auth_token")
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`
+    }
+  }
+  return headers
+}
+
 async function handleResponse(r: Response) {
   if (!r.ok) {
     const data = await r.json().catch(() => null)
@@ -30,31 +41,31 @@ async function handleResponse(r: Response) {
 
 export const api = {
   get: (path: string) =>
-    fetch(`${API_BASE}${path}`).then(handleResponse),
+    fetch(`${API_BASE}${path}`, { headers: getAuthHeaders() }).then(handleResponse),
 
   post: (path: string, body: unknown) =>
     fetch(`${API_BASE}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     }).then(handleResponse),
 
   patch: (path: string, body: unknown) =>
     fetch(`${API_BASE}${path}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     }).then(handleResponse),
 
   put: (path: string, body: unknown) =>
     fetch(`${API_BASE}${path}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     }).then(handleResponse),
 
   delete: (path: string) =>
-    fetch(`${API_BASE}${path}`, { method: "DELETE" }).then(handleResponse),
+    fetch(`${API_BASE}${path}`, { method: "DELETE", headers: getAuthHeaders() }).then(handleResponse),
 }
 
 export async function publicPost(path: string, body: unknown) {

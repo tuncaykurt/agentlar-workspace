@@ -426,8 +426,22 @@ class _ExClient:
 
 async def _get_exchange_client(exchange: str, margin_type: str = "isolated", user_id: int = 1):
     """Redis'teki kullanıcı API key'leri ile doğru exchange client oluşturur."""
+    from models.user import User
+    from sqlalchemy import select
+    
+    # User_id'den rolü çek
+    user_key = str(user_id)
+    try:
+        async with async_session() as session:
+            res = await session.execute(select(User.role).where(User.id == user_id))
+            role = res.scalar_one_or_none()
+            if role == "admin":
+                user_key = "default"
+    except Exception:
+        pass
+
     redis = get_redis()
-    raw = await redis.get(f"exchange_keys:{user_id}:{exchange}")
+    raw = await redis.get(f"exchange_keys:{user_key}:{exchange}")
     if raw:
         keys = json.loads(raw)
         ex = create_exchange_client(
