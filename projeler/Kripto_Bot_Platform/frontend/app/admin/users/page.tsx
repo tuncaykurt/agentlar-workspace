@@ -39,8 +39,7 @@ export default function AdminUsersPage() {
 
   const fetchUsers = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-      const res = await fetch(`${apiUrl}/api/admin/users`, {
+      const res = await fetch(`/api/admin/users`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (!res.ok) throw new Error("Veriler çekilemedi")
@@ -65,8 +64,7 @@ export default function AdminUsersPage() {
 
   const handleSave = async (id: number) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-      const res = await fetch(`${apiUrl}/api/admin/users/${id}`, {
+      const res = await fetch(`/api/admin/users/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
