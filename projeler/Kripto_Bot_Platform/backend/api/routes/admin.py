@@ -25,22 +25,22 @@ async def list_users(admin: User = Depends(get_current_admin)):
         result = await session.execute(select(User).order_by(User.id.desc()))
         users = result.scalars().all()
         
+        from core.redis_client import get_redis
+        import json
+        redis = get_redis()
+        
         user_list = []
         for u in users:
-            # Kullanıcının bakiyesini canlı çek (Eger API anahtari varsa)
-            keys_res = await session.execute(
-                select(UserExchangeKey).where(UserExchangeKey.user_id == u.id, UserExchangeKey.exchange == "mexc")
-            )
-            key_obj = keys_res.scalar_one_or_none()
+            user_key = "default" if u.role == "admin" else str(u.id)
+            raw = await redis.get(f"exchange_keys:{user_key}:mexc")
+            has_api_key = raw is not None
             
             balance = 0.0
-            if key_obj:
+            if has_api_key:
                 try:
-                    # Sifreyi coz ve borsadan bakiyeyi cek
-                    secret = decrypt_string(key_obj.encrypted_secret)
-                    passphrase = decrypt_string(key_obj.encrypted_passphrase) if key_obj.encrypted_passphrase else ""
-                    bal_data = await fetch_balance_for("mexc", key_obj.api_key, secret, passphrase)
-                    balance = bal_data.get("USDT", {}).get("total", 0.0)
+                    keys = json.loads(raw)
+                    bal_data = await fetch_balance_for("mexc", keys["api_key"], keys["secret"], keys.get("passphrase", ""))
+                    balance = bal_data.get("total", 0.0)
                 except Exception as e:
                     print(f"Bakiye cekilemedi User {u.id}: {e}")
                     
@@ -55,7 +55,7 @@ async def list_users(admin: User = Depends(get_current_admin)):
                 "allowed_pages": u.allowed_pages,
                 "created_at": u.created_at,
                 "balance": balance,
-                "has_api_key": key_obj is not None
+                "has_api_key": has_api_key
             })
             
         return user_list
