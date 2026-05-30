@@ -223,7 +223,7 @@ class GridBacktestEngine:
                     entry_ts = state["entry_times"].pop(lvl, ts)
                     margin_used = (lvl_contracts * cs * ep) / self.leverage
                     pos_val = lvl_contracts * cs * ep
-                    fee = pos_val * self.taker_fee_pct * 2
+                    fee = pos_val * self.taker_fee_pct  # Sadece çıkış taker fee (giriş maker = %0)
                     trades.append({
                         "entry_ts": entry_ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": price,
                         "pnl": 0, "fee": fee, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs,

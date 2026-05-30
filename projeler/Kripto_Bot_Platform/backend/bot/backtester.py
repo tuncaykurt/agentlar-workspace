@@ -30,8 +30,9 @@ class BacktestEngine:
         self.leverage = int(config.get("leverage", 3))
         self.stop_loss_pct = float(config.get("stop_loss_pct", 2.0)) / 100
         self.take_profit_pct = float(config.get("take_profit_pct", 4.0)) / 100
-        # MEXC Futures fee: Maker %0.00, Taker %0.02 (per side, notional üzerinden)
-        self.fee_pct = float(config.get("fee_pct", 0.02)) / 100  # MEXC taker fee (0.02% per side)
+        # MEXC Futures fee: Maker %0.00 (giriş), Taker %0.02 (çıkış)
+        # Fee sadece çıkışta uygulanır (giriş limit emirle = maker = %0)
+        self.fee_pct = float(config.get("fee_pct", 0.02)) / 100  # MEXC taker fee çıkışta
         self.maintenance_margin_rate = 0.005  # MEXC maintenance margin rate (0.5%)
         self.lookback = int(config.get("lookback", 200))
         self.timeframe = config.get("timeframe", "1h")
@@ -94,19 +95,17 @@ class BacktestEngine:
                 if hit:
                     exit_price = hit["exit_price"]
                     pnl = self._calc_pnl(position, exit_price)
-                    # Fee: giriş ve çıkış ayrı ayrı notional üzerinden
-                    entry_fee = position.get("entry_fee", 0)
+                    # Fee: sadece çıkışta taker fee (giriş maker = %0)
                     exit_fee = position["qty"] * exit_price * self.fee_pct
-                    net_pnl = pnl - entry_fee - exit_fee
+                    net_pnl = pnl - exit_fee
 
                     if hit["reason"] == "liquidation":
-                        # Likidasyon: cross margin'de tüm bakiye gider
                         net_pnl = -balance
                         balance = 0
                     else:
                         balance += net_pnl
 
-                    trades.append(self._make_trade(position, ts, exit_price, net_pnl, entry_fee + exit_fee, hit["reason"]))
+                    trades.append(self._make_trade(position, ts, exit_price, net_pnl, exit_fee, hit["reason"]))
                     position = None
 
                     if balance <= 0:
@@ -129,11 +128,10 @@ class BacktestEngine:
                            (signal == "sell" and current_side == "buy")
                 if opposite:
                     pnl = self._calc_pnl(position, c)
-                    entry_fee = position.get("entry_fee", 0)
                     exit_fee = position["qty"] * c * self.fee_pct
-                    net_pnl = pnl - entry_fee - exit_fee
+                    net_pnl = pnl - exit_fee
                     balance += net_pnl
-                    trades.append(self._make_trade(position, ts, c, net_pnl, entry_fee + exit_fee, "reverse"))
+                    trades.append(self._make_trade(position, ts, c, net_pnl, exit_fee, "reverse"))
                     position = None
 
                     if balance <= 0:
@@ -150,8 +148,6 @@ class BacktestEngine:
                 qty = position_value / c if c > 0 else 0
 
                 if qty > 0 and margin > 0:
-                    entry_fee = position_value * self.fee_pct
-
                     # Cross margin likidasyon: tüm bakiyeye göre
                     liq_price = self._calc_cross_liq_price(c, qty, signal, balance)
 
@@ -162,7 +158,6 @@ class BacktestEngine:
                         else:
                             sl = c * (1 - self.stop_loss_pct)
                             tp = c * (1 + self.take_profit_pct)
-                            # SL likidasyon fiyatının altına düşemez
                             if sl < liq_price:
                                 sl = liq_price
                     else:
@@ -184,7 +179,6 @@ class BacktestEngine:
                         "tp": tp,
                         "liq_price": liq_price,
                         "entry_ts": ts,
-                        "entry_fee": entry_fee,
                     }
 
             # Equity curve
@@ -201,11 +195,10 @@ class BacktestEngine:
         if position:
             last_close = ohlcv[-1][4]
             pnl = self._calc_pnl(position, last_close)
-            entry_fee = position.get("entry_fee", 0)
             exit_fee = position["qty"] * last_close * self.fee_pct
-            net_pnl = pnl - entry_fee - exit_fee
+            net_pnl = pnl - exit_fee
             balance += net_pnl
-            trades.append(self._make_trade(position, ohlcv[-1][0], last_close, net_pnl, entry_fee + exit_fee, "end_of_data"))
+            trades.append(self._make_trade(position, ohlcv[-1][0], last_close, net_pnl, exit_fee, "end_of_data"))
 
         return self._calc_metrics(trades, equity_curve, balance, max_drawdown)
 
