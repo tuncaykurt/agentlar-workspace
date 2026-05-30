@@ -343,7 +343,7 @@ const STRATEGIES: Strategy[] = [
         ],
       },
       { key: "per_grid_usdt",  label: "Grid Başına USDT",      type: "number",  min: 1,    max: 10000, step: 1,   default: 10,    description: "Her grid seviyesine ayrılan USDT (toplam = grid sayısı × bu değer)" },
-      { key: "trading_fee_pct", label: "İşlem Ücreti %",       type: "number",  min: 0,    max: 1,    step: 0.01, default: 0.06, description: "Borsa işlem ücreti (MEXC API Taker: 0.06% per side)" },
+      { key: "trading_fee_pct", label: "İşlem Ücreti %",       type: "number",  min: 0,    max: 1,    step: 0.01, default: 0.02, description: "Borsa işlem ücreti (MEXC Maker: 0%, Taker: 0.02%)" },
       { key: "stop_loss_pct",  label: "Stop Loss %",           type: "number",  min: 0,    max: 1000,  step: 0.5,  default: 8,    description: "Fiyat alt sınırın kaç % altına düşerse tüm gridleri kapat (0 = kapalı)" },
       { key: "stop_loss_price", label: "Stop Loss Fiyatı",     type: "number",  min: 0,    max: 9999999, step: 0.01, default: 0, description: "Bu fiyatın altına düşerse gridleri kapat (0 = yüzde modunu kullan)" },
       { key: "take_profit_pct", label: "Take Profit %",        type: "number",  min: 0,    max: 500,  step: 0.5,  default: 0,    description: "Toplam kâr bu yüzdeyi geçerse gridleri kapat (0 = kapalı)" },

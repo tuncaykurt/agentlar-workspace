@@ -514,7 +514,7 @@ class GridLiveEngine:
             "total_budget": total_budget,
             "margin_per_level": margin_per_level,
             "estimated_profit_per_grid": round(
-                contracts_per_level * contract_size * step - contracts_per_level * contract_size * current_price * 0.0006 * 2, 6
+                contracts_per_level * contract_size * step - contracts_per_level * contract_size * current_price * 0.0002 * 2, 6
             ),
         }
         # BB modu ek bilgileri
@@ -859,7 +859,7 @@ class GridLiveEngine:
                                             price_diff_pct = (ep - current_price) / ep if ep > 0 else 0
                                         lvl_gross = margin_per_lvl * lev * price_diff_pct
                                         lvl_notional = margin_per_lvl * lev
-                                        lvl_fee = lvl_notional * 0.0006 * 2
+                                        lvl_fee = lvl_notional * 0.0002 * 2
                                         total_net_pnl += (lvl_gross - lvl_fee)
                                     
                                     close_side = "sell" if old_dir == "long" else "buy"
@@ -1011,7 +1011,7 @@ class GridLiveEngine:
                     for lvl in sell_levels:
                         ep = entry_prices.get(str(lvl), current_price - step)
                         lvl_gross = contracts_per_lvl * cs * (current_price - ep)
-                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0006) + (contracts_per_lvl * cs * current_price * 0.0006)
+                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0002) + (contracts_per_lvl * cs * current_price * 0.0002)
                         total_net_pnl += (lvl_gross - lvl_fee)
                     net_pnl = round(total_net_pnl, 6)
 
@@ -1060,7 +1060,7 @@ class GridLiveEngine:
                     for lvl in cover_levels:
                         ep = entry_prices.get(str(lvl), current_price + step)
                         lvl_gross = contracts_per_lvl * cs * (ep - current_price)
-                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0006) + (contracts_per_lvl * cs * current_price * 0.0006)
+                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0002) + (contracts_per_lvl * cs * current_price * 0.0002)
                         total_net_pnl += (lvl_gross - lvl_fee)
                     net_pnl = round(total_net_pnl, 6)
 
@@ -1150,7 +1150,7 @@ class GridLiveEngine:
                             lvl_gross = contracts_per_lvl * cs * (current_price - ep)
                         else:
                             lvl_gross = contracts_per_lvl * cs * (ep - current_price)
-                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0006) + (contracts_per_lvl * cs * current_price * 0.0006)
+                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0002) + (contracts_per_lvl * cs * current_price * 0.0002)
                         total_net_pnl += (lvl_gross - lvl_fee)
                     net_pnl = round(total_net_pnl, 6)
 
@@ -1395,7 +1395,7 @@ class GridLiveEngine:
         if trade["exchange_status"] != "error":
             cs = state.get("contract_size", 0.01)
             notional = total_contracts * cs * price
-            fee = notional * 0.0006 * 2  # taker fee %0.06 giriş+çıkış
+            fee = notional * 0.0002 * 2  # taker fee %0.02 giriş+çıkış
             state["total_fees"] = round(state.get("total_fees", 0) + fee, 6)
 
         # İşlem geçmişine ekle
@@ -1476,7 +1476,7 @@ class GridLiveEngine:
                     unrealized_pnl = 0
                     
                 notional = total_margin * leverage
-                fee = notional * 0.0006 * 2
+                fee = notional * 0.0002 * 2
                 unrealized_net_pnl = round(unrealized_pnl - fee, 4)
                 
                 exchange_positions = [

@@ -10,8 +10,8 @@ class GridBacktestEngine:
         self.initial_balance = float(config.get("initial_balance", 10000))
         self.order_size = float(config.get("order_size", 100)) # Toplam bütçe
         self.leverage = int(config.get("leverage", 10))
-        self.maker_fee_pct = 0.0  # MEXC Maker Fee is 0%
-        self.taker_fee_pct = float(config.get("fee_pct", 0.06)) / 100  # MEXC API Taker Fee (0.06% per side)
+        self.maker_fee_pct = 0.0  # MEXC Maker Fee 0%
+        self.taker_fee_pct = float(config.get("fee_pct", 0.02)) / 100  # MEXC Taker Fee 0.02% per side
         self.maintenance_margin_rate = 0.005  # MEXC maintenance margin rate (0.5%)
         
         self.bb_period = int(config.get("bb_period", 20))

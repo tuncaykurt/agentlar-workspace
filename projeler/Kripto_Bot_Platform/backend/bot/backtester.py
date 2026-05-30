@@ -30,8 +30,8 @@ class BacktestEngine:
         self.leverage = int(config.get("leverage", 3))
         self.stop_loss_pct = float(config.get("stop_loss_pct", 2.0)) / 100
         self.take_profit_pct = float(config.get("take_profit_pct", 4.0)) / 100
-        # MEXC API taker fee: giriş ve çıkışta ayrı ayrı uygulanır
-        self.fee_pct = float(config.get("fee_pct", 0.06)) / 100  # MEXC taker fee (0.06% per side)
+        # MEXC Futures fee: Maker %0.00, Taker %0.02 (per side, notional üzerinden)
+        self.fee_pct = float(config.get("fee_pct", 0.02)) / 100  # MEXC taker fee (0.02% per side)
         self.maintenance_margin_rate = 0.005  # MEXC maintenance margin rate (0.5%)
         self.lookback = int(config.get("lookback", 200))
         self.timeframe = config.get("timeframe", "1h")

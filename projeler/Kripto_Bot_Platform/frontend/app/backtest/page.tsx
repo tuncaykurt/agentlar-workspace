@@ -102,7 +102,7 @@ export default function BacktestPage() {
   const [slPct, setSlPct] = useState("2")
   const [tpPct, setTpPct] = useState("4")
   const [params, setParams] = useState<Record<string, number | boolean | string>>({})
-  const [feePct, setFeePct] = useState("0.06")
+  const [feePct, setFeePct] = useState("0.02")
   const [overlays, setOverlays] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<BacktestResult | null>(null)
@@ -119,7 +119,7 @@ export default function BacktestPage() {
   const numLeverage = Number(leverage) || 3
   const numSlPct    = Number(slPct)    || 2
   const numTpPct    = Number(tpPct)    || 4
-  const numFeePct   = feePct.trim() === "" ? 0.06 : Math.max(0, parseFloat(feePct) || 0)
+  const numFeePct   = feePct.trim() === "" ? 0.02 : Math.max(0, parseFloat(feePct) || 0)
 
   const runBacktest = async () => {
     setLoading(true)
@@ -257,8 +257,8 @@ export default function BacktestPage() {
               <span className="text-xs text-slate-400">Komisyon %</span>
               <div className="flex gap-1">
                 <button onClick={() => setFeePct("0")} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${numFeePct === 0 ? "border-green-500 bg-green-500/20 text-green-300" : "border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>Maker 0%</button>
-                <button onClick={() => setFeePct("0.02")} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${numFeePct === 0.02 ? "border-blue-500 bg-blue-500/20 text-blue-300" : "border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>Web 0.02%</button>
-                <button onClick={() => setFeePct("0.06")} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${numFeePct === 0.06 ? "border-blue-500 bg-blue-500/20 text-blue-300" : "border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>API 0.06%</button>
+                <button onClick={() => setFeePct("0.02")} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${numFeePct === 0.02 ? "border-blue-500 bg-blue-500/20 text-blue-300" : "border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>Taker 0.02%</button>
+                <button onClick={() => setFeePct("0.05")} className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${numFeePct === 0.05 ? "border-blue-500 bg-blue-500/20 text-blue-300" : "border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"}`}>0.05%</button>
               </div>
             </div>
             <input type="number" value={feePct} onChange={e => setFeePct(e.target.value)} min={0} max={1} step={0.01} className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />

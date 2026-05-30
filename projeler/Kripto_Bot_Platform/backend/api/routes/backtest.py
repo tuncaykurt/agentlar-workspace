@@ -112,7 +112,7 @@ class BacktestRequest(BaseModel):
     leverage: int = Field(default=3, ge=1, le=500)
     stop_loss_pct: float = Field(default=2.0, ge=0.1, le=50)
     take_profit_pct: float = Field(default=4.0, ge=0.1, le=200)
-    fee_pct: float = Field(default=0.06, ge=0, le=0.5)  # MEXC API taker fee 0.06% per side
+    fee_pct: float = Field(default=0.02, ge=0, le=0.5)  # MEXC Taker fee 0.02% per side
     params: dict = Field(default_factory=dict)
     overlay_indicators: list = Field(default_factory=list)
 

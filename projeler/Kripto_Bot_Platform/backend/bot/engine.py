@@ -1886,12 +1886,14 @@ class BotEngine:
         # Kapanış fiyatı ve pnl
         exit_price = new_signal_price
         if entry_price > 0:
+            # MEXC Taker fee: %0.02 per side, giriş+çıkış = %0.04 toplam (fiyat değişimi % üzerinden)
+            fee_deduct = 0.02 * 2  # 0.02% giriş + 0.02% çıkış
             if is_long:
-                pnl_pct = ((exit_price - entry_price) / entry_price * 100) - 0.02  # Deduct 0.02% MEXC Taker fee (Open+Close)
+                pnl_pct = ((exit_price - entry_price) / entry_price * 100) - fee_deduct
                 max_favorable_pct = (max_high - entry_price) / entry_price * 100
                 max_adverse_pct = (min_low - entry_price) / entry_price * 100
             else:
-                pnl_pct = ((entry_price - exit_price) / entry_price * 100) - 0.02  # Deduct 0.02% MEXC Taker fee (Open+Close)
+                pnl_pct = ((entry_price - exit_price) / entry_price * 100) - fee_deduct
                 max_favorable_pct = (entry_price - min_low) / entry_price * 100
                 max_adverse_pct = (entry_price - max_high) / entry_price * 100
         else:
