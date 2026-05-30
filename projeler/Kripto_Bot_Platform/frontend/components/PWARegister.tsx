@@ -27,11 +27,30 @@ export function PWARegister() {
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').then(reg => {
-        // Kontrol et
-        reg.pushManager.getSubscription().then(sub => {
-          if (sub) setIsSubscribed(true)
-        })
+      navigator.serviceWorker.register('/sw.js').then(async (reg) => {
+        // Mevcut subscription'ı kontrol et
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          setIsSubscribed(true)
+          // Her açılışta backend'e kaydet (Redis temizlenmiş olabilir)
+          try {
+            await api.post("/simulations/push/subscribe", sub)
+          } catch (e) {
+            console.warn('[Push] Subscription backend sync hatası:', e)
+          }
+        } else if ('Notification' in window && Notification.permission === 'granted') {
+          // İzin var ama subscription yok — otomatik oluştur
+          try {
+            const newSub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            })
+            await api.post("/simulations/push/subscribe", newSub)
+            setIsSubscribed(true)
+          } catch (e) {
+            console.warn('[Push] Auto-subscribe hatası:', e)
+          }
+        }
       }).catch(() => {})
     }
     if ('Notification' in window) {
