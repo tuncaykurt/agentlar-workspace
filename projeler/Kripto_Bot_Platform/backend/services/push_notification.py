@@ -88,22 +88,29 @@ async def send_push(title: str, body: str, data: dict = None, tag: str = "trade"
 
     dead_endpoints = []
 
+    import asyncio
+
+    def _send_sync(sub_info, data):
+        """Senkron webpush çağrısı — thread'de çalıştırılır."""
+        webpush(
+            subscription_info=sub_info,
+            data=data,
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims=VAPID_CLAIMS,
+        )
+
     for sub_raw in subs_raw:
         try:
             sub = json.loads(sub_raw)
-            webpush(
-                subscription_info=sub,
-                data=payload,
-                vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_claims=VAPID_CLAIMS,
-            )
+            await asyncio.to_thread(_send_sync, sub, payload)
+            print(f"[Push] Bildirim gönderildi: {sub.get('endpoint', '')[:60]}...")
         except Exception as e:
             err_str = str(e)
             # 404/410 = subscription expired/invalid
             if "404" in err_str or "410" in err_str or "Gone" in err_str:
                 dead_endpoints.append(sub.get("endpoint", ""))
             else:
-                print(f"[Push] Gönderim hatası: {err_str[:120]}")
+                print(f"[Push] Gönderim hatası: {err_str[:200]}")
 
     # Geçersiz subscription'ları temizle
     for ep in dead_endpoints:
