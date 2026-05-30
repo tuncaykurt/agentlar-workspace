@@ -1469,6 +1469,52 @@ async def stop_bot(bot_id: int, user_id: int = Depends(get_current_user)):
     return {"status": "stopped", "bot_id": bot_id}
 
 
+@router.get("/push/test")
+async def test_push(user_id: int = Depends(get_current_user)):
+    """Push bildirim pipeline debug testi."""
+    from services.push_notification import send_push, REDIS_KEY_PREFIX
+    from core.redis_client import get_redis
+    redis = get_redis()
+
+    redis_key = f"{REDIS_KEY_PREFIX}{user_id}"
+    subs_raw = await redis.lrange(redis_key, 0, -1)
+
+    result = {
+        "user_id": user_id,
+        "redis_key": redis_key,
+        "subscription_count": len(subs_raw) if subs_raw else 0,
+        "subscriptions": [],
+    }
+
+    if subs_raw:
+        import json
+        for s in subs_raw:
+            try:
+                sub = json.loads(s)
+                result["subscriptions"].append(sub.get("endpoint", "")[:80])
+            except Exception:
+                pass
+
+        # Gerçek bildirim gönder
+        try:
+            await send_push(
+                "🔔 Test Bildirimi",
+                "Push notification pipeline çalışıyor!",
+                data={"url": "/bots"},
+                tag="test",
+                user_id=str(user_id),
+            )
+            result["push_sent"] = True
+        except Exception as e:
+            result["push_sent"] = False
+            result["push_error"] = str(e)
+    else:
+        result["push_sent"] = False
+        result["message"] = "Subscription bulunamadı — bildirim butonuna tekrar basın"
+
+    return result
+
+
 async def _update_bot_status(session, bot_id: int, status):
     """Bot status güncelle — ayrı fonksiyon (timeout ile kullanılabilsin)."""
     await session.execute(
