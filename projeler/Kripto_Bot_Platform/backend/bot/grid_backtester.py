@@ -11,7 +11,8 @@ class GridBacktestEngine:
         self.order_size = float(config.get("order_size", 100)) # Toplam bütçe
         self.leverage = int(config.get("leverage", 10))
         self.maker_fee_pct = 0.0  # MEXC Maker Fee is 0%
-        self.taker_fee_pct = float(config.get("fee_pct", 0.01)) / 100  # MEXC Taker Fee is 0.01%
+        self.taker_fee_pct = float(config.get("fee_pct", 0.02)) / 100  # MEXC Taker Fee is 0.02%
+        self.maintenance_margin_rate = 0.005  # MEXC maintenance margin rate (0.5%)
         
         self.bb_period = int(config.get("bb_period", 20))
         self.bb_std = float(config.get("bb_std_dev", 2.0))
@@ -200,14 +201,17 @@ class GridBacktestEngine:
             # Check liquidation
             cs = 0.01 if "BTC" not in self.config.get("symbol", "") else 0.0001
             liquidated_lvls = []
+            mmr = self.maintenance_margin_rate
             for lvl in list(state["filled"]):
                 ep = state["entry_prices"][lvl]
                 if active_dir == "long":
-                    liq_price = ep * (1 - 1/self.leverage + self.taker_fee_pct)
+                    # MEXC isolated margin: liq = entry * (1 - 1/leverage + MMR)
+                    liq_price = ep * (1 - 1/self.leverage + mmr)
                     if low <= liq_price:
                         liquidated_lvls.append((lvl, liq_price))
                 else:
-                    liq_price = ep * (1 + 1/self.leverage - self.taker_fee_pct)
+                    # MEXC isolated margin: liq = entry * (1 + 1/leverage - MMR)
+                    liq_price = ep * (1 + 1/self.leverage - mmr)
                     if high >= liq_price:
                         liquidated_lvls.append((lvl, liq_price))
                         

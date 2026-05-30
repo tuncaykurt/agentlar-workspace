@@ -29,7 +29,8 @@ class BacktestEngine:
         self.leverage = int(config.get("leverage", 3))
         self.stop_loss_pct = float(config.get("stop_loss_pct", 2.0)) / 100
         self.take_profit_pct = float(config.get("take_profit_pct", 4.0)) / 100
-        self.fee_pct = float(config.get("fee_pct", 0.01)) / 100  # MEXC taker fee (0.01%)
+        self.fee_pct = float(config.get("fee_pct", 0.02)) / 100  # MEXC taker fee (0.02%)
+        self.maintenance_margin_rate = 0.005  # MEXC maintenance margin rate (0.5%)
         self.lookback = int(config.get("lookback", 200))  # strateji hesabı için gereken bar
         self.timeframe = config.get("timeframe", "1h")
         # Reverse modu: SL/TP yok, her yeni sinyalde pozisyonu ters çevir
@@ -145,13 +146,14 @@ class BacktestEngine:
 
                 if qty > 0 and margin > 0:
                     entry_fee = position_value * self.fee_pct
-                    # Likidasyon fiyatı (basitleştirilmiş, maintenance margin ihmal)
-                    liq_pct = 0.95 / self.leverage
+                    # MEXC Likidasyon fiyatı (isolated margin)
+                    # Long: liq = entry * (1 - 1/leverage + MMR)
+                    # Short: liq = entry * (1 + 1/leverage - MMR)
+                    mmr = self.maintenance_margin_rate
                     if signal == "buy":
-                        liq_price = c * (1 - liq_pct)
-                        # Reverse modda SL/TP yok — çok uzağa yerleştir, pratik olarak tetiklenmez
+                        liq_price = c * (1 - 1/self.leverage + mmr)
                         if self.reverse_on_signal:
-                            sl = liq_price  # likidasyon dışında SL yok
+                            sl = liq_price
                             tp = c * 1e9
                         else:
                             sl = c * (1 - self.stop_loss_pct)
@@ -159,7 +161,7 @@ class BacktestEngine:
                             if sl < liq_price:
                                 sl = liq_price
                     else:
-                        liq_price = c * (1 + liq_pct)
+                        liq_price = c * (1 + 1/self.leverage - mmr)
                         if self.reverse_on_signal:
                             sl = liq_price
                             tp = 0.0
@@ -293,6 +295,17 @@ class BacktestEngine:
         if ind:
             from ai.indicators import generate_signal
             return generate_signal(ind)
+        return None
+
+    def _check_liquidation_only(self, pos: dict, high: float, low: float) -> dict | None:
+        """Reverse modda sadece likidasyon kontrolü (SL/TP yok)."""
+        liq_price = pos.get("liq_price")
+        if liq_price is None:
+            return None
+        if pos["side"] == "buy" and low <= liq_price:
+            return {"exit_price": liq_price, "reason": "liquidation"}
+        if pos["side"] == "sell" and high >= liq_price:
+            return {"exit_price": liq_price, "reason": "liquidation"}
         return None
 
     def _check_sl_tp(self, pos: dict, high: float, low: float) -> dict | None:
