@@ -308,6 +308,7 @@ export default function StrategyViewPage() {
         leverage: Number(leverage) || 1,
         stop_loss_pct: Number(slPct) || 3,
         take_profit_pct: Number(tpPct) || 6,
+        fee_pct: 0.02,  // MEXC Taker fee
         params: { ...mergedParams, budget_mode: budgetMode },
       })
       setResult(res)
