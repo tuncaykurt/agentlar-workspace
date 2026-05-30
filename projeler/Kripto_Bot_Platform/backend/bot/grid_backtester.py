@@ -282,67 +282,13 @@ class GridBacktestEngine:
                 continue
 
             # ── USD bazlı pozisyon hesaplama ──
-            # margin = bütçe / kademe sayısı (tam, yuvarlama yok)
-            # pos_val = margin * kaldıraç
-            # qty = pos_val / fiyat (base currency cinsinden)
             margin_used = state["margin_per_level"]
             pos_val = margin_used * self.leverage
             qty = pos_val / price
 
-            if active_dir == "long":
-                if current_level < state["last_level"] and not skip_buy:
-                    for lvl in range(state["last_level"] - 1, current_level - 1, -1):
-                        if lvl not in state["filled"] and 0 <= lvl < self.grid_count:
-                            state["filled"].add(lvl)
-                            state["entry_prices"][lvl] = price
-                            state["qtys"][lvl] = qty
-                            state["entry_times"][lvl] = ts
-                            trades.append({"entry_ts": ts, "side": "buy", "entry": price, "exit": 0, "pnl": 0, "status": "open", "lvl": lvl, "qty": qty, "margin": round(margin_used, 2), "position_value": round(pos_val, 2), "pnl_pct": 0})
-                elif current_level > state["last_level"] and not skip_sell:
-                    for lvl in range(state["last_level"], current_level):
-                            if lvl not in state["filled"]:
-                                continue
-                            state["filled"].discard(lvl)
-                            ep = state["entry_prices"].pop(lvl, price - state["step"])
-                            lvl_qty = state["qtys"].pop(lvl, qty)
-                            entry_ts = state["entry_times"].pop(lvl, ts)
-                            gross = (price - ep) * lvl_qty
-                            fee = lvl_qty * price * self.taker_fee_pct  # Sadece çıkışta taker fee
-                            net_pnl = gross - fee
-                            balance += net_pnl
-                            entry_margin = state["margin_per_level"]
-                            entry_pos_val = lvl_qty * ep
-                            pnl_pct = (net_pnl / entry_margin * 100) if entry_margin > 0 else 0
-                            trades.append({"entry_ts": entry_ts, "exit_ts": ts, "side": "buy", "entry": ep, "exit": price, "pnl": round(net_pnl, 4), "fee": round(fee, 4), "status": "closed", "lvl": lvl, "qty": lvl_qty, "margin": round(entry_margin, 2), "position_value": round(entry_pos_val, 2), "pnl_pct": round(pnl_pct, 2)})
-            else: # short
-                if current_level > state["last_level"] and not skip_buy:
-                    for lvl in range(state["last_level"] + 1, current_level + 1):
-                        if lvl not in state["filled"] and 0 <= lvl < self.grid_count:
-                            state["filled"].add(lvl)
-                            state["entry_prices"][lvl] = price
-                            state["qtys"][lvl] = qty
-                            state["entry_times"][lvl] = ts
-                            trades.append({"entry_ts": ts, "side": "sell", "entry": price, "exit": 0, "pnl": 0, "status": "open", "lvl": lvl, "qty": qty, "margin": round(margin_used, 2), "position_value": round(pos_val, 2), "pnl_pct": 0})
-                elif current_level < state["last_level"] and not skip_sell:
-                    for lvl in range(state["last_level"], current_level, -1):
-                            if lvl not in state["filled"]:
-                                continue
-                            state["filled"].discard(lvl)
-                            ep = state["entry_prices"].pop(lvl, price + state["step"])
-                            lvl_qty = state["qtys"].pop(lvl, qty)
-                            entry_ts = state["entry_times"].pop(lvl, ts)
-                            gross = (ep - price) * lvl_qty
-                            fee = lvl_qty * price * self.taker_fee_pct  # Sadece çıkışta taker fee
-                            net_pnl = gross - fee
-                            balance += net_pnl
-                            entry_margin = state["margin_per_level"]
-                            entry_pos_val = lvl_qty * ep
-                            pnl_pct = (net_pnl / entry_margin * 100) if entry_margin > 0 else 0
-                            trades.append({"entry_ts": entry_ts, "exit_ts": ts, "side": "sell", "entry": ep, "exit": price, "pnl": round(net_pnl, 4), "fee": round(fee, 4), "status": "closed", "lvl": lvl, "qty": lvl_qty, "margin": round(entry_margin, 2), "position_value": round(entry_pos_val, 2), "pnl_pct": round(pnl_pct, 2)})
-
-            state["last_level"] = current_level
-
-            # Band exit kontrolü
+            # ── ÖNCE band exit kontrolü ──
+            # Band exit tetiklenirse bu mumda yeni pozisyon açılmaz, sadece mevcutlar kapatılır
+            band_exit_triggered = False
             if state["upper"] > 0:
                 should_close = False
                 exit_side = None
@@ -379,7 +325,8 @@ class GridBacktestEngine:
                         elif state["band_exit_side"] == "lower" and price >= bb_lower:
                             should_close, exit_side = True, "lower"
 
-                if should_close:
+                if should_close and state["filled"]:
+                    band_exit_triggered = True
                     close_lvls = list(state["filled"])
                     for lvl in close_lvls:
                         state["filled"].discard(lvl)
@@ -404,7 +351,63 @@ class GridBacktestEngine:
                     state["levels"] = []
                     state["band_exited"] = False
                     state["band_exit_side"] = None
+                    state["last_level"] = current_level
                     continue
+
+            # ── Grid fill: sadece band exit tetiklenmemişse ──
+            if not band_exit_triggered:
+                if active_dir == "long":
+                    if current_level < state["last_level"] and not skip_buy:
+                        for lvl in range(state["last_level"] - 1, current_level - 1, -1):
+                            if lvl not in state["filled"] and 0 <= lvl < self.grid_count:
+                                state["filled"].add(lvl)
+                                state["entry_prices"][lvl] = price
+                                state["qtys"][lvl] = qty
+                                state["entry_times"][lvl] = ts
+                                trades.append({"entry_ts": ts, "side": "buy", "entry": price, "exit": 0, "pnl": 0, "status": "open", "lvl": lvl, "qty": qty, "margin": round(margin_used, 2), "position_value": round(pos_val, 2), "pnl_pct": 0})
+                    elif current_level > state["last_level"] and not skip_sell:
+                        for lvl in range(state["last_level"], current_level):
+                            if lvl not in state["filled"]:
+                                continue
+                            state["filled"].discard(lvl)
+                            ep = state["entry_prices"].pop(lvl, price - state["step"])
+                            lvl_qty = state["qtys"].pop(lvl, qty)
+                            entry_ts = state["entry_times"].pop(lvl, ts)
+                            gross = (price - ep) * lvl_qty
+                            fee = lvl_qty * price * self.taker_fee_pct
+                            net_pnl = gross - fee
+                            balance += net_pnl
+                            entry_margin = state["margin_per_level"]
+                            entry_pos_val = lvl_qty * ep
+                            pnl_pct = (net_pnl / entry_margin * 100) if entry_margin > 0 else 0
+                            trades.append({"entry_ts": entry_ts, "exit_ts": ts, "side": "buy", "entry": ep, "exit": price, "pnl": round(net_pnl, 4), "fee": round(fee, 4), "status": "closed", "lvl": lvl, "qty": lvl_qty, "margin": round(entry_margin, 2), "position_value": round(entry_pos_val, 2), "pnl_pct": round(pnl_pct, 2)})
+                else: # short
+                    if current_level > state["last_level"] and not skip_buy:
+                        for lvl in range(state["last_level"] + 1, current_level + 1):
+                            if lvl not in state["filled"] and 0 <= lvl < self.grid_count:
+                                state["filled"].add(lvl)
+                                state["entry_prices"][lvl] = price
+                                state["qtys"][lvl] = qty
+                                state["entry_times"][lvl] = ts
+                                trades.append({"entry_ts": ts, "side": "sell", "entry": price, "exit": 0, "pnl": 0, "status": "open", "lvl": lvl, "qty": qty, "margin": round(margin_used, 2), "position_value": round(pos_val, 2), "pnl_pct": 0})
+                    elif current_level < state["last_level"] and not skip_sell:
+                        for lvl in range(state["last_level"], current_level, -1):
+                            if lvl not in state["filled"]:
+                                continue
+                            state["filled"].discard(lvl)
+                            ep = state["entry_prices"].pop(lvl, price + state["step"])
+                            lvl_qty = state["qtys"].pop(lvl, qty)
+                            entry_ts = state["entry_times"].pop(lvl, ts)
+                            gross = (ep - price) * lvl_qty
+                            fee = lvl_qty * price * self.taker_fee_pct
+                            net_pnl = gross - fee
+                            balance += net_pnl
+                            entry_margin = state["margin_per_level"]
+                            entry_pos_val = lvl_qty * ep
+                            pnl_pct = (net_pnl / entry_margin * 100) if entry_margin > 0 else 0
+                            trades.append({"entry_ts": entry_ts, "exit_ts": ts, "side": "sell", "entry": ep, "exit": price, "pnl": round(net_pnl, 4), "fee": round(fee, 4), "status": "closed", "lvl": lvl, "qty": lvl_qty, "margin": round(entry_margin, 2), "position_value": round(entry_pos_val, 2), "pnl_pct": round(pnl_pct, 2)})
+
+            state["last_level"] = current_level
 
             # Trailing
             if not state.get("bb_dir_paused"):
