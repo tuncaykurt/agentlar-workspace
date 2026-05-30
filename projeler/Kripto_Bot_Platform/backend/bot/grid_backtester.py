@@ -11,7 +11,7 @@ class GridBacktestEngine:
         self.order_size = float(config.get("order_size", 100)) # Toplam bütçe
         self.leverage = int(config.get("leverage", 10))
         self.maker_fee_pct = 0.0  # MEXC Maker Fee is 0%
-        self.taker_fee_pct = float(config.get("fee_pct", 0.02)) / 100  # MEXC Taker Fee is 0.02%
+        self.taker_fee_pct = float(config.get("fee_pct", 0.06)) / 100  # MEXC API Taker Fee (0.06% per side)
         self.maintenance_margin_rate = 0.005  # MEXC maintenance margin rate (0.5%)
         
         self.bb_period = int(config.get("bb_period", 20))
@@ -198,42 +198,54 @@ class GridBacktestEngine:
                 if active_dir == "long" and not above_mid: skip_buy = True
                 elif active_dir == "short" and above_mid: skip_buy = True
 
-            # Check liquidation
+            # Cross margin likidasyon: tüm açık pozisyonların toplam notional'ı vs tüm bakiye
+            # Toplam notional hesapla
             cs = 0.01 if "BTC" not in self.config.get("symbol", "") else 0.0001
-            liquidated_lvls = []
             mmr = self.maintenance_margin_rate
-            for lvl in list(state["filled"]):
+            total_notional = 0
+            total_unrealized = 0
+            for lvl in state["filled"]:
                 ep = state["entry_prices"][lvl]
+                lc = state["contracts"][lvl]
+                total_notional += lc * cs * ep
                 if active_dir == "long":
-                    # MEXC isolated margin: liq = entry * (1 - 1/leverage + MMR)
-                    liq_price = ep * (1 - 1/self.leverage + mmr)
-                    if low <= liq_price:
-                        liquidated_lvls.append((lvl, liq_price))
+                    total_unrealized += (price - ep) * lc * cs
                 else:
-                    # MEXC isolated margin: liq = entry * (1 + 1/leverage - MMR)
-                    liq_price = ep * (1 + 1/self.leverage - mmr)
-                    if high >= liq_price:
-                        liquidated_lvls.append((lvl, liq_price))
-                        
-            for lvl, liq_price in liquidated_lvls:
-                state["filled"].discard(lvl)
-                ep = state["entry_prices"].pop(lvl)
-                lvl_contracts = state["contracts"].pop(lvl)
-                entry_ts = state["entry_times"].pop(lvl, ts)
-                margin_used = (lvl_contracts * cs * ep) / self.leverage
-                pos_val = lvl_contracts * cs * ep
-                fee = pos_val * (self.maker_fee_pct + self.taker_fee_pct) # Open + Close fee estimation
-                net_pnl = -margin_used
-                balance += net_pnl
-                trades.append({
-                    "entry_ts": entry_ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": liq_price,
-                    "pnl": net_pnl, "fee": fee, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs,
-                    "margin": margin_used, "position_value": pos_val, "pnl_pct": -100, "exit_reason": "liquidation"
-                })
-                
+                    total_unrealized += (ep - price) * lc * cs
+
+            # Cross margin likidasyon kontrolü: bakiye + unrealized <= maintenance margin
+            maintenance_margin = total_notional * mmr
+            if state["filled"] and (balance + total_unrealized) <= maintenance_margin:
+                # Tüm pozisyonlar likit — cross margin'de hesap sıfırlanır
+                for lvl in list(state["filled"]):
+                    ep = state["entry_prices"].pop(lvl)
+                    lvl_contracts = state["contracts"].pop(lvl)
+                    entry_ts = state["entry_times"].pop(lvl, ts)
+                    margin_used = (lvl_contracts * cs * ep) / self.leverage
+                    pos_val = lvl_contracts * cs * ep
+                    fee = pos_val * self.taker_fee_pct * 2
+                    trades.append({
+                        "entry_ts": entry_ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": price,
+                        "pnl": 0, "fee": fee, "status": "closed", "lvl": lvl, "qty": lvl_contracts*cs,
+                        "margin": margin_used, "position_value": pos_val, "pnl_pct": -100, "exit_reason": "liquidation"
+                    })
+                # Cross margin: tüm bakiye gider
+                liq_loss = balance
+                balance = 0
+                # Likidasyon trade'lerine toplam kaybı dağıt
+                liq_trades = [t for t in trades if t["exit_reason"] == "liquidation" and t["exit_ts"] == ts]
+                if liq_trades:
+                    per_trade_loss = -liq_loss / len(liq_trades)
+                    for t in liq_trades:
+                        t["pnl"] = round(per_trade_loss, 2)
+                state["filled"] = set()
+                state["entry_prices"] = {}
+                state["contracts"] = {}
+                state["entry_times"] = {}
+
             if balance <= 0:
                 balance = 0
-                break # Account blown up
+                break
 
             # Init bounds if 0 (non-ema)
             if state["upper"] == 0 and self.grid_mode != "ema_trend" and bb_upper > bb_lower:

@@ -5,6 +5,7 @@ Geçmiş OHLCV verisi üzerinde strateji simülasyonu.
 - DB'den veri çeker (DataFetcher)
 - Seçilen stratejiyi bar bar çalıştırır
 - Paper trade simülasyonu: giriş, çıkış, SL/TP
+- Cross margin modu: tüm bakiye teminat olarak kullanılır (canlı trade ile aynı)
 - Metrikler: win rate, PnL, max drawdown, Sharpe, profit factor
 """
 import pandas as pd
@@ -29,17 +30,39 @@ class BacktestEngine:
         self.leverage = int(config.get("leverage", 3))
         self.stop_loss_pct = float(config.get("stop_loss_pct", 2.0)) / 100
         self.take_profit_pct = float(config.get("take_profit_pct", 4.0)) / 100
-        self.fee_pct = float(config.get("fee_pct", 0.02)) / 100  # MEXC taker fee (0.02%)
+        # MEXC API taker fee: giriş ve çıkışta ayrı ayrı uygulanır
+        self.fee_pct = float(config.get("fee_pct", 0.06)) / 100  # MEXC taker fee (0.06% per side)
         self.maintenance_margin_rate = 0.005  # MEXC maintenance margin rate (0.5%)
-        self.lookback = int(config.get("lookback", 200))  # strateji hesabı için gereken bar
+        self.lookback = int(config.get("lookback", 200))
         self.timeframe = config.get("timeframe", "1h")
-        # Reverse modu: SL/TP yok, her yeni sinyalde pozisyonu ters çevir
         self.reverse_on_signal = bool(config.get("reverse_on_signal", False))
+
+    def _calc_cross_liq_price(self, entry: float, qty: float, side: str, balance: float) -> float:
+        """
+        Cross margin likidasyon fiyatı hesapla.
+        Cross margin'de tüm bakiye teminat olarak kullanılır.
+
+        Long:  liq = entry - (balance - notional * MMR) / qty
+        Short: liq = entry + (balance - notional * MMR) / qty
+
+        Eğer bakiye pozisyona göre çok büyükse likidasyon çok uzakta olur.
+        """
+        notional = entry * qty
+        mmr = self.maintenance_margin_rate
+        buffer = (balance - notional * mmr) / qty if qty > 0 else 0
+
+        if side == "buy":
+            liq = entry - buffer
+            return max(0, liq)  # Negatif olamaz
+        else:
+            liq = entry + buffer
+            return liq
 
     def run(self, ohlcv: list) -> dict:
         """
         ohlcv: [[ts, o, h, l, c, v], ...]
         Tüm veri üzerinde bar bar strateji çalıştırır.
+        Cross margin: tüm bakiye teminat, likidasyon tüm bakiyeye göre hesaplanır.
         """
         if len(ohlcv) < self.lookback + 10:
             return {"error": "Yetersiz veri", "candle_count": len(ohlcv)}
@@ -48,7 +71,7 @@ class BacktestEngine:
         peak_balance = balance
         trades: list[dict] = []
         equity_curve: list[dict] = []
-        position = None  # {"side", "entry", "qty", "sl", "tp", "entry_ts"}
+        position = None
         max_drawdown = 0.0
 
         for i in range(self.lookback, len(ohlcv)):
@@ -56,119 +79,100 @@ class BacktestEngine:
             bar = ohlcv[i]
             ts, o, h, l, c, v = bar[0], bar[1], bar[2], bar[3], bar[4], bar[5]
 
-            # ── Açık pozisyon varsa SL/TP/Likidasyon kontrolü ──
-            # Reverse modda SL/TP yok; yalnız likidasyon kontrol edilir.
+            # ── Açık pozisyon varsa kontroller ──
             if position:
+                # Cross margin: her barda likidasyon fiyatını güncelle (bakiye değişir)
+                position["liq_price"] = self._calc_cross_liq_price(
+                    position["entry"], position["qty"], position["side"], balance
+                )
+
                 if self.reverse_on_signal:
                     hit = self._check_liquidation_only(position, h, l)
                 else:
                     hit = self._check_sl_tp(position, h, l)
 
                 if hit:
-                    pnl = self._calc_pnl(position, hit["exit_price"])
-                    exit_fee = position["qty"] * hit["exit_price"] * self.fee_pct
+                    exit_price = hit["exit_price"]
+                    pnl = self._calc_pnl(position, exit_price)
+                    # Fee: giriş ve çıkış ayrı ayrı notional üzerinden
                     entry_fee = position.get("entry_fee", 0)
-                    net_pnl = pnl - exit_fee - entry_fee
-                    # Likidasyon güvenliği: margin'den fazla kaybedemezsin
-                    if net_pnl < -position["margin"]:
-                        net_pnl = -position["margin"]
-                    balance += net_pnl
+                    exit_fee = position["qty"] * exit_price * self.fee_pct
+                    net_pnl = pnl - entry_fee - exit_fee
 
-                    trades.append({
-                        "entry_ts": position["entry_ts"],
-                        "exit_ts": ts,
-                        "side": position["side"],
-                        "entry": position["entry"],
-                        "exit": hit["exit_price"],
-                        "qty": round(position["qty"], 6),
-                        "margin": round(position["margin"], 2),
-                        "position_value": round(position["margin"] * self.leverage, 2),
-                        "leverage": self.leverage,
-                        "pnl": round(net_pnl, 2),
-                        "fee": exit_fee + entry_fee,
-                        "pnl_pct": round((net_pnl / position["margin"]) * 100, 2) if position["margin"] > 0 else 0,
-                        "exit_reason": hit["reason"],
-                    })
+                    if hit["reason"] == "liquidation":
+                        # Likidasyon: cross margin'de tüm bakiye gider
+                        net_pnl = -balance
+                        balance = 0
+                    else:
+                        balance += net_pnl
+
+                    trades.append(self._make_trade(position, ts, exit_price, net_pnl, entry_fee + exit_fee, hit["reason"]))
                     position = None
+
+                    if balance <= 0:
+                        break
 
             # ── Drawdown takibi ──
             if balance > peak_balance:
                 peak_balance = balance
-            dd = (peak_balance - balance) / peak_balance
+            dd = (peak_balance - balance) / peak_balance if peak_balance > 0 else 0
             if dd > max_drawdown:
                 max_drawdown = dd
 
             # ── Strateji sinyali ──
             signal = self._get_signal(window) if (position is None or self.reverse_on_signal) else None
 
-            # Reverse mod: açık pozisyon varsa ve zıt yönde sinyal geldiyse kapat
+            # Reverse mod: zıt sinyal gelirse pozisyonu kapat
             if position and self.reverse_on_signal and signal:
                 current_side = position["side"]
                 opposite = (signal == "buy" and current_side == "sell") or \
                            (signal == "sell" and current_side == "buy")
                 if opposite:
                     pnl = self._calc_pnl(position, c)
-                    exit_fee = position["qty"] * c * self.fee_pct
                     entry_fee = position.get("entry_fee", 0)
-                    net_pnl = pnl - exit_fee - entry_fee
-                    if net_pnl < -position["margin"]:
-                        net_pnl = -position["margin"]
+                    exit_fee = position["qty"] * c * self.fee_pct
+                    net_pnl = pnl - entry_fee - exit_fee
                     balance += net_pnl
-                    trades.append({
-                        "entry_ts": position["entry_ts"],
-                        "exit_ts": ts,
-                        "side": position["side"],
-                        "entry": position["entry"],
-                        "exit": c,
-                        "qty": round(position["qty"], 6),
-                        "margin": round(position["margin"], 2),
-                        "position_value": round(position["margin"] * self.leverage, 2),
-                        "leverage": self.leverage,
-                        "pnl": round(net_pnl, 2),
-                        "fee": exit_fee + entry_fee,
-                        "pnl_pct": round((net_pnl / position["margin"]) * 100, 2) if position["margin"] > 0 else 0,
-                        "exit_reason": "reverse",
-                    })
+                    trades.append(self._make_trade(position, ts, c, net_pnl, entry_fee + exit_fee, "reverse"))
                     position = None
-                else:
-                    signal = None  # aynı yön sinyali → mevcut pozisyonu bırak
 
-            # Pozisyon aç (reverse modda kapanan pozisyonun ardından da buraya düşer)
-            if position is None and signal:
-                # Gerçek vadeli model:
-                #   margin = kasadan ayrılan sermaye (risk_per_trade × balance)
-                #   position_value = margin × leverage (borsada açılan pozisyon büyüklüğü)
-                #   qty = position_value / fiyat
-                # PnL = qty × fiyat_farkı = position_value × fiyat_hareketi_yüzdesi
-                margin = balance * self.risk_per_trade
+                    if balance <= 0:
+                        break
+                else:
+                    signal = None
+
+            # ── Pozisyon aç ──
+            if position is None and signal and balance > 0:
+                margin = balance * self.risk_per_trade if self.risk_per_trade <= 1.0 else self.risk_per_trade
+                if margin > balance:
+                    margin = balance
                 position_value = margin * self.leverage
                 qty = position_value / c if c > 0 else 0
 
                 if qty > 0 and margin > 0:
                     entry_fee = position_value * self.fee_pct
-                    # MEXC Likidasyon fiyatı (isolated margin)
-                    # Long: liq = entry * (1 - 1/leverage + MMR)
-                    # Short: liq = entry * (1 + 1/leverage - MMR)
-                    mmr = self.maintenance_margin_rate
+
+                    # Cross margin likidasyon: tüm bakiyeye göre
+                    liq_price = self._calc_cross_liq_price(c, qty, signal, balance)
+
                     if signal == "buy":
-                        liq_price = c * (1 - 1/self.leverage + mmr)
                         if self.reverse_on_signal:
                             sl = liq_price
                             tp = c * 1e9
                         else:
                             sl = c * (1 - self.stop_loss_pct)
                             tp = c * (1 + self.take_profit_pct)
+                            # SL likidasyon fiyatının altına düşemez
                             if sl < liq_price:
                                 sl = liq_price
                     else:
-                        liq_price = c * (1 + 1/self.leverage - mmr)
                         if self.reverse_on_signal:
                             sl = liq_price
                             tp = 0.0
                         else:
                             sl = c * (1 + self.stop_loss_pct)
                             tp = c * (1 - self.take_profit_pct)
-                            if sl > liq_price:
+                            if liq_price > 0 and sl > liq_price:
                                 sl = liq_price
 
                     position = {
@@ -183,46 +187,45 @@ class BacktestEngine:
                         "entry_fee": entry_fee,
                     }
 
-            # Equity curve (her 10 barda bir kaydet — performans)
+            # Equity curve
             if i % 10 == 0:
                 unrealized = 0.0
                 if position:
                     unrealized = self._calc_pnl(position, c)
-                    # Likidasyon sonrası unrealized margin'den fazla negatif olamaz
-                    if unrealized < -position["margin"]:
-                        unrealized = -position["margin"]
                 equity_curve.append({
                     "time": ts // 1000,
                     "equity": round(balance + unrealized, 2),
                 })
 
-        # ── Açık pozisyon kaldıysa son bardan kapat ──
+        # ── Son barda açık pozisyon varsa kapat ──
         if position:
             last_close = ohlcv[-1][4]
             pnl = self._calc_pnl(position, last_close)
-            exit_fee = position["qty"] * last_close * self.fee_pct
             entry_fee = position.get("entry_fee", 0)
-            net_pnl = pnl - exit_fee - entry_fee
-            if net_pnl < -position["margin"]:
-                net_pnl = -position["margin"]
+            exit_fee = position["qty"] * last_close * self.fee_pct
+            net_pnl = pnl - entry_fee - exit_fee
             balance += net_pnl
-            trades.append({
-                "entry_ts": position["entry_ts"],
-                "exit_ts": ohlcv[-1][0],
-                "side": position["side"],
-                "entry": position["entry"],
-                "exit": last_close,
-                "qty": round(position["qty"], 6),
-                "margin": round(position["margin"], 2),
-                "position_value": round(position["margin"] * self.leverage, 2),
-                "leverage": self.leverage,
-                "pnl": round(net_pnl, 2),
-                "fee": exit_fee + entry_fee,
-                "pnl_pct": round((net_pnl / position["margin"]) * 100, 2) if position["margin"] > 0 else 0,
-                "exit_reason": "end_of_data",
-            })
+            trades.append(self._make_trade(position, ohlcv[-1][0], last_close, net_pnl, entry_fee + exit_fee, "end_of_data"))
 
         return self._calc_metrics(trades, equity_curve, balance, max_drawdown)
+
+    def _make_trade(self, pos: dict, exit_ts: int, exit_price: float, net_pnl: float, fee: float, reason: str) -> dict:
+        """Trade kaydı oluştur."""
+        return {
+            "entry_ts": pos["entry_ts"],
+            "exit_ts": exit_ts,
+            "side": pos["side"],
+            "entry": pos["entry"],
+            "exit": exit_price,
+            "qty": round(pos["qty"], 6),
+            "margin": round(pos["margin"], 2),
+            "position_value": round(pos["margin"] * self.leverage, 2),
+            "leverage": self.leverage,
+            "pnl": round(net_pnl, 2),
+            "fee": round(fee, 4),
+            "pnl_pct": round((net_pnl / pos["margin"]) * 100, 2) if pos["margin"] > 0 else 0,
+            "exit_reason": reason,
+        }
 
     def _get_signal(self, window: list) -> str | None:
         """Strateji bazlı sinyal üret."""
@@ -300,7 +303,7 @@ class BacktestEngine:
     def _check_liquidation_only(self, pos: dict, high: float, low: float) -> dict | None:
         """Reverse modda sadece likidasyon kontrolü (SL/TP yok)."""
         liq_price = pos.get("liq_price")
-        if liq_price is None:
+        if liq_price is None or liq_price <= 0:
             return None
         if pos["side"] == "buy" and low <= liq_price:
             return {"exit_price": liq_price, "reason": "liquidation"}
@@ -311,29 +314,27 @@ class BacktestEngine:
     def _check_sl_tp(self, pos: dict, high: float, low: float) -> dict | None:
         """Bar içi SL/TP/Likidasyon kontrolü."""
         liq_price = pos.get("liq_price")
-        # SL fiyatı likidasyona eşitse, SL reason "liquidation" olsun
-        sl_is_liq = liq_price is not None and abs(pos["sl"] - liq_price) < 1e-9
+        sl_is_liq = liq_price is not None and liq_price > 0 and abs(pos["sl"] - liq_price) < 1e-9
 
         if pos["side"] == "buy":
+            # Önce likidasyon kontrolü (SL'den önce tetiklenir)
+            if liq_price and liq_price > 0 and low <= liq_price:
+                return {"exit_price": liq_price, "reason": "liquidation"}
             if low <= pos["sl"]:
-                return {
-                    "exit_price": pos["sl"],
-                    "reason": "liquidation" if sl_is_liq else "stop_loss",
-                }
+                return {"exit_price": pos["sl"], "reason": "stop_loss"}
             if high >= pos["tp"]:
                 return {"exit_price": pos["tp"], "reason": "take_profit"}
-        else:  # sell/short
+        else:
+            if liq_price and liq_price > 0 and high >= liq_price:
+                return {"exit_price": liq_price, "reason": "liquidation"}
             if high >= pos["sl"]:
-                return {
-                    "exit_price": pos["sl"],
-                    "reason": "liquidation" if sl_is_liq else "stop_loss",
-                }
+                return {"exit_price": pos["sl"], "reason": "stop_loss"}
             if low <= pos["tp"]:
                 return {"exit_price": pos["tp"], "reason": "take_profit"}
         return None
 
     def _calc_pnl(self, pos: dict, exit_price: float) -> float:
-        """Pozisyon PnL hesapla."""
+        """Pozisyon PnL hesapla (fee hariç, brüt)."""
         if pos["side"] == "buy":
             return pos["qty"] * (exit_price - pos["entry"])
         else:
@@ -347,6 +348,7 @@ class BacktestEngine:
                 "final_balance": round(final_balance, 2),
                 "total_pnl": 0,
                 "total_pnl_pct": 0,
+                "total_fees": 0,
                 "win_rate": 0,
                 "max_drawdown_pct": 0,
                 "sharpe_ratio": 0,
@@ -367,26 +369,20 @@ class BacktestEngine:
         total_pnl = sum(pnls)
         win_rate = len(wins) / len(pnls) * 100 if pnls else 0
 
-        # ── Sharpe Ratio: günlük getiri bazlı (equity_curve üzerinden) ──
-        # Per-trade PnL'i sqrt(252) ile çarpmak yanlış — çok şişiriyordu.
-        # Doğru yol: equity curve'den günlük return çıkar, yıllıklaştır.
         sharpe = 0.0
         if len(equity_curve) > 2:
             equity_vals = np.array([p["equity"] for p in equity_curve])
             returns = np.diff(equity_vals) / equity_vals[:-1]
             if len(returns) > 1 and returns.std() > 0:
-                # equity_curve her 10 barda bir kayıt. Bar → gün çevrimi:
                 tf_hours = {"1m": 1/60, "5m": 5/60, "15m": 0.25, "30m": 0.5, "1h": 1, "4h": 4, "1d": 24}
                 hpc = tf_hours.get(self.timeframe, 1)
-                periods_per_year = (365 * 24) / (hpc * 10)  # 10 bar aralıkla örnekleniyor
+                periods_per_year = (365 * 24) / (hpc * 10)
                 sharpe = float(returns.mean() / returns.std()) * np.sqrt(periods_per_year)
 
-        # Profit Factor
         gross_profit = sum(wins) if wins else 0
         gross_loss = abs(sum(losses)) if losses else 1e-10
         profit_factor = gross_profit / gross_loss
 
-        # Ortalama trade süreleri
         durations = []
         for t in trades:
             if t.get("entry_ts") and t.get("exit_ts"):
@@ -411,6 +407,6 @@ class BacktestEngine:
             "win_count": len(wins),
             "loss_count": len(losses),
             "avg_duration_hours": round(np.mean(durations), 1) if durations else 0,
-            "trades": trades,  # Tüm trade'ler (grafik marker için)
+            "trades": trades,
             "equity_curve": equity_curve,
         }
