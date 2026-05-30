@@ -435,7 +435,7 @@ async def hft_bb_data(data: dict, user_id: int = Depends(get_current_user)):
             smart_start_wait = data.get("smart_start_wait", True)
             
             recent_cross = await grid_engine._check_recent_midline_cross(
-                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, lookback=3
+                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev, user_id=str(user_id), lookback=3
             )
             
             if not smart_start_wait:

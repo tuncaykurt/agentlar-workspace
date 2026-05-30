@@ -1470,8 +1470,19 @@ async def stop_bot(bot_id: int, user_id: int = Depends(get_current_user)):
 
 
 @router.get("/push/test")
-async def test_push(user_id: int = Depends(get_current_user)):
-    """Push bildirim pipeline debug testi."""
+async def test_push(token: str = None, user_id: int = None):
+    """Push bildirim pipeline debug testi. ?token=JWT ile veya auth header ile."""
+    # Token'dan user_id çöz
+    if token and not user_id:
+        try:
+            from core.security import decode_token
+            payload = decode_token(token)
+            user_id = int(payload.get("sub", 0))
+        except Exception as e:
+            return {"error": f"Token geçersiz: {e}"}
+    if not user_id:
+        return {"error": "?token=JWT_TOKEN parametresi gerekli"}
+
     from services.push_notification import send_push, REDIS_KEY_PREFIX
     from core.redis_client import get_redis
     redis = get_redis()
