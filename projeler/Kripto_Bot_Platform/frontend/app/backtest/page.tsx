@@ -72,6 +72,10 @@ const STRATEGIES = [
     id: "bb_ema_cross", name: "BB-EMA Cross",
     params: { bb_period: 20, bb_std: 2.0, ema_fast: 5, ema_slow: 13, touch_pct: 0.3, setup_lookback: 5, direction: "both", exit_at_bands: true },
   },
+  {
+    id: "math_grid_gemini", name: "Math Genius Grid - Gemini",
+    params: { grid_count: 20, per_grid_usdt: 10, atr_period: 14, atr_grid_mult: 0.5, adx_period: 14, adx_threshold: 25, ema_period: 200, breakout_atr_mult: 1.5, target_pnl_pct: 5, max_drawdown_pct: 15 },
+  },
 ]
 
 // String parametre için seçenek listesi

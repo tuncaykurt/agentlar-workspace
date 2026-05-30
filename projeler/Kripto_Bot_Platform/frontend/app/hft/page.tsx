@@ -47,7 +47,7 @@ function toChartSymbol(s: string): string {
 }
 
 type TradingMode = "sim" | "paper" | "live"
-type GridMode = "manual" | "bollinger" | "hybrid" | "bb_direction" | "trend_score"
+type GridMode = "manual" | "bollinger" | "hybrid" | "bb_direction" | "trend_score" | "math_grid_gemini"
 type GridDirection = "long" | "short" | "auto"
 
 interface SimTrade {
@@ -1248,6 +1248,7 @@ export default function HftPage() {
               <option value="bb_direction">BB Yön (Oto Long/Short)</option>
               <option value="ema_trend">EMA Trend (Oto)</option>
               <option value="trend_score">Trend Puanlama (Claude)</option>
+              <option value="math_grid_gemini">Math Genius Grid - Gemini</option>
             </select>
           </div>
 
@@ -1255,12 +1256,12 @@ export default function HftPage() {
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Yön</span>
             <select
-              value={["bb_direction", "ema_trend", "trend_score"].includes(gridMode) ? "auto" : gridDirection}
+              value={["bb_direction", "ema_trend", "trend_score", "math_grid_gemini"].includes(gridMode) ? "auto" : gridDirection}
               onChange={e => { setGridDirection(e.target.value as GridDirection); updateHftSetting("grid_direction", e.target.value); }}
-              disabled={simRunning || ["bb_direction", "ema_trend", "trend_score"].includes(gridMode)}
+              disabled={simRunning || ["bb_direction", "ema_trend", "trend_score", "math_grid_gemini"].includes(gridMode)}
               className={`bg-[#020817] border rounded-md px-3 py-1.5 text-sm font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50 ${
-                (["bb_direction", "ema_trend", "trend_score"].includes(gridMode) ? "auto" : activeDirection) === "long" ? "border-emerald-500/50 text-emerald-400" : 
-                (["bb_direction", "ema_trend", "trend_score"].includes(gridMode) ? "auto" : activeDirection) === "short" ? "border-red-500/50 text-red-400" :
+                (["bb_direction", "ema_trend", "trend_score", "math_grid_gemini"].includes(gridMode) ? "auto" : activeDirection) === "long" ? "border-emerald-500/50 text-emerald-400" : 
+                (["bb_direction", "ema_trend", "trend_score", "math_grid_gemini"].includes(gridMode) ? "auto" : activeDirection) === "short" ? "border-red-500/50 text-red-400" :
                 "border-indigo-500/50 text-indigo-400"
               }`}
             >
@@ -1286,7 +1287,7 @@ export default function HftPage() {
           )}
 
           {/* BB modu ayarlari */}
-          {gridMode !== "manual" && (
+          {gridMode !== "manual" && gridMode !== "math_grid_gemini" && (
           <>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Zaman Dilimi</span>
@@ -1345,6 +1346,55 @@ export default function HftPage() {
             </>
           )}
           </>
+          )}
+
+          {/* Gemini Modu ayarlari */}
+          {gridMode === "math_grid_gemini" && (
+            <div className="flex flex-wrap gap-2 w-full mt-2 pt-2 border-t border-indigo-500/20">
+              <div className="flex justify-between items-center w-full mb-0">
+                <span className="text-[10px] font-semibold text-indigo-400 uppercase">Gemini Matematiksel Grid Ayarları</span>
+                <button 
+                  onClick={() => {
+                    updateHftSetting("atr_period", 14);
+                    updateHftSetting("adx_period", 14);
+                    updateHftSetting("adx_threshold", 20);
+                    updateHftSetting("ema_period", 50);
+                    updateHftSetting("breakout_atr_mult", 0.5);
+                    updateHftSetting("grid_count", 80);
+                    updateHftSetting("leverage", 500);
+                    setLocalGrid("80");
+                    setLocalLev("500");
+                  }}
+                  disabled={simRunning}
+                  className="px-2 py-1 bg-red-900/40 hover:bg-red-900/60 text-red-300 border border-red-500/30 rounded text-[9px] font-bold transition-all flex items-center gap-1"
+                >
+                  🚀 500x Mikro-Grid (1m)
+                </button>
+              </div>
+              <p className="text-[9px] text-slate-400 w-full mb-1">
+                ADX &lt; 25: Nötr. ADX &gt; 25: Trend (EMA). Breakout stop: 1.5 ATR.
+              </p>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-slate-400 uppercase tracking-wider">ATR Prd</span>
+                <input type="number" value={hftSettings.atr_period ?? 14} onChange={e => updateHftSetting("atr_period", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-slate-400 uppercase tracking-wider">ADX Prd</span>
+                <input type="number" value={hftSettings.adx_period ?? 14} onChange={e => updateHftSetting("adx_period", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-slate-400 uppercase tracking-wider">ADX Eşik</span>
+                <input type="number" value={hftSettings.adx_threshold ?? 25} onChange={e => updateHftSetting("adx_threshold", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-slate-400 uppercase tracking-wider">EMA Trend</span>
+                <input type="number" value={hftSettings.ema_period ?? 200} onChange={e => updateHftSetting("ema_period", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-slate-400 uppercase tracking-wider">Kırılım ATRx</span>
+                <input type="number" value={hftSettings.breakout_atr_mult ?? 1.5} step={0.1} onChange={e => updateHftSetting("breakout_atr_mult", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+              </div>
+            </div>
           )}
 
           <div className="flex flex-col gap-1 justify-end">

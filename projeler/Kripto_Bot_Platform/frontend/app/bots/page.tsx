@@ -381,6 +381,31 @@ const STRATEGIES: Strategy[] = [
     ],
   },
   {
+    id: "math_grid_gemini",
+    name: "Math Genius Grid - Gemini",
+    category: "Grid",
+    icon: "🧮",
+    description: "Gemini AI tarafından tasarlanmış matematiksel deha seviyesinde grid bot stratejisi. ADX trend gücünü ölçer, EMA ve VWAP ile yön belirler, ATR ile dinamik grid aralığı hesaplar.",
+    signals: [
+      "ADX < 25: Nötr (İki yönlü) grid",
+      "ADX > 25 & Fiyat > EMA200: Sadece Long Grid",
+      "ADX > 25 & Fiyat < EMA200: Sadece Short Grid",
+      "Breakout Stop: Fiyat gridi 1.5x ATR aşarsa panic sell",
+    ],
+    params: [
+      { key: "grid_count",     label: "Grid Sayısı",  type: "number",  min: 2,    max: 300,  step: 1,   default: 20,    description: "Toplam grid sayısı" },
+      { key: "per_grid_usdt",  label: "Grid Başına USDT ($)",      type: "number",  min: 1,    max: 1000000, step: 1, default: 10,   description: "Her gride ayrılacak USDT tutarı" },
+      { key: "atr_period",     label: "ATR Periyodu",          type: "number",  min: 1,    max: 100,  step: 1,   default: 14,   description: "ATR ve Volatilite hesaplaması için" },
+      { key: "atr_grid_mult",  label: "Aralık ATR Çarpanı",type: "number",  min: 0.1,  max: 10,   step: 0.1, default: 0.5,  description: "Grid genişliği (ATR x Çarpan)" },
+      { key: "adx_period",     label: "ADX Periyodu",          type: "number",  min: 1,    max: 100,  step: 1,   default: 14,   description: "Trend gücü hesabı için" },
+      { key: "adx_threshold",  label: "ADX Trend Eşiği",       type: "number",  min: 10,   max: 50,   step: 1,   default: 25,   description: "Yatay/Trend ayrım noktası" },
+      { key: "ema_period",     label: "Trend EMA Periyodu",    type: "number",  min: 10,   max: 500,  step: 1,   default: 200,  description: "Makro yön (Long/Short) tespiti" },
+      { key: "breakout_atr_mult", label: "Breakout Stop (ATRx)", type: "number", min: 0.5, max: 10, step: 0.5, default: 1.5, description: "Kırılımda stop olmak için ATR mesafesi" },
+      { key: "target_pnl_pct", label: "Hedef Kâr (PnL) %",     type: "number",  min: 1,    max: 100,  step: 1,   default: 5,    description: "Kâr hedefine ulaşınca döngüyü yenile" },
+      { key: "max_drawdown_pct", label: "Maks. Drawdown %",   type: "number",  min: 1,    max: 100,  step: 1,   default: 15,   description: "Fail-safe: bu zararda bot kapanır" },
+    ],
+  },
+  {
     id: "smart_scanner",
     name: "Smart Scanner Bot",
     category: "Custom" as const,
@@ -1615,13 +1640,13 @@ export default function BotsPage() {
     }
 
     // Grid bot: kaldıraç yok, özel paramlar
-    if (f.strategy === "grid_bot") {
+    if (f.strategy === "grid_bot" || f.strategy === "trend_score_grid" || f.strategy === "math_grid_gemini") {
       const count   = Number(f.strategy_params.grid_count   ?? 20)
       const perGrid = Number(f.strategy_params.per_grid_usdt ?? 10)
       return {
         name: f.name,
         symbol: f.symbol,
-        strategy: "grid_bot",
+        strategy: f.strategy,
         exchange: f.exchange,
         paper_mode: f.paper_mode,
         leverage: 1,
@@ -1945,7 +1970,7 @@ export default function BotsPage() {
                       )}
 
                       {/* ── Sinyal Kaynağı Seçici — Grid Bot, TradingView Webhook ve Hedge Bot için gösterilmez ── */}
-                      {form.strategy !== "grid_bot" && form.strategy !== "tradingview_webhook" && form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && <div className="space-y-3">
+                      {form.strategy !== "grid_bot" && form.strategy !== "trend_score_grid" && form.strategy !== "math_grid_gemini" && form.strategy !== "tradingview_webhook" && form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && <div className="space-y-3">
                         <p className="text-xs text-slate-400 font-medium">Sinyal Kaynağı Seç</p>
 
                         {/* Dahili algoritma kartı */}
@@ -2111,7 +2136,7 @@ export default function BotsPage() {
                         <div className="space-y-4">
                           {/* Sinyal mantığı açıklama kartı */}
                           <StrategySignalCard strategyId={form.strategy} getParam={getParam} />
-                          <div className={`grid gap-4 ${form.strategy === "grid_bot" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
+                          <div className={`grid gap-4 ${(form.strategy === "grid_bot" || form.strategy === "math_grid_gemini") ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
                             {selectedStrategy.params
                               .filter(param => {
                                 // Smart Scanner: AI/Manuel moduna göre filtrele
@@ -2203,7 +2228,7 @@ export default function BotsPage() {
                   )}
 
                   {/* ── Kar / Zarar (Grid/Hedge Bot ve Smart Scanner AI modunda gizle) ── */}
-                  {form.strategy !== "grid_bot" && form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && !(form.strategy === "smart_scanner" && (form.strategy_params.selection_mode || "ai") === "ai") && <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/30 space-y-4">
+                  {form.strategy !== "grid_bot" && form.strategy !== "trend_score_grid" && form.strategy !== "math_grid_gemini" && form.strategy !== "hedge_bot" && form.strategy !== "dual_hedge" && !(form.strategy === "smart_scanner" && (form.strategy_params.selection_mode || "ai") === "ai") && <div className="p-4 rounded-xl border border-slate-700 bg-slate-900/30 space-y-4">
                     {/* Başlık + Manuel / AI toggle */}
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-semibold text-slate-300">📊 Kar / Zarar Ayarları</p>
@@ -2671,7 +2696,7 @@ export default function BotsPage() {
               {step === 2 && (
                 <div className="space-y-6">
                   {/* Grid bot: kaldıraç yok, yatırım özeti göster */}
-                  {form.strategy === "grid_bot" ? (
+                  {(form.strategy === "grid_bot" || form.strategy === "trend_score_grid" || form.strategy === "math_grid_gemini") ? (
                     <>
                       <div className="p-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 space-y-4">
                         <p className="text-sm font-medium text-cyan-300">⊞ Grid Bot — Para Yönetimi</p>

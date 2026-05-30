@@ -286,6 +286,18 @@ class BacktestEngine:
             )
             return strat.calculate(window).get("signal")
 
+        elif self.strategy_name == "math_grid_gemini":
+            if not hasattr(self, "_math_grid"):
+                from bot.strategies.math_grid_gemini import MathGridGeminiStrategy
+                self._math_grid = MathGridGeminiStrategy(p)
+            current_price = window[-1][4] # close price
+            if not self._math_grid.initialized:
+                self._math_grid.initialize(current_price, window)
+            sig = self._math_grid.generate_signal(current_price)
+            if sig in ("buy", "sell"):
+                return sig
+            return None
+
         # Fallback: indicators generate_signal
         ind = calculate_all(window)
         if ind:

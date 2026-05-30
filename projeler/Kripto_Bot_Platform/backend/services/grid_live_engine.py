@@ -1593,7 +1593,7 @@ class GridLiveEngine:
                 # process_tick çağır
                 await self.process_tick(current_price, user_id)
 
-                await asyncio.sleep(0.5)  # 500ms interval
+                await asyncio.sleep(0.05)  # 50ms interval (0.5 saniyede 10 istek)
 
             except asyncio.CancelledError:
                 print("[GridLive] Standalone loop iptal edildi.")

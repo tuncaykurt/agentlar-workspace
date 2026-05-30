@@ -137,7 +137,7 @@ class BotEngine:
                     continue
 
                 # ── Grid Bot Stratejisi ───────────────────────────────
-                if strategy == "grid_bot":
+                if strategy in ("grid_bot", "trend_score_grid", "math_grid_gemini"):
                     await self._run_grid_cycle(redis, symbol)
                     await asyncio.sleep(10)   # 10sn'de bir fiyat kontrolü
                     continue
@@ -1388,12 +1388,16 @@ class BotEngine:
         - Her döngüde anlık fiyatı kontrol eder
         - Uygun grid seviyesinde AL/SAT sinyali üretir
         """
-        from bot.strategies.grid import GridStrategy
-
         # Grid strategy instance'ını bot başına sakla (memory'de)
         if not hasattr(self, "_grid"):
+            strategy = self.config.get("strategy", "grid_bot")
             params = self.config.get("params", self.config.get("strategy_params", {}))
-            self._grid = GridStrategy(params)
+            if strategy == "math_grid_gemini":
+                from bot.strategies.math_grid_gemini import MathGridGeminiStrategy
+                self._grid = MathGridGeminiStrategy(params)
+            else:
+                from bot.strategies.grid import GridStrategy
+                self._grid = GridStrategy(params)
 
         # Anlık fiyatı al
         try:
@@ -1403,9 +1407,21 @@ class BotEngine:
             print(f"[Grid] Fiyat alınamadı: {e}")
             return
 
-        # İlk çalışmada grid'i başlat
+        # İlk çalışmada grid'i başlat (take profit sonrası kapanırsa yeniden başlatılır)
         if not self._grid.initialized:
-            self._grid.initialize(price)
+            ohlcv = None
+            if getattr(self._grid, "needs_ohlcv", False):
+                try:
+                    # Strateji için gerekli OHLCV verisini çek
+                    raw = await self.exchange.exchange.fetch_ohlcv(symbol, "1h", limit=300)
+                    ohlcv = raw
+                except Exception as e:
+                    print(f"[Grid] OHLCV alınamadı: {e}")
+            
+            if getattr(self._grid, "needs_ohlcv", False):
+                self._grid.initialize(price, ohlcv)
+            else:
+                self._grid.initialize(price)
 
         # Sinyal kontrolü
         signal = self._grid.generate_signal(price)

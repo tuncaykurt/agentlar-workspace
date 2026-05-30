@@ -16,6 +16,11 @@ const nextConfig = {
       },
     ]
   },
+  experimental: {
+    cpus: 1,
+    workerThreads: false,
+    memoryBasedWorkersCount: true,
+  },
 }
 
 module.exports = nextConfig
