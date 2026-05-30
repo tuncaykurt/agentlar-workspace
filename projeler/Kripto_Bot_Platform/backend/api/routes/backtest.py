@@ -27,9 +27,24 @@ def _compute_indicators(ohlcv: list, strategy: str, params: dict, step: int, ext
                 out.append({"time": int(t), "value": round(float(v), 8)})
         return out[::step]
 
-    if strategy in ("bb_ema_cross", "bollinger_bounce") or (strategy.startswith("grid_") and strategy != "grid_ema_trend"):
+    if strategy in ("bb_ema_cross", "bollinger_bounce") or (strategy.startswith("grid_") and strategy not in ("grid_ema_trend", "grid_trend_score")):
         period  = int(params.get("bb_period") or params.get("period") or 20)
         std_dev = float(params.get("bb_std") or params.get("std_dev") or 2.0)
+        sma   = s.rolling(period).mean()
+        std   = s.rolling(period).std()
+        indicators["bb_upper"] = make_line(sma + std_dev * std)
+        indicators["bb_mid"]   = make_line(sma)
+        indicators["bb_lower"] = make_line(sma - std_dev * std)
+
+    if strategy == "grid_trend_score":
+        # EMA 21/55/200 overlay
+        indicators["custom_ema_21"] = make_line(s.ewm(span=21, adjust=False).mean())
+        indicators["custom_ema_55"] = make_line(s.ewm(span=55, adjust=False).mean())
+        indicators["custom_ema_200"] = make_line(s.ewm(span=200, adjust=False).mean())
+        # Supertrend — grid backtester zaten hesaplıyor ve indicators'a ekliyor
+        # BB overlay (referans olarak)
+        period  = int(params.get("bb_period") or params.get("BB_Periyot") or 20)
+        std_dev = float(params.get("bb_std") or params.get("BB_Sapma") or 2.0)
         sma   = s.rolling(period).mean()
         std   = s.rolling(period).std()
         indicators["bb_upper"] = make_line(sma + std_dev * std)
@@ -139,7 +154,7 @@ async def run_backtest(req: BacktestRequest):
         engine = GridBacktestEngine({
             "symbol": req.symbol,
             "grid_mode": grid_mode,
-            "grid_direction": "auto" if grid_mode in ("bollinger", "hybrid", "bb_direction") else "long",
+            "grid_direction": "auto" if grid_mode in ("bollinger", "hybrid", "bb_direction", "trend_score") else "long",
             "grid_count": req.params.get("Kademe", 20),
             "bb_period": req.params.get("BB_Periyot", 20),
             "bb_std_dev": req.params.get("BB_Sapma", 2.0),
@@ -153,6 +168,14 @@ async def run_backtest(req: BacktestRequest):
             "min_ema_pct": req.params.get("min_ema_pct", 1.0),
             "spread_pct": req.params.get("Spread_Pct", 1.5),
             "filters": req.params.get("filters", {"rsi_filter": True, "squeeze_filter": True, "midline_filter": True}),
+            # Trend Score parametreleri
+            "ts_entry_threshold": req.params.get("ts_entry_threshold", 4),
+            "ts_exit_threshold": req.params.get("ts_exit_threshold", 1),
+            "ts_adx_period": req.params.get("ts_adx_period", 14),
+            "ts_adx_min": req.params.get("ts_adx_min", 20),
+            "ts_supertrend_period": req.params.get("ts_supertrend_period", 10),
+            "ts_supertrend_mult": req.params.get("ts_supertrend_mult", 3.0),
+            "ts_divergence_lookback": req.params.get("ts_divergence_lookback", 14),
         })
     else:
         engine = BacktestEngine({

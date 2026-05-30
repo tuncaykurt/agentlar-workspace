@@ -47,7 +47,7 @@ function toChartSymbol(s: string): string {
 }
 
 type TradingMode = "sim" | "paper" | "live"
-type GridMode = "manual" | "bollinger" | "hybrid" | "bb_direction"
+type GridMode = "manual" | "bollinger" | "hybrid" | "bb_direction" | "trend_score"
 type GridDirection = "long" | "short" | "auto"
 
 interface SimTrade {
@@ -142,7 +142,7 @@ export default function HftPage() {
           tradeIdRef.current = s.tradeId ?? 0
           if (Array.isArray(s.filled)) simFilledRef.current = new Set(s.filled)
           if (Array.isArray(s.entryPrices)) simEntryPricesRef.current = new Map(s.entryPrices)
-          if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid" || s.gridMode === "bb_direction") {
+          if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid" || s.gridMode === "bb_direction" || s.gridMode === "trend_score") {
             setGridMode(s.gridMode)
           }
           if (s.gridDirection === "long" || s.gridDirection === "short" || s.gridDirection === "auto") {
@@ -1247,6 +1247,7 @@ export default function HftPage() {
               <option value="hybrid">Hibrit (BB+Filtre)</option>
               <option value="bb_direction">BB Yön (Oto Long/Short)</option>
               <option value="ema_trend">EMA Trend (Oto)</option>
+              <option value="trend_score">Trend Puanlama (Claude)</option>
             </select>
           </div>
 
@@ -1254,12 +1255,12 @@ export default function HftPage() {
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Yön</span>
             <select
-              value={["bb_direction", "ema_trend"].includes(gridMode) ? "auto" : gridDirection}
+              value={["bb_direction", "ema_trend", "trend_score"].includes(gridMode) ? "auto" : gridDirection}
               onChange={e => { setGridDirection(e.target.value as GridDirection); updateHftSetting("grid_direction", e.target.value); }}
-              disabled={simRunning || ["bb_direction", "ema_trend"].includes(gridMode)}
+              disabled={simRunning || ["bb_direction", "ema_trend", "trend_score"].includes(gridMode)}
               className={`bg-[#020817] border rounded-md px-3 py-1.5 text-sm font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50 ${
-                (["bb_direction", "ema_trend"].includes(gridMode) ? "auto" : activeDirection) === "long" ? "border-emerald-500/50 text-emerald-400" : 
-                (["bb_direction", "ema_trend"].includes(gridMode) ? "auto" : activeDirection) === "short" ? "border-red-500/50 text-red-400" :
+                (["bb_direction", "ema_trend", "trend_score"].includes(gridMode) ? "auto" : activeDirection) === "long" ? "border-emerald-500/50 text-emerald-400" : 
+                (["bb_direction", "ema_trend", "trend_score"].includes(gridMode) ? "auto" : activeDirection) === "short" ? "border-red-500/50 text-red-400" :
                 "border-indigo-500/50 text-indigo-400"
               }`}
             >

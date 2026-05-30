@@ -351,6 +351,36 @@ const STRATEGIES: Strategy[] = [
     ],
   },
   {
+    id: "trend_score_grid",
+    name: "Trend Puanlama Grid (Claude)",
+    category: "Grid",
+    icon: "🎯",
+    description: "5 farklı göstergenin (EMA dizilimi, ADX trend gücü, MACD momentum, Supertrend, RSI divergence) ortaklaşa oylama yaparak trend yönü ve gücünü belirlediği gelişmiş grid stratejisi. Tek gösterge yerine çoklu onay sistemi kullanarak yalancı sinyalleri minimuma indirir. ADX filtresi sayesinde yatay piyasada işlem açmaz.",
+    signals: [
+      "Trend Puanı ≥ +4 → LONG grid aç",
+      "Trend Puanı ≤ −4 → SHORT grid aç",
+      "Puan düşerse → pozisyonları kapat",
+      "Puan ters yöne geçerse → yön değiştir",
+      "ADX < 20 → yatay piyasa, işlem açma",
+    ],
+    params: [
+      { key: "grid_count",     label: "Grid Sayısı (Kademe)",  type: "number",  min: 2,    max: 300,  step: 1,   default: 15,    description: "Toplam kaç grid seviyesi oluşturulsun" },
+      { key: "spread_pct",     label: "Grid Aralığı %",        type: "number",  min: 0.1,  max: 20,   step: 0.1, default: 1.5,   description: "Grid üst-alt sınır yüzde aralığı (BB spread'den büyükse BB kullanılır)" },
+      { key: "order_size",     label: "Toplam Bütçe ($)",      type: "number",  min: 1,    max: 1000000, step: 1, default: 100,   description: "Grid'e ayrılacak toplam USDT bütçesi" },
+      { key: "leverage",       label: "Kaldıraç",              type: "number",  min: 1,    max: 500,  step: 1,   default: 500,   description: "MEXC kaldıraç değeri" },
+      { key: "ts_entry_threshold", label: "Giriş Eşiği",      type: "number",  min: 1,    max: 10,   step: 1,   default: 4,     description: "Trend puanı bu değere ulaşınca grid açılır (yüksek = daha az sinyal, daha güvenli)" },
+      { key: "ts_exit_threshold",  label: "Çıkış Eşiği",      type: "number",  min: 0,    max: 5,    step: 1,   default: 1,     description: "Puan bu değere düşünce pozisyonlar kapatılır (düşük = daha geç çıkış)" },
+      { key: "ts_adx_min",     label: "Min ADX (Trend Gücü)",  type: "number",  min: 10,   max: 50,   step: 1,   default: 20,    description: "ADX bu değerin altındaysa trend yok → puan vermez (20-25 önerilir)" },
+      { key: "ts_adx_period",  label: "ADX Periyodu",          type: "number",  min: 7,    max: 50,   step: 1,   default: 14,    description: "ADX hesaplama periyodu" },
+      { key: "ts_supertrend_period", label: "Supertrend Periyot", type: "number", min: 5, max: 50, step: 1, default: 10, description: "Supertrend ATR periyodu" },
+      { key: "ts_supertrend_mult",   label: "Supertrend Çarpan", type: "number", min: 1.0, max: 10, step: 0.5, default: 3.0, description: "Supertrend ATR çarpanı (yüksek = daha az sinyal)" },
+      { key: "ts_divergence_lookback", label: "Divergence Bakış", type: "number", min: 5, max: 30, step: 1, default: 14, description: "RSI divergence tespiti için kaç mum geriye bak" },
+      { key: "bb_period",      label: "BB Periyot",             type: "number",  min: 5,    max: 200,  step: 1,   default: 20,    description: "Bollinger Band hesaplama periyodu (grid aralığı referansı)" },
+      { key: "bb_std_dev",     label: "BB Sapma",               type: "number",  min: 0.5,  max: 4,    step: 0.5, default: 2.0,   description: "Bollinger Band standart sapma çarpanı" },
+      { key: "trading_fee_pct", label: "İşlem Ücreti %",       type: "number",  min: 0,    max: 1,    step: 0.01, default: 0.02, description: "Borsa işlem ücreti (MEXC Maker: 0%, Taker: 0.02%)" },
+    ],
+  },
+  {
     id: "smart_scanner",
     name: "Smart Scanner Bot",
     category: "Custom" as const,
@@ -1056,6 +1086,39 @@ function StrategySignalCard({
           ...(Number(sl) > 0 ? [`Stop Loss: Alt sınırın %${sl} altına düşerse tüm pozisyonlar kapatılır`] : [`Stop Loss kapalı — grid sınır dışına çıkabilir`]),
         ],
         note: `Grid bot yatay piyasada en verimlidir. Güçlü trend dönemlerinde risk artar.`,
+      }
+    }
+    if (strategyId === "trend_score_grid") {
+      const entry = getParam("ts_entry_threshold", 4)
+      const exit  = getParam("ts_exit_threshold", 1)
+      const adx   = getParam("ts_adx_min", 20)
+      const count = getParam("grid_count", 15)
+      const stP   = getParam("ts_supertrend_period", 10)
+      const stM   = getParam("ts_supertrend_mult", 3.0)
+      return {
+        algo: `5 gösterge trend puanı üretir (−10 ile +10 arası). Puan ≥ +${entry} → LONG, ≤ −${entry} → SHORT grid açılır. ${count} kademe grid ile trend boyunca kar toplanır.`,
+        buy: [
+          `EMA 21 > 55 > 200 (tam dizilim) → +3 puan`,
+          `ADX ≥ ${adx} ve +DI > −DI → +2 puan (güçlü yükseliş trendi)`,
+          `MACD histogram > 0 ve artıyor → +2 puan (momentum artıyor)`,
+          `Supertrend(${stP}, ${stM}) = LONG → +1 puan`,
+          `RSI bullish divergence (fiyat düştü ama RSI yükseldi) → +2 puan`,
+          `TOPLAM ≥ +${entry} → LONG grid aç, kademelerde alım yap ▲`,
+        ],
+        sell: [
+          `EMA 21 < 55 < 200 (tam ters dizilim) → −3 puan`,
+          `ADX ≥ ${adx} ve −DI > +DI → −2 puan (güçlü düşüş trendi)`,
+          `MACD histogram < 0 ve azalıyor → −2 puan`,
+          `Supertrend(${stP}, ${stM}) = SHORT → −1 puan`,
+          `RSI bearish divergence → −2 puan`,
+          `TOPLAM ≤ −${entry} → SHORT grid aç, kademelerde satış yap ▼`,
+        ],
+        filters: [
+          `ADX < ${adx} → trend yok, puan 0 → yatay piyasada işlem AÇILMAZ`,
+          `Çıkış: puan ≤ +${exit} (long) veya ≥ −${exit} (short) → pozisyonları kapat`,
+          `Hızlı dönüş: puan karşı eşiğe ulaşırsa → kapat + ters yönde grid aç`,
+        ],
+        note: `Avantaj: Tek göstergeye güvenmek yerine 5 gösterge oylama yapar → yalancı sinyal çok az. ADX filtresi yatay piyasada işlem açmaz. Dezavantaj: Güçlü trend gerektirir, yatay dönemlerde bekler.`,
       }
     }
     return { algo: "", buy: [], sell: [], filters: [] }

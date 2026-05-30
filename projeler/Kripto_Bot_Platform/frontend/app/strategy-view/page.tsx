@@ -78,6 +78,7 @@ const STRATEGIES = [
   { id: "grid_hybrid",      name: "Hibrit Grid (BB+Filtre)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0, Min_Spread_Pct: 0.3 } },
   { id: "grid_bb_direction",name: "BB Yön (Oto Long/Short)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0, Min_Spread_Pct: 0.3 } },
   { id: "grid_ema_trend",   name: "EMA Trend (Oto)",  params: { min_ema_pct: 1.0, ema_exit_mode: "ema_cross", Kademe: 15, Spread_Pct: 1.5 } },
+  { id: "grid_trend_score", name: "Trend Puanlama (Claude)", params: { Kademe: 15, Spread_Pct: 1.5, BB_Periyot: 20, BB_Sapma: 2.0, ts_entry_threshold: 4, ts_exit_threshold: 1, ts_adx_period: 14, ts_adx_min: 20, ts_supertrend_period: 10, ts_supertrend_mult: 3.0, ts_divergence_lookback: 14 } },
 ]
 
 const PARAM_OPTIONS: Record<string, Record<string, string[]>> = {
