@@ -74,7 +74,9 @@ async def send_push(title: str, body: str, data: dict = None, tag: str = "trade"
     redis = get_redis()
     redis_key = f"{REDIS_KEY_PREFIX}{user_id}"
     subs_raw = await redis.lrange(redis_key, 0, -1)
+    print(f"[Push] user_id={user_id} key={redis_key} subscription_count={len(subs_raw) if subs_raw else 0}")
     if not subs_raw:
+        print(f"[Push] Subscription bulunamadı, bildirim gönderilemedi. user_id={user_id}")
         return
 
     payload = json.dumps({

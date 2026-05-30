@@ -617,15 +617,16 @@ async def create_bot(data: BotCreate, user_id: int = Depends(get_current_user)):
             # Push bildirim — bot oluşturuldu
             try:
                 from services.push_notification import send_push
-                asyncio.create_task(send_push(
+                print(f"[Push] Bot create bildirim gönderiliyor user_id={user_id}")
+                await send_push(
                     f"✅ Yeni Bot: {data.name}",
                     f"{data.symbol} | {strategy} | {'Paper' if data.paper_mode else 'CANLI'}",
                     data={"url": "/bots"},
                     tag="bot-create",
                     user_id=str(user_id),
-                ))
-            except Exception:
-                pass
+                )
+            except Exception as e:
+                print(f"[Push] Bot create bildirim hatası: {e}")
 
             return {
                 "id": bot.id,
@@ -708,15 +709,16 @@ async def start_bot(bot_id: int, user_id: int = Depends(get_current_user)):
     # Push bildirim gönder — bot başlatıldı
     try:
         from services.push_notification import send_push
-        asyncio.create_task(send_push(
+        print(f"[Push] Bot start bildirim gönderiliyor user_id={user_id}")
+        await send_push(
             f"🚀 {config['name']} Başlatıldı",
             f"{config['symbol']} | {'Paper' if config['paper_mode'] else 'CANLI'} mod",
             data={"url": "/bots"},
             tag="bot-start",
             user_id=str(user_id),
-        ))
-    except Exception:
-        pass
+        )
+    except Exception as e:
+        print(f"[Push] Bot start bildirim hatası: {e}")
 
     return {"status": "started", "bot_id": bot_id}
 
@@ -1453,15 +1455,16 @@ async def stop_bot(bot_id: int, user_id: int = Depends(get_current_user)):
     # Push bildirim gönder — bot durduruldu
     try:
         from services.push_notification import send_push
-        asyncio.create_task(send_push(
+        print(f"[Push] Bot stop bildirim gönderiliyor user_id={user_id}")
+        await send_push(
             f"⏹️ {bot.name} Durduruldu",
             f"{bot.symbol} botu durduruldu.",
             data={"url": "/bots"},
             tag="bot-stop",
             user_id=str(user_id),
-        ))
-    except Exception:
-        pass
+        )
+    except Exception as e:
+        print(f"[Push] Bot stop bildirim hatası: {e}")
 
     return {"status": "stopped", "bot_id": bot_id}
 
