@@ -194,11 +194,14 @@ export default function BotCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bot.id, running])
 
-  // Sinyal performansını çek
+  // Sinyal performansını lazy çek (ilk render'da değil, 2s sonra — sayfa açılış hızı için)
   useEffect(() => {
-    api.get(`/bots/${bot.id}/performance`)
-      .then((data: any) => { if (data && !data.error) setPerf(data) })
-      .catch(() => {})
+    const timer = setTimeout(() => {
+      api.get(`/bots/${bot.id}/performance`)
+        .then((data: any) => { if (data && !data.error) setPerf(data) })
+        .catch(() => {})
+    }, 2000)
+    return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bot.id])
 
@@ -229,36 +232,41 @@ export default function BotCard({
       return () => { cancelled = true; clearInterval(iv) }
     }, [bot.id, showLiveTrades, running])
 
-  // Borsa bakiyesini çek (mount'ta bir kez)
+  // Borsa bakiyesini lazy çek (3s sonra — sayfa yüklenme hızı için)
   useEffect(() => {
     if (!bot.exchange) return
     let cancelled = false
-    api.get(`/exchanges/${bot.exchange}/balance`)
-      .then((data: any) => {
-        if (cancelled) return
-        const usdt = data?.total ?? data?.free ?? null
-        if (usdt != null) setExchBalance(Number(usdt))
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
+    const timer = setTimeout(() => {
+      api.get(`/exchanges/${bot.exchange}/balance`)
+        .then((data: any) => {
+          if (cancelled) return
+          const usdt = data?.total ?? data?.free ?? null
+          if (usdt != null) setExchBalance(Number(usdt))
+        })
+        .catch(() => {})
+    }, 3000)
+    return () => { cancelled = true; clearTimeout(timer) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bot.id])
 
-  // Filtreleri çek
+  // Filtreleri lazy çek (2.5s sonra)
   useEffect(() => {
-    api.get(`/bots/${bot.id}/filters`)
-      .then((data: any) => {
-        if (data && !data.error) {
-          setFilters({
-            smart_hours_enabled: data.smart_hours_enabled ?? false,
-            news_protection_enabled: data.news_protection_enabled ?? false,
-            self_learning_enabled: data.self_learning_enabled ?? false,
-            trend_filter_enabled: data.trend_filter_enabled ?? false,
-            volatility_filter_enabled: data.volatility_filter_enabled ?? false,
-          })
-        }
-      })
-      .catch(() => {})
+    const timer = setTimeout(() => {
+      api.get(`/bots/${bot.id}/filters`)
+        .then((data: any) => {
+          if (data && !data.error) {
+            setFilters({
+              smart_hours_enabled: data.smart_hours_enabled ?? false,
+              news_protection_enabled: data.news_protection_enabled ?? false,
+              self_learning_enabled: data.self_learning_enabled ?? false,
+              trend_filter_enabled: data.trend_filter_enabled ?? false,
+              volatility_filter_enabled: data.volatility_filter_enabled ?? false,
+            })
+          }
+        })
+        .catch(() => {})
+    }, 2500)
+    return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bot.id])
 

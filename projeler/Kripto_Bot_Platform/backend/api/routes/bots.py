@@ -460,7 +460,7 @@ async def _get_exchange_client(exchange: str, margin_type: str = "isolated", use
         return _ExClient(ex, exchange_name=exchange, margin_type=margin_type)
     raise HTTPException(400, f"{exchange} için API key bulunamadı. Önce Borsa Ayarları'ndan key girin.")
 
-async def _sync_bot_params_to_sim(bot_params: dict):
+async def _sync_bot_params_to_sim(bot_params: dict, user_id: int = None):
     """Smart scanner bot params → simülasyon ayarlarına senkronize et."""
     from core.redis_client import get_redis
     redis = get_redis()
@@ -487,7 +487,9 @@ async def _sync_bot_params_to_sim(bot_params: dict):
         "trade_size_value": "trade_size_value",
     }
 
-    raw = await redis.get("scanner_sim:settings")
+    # Kullanıcıya özel settings key kullan
+    settings_key = f"scanner_sim:settings:{user_id}" if user_id else "scanner_sim:settings"
+    raw = await redis.get(settings_key)
     sim_cfg = json.loads(raw) if raw else {}
     changed = False
     for bot_key, sim_key in bot_to_sim.items():
@@ -497,8 +499,8 @@ async def _sync_bot_params_to_sim(bot_params: dict):
                 sim_cfg[sim_key] = new_val
                 changed = True
     if changed:
-        await redis.set("scanner_sim:settings", json.dumps(sim_cfg))
-        print(f"[BotSync] Simülasyon ayarları bot'tan güncellendi")
+        await redis.set(settings_key, json.dumps(sim_cfg))
+        print(f"[BotSync] Simülasyon ayarları bot'tan güncellendi (user_id={user_id})")
 
 
 router = APIRouter(prefix="/bots", tags=["bots"])
@@ -611,6 +613,20 @@ async def create_bot(data: BotCreate, user_id: int = Depends(get_current_user)):
             await session.commit()
             await session.refresh(bot)
             print(f"[Bot Created] ID:{bot.id} Name:{data.name} Strategy:{strategy} Params:{effective_params}")
+
+            # Push bildirim — bot oluşturuldu
+            try:
+                from services.push_notification import send_push
+                asyncio.create_task(send_push(
+                    f"✅ Yeni Bot: {data.name}",
+                    f"{data.symbol} | {strategy} | {'Paper' if data.paper_mode else 'CANLI'}",
+                    data={"url": "/bots"},
+                    tag="bot-create",
+                    user_id=str(user_id),
+                ))
+            except Exception:
+                pass
+
             return {
                 "id": bot.id,
                 "name": bot.name,
@@ -688,6 +704,19 @@ async def start_bot(bot_id: int, user_id: int = Depends(get_current_user)):
             update(Bot).where(Bot.id == bot_id).values(status=BotStatus.RUNNING)
         )
         await session.commit()
+
+    # Push bildirim gönder — bot başlatıldı
+    try:
+        from services.push_notification import send_push
+        asyncio.create_task(send_push(
+            f"🚀 {config['name']} Başlatıldı",
+            f"{config['symbol']} | {'Paper' if config['paper_mode'] else 'CANLI'} mod",
+            data={"url": "/bots"},
+            tag="bot-start",
+            user_id=str(user_id),
+        ))
+    except Exception:
+        pass
 
     return {"status": "started", "bot_id": bot_id}
 
@@ -1421,6 +1450,19 @@ async def stop_bot(bot_id: int, user_id: int = Depends(get_current_user)):
         print(f"[BotStop] Bot #{bot_id} DB hatası: {e}")
         asyncio.create_task(_retry_bot_status_update(bot_id, BotStatus.STOPPED))
 
+    # Push bildirim gönder — bot durduruldu
+    try:
+        from services.push_notification import send_push
+        asyncio.create_task(send_push(
+            f"⏹️ {bot.name} Durduruldu",
+            f"{bot.symbol} botu durduruldu.",
+            data={"url": "/bots"},
+            tag="bot-stop",
+            user_id=str(user_id),
+        ))
+    except Exception:
+        pass
+
     return {"status": "stopped", "bot_id": bot_id}
 
 
@@ -1541,7 +1583,7 @@ async def update_bot(bot_id: int, data: BotCreate, user_id: int = Depends(get_cu
     # Smart scanner botu güncellendiyse simülasyon ayarlarını da senkronize et
     if strategy == "smart_scanner":
         try:
-            await _sync_bot_params_to_sim(effective_params)
+            await _sync_bot_params_to_sim(effective_params, user_id=user_id)
         except Exception as e:
             print(f"[Bot Update] Sim sync hatası: {e}")
 
@@ -1562,7 +1604,7 @@ async def update_bot(bot_id: int, data: BotCreate, user_id: int = Depends(get_cu
 
 
 @router.get("/{bot_id}/status")
-async def bot_status(bot_id: int):
+async def bot_status(bot_id: int, user_id: int = Depends(get_current_user)):
     from core.redis_client import get_redis
     redis = get_redis()
     raw = await redis.get(f"bot:{bot_id}:status")
@@ -1589,7 +1631,7 @@ class FilterUpdate(BaseModel):
 
 
 @router.get("/{bot_id}/filters")
-async def get_filters(bot_id: int):
+async def get_filters(bot_id: int, user_id: int = Depends(get_current_user)):
     from models.trade import BotFilter
     async with async_session() as session:
         result = await session.execute(select(BotFilter).where(BotFilter.bot_id == bot_id))
@@ -1715,7 +1757,7 @@ async def get_signal_logs(bot_id: int, limit: int = 50, action: str = None):
 
 
 @router.get("/{bot_id}/performance")
-async def bot_performance(bot_id: int):
+async def bot_performance(bot_id: int, user_id: int = Depends(get_current_user)):
     """Bot'un trade + sinyal performansı — TP/SL vuruş oranı, kâr/zarar özeti."""
     from models.trade import SignalLog, Trade, TradeStatus
     async with async_session() as session:
@@ -1813,7 +1855,7 @@ async def bot_performance(bot_id: int):
 
 
 @router.get("/{bot_id}/live-trades")
-async def get_live_trades(bot_id: int):
+async def get_live_trades(bot_id: int, user_id: int = Depends(get_current_user)):
     """Bot'un canli borsa pozisyonlarini + signal log'larini birlestirir.
     Simulasyon sayfasindaki gibi detayli trade karti gosterir."""
     from models.trade import SignalLog, Trade

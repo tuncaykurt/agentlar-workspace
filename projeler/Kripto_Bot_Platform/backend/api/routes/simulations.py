@@ -6,7 +6,7 @@ from sqlalchemy import text
 from core.database import async_session
 from core.redis_client import get_redis
 import json
-from api.routes.auth import get_current_user_obj
+from api.routes.auth import get_current_user_obj, get_current_user
 from models.user import User
 
 router = APIRouter(prefix="/simulations", tags=["simulations"])
@@ -29,12 +29,12 @@ async def _check_ai_log_col() -> bool:
 
 
 @router.get("")
-async def list_simulations(status: str = None, limit: int = 50, offset: int = 0):
+async def list_simulations(status: str = None, limit: int = 50, offset: int = 0, user_id: int = Depends(get_current_user)):
     """Simülasyonları listele. ?status=open|win|loss|expired ile filtrele."""
     # ai_log çok büyük — listede gösterme, sadece detay endpoint'inde ver
     async with async_session() as session:
-        where = "WHERE 1=1"
-        params = {"limit": limit, "offset": offset}
+        where = "WHERE (user_id = :user_id OR user_id IS NULL)"
+        params = {"limit": limit, "offset": offset, "user_id": user_id}
         if status:
             where += " AND status = :status"
             params["status"] = status
@@ -119,11 +119,12 @@ async def list_simulations(status: str = None, limit: int = 50, offset: int = 0)
 
 
 @router.get("/stats")
-async def simulation_stats():
-    """Genel simülasyon istatistikleri — tek DB session, tek round-trip."""
+async def simulation_stats(user_id: int = Depends(get_current_user)):
+    """Kullanıcıya özel simülasyon istatistikleri — tek DB session, tek round-trip."""
+    user_filter = "(user_id = :uid OR user_id IS NULL)"
     async with async_session() as session:
         # Ana istatistikler + yön analizi + coin performansı — tek session
-        result = await session.execute(text("""
+        result = await session.execute(text(f"""
             SELECT
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE status = 'win') as wins,
@@ -137,33 +138,34 @@ async def simulation_stats():
                 COALESCE(AVG(confidence) FILTER (WHERE status = 'loss'), 0) as avg_loss_confidence,
                 COALESCE(AVG(max_favorable_pct) FILTER (WHERE status = 'loss'), 0) as avg_loss_max_fav
             FROM scanner_simulations
-        """))
+            WHERE {user_filter}
+        """), {"uid": user_id})
         row = result.fetchone()
 
-        dir_result = await session.execute(text("""
+        dir_result = await session.execute(text(f"""
             SELECT direction,
                    COUNT(*) as total,
                    COUNT(*) FILTER (WHERE status = 'win') as wins,
                    COALESCE(AVG(pnl_pct) FILTER (WHERE status IN ('win','loss')), 0) as avg_pnl
             FROM scanner_simulations
-            WHERE status IN ('win', 'loss')
+            WHERE status IN ('win', 'loss') AND {user_filter}
             GROUP BY direction
-        """))
+        """), {"uid": user_id})
         dir_rows = dir_result.fetchall()
 
-        coin_result = await session.execute(text("""
+        coin_result = await session.execute(text(f"""
             SELECT coin,
                    COUNT(*) as total,
                    COUNT(*) FILTER (WHERE status = 'win') as wins,
                    COUNT(*) FILTER (WHERE status = 'loss') as losses,
                    COALESCE(SUM(pnl_usdt), 0) as total_pnl
             FROM scanner_simulations
-            WHERE status IN ('win', 'loss')
+            WHERE status IN ('win', 'loss') AND {user_filter}
             GROUP BY coin
             HAVING COUNT(*) >= 2
             ORDER BY COALESCE(SUM(pnl_usdt), 0) DESC
             LIMIT 10
-        """))
+        """), {"uid": user_id})
         coin_rows = coin_result.fetchall()
 
     total = row[0] or 0
@@ -204,39 +206,47 @@ async def simulation_stats():
     }
 
 
+_SIM_SETTINGS_DEFAULTS = {
+    "enabled": True, "mode": "ai", "interval": 120,
+    "leverage": 50, "min_leverage": 3, "max_leverage": 75,
+    "tp_pct": 1.5, "sl_pct": 0.8,
+    "auto_scale_tp_sl": True, "scale_base_leverage": 10,
+    "trailing_enabled": False,
+    "trailing_activate_pct": 0.3, "trailing_callback_pct": 0.15,
+    "min_confidence": 65, "max_open": 5,
+    "expiry_hours": 24,
+    "hedge_enabled": False,
+    "hedge_tp_pct": 0.4, "hedge_sl_pct": 0.1,
+    "hedge_use_max_leverage": True,
+    "hedge_min_atr_pct": 0.3, "hedge_min_volume_ratio": 1.5,
+    "portfolio_enabled": True,
+    "trade_size_mode": "fixed",
+    "trade_size_value": 100,
+}
+
+
 @router.get("/settings")
-async def get_sim_settings():
-    """Simülasyon ayarlarını getir."""
+async def get_sim_settings(user_id: int = Depends(get_current_user)):
+    """Kullanıcıya özel simülasyon ayarlarını getir."""
     redis = get_redis()
+    # Önce kullanıcıya özel ayar var mı bak
+    raw = await redis.get(f"scanner_sim:settings:{user_id}")
+    if raw:
+        return json.loads(raw)
+    # Fallback: eski global ayar (migration)
     raw = await redis.get("scanner_sim:settings")
     if raw:
         return json.loads(raw)
-    return {
-        "enabled": True, "mode": "ai", "interval": 120,
-        "leverage": 50, "min_leverage": 3, "max_leverage": 75,
-        "tp_pct": 1.5, "sl_pct": 0.8,
-        "auto_scale_tp_sl": True, "scale_base_leverage": 10,
-        "trailing_enabled": False,
-        "trailing_activate_pct": 0.3, "trailing_callback_pct": 0.15,
-        "min_confidence": 65, "max_open": 5,
-        "expiry_hours": 24,
-        "hedge_enabled": False,
-        "hedge_tp_pct": 0.4, "hedge_sl_pct": 0.1,
-        "hedge_use_max_leverage": True,
-        "hedge_min_atr_pct": 0.3, "hedge_min_volume_ratio": 1.5,
-        "portfolio_enabled": True,
-        "trade_size_mode": "fixed",
-        "trade_size_value": 100,
-    }
+    return {**_SIM_SETTINGS_DEFAULTS}
 
 
 @router.post("/settings")
-async def update_sim_settings(data: dict):
-    """Simülasyon ayarlarını güncelle. Bot ayarlarını DEĞİŞTİRMEZ — bağımsız çalışır."""
+async def update_sim_settings(data: dict, user_id: int = Depends(get_current_user)):
+    """Kullanıcıya özel simülasyon ayarlarını güncelle."""
     redis = get_redis()
-    current = await get_sim_settings()
+    current = await get_sim_settings(user_id)
     current.update(data)
-    await redis.set("scanner_sim:settings", json.dumps(current))
+    await redis.set(f"scanner_sim:settings:{user_id}", json.dumps(current))
     return current
 
 
@@ -363,7 +373,7 @@ async def hft_live_status(user = Depends(get_current_user_obj)):
 
 
 @router.post("/hft-bb-data")
-async def hft_bb_data(data: dict):
+async def hft_bb_data(data: dict, user_id: int = Depends(get_current_user)):
     """
     BB bantlarını hesapla ve döndür (bot başlatmadan).
     Sim modu için: frontend grid sınırlarını BB'den alır.
@@ -540,7 +550,7 @@ async def hft_debug(user = Depends(get_current_user_obj)):
 
 
 @router.get("/status")
-async def sim_status():
+async def sim_status(user_id: int = Depends(get_current_user)):
     """Simülatörün anlık durumu + MEXC WS bilgisi."""
     redis = get_redis()
     raw = await redis.get("scanner_sim:status")
@@ -573,7 +583,7 @@ async def sim_status():
 
 
 @router.get("/ws-prices")
-async def ws_prices():
+async def ws_prices(user_id: int = Depends(get_current_user)):
     """MEXC WebSocket'ten gelen anlık fiyatları göster (debug)."""
     redis = get_redis()
     prices = {}
@@ -600,7 +610,7 @@ async def ws_prices():
 
 
 @router.post("/trigger")
-async def trigger_simulation():
+async def trigger_simulation(user_id: int = Depends(get_current_user)):
     """Simülasyonu manuel tetikle — debug ve test için."""
     from services.scanner_simulator import run_simulator_cycle
     try:
@@ -661,7 +671,7 @@ async def sync_exchange_balance(user = Depends(get_current_user_obj)):
 
 
 @router.post("/portfolio/reset")
-async def reset_portfolio(data: dict = None):
+async def reset_portfolio(data: dict = None, user_id: int = Depends(get_current_user)):
     """Portföyü sıfırla. Opsiyonel: initial_balance gönder."""
     from services.scanner_simulator import _save_portfolio
     redis = get_redis()
@@ -681,13 +691,13 @@ async def reset_portfolio(data: dict = None):
 
 
 @router.post("/deploy-to-bot")
-async def deploy_to_bot(data: dict = None):
+async def deploy_to_bot(data: dict = None, user_id: int = Depends(get_current_user)):
     """Simülasyon ayarlarını Smart Scanner botu olarak deploy et."""
     from models.trade import Bot, BotStatus
     from sqlalchemy import select
 
     redis = get_redis()
-    sim_cfg = await get_sim_settings()
+    sim_cfg = await get_sim_settings(user_id)
     overrides = data or {}
 
     # Bot parametreleri — simulator ayarlarından oluştur
@@ -716,7 +726,7 @@ async def deploy_to_bot(data: dict = None):
     }
 
     # Performans verisi ekle
-    stats_data = await simulation_stats()
+    stats_data = await simulation_stats(user_id)
 
     bot_name = overrides.get("name", "Smart Scanner Bot")
     paper_mode = overrides.get("paper_mode", True)
@@ -726,6 +736,7 @@ async def deploy_to_bot(data: dict = None):
 
     async with async_session() as session:
         bot = Bot(
+            user_id=user_id,
             name=bot_name,
             symbol="MULTI",  # Çoklu coin — smart scanner
             strategy="smart_scanner",
@@ -761,15 +772,17 @@ async def deploy_to_bot(data: dict = None):
 
 
 @router.post("/copy-to-bot")
-async def copy_sim_to_bot():
+async def copy_sim_to_bot(user_id: int = Depends(get_current_user)):
     """Simülasyon ayarlarını gerçek 'smart_scanner' botuna kopyala ve (eğer çalışmıyorsa) çalıştır."""
     from models.trade import Bot, BotStatus
     from core.database import async_session
     from sqlalchemy import select
 
-    # Güncel simülasyon ayarlarını Redis'ten al
+    # Güncel simülasyon ayarlarını Redis'ten al (kullanıcıya özel)
     redis = get_redis()
-    raw_cfg = await redis.get("scanner_sim:settings")
+    raw_cfg = await redis.get(f"scanner_sim:settings:{user_id}")
+    if not raw_cfg:
+        raw_cfg = await redis.get("scanner_sim:settings")
     sim_cfg = json.loads(raw_cfg) if raw_cfg else {}
 
     # Bot parametrelerini hazırla (create_smart_bot ile aynı yapı)
@@ -794,8 +807,8 @@ async def copy_sim_to_bot():
     leverage = sim_cfg.get("max_leverage", 75)
     
     async with async_session() as session:
-        # Mevcut bir smart_scanner botu bul
-        result = await session.execute(select(Bot).where(Bot.strategy == "smart_scanner").limit(1))
+        # Mevcut bir smart_scanner botu bul (kullanıcıya ait)
+        result = await session.execute(select(Bot).where(Bot.strategy == "smart_scanner", Bot.user_id == user_id).limit(1))
         bot = result.scalar_one_or_none()
 
         if bot:
@@ -814,6 +827,7 @@ async def copy_sim_to_bot():
             # Eğer yoksa yeni bot oluştur ve başlat
             initial_balance = sim_cfg.get("trade_size_value", 100) * sim_cfg.get("max_open", 5)
             bot = Bot(
+                user_id=user_id,
                 name="Smart Scanner Bot",
                 symbol="MULTI",
                 strategy="smart_scanner",
@@ -837,22 +851,22 @@ async def copy_sim_to_bot():
 
 
 @router.delete("/{sim_id}")
-async def delete_simulation(sim_id: int):
-    """Tek bir simülasyonu sil."""
+async def delete_simulation(sim_id: int, user_id: int = Depends(get_current_user)):
+    """Tek bir simülasyonu sil (kullanıcıya ait)."""
     async with async_session() as session:
-        await session.execute(text("DELETE FROM scanner_simulations WHERE id = :id"), {"id": sim_id})
+        await session.execute(text("DELETE FROM scanner_simulations WHERE id = :id AND (user_id = :uid OR user_id IS NULL)"), {"id": sim_id, "uid": user_id})
         await session.commit()
     return {"deleted": sim_id}
 
 
 @router.delete("")
-async def clear_simulations(status: str = None):
-    """Tüm veya belirli statüdeki simülasyonları temizle."""
+async def clear_simulations(status: str = None, user_id: int = Depends(get_current_user)):
+    """Kullanıcıya ait simülasyonları temizle."""
     async with async_session() as session:
         if status:
-            await session.execute(text("DELETE FROM scanner_simulations WHERE status = :s"), {"s": status})
+            await session.execute(text("DELETE FROM scanner_simulations WHERE status = :s AND (user_id = :uid OR user_id IS NULL)"), {"s": status, "uid": user_id})
         else:
-            await session.execute(text("DELETE FROM scanner_simulations"))
+            await session.execute(text("DELETE FROM scanner_simulations WHERE (user_id = :uid OR user_id IS NULL)"), {"uid": user_id})
         await session.commit()
     return {"cleared": status or "all"}
 
@@ -866,12 +880,12 @@ async def scenario_analysis(user = Depends(get_current_user_obj)):
     3. Sadece yüksek güvenli sinyaller (AI >80)
     """
     redis = get_redis()
-    sim_cfg = await get_sim_settings()
+    user_id = user.id
+    sim_cfg = await get_sim_settings(user_id)
 
     # Borsa bakiyesi
     exchange_bal = None
     try:
-        user_id = str(user.id)
         raw = await redis.get(f"exchange:mexc:balance:{user_id}")
         if raw:
             exchange_bal = json.loads(raw)
@@ -883,7 +897,7 @@ async def scenario_analysis(user = Depends(get_current_user_obj)):
     margin_per_trade = round(real_balance / max(1, max_open), 2) if real_balance > 0 else float(sim_cfg.get("trade_size_value", 100))
 
     async with async_session() as session:
-        # Tüm kapanmış simülasyonlar
+        # Tüm kapanmış simülasyonlar (kullanıcıya ait)
         result = await session.execute(text("""
             SELECT id, coin, direction, confidence, leverage,
                    entry_price, exit_price, tp_pct, sl_pct,
@@ -893,9 +907,9 @@ async def scenario_analysis(user = Depends(get_current_user_obj)):
                    max_favorable_pct, max_adverse_pct,
                    atr_pct
             FROM scanner_simulations
-            WHERE status IN ('win', 'loss')
+            WHERE status IN ('win', 'loss') AND (user_id = :uid OR user_id IS NULL)
             ORDER BY closed_at DESC
-        """))
+        """), {"uid": user_id})
         rows = result.fetchall()
 
     cols = ["id", "coin", "direction", "confidence", "leverage",

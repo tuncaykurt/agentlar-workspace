@@ -123,6 +123,7 @@ async def _init_db():
                 "is_hedge BOOLEAN DEFAULT FALSE", # Hedge işlemi mi
                 "hedge_pair_id BIGINT",           # Eşleşen hedge işleminin ID'si
                 "margin_usdt FLOAT",              # İşlem için kullanılan margin
+                "user_id INTEGER DEFAULT 1",      # Multi-tenant: kullanıcıya ait
             ]:
                 col_name = col_def.split()[0]
                 await conn.execute(text(

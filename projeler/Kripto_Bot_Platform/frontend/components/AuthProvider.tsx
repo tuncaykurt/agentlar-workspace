@@ -42,11 +42,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""
 
+  // Token doğrulama sadece mount'ta bir kez yapılır (pathname değişiminde tekrarlanmaz)
   useEffect(() => {
-    // Check localStorage on mount
     const storedToken = localStorage.getItem("auth_token")
     if (storedToken) {
-      // Validate token with backend
       fetch(`/api/auth/me`, {
         headers: {
           Authorization: `Bearer ${storedToken}`,
@@ -62,18 +61,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
         .catch(() => {
           localStorage.removeItem("auth_token")
-          if (pathname !== "/login") {
-            router.push("/login")
-          }
+          router.push("/login")
         })
         .finally(() => setIsLoading(false))
     } else {
       setIsLoading(false)
-      if (pathname !== "/login") {
+      if (pathname !== "/login" && pathname !== "/forgot-password" && pathname !== "/reset-password") {
         router.push("/login")
       }
     }
-  }, [pathname, router])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const login = (newToken: string, newUser: User) => {
     localStorage.setItem("auth_token", newToken)
@@ -88,6 +86,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     router.push("/login")
   }
+
+  // Token yoksa ve korumalı sayfadaysa login'e yönlendir
+  const publicPages = ["/login", "/forgot-password", "/reset-password"]
+  useEffect(() => {
+    if (!isLoading && !token && !publicPages.includes(pathname)) {
+      router.push("/login")
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, token, pathname])
 
   return (
     <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>

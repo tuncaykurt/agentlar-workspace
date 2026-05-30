@@ -30,7 +30,18 @@ async def market_ws(websocket: WebSocket, symbol: str):
 
 
 async def bot_status_ws(websocket: WebSocket, bot_id: int):
-    """Bot durumunu her 5 saniyede bir gönder."""
+    """Bot durumunu her 5 saniyede bir gönder. Token query param ile auth."""
+    # WS auth: ?token=xxx query param'dan JWT doğrula
+    token = websocket.query_params.get("token")
+    if token:
+        try:
+            from core.security import decode_token
+            payload = decode_token(token)
+            # Token geçerli, devam et
+        except Exception:
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+
     await websocket.accept()
     redis = get_redis()
 
