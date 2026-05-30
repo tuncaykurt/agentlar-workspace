@@ -67,6 +67,7 @@ class GridBacktestEngine:
             "bb_dir_last_mid": "",
             "ema_paused": False, "ema_wait_cross": self.grid_mode == "ema_trend",
             "active_direction": "long",
+            "band_exited": False, "band_exit_side": None,  # 2 aşamalı çıkış: önce bandı geç, sonra geri dönünce kapat
         }
         
         grid_upper_line = []
@@ -140,6 +141,8 @@ class GridBacktestEngine:
                         state["contracts"] = {}
                         state["entry_times"] = {}
                         state["last_level"] = -1
+                        state["band_exited"] = False
+                        state["band_exit_side"] = None
                     continue
                 if state["ema_paused"]:
                     state["ema_wait_cross"] = True
@@ -174,6 +177,8 @@ class GridBacktestEngine:
                         state["contracts"] = {}
                         state["entry_times"] = {}
                         state["last_level"] = -1
+                        state["band_exited"] = False
+                        state["band_exit_side"] = None
                     state["bb_dir_last_mid"] = current_mid_side
                     continue
                 if state["bb_dir_paused"]:
@@ -263,7 +268,9 @@ class GridBacktestEngine:
                 else:
                     state["margin_per_level"] = self.margin_per_level
                 trades.append({"entry_ts": ts, "side": "grid_start", "entry": price, "exit": 0, "pnl": 0, "status": "info", "lvl": 0, "qty": 0})
-                
+                state["band_exited"] = False
+                state["band_exit_side"] = None
+
             if not state["levels"]: continue
             
             # Find current level based on low and high
@@ -331,35 +338,47 @@ class GridBacktestEngine:
 
             state["last_level"] = current_level
             
-            # Band exit (even if not filled, we should close the grid)
+            # Band exit kontrolü
             if state["upper"] > 0:
-                exited = False
-                side = None
-                
+                should_close = False
+                exit_side = None
+
                 if self.grid_mode == "ema_trend":
+                    # EMA trend modu: tek aşamalı çıkış (eski davranış)
                     ema_exit_mode = self.config.get("ema_exit_mode", "ema_cross")
                     if ema_exit_mode == "bollinger":
-                        if active_dir == "long" and price > bb_upper: exited, side = True, "upper"
-                        elif active_dir == "short" and price < bb_lower: exited, side = True, "lower"
+                        if active_dir == "long" and price > bb_upper: should_close, exit_side = True, "upper"
+                        elif active_dir == "short" and price < bb_lower: should_close, exit_side = True, "lower"
                     elif ema_exit_mode == "ema_cross":
                         ema6, ema14 = float(row["ema6"]), float(row["ema14"])
-                        if active_dir == "long" and ema6 < ema14: exited, side = True, "upper"
-                        elif active_dir == "short" and ema6 > ema14: exited, side = True, "lower"
+                        if active_dir == "long" and ema6 < ema14: should_close, exit_side = True, "upper"
+                        elif active_dir == "short" and ema6 > ema14: should_close, exit_side = True, "lower"
                     elif ema_exit_mode == "touch_ema50":
                         ema50 = float(row["ema50"])
-                        if active_dir == "long" and low <= ema50: exited, side = True, "upper"
-                        elif active_dir == "short" and high >= ema50: exited, side = True, "lower"
+                        if active_dir == "long" and low <= ema50: should_close, exit_side = True, "upper"
+                        elif active_dir == "short" and high >= ema50: should_close, exit_side = True, "lower"
                     elif ema_exit_mode == "touch_ema200":
                         ema200 = float(row["ema200"])
-                        if active_dir == "long" and low <= ema200: exited, side = True, "upper"
-                        elif active_dir == "short" and high >= ema200: exited, side = True, "lower"
+                        if active_dir == "long" and low <= ema200: should_close, exit_side = True, "upper"
+                        elif active_dir == "short" and high >= ema200: should_close, exit_side = True, "lower"
                 else:
-                    if active_dir == "long" and price > bb_upper:
-                        exited, side = True, "upper"
-                    elif active_dir == "short" and price < bb_lower:
-                        exited, side = True, "lower"
-                    
-                if exited:
+                    # BB modları: 2 aşamalı çıkış (canlı engine ile aynı)
+                    # Aşama 1: Fiyat bandı dışına çıktı mı?
+                    if not state["band_exited"]:
+                        if active_dir == "long" and price > bb_upper:
+                            state["band_exited"] = True
+                            state["band_exit_side"] = "upper"
+                        elif active_dir == "short" and price < bb_lower:
+                            state["band_exited"] = True
+                            state["band_exit_side"] = "lower"
+                    else:
+                        # Aşama 2: Fiyat geri dönüp banda dışarıdan içeri değdi mi?
+                        if state["band_exit_side"] == "upper" and price <= bb_upper:
+                            should_close, exit_side = True, "upper"
+                        elif state["band_exit_side"] == "lower" and price >= bb_lower:
+                            should_close, exit_side = True, "lower"
+
+                if should_close:
                     close_lvls = list(state["filled"])
                     for lvl in close_lvls:
                         state["filled"].discard(lvl)
@@ -373,7 +392,7 @@ class GridBacktestEngine:
                         margin_used = (lvl_contracts * cs * ep) / self.leverage
                         pos_val = lvl_contracts * cs * ep
                         pnl_pct = (net_pnl / margin_used * 100) if margin_used > 0 else 0
-                        trades.append({"entry_ts": entry_ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": price, "pnl": net_pnl, "fee": fee, "status": "band_exit", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct, "exit_reason": "bb_upper_band" if side == "upper" else "bb_lower_band"})
+                        trades.append({"entry_ts": entry_ts, "exit_ts": ts, "side": active_dir, "entry": ep, "exit": price, "pnl": net_pnl, "fee": fee, "status": "band_exit", "lvl": lvl, "qty": lvl_contracts*cs, "margin": margin_used, "position_value": pos_val, "pnl_pct": pnl_pct, "exit_reason": "bb_upper_band" if exit_side == "upper" else "bb_lower_band"})
                     if self.grid_mode == "bb_direction":
                         state["bb_dir_paused"] = True
                     if self.grid_mode == "ema_trend":
@@ -382,6 +401,8 @@ class GridBacktestEngine:
                     state["upper"] = 0
                     state["lower"] = 0
                     state["levels"] = []
+                    state["band_exited"] = False
+                    state["band_exit_side"] = None
                     continue
 
             # Trailing
