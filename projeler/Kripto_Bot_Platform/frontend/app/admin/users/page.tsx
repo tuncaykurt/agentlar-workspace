@@ -110,13 +110,64 @@ export default function AdminUsersPage() {
     }
   }
 
+  const handleApprove = async (id: number) => {
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ is_active: true })
+      })
+      if (!res.ok) throw new Error("Onay başarısız")
+      fetchUsers()
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const pendingUsers = users.filter(u => !u.is_active && u.role !== "admin")
+
   if (isLoading || loading) return <div className="p-8 text-slate-400">Yükleniyor...</div>
 
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold text-white mb-6">Müşteri ve Ücret Yönetimi</h1>
-      
+
       {error && <div className="bg-red-500/10 text-red-400 p-4 rounded-lg mb-6">{error}</div>}
+
+      {pendingUsers.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6">
+          <h2 className="text-amber-400 font-semibold mb-3 flex items-center gap-2">
+            <span>⏳</span> Onay Bekleyen Kullanıcılar ({pendingUsers.length})
+          </h2>
+          <div className="space-y-2">
+            {pendingUsers.map(u => (
+              <div key={u.id} className="flex items-center justify-between bg-slate-900/50 rounded-xl px-4 py-3">
+                <div>
+                  <span className="text-white font-medium">{u.email}</span>
+                  <span className="text-slate-500 text-xs ml-2">{new Date(u.created_at).toLocaleDateString("tr-TR")}</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleApprove(u.id)}
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg font-medium transition-colors"
+                  >
+                    Onayla
+                  </button>
+                  <button
+                    onClick={() => handleEditClick(u)}
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg transition-colors"
+                  >
+                    Düzenle
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">

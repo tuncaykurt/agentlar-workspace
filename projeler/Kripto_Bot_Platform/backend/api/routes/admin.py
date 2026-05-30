@@ -74,6 +74,7 @@ async def update_user(user_id: int, data: UserUpdateParams, admin: User = Depend
         if not user:
             raise HTTPException(404, "Kullanıcı bulunamadı")
             
+        was_inactive = not user.is_active
         if data.is_active is not None:
             user.is_active = data.is_active
         if data.fee_type is not None:
@@ -86,4 +87,20 @@ async def update_user(user_id: int, data: UserUpdateParams, admin: User = Depend
             user.allowed_pages = data.allowed_pages
             
         await session.commit()
+
+        # Kullanıcı onaylandıysa bildirim gönder
+        if was_inactive and data.is_active:
+            try:
+                import asyncio
+                from services.push_notification import send_push
+                asyncio.create_task(send_push(
+                    "✅ Hesabınız Onaylandı!",
+                    "Artık KriptoBot platformuna giriş yapabilirsiniz.",
+                    data={"url": "/login"},
+                    tag="account-approved",
+                    user_id=str(user_id),
+                ))
+            except Exception:
+                pass
+
         return {"status": "ok", "message": "Kullanıcı başarıyla güncellendi"}

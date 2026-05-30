@@ -92,12 +92,12 @@ async def login(data: AuthRequest):
                 raise HTTPException(401, "E-posta veya şifre hatalı")
         
         if not user.is_active:
-            raise HTTPException(403, "Hesabınız askıya alınmış")
+            raise HTTPException(403, "PENDING_APPROVAL")
 
         token = create_access_token({"sub": str(user.id), "role": user.role})
         return {
-            "access_token": token, 
-            "token_type": "bearer", 
+            "access_token": token,
+            "token_type": "bearer",
             "user": {
                 "id": user.id,
                 "email": user.email,
@@ -124,28 +124,44 @@ async def google_login(data: GoogleAuthRequest):
             result = await session.execute(select(User).where(User.email == email))
             user = result.scalar_one_or_none()
             
-            # Eger kullanici yoksa otomatik kayit et (SaaS mantigi)
+            # Eger kullanici yoksa kayit et — admin onayı bekleyecek
             if not user:
-                # Rastgele guclu bir sifre ata (sadece google ile girebilsin diye)
                 import secrets
                 random_pass = secrets.token_urlsafe(16)
-                
+
                 user = User(
                     email=email,
                     password_hash=hash_password(random_pass),
                     role="user",
-                    is_active=True,
+                    is_active=False,  # Admin onayı gerekli
                     fee_type="percentage",
-                    fee_amount=20.0,  # Default kar payi %20
+                    fee_amount=20.0,
                     fee_active=True,
                     allowed_pages=["dashboard", "strategy-view", "hft", "calculator", "settings", "billing"]
                 )
                 session.add(user)
                 await session.commit()
                 await session.refresh(user)
-            
+
+                # Admin'e bildirim gönder
+                try:
+                    import asyncio
+                    from services.push_notification import send_push
+                    # Admin user_id = 1
+                    asyncio.create_task(send_push(
+                        "👤 Yeni Üye Kaydı",
+                        f"{email} kayıt oldu — onay bekliyor",
+                        data={"url": "/admin/users"},
+                        tag="new-user",
+                        user_id="1",
+                    ))
+                except Exception:
+                    pass
+
+                raise HTTPException(403, "PENDING_APPROVAL")
+
             if not user.is_active:
-                raise HTTPException(403, "Hesabınız askıya alınmış")
+                raise HTTPException(403, "PENDING_APPROVAL")
 
             token = create_access_token({"sub": str(user.id), "role": user.role})
             return {

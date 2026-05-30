@@ -59,8 +59,20 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-              {error}
+            <div className={`mb-6 p-4 rounded-xl text-sm ${
+              error === "PENDING_APPROVAL"
+                ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
+                : "bg-red-500/10 border border-red-500/20 text-red-400"
+            }`}>
+              {error === "PENDING_APPROVAL" ? (
+                <div className="flex items-start gap-3">
+                  <span className="text-xl">⏳</span>
+                  <div>
+                    <p className="font-semibold mb-1">Hesabınız Onay Bekliyor</p>
+                    <p className="text-xs text-amber-400/80">Kaydınız alındı. Yönetici onayından sonra giriş yapabileceksiniz. Onaylandığında bildirim alacaksınız.</p>
+                  </div>
+                </div>
+              ) : error}
             </div>
           )}
 
