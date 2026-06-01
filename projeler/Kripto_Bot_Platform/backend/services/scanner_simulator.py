@@ -152,9 +152,14 @@ async def _release_margin(redis, margin: float, pnl: float):
     await _save_portfolio(redis, portfolio)
 
 
-async def _get_sim_settings(redis) -> dict:
-    """Redis'ten simülasyon ayarlarını oku (frontend'den değiştirilebilir)."""
-    raw = await redis.get("scanner_sim:settings")
+async def _get_sim_settings(redis, user_id: str = None) -> dict:
+    """Redis'ten simülasyon ayarlarını oku (frontend'den değiştirilebilir). User-scoped."""
+    # Önce user-scoped key'e bak, yoksa global fallback
+    raw = None
+    if user_id:
+        raw = await redis.get(f"scanner_sim:settings:{user_id}")
+    if not raw:
+        raw = await redis.get("scanner_sim:settings")
     if raw:
         return json.loads(raw)
     return {
@@ -1468,10 +1473,10 @@ async def _check_open_simulations(exchange, expiry_hours: int = SIM_EXPIRY_HOURS
                 await session.commit()
 
 
-async def run_simulator_cycle():
-    """Tek bir simülasyon döngüsü."""
+async def run_simulator_cycle(user_id: str = None):
+    """Tek bir simülasyon döngüsü. user_id varsa user-scoped ayarları kullanır."""
     redis = get_redis()
-    cfg = await _get_sim_settings(redis)
+    cfg = await _get_sim_settings(redis, user_id=user_id)
 
     if not cfg.get("enabled", True):
         return
@@ -1493,7 +1498,7 @@ async def run_simulator_cycle():
         if len(open_sims) >= cfg.get("max_open", SIM_MAX_OPEN):
             print(f"[SimScanner] Max açık sim ({len(open_sims)}/{cfg.get('max_open', SIM_MAX_OPEN)}) — bekleniyor")
             # Status güncelle
-            await redis.set("scanner_sim:status", json.dumps({
+            await redis.set(f"scanner_sim:status:{user_id}" if user_id else "scanner_sim:status", json.dumps({
                 "open_count": len(open_sims),
                 "waiting": True,
                 "ts": datetime.now(timezone.utc).isoformat(),
@@ -1503,7 +1508,7 @@ async def run_simulator_cycle():
         coins = await _get_coins_from_db()
         if not coins:
             print("[SimScanner] Coin verisi yok — collector bekleniyor")
-            await redis.set("scanner_sim:status", json.dumps({
+            await redis.set(f"scanner_sim:status:{user_id}" if user_id else "scanner_sim:status", json.dumps({
                 "error": "Coin verisi yok",
                 "ts": datetime.now(timezone.utc).isoformat(),
             }), ex=300)
@@ -1656,7 +1661,7 @@ async def run_simulator_cycle():
                 "roi": round((portfolio["balance"] + portfolio["reserved"] - portfolio["initial_balance"]) / max(1, portfolio["initial_balance"]) * 100, 2),
             }
 
-        await redis.set("scanner_sim:status", json.dumps({
+        await redis.set(f"scanner_sim:status:{user_id}" if user_id else "scanner_sim:status", json.dumps({
             "coins_total": len(coins),
             "open_count": len(open_sims) + len(opened) + len(hedge_opened) * 2,
             "opened": opened + hedge_opened,
@@ -1675,7 +1680,7 @@ async def run_simulator_cycle():
         import traceback
         traceback.print_exc()
         try:
-            await redis.set("scanner_sim:status", json.dumps({
+            await redis.set(f"scanner_sim:status:{user_id}" if user_id else "scanner_sim:status", json.dumps({
                 "error": str(e)[:300],
                 "ts": datetime.now(timezone.utc).isoformat(),
             }), ex=300)

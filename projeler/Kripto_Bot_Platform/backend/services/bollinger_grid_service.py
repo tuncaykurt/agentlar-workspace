@@ -207,7 +207,7 @@ class BollingerGridService:
                     recalc_count += 1
 
                     # BB meta'yı state'e yaz (grid engine okuyacak)
-                    await redis.set(f"bb_grid:meta:{ccxt_symbol}", json.dumps({
+                    await redis.set(f"bb_grid:meta:{user_id}:{ccxt_symbol}", json.dumps({
                         "bb_upper": bb_data.get("bb_upper", 0),
                         "bb_lower": bb_data.get("bb_lower", 0),
                         "bb_mid": bb_data.get("bb_mid", 0),

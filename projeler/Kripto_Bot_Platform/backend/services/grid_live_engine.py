@@ -486,7 +486,7 @@ class GridLiveEngine:
 
         # BB modunda: meta'yı hemen Redis'e yaz (recalc loop 60s beklemeden önce)
         if grid_mode in ("bollinger", "hybrid", "bb_direction", "math_grid_gemini") and bb_data:
-            await redis.set(f"bb_grid:meta:{ccxt_symbol}", json.dumps({
+            await redis.set(f"bb_grid:meta:{user_id}:{ccxt_symbol}", json.dumps({
                 "bb_upper": bb_data.get("bb_upper", 0),
                 "bb_lower": bb_data.get("bb_lower", 0),
                 "bb_mid": bb_data.get("bb_mid", 0),
@@ -653,7 +653,7 @@ class GridLiveEngine:
         return result
 
     async def _close_all_positions(self, state: dict, user_id: str) -> list:
-        """Tüm açık pozisyonları market order ile kapat."""
+        """Tüm açık pozisyonları market order ile kapat. Önce TP/SL/Trailing emirleri iptal et."""
         ccxt_symbol = state.get("ccxt_symbol", "")
         if not ccxt_symbol:
             return []
@@ -663,6 +663,22 @@ class GridLiveEngine:
 
         try:
             ex = await self._get_exchange(user_id)
+
+            # Önce tüm koruma emirlerini iptal et (orphan emir bırakma)
+            try:
+                await ex.exchange.cancel_all_orders(ccxt_symbol)
+            except Exception:
+                pass
+            try:
+                await ex.cancel_trailing_order(ccxt_symbol)
+            except Exception:
+                pass
+            try:
+                await ex.exchange.contractPrivatePostStoporderCancelAll({"symbol": mexc_symbol})
+            except Exception:
+                pass
+
+            # Şimdi pozisyonları kapat
             positions = await ex.get_positions(ccxt_symbol)
 
             for pos in positions:
@@ -671,7 +687,6 @@ class GridLiveEngine:
                 if contracts <= 0:
                     continue
 
-                # CCXT reduceOnly ile pozisyon kapat (one-way + hedge mod uyumlu)
                 close_side_str = "sell" if side == "long" else "buy"
                 try:
                     resp = await ex.exchange.create_order(
@@ -785,7 +800,7 @@ class GridLiveEngine:
 
         if grid_mode in ("bollinger", "hybrid", "bb_direction", "math_grid_gemini"):
             ccxt_sym = state.get("ccxt_symbol", "")
-            bb_meta_raw = await redis.get(f"bb_grid:meta:{ccxt_sym}")
+            bb_meta_raw = await redis.get(f"bb_grid:meta:{user_id}:{ccxt_sym}")
             if bb_meta_raw:
                 try:
                     bb_meta = json.loads(bb_meta_raw)
@@ -1278,7 +1293,7 @@ class GridLiveEngine:
             if state.get("filled_levels"):
                 return False
             ccxt_symbol = state.get("ccxt_symbol", "")
-            bb_meta_raw = await redis.get(f"bb_grid:meta:{ccxt_symbol}")
+            bb_meta_raw = await redis.get(f"bb_grid:meta:{user_id}:{ccxt_symbol}")
             if not bb_meta_raw:
                 return False
 
@@ -1325,13 +1340,15 @@ class GridLiveEngine:
             print(f"[GridLive] BB recalc hatası: {e}")
             return False
 
-    async def _sync_hft_bounds(self, redis, state: dict):
-        """HFT settings'deki grid sınırlarını güncelle (frontend grafik için)."""
-        hft_raw = await redis.get("hft_sim:settings")
+    async def _sync_hft_bounds(self, redis, state: dict, user_id: str = None):
+        """HFT settings'deki grid sınırlarını güncelle (frontend grafik için). User-scoped."""
+        uid = user_id or state.get("user_id", "default")
+        # User-scoped key (çoklu kullanıcıda çakışma olmaz)
+        hft_raw = await redis.get(f"hft_sim:settings:{uid}")
         hft = json.loads(hft_raw) if hft_raw else {}
         hft["upper_price"] = state["upper"]
         hft["lower_price"] = state["lower"]
-        await redis.set("hft_sim:settings", json.dumps(hft))
+        await redis.set(f"hft_sim:settings:{uid}", json.dumps(hft))
 
     async def _execute_order(
         self, state: dict, side: str, price: float,
@@ -1410,8 +1427,8 @@ class GridLiveEngine:
                 resp_code = resp.get("code", 0) if isinstance(resp, dict) else 0
                 order_id = str(resp.get("data", resp.get("orderId", "")))
 
-                if resp_code != 0 and resp_code != 200:
-                    # MEXC hata döndü — emir başarısız
+                # MEXC başarı: code==0, başarısızlık: code!=0 (200 dahil hata olabilir)
+                if resp_code != 0:
                     err_msg = resp.get("msg", resp.get("message", str(resp)))
                     raise Exception(f"MEXC emir reddetti (code={resp_code}): {err_msg}")
 

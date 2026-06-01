@@ -1980,8 +1980,19 @@ class BotEngine:
                 print(f"[Bot {bot_name}] SignalLog güncelleme hatası: {e}")
 
     async def _close_position(self, symbol: str, position: dict):
-        """Mevcut pozisyonu kapat"""
+        """Mevcut pozisyonu kapat — önce TP/SL/Trailing emirlerini iptal et."""
         try:
+            # Önce koruma emirlerini iptal et (orphan emir bırakma)
+            pos_side = position.get("side", "long")
+            try:
+                await self._cancel_existing_stop_orders(symbol, pos_side=pos_side)
+            except Exception:
+                pass
+            try:
+                await self._cancel_existing_trailing_orders(symbol, pos_side=pos_side)
+            except Exception:
+                pass
+
             if hasattr(self.exchange, 'close_position'):
                 await self.exchange.close_position(symbol, position["side"], position["size"])
             else:

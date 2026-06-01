@@ -211,11 +211,10 @@ class MEXCClient:
                 print(f"[MEXCClient] Position ID bulunamadi (attempt {attempt}/5), tekrar deneniyor...")
 
             if not pos_id:
-                # KRİTİK: Pozisyon açık ama ID bulunamadı — acil kapatma yerine uyar ve devam et
+                # KRİTİK: Pozisyon açık ama ID bulunamadı — uyar ve order'u dön
                 print(f"[MEXCClient] ⚠️ KRİTİK: Position ID 10s bulunamadı ({mexc_symbol}, type={target_type})")
                 print(f"[MEXCClient] ⚠️ Pozisyon TP/SL OLMADAN açık kalacak — manuel kontrol gerekli!")
-                # RuntimeError fırlatma — pozisyon zaten açık, kapatmak daha tehlikeli
-                return order_resp
+                return order
 
             # Gerçek giriş fiyatından TP/SL yeniden hesapla
             if pos_id and actual_entry and actual_entry > 0 and tp_pct is not None and sl_pct is not None:
@@ -248,6 +247,11 @@ class MEXCClient:
                         stop_body["takeProfitPrice"] = round(float(tp_price), 6)
                     try:
                         result = await self.exchange.contractPrivatePostStoporderPlace(stop_body)
+                        # Yanıt doğrulama: MEXC code==0 başarı
+                        r_code = result.get("code", -1) if isinstance(result, dict) else -1
+                        r_success = result.get("success", False) if isinstance(result, dict) else False
+                        if r_code != 0 and not r_success:
+                            raise Exception(f"MEXC stop order reddetti (code={r_code}): {result}")
                         print(f"[MEXCClient] ✓ SL{'+ TP' if not use_trailing and tp_price else ''} başarıyla konuldu: result={result}")
                     except Exception as e:
                         print(f"[MEXCClient] ✗ KRITIK: stoporder/place HATASI: {e}")
@@ -271,18 +275,27 @@ class MEXCClient:
                     print(f"[MEXCClient] Trailing order: {trail_body}")
                     try:
                         trail_resp = await self.exchange.contractPrivatePostTrackorderPlace(trail_body)
+                        t_code = trail_resp.get("code", -1) if isinstance(trail_resp, dict) else -1
+                        t_success = trail_resp.get("success", False) if isinstance(trail_resp, dict) else False
+                        if t_code != 0 and not t_success:
+                            raise Exception(f"MEXC trailing reddetti (code={t_code}): {trail_resp}")
                         print(f"[MEXCClient] ✓ Trailing order konuldu: {trail_resp}")
                     except Exception as e:
                         print(f"[MEXCClient] ⚠ Trailing başarısız, fallback TP konuluyor: {e}")
                         if tp_price:
-                            fb = {
-                                "positionId": pos_id, "vol": int(amount),
-                                "profitTrend": 1, "lossTrend": 1,
-                                "stopLossType": 0, "takeProfitType": 0,
-                                "stopLossOrderPrice": 0, "takeProfitOrderPrice": 0,
-                                "takeProfitPrice": round(float(tp_price), 2),
-                            }
-                            await self.exchange.contractPrivatePostStoporderPlace(fb)
+                            try:
+                                fb = {
+                                    "positionId": pos_id, "vol": int(amount),
+                                    "profitTrend": 1, "lossTrend": 1,
+                                    "stopLossType": 0, "takeProfitType": 0,
+                                    "stopLossOrderPrice": 0, "takeProfitOrderPrice": 0,
+                                    "takeProfitPrice": round(float(tp_price), 2),
+                                }
+                                fb_resp = await self.exchange.contractPrivatePostStoporderPlace(fb)
+                                print(f"[MEXCClient] ✓ Fallback TP konuldu: {fb_resp}")
+                            except Exception as fb_err:
+                                print(f"[MEXCClient] ✗ KRITIK: Fallback TP de başarısız: {fb_err}")
+                                raise RuntimeError(f"Trailing ve fallback TP başarısız (pozisyon korumasız!): {fb_err}")
 
                 elif not sl_price and tp_price:
                     # Sadece TP (SL yoksa)

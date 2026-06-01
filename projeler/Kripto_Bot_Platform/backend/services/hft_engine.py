@@ -135,9 +135,9 @@ async def run_hft_engine():
                 if not current_price:
                     continue
 
-                # Redis'ten HFT özel ayarlarını çek (bot ID bazlı, fallback global)
+                # Redis'ten HFT özel ayarlarını çek (bot ID bazlı — global key yok, multi-tenant safe)
                 bot_id = bot.get("id", "")
-                hft_raw = await redis.get(f"hft_sim:settings:{bot_id}") or await redis.get("hft_sim:settings")
+                hft_raw = await redis.get(f"hft_sim:settings:{bot_id}")
                 hft_params = json.loads(hft_raw) if hft_raw else {}
 
                 target_sym = hft_params.get("symbol", "BTCUSDT")
@@ -159,7 +159,7 @@ async def run_hft_engine():
                     grid_lower = current_price * (1 - spread_pct)
                     hft_params["upper_price"] = grid_upper
                     hft_params["lower_price"] = grid_lower
-                    await redis.set("hft_sim:settings", json.dumps(hft_params))
+                    await redis.set(f"hft_sim:settings:{bot_id}", json.dumps(hft_params))
 
                 if current_price >= grid_upper:
                     diff = current_price - grid_upper
@@ -167,7 +167,7 @@ async def run_hft_engine():
                     grid_lower = grid_lower + diff
                     hft_params["upper_price"] = grid_upper
                     hft_params["lower_price"] = grid_lower
-                    await redis.set("hft_sim:settings", json.dumps(hft_params))
+                    await redis.set(f"hft_sim:settings:{bot_id}", json.dumps(hft_params))
 
                 elif current_price <= grid_lower:
                     diff = grid_lower - current_price
@@ -175,7 +175,7 @@ async def run_hft_engine():
                     grid_upper = grid_upper - diff
                     hft_params["upper_price"] = grid_upper
                     hft_params["lower_price"] = grid_lower
-                    await redis.set("hft_sim:settings", json.dumps(hft_params))
+                    await redis.set(f"hft_sim:settings:{bot_id}", json.dumps(hft_params))
 
             # HFT Döngü Beklemesi
             await asyncio.sleep(HFT_POLL_INTERVAL)
