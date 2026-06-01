@@ -265,33 +265,45 @@ class GridLiveEngine:
             # BB bantlarından dinamik grid sınırları
             from services.bollinger_grid_service import BollingerGridService
             self._bb_services[bk] = BollingerGridService()
-            bb_data = await self._bb_services[bk].compute_grid_bounds(
-                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
-                min_spread_pct, current_price, grid_count
-            )
+            # 2 deneme — OHLCV geçici hatası olabilir
+            for _attempt in range(2):
+                bb_data = await self._bb_services[bk].compute_grid_bounds(
+                    ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
+                    min_spread_pct, current_price, grid_count
+                )
+                if bb_data:
+                    break
+                await asyncio.sleep(2)
 
             if not bb_data:
-                return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamadı — lütfen internet bağlantısını ve sembol adını kontrol edin."}
+                # BB alınamadı — manuel spread'e düş
+                print(f"[GridLive] BB alınamadı, manuel spread'e geçiliyor: ±{spread_pct}%")
+                upper = current_price * (1 + spread_pct / 100)
+                lower = current_price * (1 - spread_pct / 100)
+            else:
+                upper = bb_data["bb_upper"]
+                lower = bb_data["bb_lower"]
+                # Spread'i BB'den hesapla
+                spread_pct = round((upper - lower) / current_price * 100, 4)
+                print(f"[GridLive] BB Modu: upper=${upper:.2f} lower=${lower:.2f} "
+                      f"mid=${bb_data.get('bb_mid', 0):.2f} width={bb_data.get('bb_width', 0):.4f} "
+                      f"rsi={bb_data.get('rsi', 0):.1f} adx={bb_data.get('adx', 0):.1f}")
 
-            upper = bb_data["bb_upper"]
-            lower = bb_data["bb_lower"]
-            # Spread'i BB'den hesapla
-            spread_pct = round((upper - lower) / current_price * 100, 4)
-            print(f"[GridLive] BB Modu: upper=${upper:.2f} lower=${lower:.2f} "
-                  f"mid=${bb_data.get('bb_mid', 0):.2f} width={bb_data.get('bb_width', 0):.4f} "
-                  f"rsi={bb_data.get('rsi', 0):.1f} adx={bb_data.get('adx', 0):.1f}")
-        
         elif grid_mode == "bb_direction":
             # BB Yön modu: Sinyal ve genişlik için BB kullanılır
             from services.bollinger_grid_service import BollingerGridService
             self._bb_services[bk] = BollingerGridService()
-            bb_data = await self._bb_services[bk].compute_grid_bounds(
-                ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
-                min_spread_pct, current_price, grid_count
-            )
+            for _attempt in range(2):
+                bb_data = await self._bb_services[bk].compute_grid_bounds(
+                    ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
+                    min_spread_pct, current_price, grid_count
+                )
+                if bb_data:
+                    break
+                await asyncio.sleep(2)
 
             if not bb_data:
-                return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamadı — lütfen internet bağlantısını ve sembol adını kontrol edin."}
+                return {"error": "BB bantları hesaplanamadı. Borsa bağlantısını kontrol edip tekrar deneyin."}
 
             # ── Akıllı Başlangıç: son mumları kontrol et ──
             # Eğer son 3 mum içinde orta çizgi kesimi olduysa hemen başla
@@ -515,7 +527,7 @@ class GridLiveEngine:
         if grid_mode in ("bollinger", "hybrid", "bb_direction", "math_grid_gemini") and bk in self._bb_services:
             self._bb_services[bk]._recalc_task = asyncio.create_task(
                 self._bb_services[bk].start_recalc_loop(
-                    ccxt_symbol, user_id, bb_timeframe, bb_period, bb_std_dev, min_spread_pct
+                    ccxt_symbol, user_id, bb_timeframe, bb_period, bb_std_dev, min_spread_pct, bot_id=bot_id
                 )
             )
 

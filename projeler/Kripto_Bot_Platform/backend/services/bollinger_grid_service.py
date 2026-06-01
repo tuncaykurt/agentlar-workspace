@@ -171,6 +171,7 @@ class BollingerGridService:
         bb_period: int = 20,
         bb_std: float = 2.0,
         min_spread_pct: float = 0.3,
+        bot_id: str = "default",
     ):
         """Arka plan loop: her 60s BB yeniden hesapla → grid engine'e bildir."""
         self._running = True
@@ -179,18 +180,18 @@ class BollingerGridService:
         recalc_count = 0
 
         print(f"[BB-Service] Recalc loop başlatıldı: {ccxt_symbol} / {timeframe} / "
-              f"period={bb_period} / std={bb_std}")
+              f"period={bb_period} / std={bb_std} / bot={bot_id}")
 
         while self._running:
             try:
-                # Grid hâlâ çalışıyor mu?
-                running = await redis.get(f"grid_live:running:{user_id}")
+                # Grid hâlâ çalışıyor mu? (multi-bot format)
+                running = await redis.get(f"grid_live:running:{user_id}:{bot_id}")
                 if not running:
-                    print("[BB-Service] Grid durmuş, recalc loop sonlandırılıyor")
+                    print(f"[BB-Service] Grid durmuş (bot={bot_id}), recalc loop sonlandırılıyor")
                     break
 
                 # Mevcut fiyatı al (min_spread_pct floor için)
-                state_raw = await redis.get(f"grid_live:state:{user_id}")
+                state_raw = await redis.get(f"grid_live:state:{user_id}:{bot_id}")
                 current_price = 0
                 if state_raw:
                     state = json.loads(state_raw)
@@ -207,7 +208,7 @@ class BollingerGridService:
                     recalc_count += 1
 
                     # BB meta'yı state'e yaz (grid engine okuyacak)
-                    await redis.set(f"bb_grid:meta:{user_id}:{ccxt_symbol}", json.dumps({
+                    await redis.set(f"bb_grid:meta:{user_id}:{bot_id}:{ccxt_symbol}", json.dumps({
                         "bb_upper": bb_data.get("bb_upper", 0),
                         "bb_lower": bb_data.get("bb_lower", 0),
                         "bb_mid": bb_data.get("bb_mid", 0),

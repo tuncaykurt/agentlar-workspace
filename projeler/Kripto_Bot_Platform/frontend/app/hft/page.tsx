@@ -927,20 +927,30 @@ export default function HftPage() {
     setTotalPnl(0)
     setTradeCount(0)
     try {
-      const res = await api.post("/simulations/hft-bb-data", {
-        symbol,
-        bb_timeframe: bbTimeframe,
-        bb_period: Number(bbPeriod) || 20,
-        bb_std_dev: Number(bbStdDev) || 2.0,
-        min_spread_pct: Number(minSpread) || 0.3,
-        current_price: livePrice,
-        grid_mode: gridMode,
-        smart_start_wait: smartStartWait,
-        grid_count: gridCount,
-      })
+      // BB verisini çek — OHLCV geçici olarak alınamayabilir, 2 kere dene
+      let res: any = null
+      for (let attempt = 0; attempt < 2; attempt++) {
+        res = await api.post("/simulations/hft-bb-data", {
+          symbol,
+          bb_timeframe: bbTimeframe,
+          bb_period: Number(bbPeriod) || 20,
+          bb_std_dev: Number(bbStdDev) || 2.0,
+          min_spread_pct: Number(minSpread) || 0.3,
+          current_price: livePrice,
+          grid_mode: gridMode,
+          smart_start_wait: smartStartWait,
+          grid_count: gridCount,
+        })
+        if (!res.error) break
+        if (attempt === 0) await new Promise(r => setTimeout(r, 2000)) // 2s bekle, tekrar dene
+      }
       if (res.error) {
-        alert(`BB Hatasi: ${res.error}`)
-        return false
+        console.warn(`[HFT] BB veri hatası: ${res.error}`)
+        // Manuel spread'e düş — OHLCV geçici hatası bot başlatmayı engellemesin
+        const fallbackUpper = livePrice * (1 + spreadPct / 100)
+        const fallbackLower = livePrice * (1 - spreadPct / 100)
+        setGridBounds({ upper: fallbackUpper, lower: fallbackLower })
+        return true
       }
       const meta = {
         bb_upper: res.bb_upper, bb_lower: res.bb_lower,
