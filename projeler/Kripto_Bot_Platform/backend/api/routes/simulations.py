@@ -352,6 +352,8 @@ async def hft_start(data: dict, user = Depends(get_current_user_obj)):
     config = {
         "symbol": data.get("symbol", hft_settings.get("symbol", "ETHUSDT")),
         "mode": data.get("mode", "paper"),
+        "coin_mode": data.get("coin_mode", "single"),  # "single" veya "scanner"
+        "max_scanner_coins": data.get("max_scanner_coins", 5),
         "leverage": data.get("leverage", hft_settings.get("leverage", 10)),
         "order_size": data.get("order_size", hft_settings.get("order_size", 100)),
         "spread_pct": data.get("spread_pct", hft_settings.get("spread_pct", 0.5)),

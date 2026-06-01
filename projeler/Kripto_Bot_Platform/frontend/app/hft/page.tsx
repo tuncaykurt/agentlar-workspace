@@ -82,6 +82,7 @@ interface BotInfo {
   total_pnl: number
   total_trades: number
   created_at?: number
+  coin_mode?: string
 }
 
 export default function HftPage() {
@@ -1068,6 +1069,8 @@ export default function HftPage() {
       const result = await api.post("/simulations/hft-start", {
         mode: tradingMode,
         symbol,
+        coin_mode: coinMode,
+        max_scanner_coins: maxScannerCoins,
         leverage,
         order_size: orderSize,
         spread_pct: spreadPct,
@@ -1246,7 +1249,7 @@ export default function HftPage() {
                 }`}
               >
                 <span className={`w-2 h-2 rounded-full ${bot.running ? "bg-green-400 animate-pulse" : "bg-slate-600"}`} />
-                <span>{bot.symbol?.replace("USDT", "") || "BOT"}</span>
+                <span>{bot.coin_mode === "scanner" ? "Tarayıcı" : (bot.symbol?.replace("USDT", "") || "BOT")}</span>
                 <span className={`text-[10px] px-1 rounded ${
                   bot.mode === "live" ? "bg-red-500/20 text-red-400" : "bg-amber-500/20 text-amber-400"
                 }`}>{bot.mode === "live" ? "L" : "P"}</span>

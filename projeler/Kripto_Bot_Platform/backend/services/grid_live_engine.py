@@ -211,6 +211,7 @@ class GridLiveEngine:
         ccxt_symbol = f"{base}/USDT:USDT"
 
         mode = config.get("mode", "paper")  # "paper" veya "live"
+        coin_mode = config.get("coin_mode", "single")  # "single" veya "scanner"
         leverage = int(config.get("leverage", 10))
         budget_mode = config.get("budget_mode", "fixed")
         
@@ -472,6 +473,8 @@ class GridLiveEngine:
             # EMA Trend modu ek alanları
             "ema_paused": False,
             "ema_wait_cross": grid_mode == "ema_trend" and upper == 0,
+            # Akıllı Tarayıcı modu
+            "coin_mode": coin_mode,
         }
 
         await redis.set(f"grid_live:state:{user_id}:{bot_id}", json.dumps(state))
@@ -479,7 +482,7 @@ class GridLiveEngine:
         await redis.delete(f"grid_live:trades:{user_id}:{bot_id}")
 
         # Bot registry'ye kaydet
-        await self._register_bot(user_id, bot_id, symbol_raw, config.get("mode", "paper"))
+        await self._register_bot(user_id, bot_id, symbol_raw, config.get("mode", "paper"), coin_mode=coin_mode)
 
         # HFT settings'i de güncelle (frontend grafik sınırları için)
         old_hft_raw = await redis.get(f"hft_sim:settings:{user_id}:{bot_id}")
@@ -538,13 +541,14 @@ class GridLiveEngine:
         emoji = "🔴 CANLI" if mode == "live" else "📝 PAPER"
         dir_label = grid_direction.upper() if grid_direction != "auto" else "OTOMATİK"
         live_paper = "Canlı" if mode == "live" else "Paper"
-        print(f"[GridLive] {emoji} [{mode_label}] Grid Bot Başlatıldı: {symbol_raw} | "
+        coin_label = "Akıllı Tarayıcı" if coin_mode == "scanner" else symbol_raw
+        print(f"[GridLive] {emoji} [{mode_label}] Grid Bot Başlatıldı: {coin_label} | "
               f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | "
               f"{leverage}x | toplam=${total_budget} margin/kademe=${margin_per_level:.4f} | "
               f"{contracts_per_level} kontrat/kademe")
 
         asyncio.create_task(push_grid_event("grid_start",
-            f"{symbol_raw} · {live_paper} {mode_label}\n"
+            f"{coin_label} · {live_paper} {mode_label}\n"
             f"Kaldıraç: {leverage}x | Bütçe: ${total_budget}\n"
             f"{grid_count} kademe | Kademe başı: ${margin_per_level:.2f}\n"
             f"Yön: {dir_label} | Aralık: ${lower:.2f}-${upper:.2f}",
@@ -825,6 +829,8 @@ class GridLiveEngine:
 
         # Giriş fiyatları takibi (level_index → entry_price)
         entry_prices = state.get("entry_prices", {})
+        # Alım zamanları takibi (level_index → epoch) — aynı tick'te al-sat engeli
+        entry_times = state.get("entry_times", {})
 
         # BB modu filtreleri — Redis'ten güncel BB meta oku
         skip_buy = False
@@ -900,6 +906,7 @@ class GridLiveEngine:
                                         state["levels"] = [round(new_lower + i * new_step, 8) for i in range(grid_count + 1)]
                                     state["filled_levels"] = []
                                     state["entry_prices"] = {}
+                                    state["entry_times"] = {}
                                     state["last_level"] = -1
                                     await self._sync_hft_bounds(redis, state, user_id, bot_id)
                                     print(f"[GridLive] BB Yön: Orta çizgi kesildi ({bb_dir_last_mid_side} -> {current_mid_side}), grid yeniden başlatıldı")
@@ -955,6 +962,7 @@ class GridLiveEngine:
                                         for lvl in close_levels:
                                             filled.discard(lvl)
                                             entry_prices.pop(str(lvl), None)
+                                            entry_times.pop(str(lvl), None)
                                 
                                 # Grid'i sıfırla ve yeniden fiyata merkezle
                                 bb_upper_new = bb_meta.get("bb_upper", state.get("upper", 0))
@@ -1072,11 +1080,13 @@ class GridLiveEngine:
                     print(f"[GridLive] ⏸ LONG BUY atlandı (filtre aktif)")
                 else:
                     buy_levels = []
+                    now_ts = time.time()
                     for lvl in range(last_level - 1, current_level - 1, -1):
                         if lvl not in filled and 0 <= lvl < grid_count:
                             buy_levels.append(lvl)
                             filled.add(lvl)
                             entry_prices[str(lvl)] = current_price
+                            entry_times[str(lvl)] = now_ts
 
                     if buy_levels:
                         trade = await self._execute_order(
@@ -1085,7 +1095,11 @@ class GridLiveEngine:
                         trades.append(trade)
 
             elif current_level > last_level:
-                sell_levels = [lvl for lvl in range(last_level, current_level) if lvl in filled]
+                # Minimum 5 saniye bekle — aynı tick'te veya hemen sonra satmayı engelle
+                now_ts = time.time()
+                min_hold_seconds = 5
+                sell_levels = [lvl for lvl in range(last_level, current_level)
+                               if lvl in filled and (now_ts - entry_times.get(str(lvl), 0)) >= min_hold_seconds]
 
                 if sell_levels:
                     contracts_per_lvl = state.get("contracts_per_level", 1)
@@ -1113,6 +1127,7 @@ class GridLiveEngine:
                             for lvl in sell_levels:
                                 filled.discard(lvl)
                                 entry_prices.pop(str(lvl), None)
+                                entry_times.pop(str(lvl), None)
 
         else:
             # ═══ SHORT GRID: yükselişte short aç, düşüşte kapat ═══
@@ -1121,11 +1136,13 @@ class GridLiveEngine:
                     print(f"[GridLive] ⏸ SHORT açma atlandı (filtre aktif)")
                 else:
                     short_levels = []
+                    now_ts = time.time()
                     for lvl in range(last_level + 1, current_level + 1):
                         if lvl not in filled and 0 <= lvl < grid_count:
                             short_levels.append(lvl)
                             filled.add(lvl)
                             entry_prices[str(lvl)] = current_price
+                            entry_times[str(lvl)] = now_ts
 
                     if short_levels:
                         trade = await self._execute_order(
@@ -1134,8 +1151,11 @@ class GridLiveEngine:
                         trades.append(trade)
 
             elif current_level < last_level:
-                # Düşüşte cover (short kapat)
-                cover_levels = [lvl for lvl in range(last_level, current_level, -1) if lvl in filled]
+                # Düşüşte cover (short kapat) — minimum 5s bekleme
+                now_ts = time.time()
+                min_hold_seconds = 5
+                cover_levels = [lvl for lvl in range(last_level, current_level, -1)
+                                if lvl in filled and (now_ts - entry_times.get(str(lvl), 0)) >= min_hold_seconds]
 
                 if cover_levels:
                     contracts_per_lvl = state.get("contracts_per_level", 1)
@@ -1163,6 +1183,7 @@ class GridLiveEngine:
                             for lvl in cover_levels:
                                 filled.discard(lvl)
                                 entry_prices.pop(str(lvl), None)
+                                entry_times.pop(str(lvl), None)
 
         # ═══ AĞ KAPATMA MANTIĞI (EXIT TRIGGERS) ═══
         should_close_grid = False
@@ -1224,7 +1245,12 @@ class GridLiveEngine:
                         exit_reason = f"Fiyattan {exit_mode.replace('touch_', '').upper()}'ye Temas"
 
             if should_close_grid:
-                    close_levels = list(filled)
+                    # Minimum 5s bekleme — yeni alınan seviyeleri hemen kapatma
+                    now_ts = time.time()
+                    close_levels = [lvl for lvl in filled
+                                    if (now_ts - entry_times.get(str(lvl), 0)) >= 5]
+                    if not close_levels:
+                        should_close_grid = False  # Henüz yaşlanmış seviye yok, çıkışı ertele
                     contracts_per_lvl = state.get("contracts_per_level", 1)
                     cs = state.get("contract_size", 0.01)
 
@@ -1250,6 +1276,7 @@ class GridLiveEngine:
                         for lvl in close_levels:
                             filled.discard(lvl)
                             entry_prices.pop(str(lvl), None)
+                            entry_times.pop(str(lvl), None)
 
                     state["band_exited"] = False
                     state["band_exit_side"] = None
@@ -1265,6 +1292,7 @@ class GridLiveEngine:
                         print(f"[GridLive] ⏸ EMA Trend: Çıkış sonrası durduruldu, yeni giriş kesişimi bekleniyor")
 
         state["entry_prices"] = entry_prices
+        state["entry_times"] = entry_times
 
         state["filled_levels"] = list(filled)
         
@@ -1545,9 +1573,10 @@ class GridLiveEngine:
                 b["total_trades"] = state.get("total_trades", 0)
                 b["grid_mode"] = state.get("grid_mode", "manual")
                 b["current_price"] = state.get("current_price", 0)
+                b["coin_mode"] = state.get("coin_mode", "single")
         return bots
 
-    async def _register_bot(self, user_id: str, bot_id: str, symbol: str, mode: str):
+    async def _register_bot(self, user_id: str, bot_id: str, symbol: str, mode: str, coin_mode: str = "single"):
         """Bot registry'ye yeni bot ekle."""
         redis = get_redis()
         raw = await redis.get(f"grid_live:bots:{user_id}")
@@ -1557,6 +1586,7 @@ class GridLiveEngine:
             if b["bot_id"] == bot_id:
                 b["symbol"] = symbol
                 b["mode"] = mode
+                b["coin_mode"] = coin_mode
                 await redis.set(f"grid_live:bots:{user_id}", json.dumps(bots))
                 return
         # Yeni ekle (max 5)
@@ -1566,6 +1596,7 @@ class GridLiveEngine:
             "bot_id": bot_id,
             "symbol": symbol,
             "mode": mode,
+            "coin_mode": coin_mode,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         await redis.set(f"grid_live:bots:{user_id}", json.dumps(bots))
