@@ -63,7 +63,7 @@ async def run_hft_engine():
 
             # Grid Live Engine çalışıyor mu kontrol et (Tüm kullanıcılar için)
             grid_keys = await redis.keys("grid_live:running:*")
-            active_users = [k.decode('utf-8').split(":")[-1] for k in grid_keys] if grid_keys else []
+            active_users = [(k.decode('utf-8') if isinstance(k, bytes) else k).split(":")[-1] for k in grid_keys] if grid_keys else []
 
             # Ne HFT bot ne de Grid Live varsa kısa bir uyku
             if not active_hft_bots and not active_users:

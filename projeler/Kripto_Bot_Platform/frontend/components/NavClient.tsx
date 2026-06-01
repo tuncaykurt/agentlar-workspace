@@ -12,12 +12,11 @@ const CORE_LINKS = [
 ]
 
 const TRADE_LINKS = [
-  { href: "/strategy-view", label: "Strateji" },
+  { href: "/strategy-view", label: "Strateji Backtest" },
   { href: "/analytics",     label: "Analiz" },
   { href: "/scanner",       label: "Tarayıcı" },
   { href: "/simulations",   label: "Simülasyon" },
   { href: "/hft",           label: "HFT Grid" },
-  { href: "/backtest",      label: "Backtest" },
 ]
 
 const TOOLS_LINKS = [

@@ -33,11 +33,22 @@ async def process_webhook_with_ai(payload: dict, token: str, profile: dict):
         ohlcv = await asyncio.wait_for(exchange.fetch_ohlcv(symbol_ccxt, "15m", limit=100), timeout=15)
         ind = calculate_all(ohlcv) if len(ohlcv) > 50 else {}
         
-        # Risk context
+        # Risk context — MEXC client ile topla
         full_ctx = {}
         try:
-            from exchange.bitget_client import bitget
-            full_ctx = await collect_full_context(bitget, symbol_ccxt)
+            from exchange.exchange_factory import get_public_client
+            class _Wrap:
+                def __init__(self, ex):
+                    self.exchange = ex
+                async def get_ohlcv(self, sym, tf, limit=200):
+                    return await self.exchange.fetch_ohlcv(sym, tf, limit=limit)
+                async def get_funding_rate(self, sym):
+                    try:
+                        t = await self.exchange.fetch_ticker(sym)
+                        return float(t.get("info", {}).get("fundingRate", 0))
+                    except Exception:
+                        return 0
+            full_ctx = await collect_full_context(_Wrap(get_public_client("mexc")), symbol_ccxt)
         except Exception:
             pass
         

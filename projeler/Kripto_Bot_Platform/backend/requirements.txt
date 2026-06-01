@@ -18,3 +18,4 @@ blankly
 pywebpush
 google-auth
 cryptography
+ta

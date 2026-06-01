@@ -79,6 +79,7 @@ const STRATEGIES = [
   { id: "grid_bb_direction",name: "BB Yön (Oto Long/Short)", params: { Kademe: 20, BB_Periyot: 20, BB_Sapma: 2.0, Min_Spread_Pct: 0.3 } },
   { id: "grid_ema_trend",   name: "EMA Trend (Oto)",  params: { min_ema_pct: 1.0, ema_exit_mode: "ema_cross", Kademe: 15, Spread_Pct: 1.5 } },
   { id: "grid_trend_score", name: "Trend Puanlama (Claude)", params: { Kademe: 15, Spread_Pct: 1.5, BB_Periyot: 20, BB_Sapma: 2.0, ts_entry_threshold: 4, ts_exit_threshold: 1, ts_adx_period: 14, ts_adx_min: 20, ts_supertrend_period: 10, ts_supertrend_mult: 3.0, ts_divergence_lookback: 14 } },
+  { id: "math_grid_gemini", name: "Math Genius Grid (Gemini)", params: { Kademe: 20, atr_period: 14, adx_period: 14, adx_threshold: 25, ema_period: 200, breakout_atr_mult: 1.5 } },
 ]
 
 const PARAM_OPTIONS: Record<string, Record<string, string[]>> = {
@@ -206,7 +207,7 @@ export default function StrategyViewPage() {
   const [symbol,     setSymbol]     = useState("BTC/USDT:USDT")
   const [timeframe,  setTimeframe]  = useState("1h")
   const [days,       setDays]       = useState(30)
-  const [strategy,   setStrategy]   = useState("ema_cross")
+  const [strategy,   setStrategy]   = useState("math_grid_gemini")
   const [params,     setParams]     = useState<Record<string, number | boolean | string>>({})
   const [loading,    setLoading]    = useState(false)
   const [result,     setResult]     = useState<BacktestResult | null>(null)
@@ -294,7 +295,7 @@ export default function StrategyViewPage() {
 
       // ── Normal strateji: backend ──
       const mergedParams = { ...selectedStrat.params, ...params }
-      if (strategy.startsWith("grid_")) {
+      if (strategy.startsWith("grid_") || strategy === "math_grid_gemini") {
         mergedParams.budget = Number(riskPct) || 1000
         if (mergedParams.Kademe) { mergedParams.grid_count = mergedParams.Kademe; delete mergedParams.Kademe }
         if (mergedParams.BB_Periyot) { mergedParams.bb_period = mergedParams.BB_Periyot; delete mergedParams.BB_Periyot }
@@ -305,7 +306,7 @@ export default function StrategyViewPage() {
       const res = await api.post("/backtest/run", {
         symbol, timeframe, strategy, days,
         initial_balance: Number(initialBalance) || 10000,
-        risk_per_trade: strategy.startsWith("grid_") ? (Number(riskPct) || 1000) : (Number(riskPct) || 2) / 100,
+        risk_per_trade: (strategy.startsWith("grid_") || strategy === "math_grid_gemini") ? (Number(riskPct) || 1000) : (Number(riskPct) || 2) / 100,
         leverage: Number(leverage) || 1,
         stop_loss_pct: Number(slPct) || 3,
         take_profit_pct: Number(tpPct) || 6,
@@ -327,7 +328,7 @@ export default function StrategyViewPage() {
       <div className="section-header">
         <div className="section-header-icon">📈</div>
         <div>
-          <h1 className="section-title">Strateji Görüntüleme</h1>
+          <h1 className="section-title">Strateji Backtest</h1>
           <p className="section-subtitle">Grafik üstünde giriş/çıkış noktaları · Trade simulations</p>
         </div>
       </div>
@@ -401,7 +402,7 @@ export default function StrategyViewPage() {
                 onChange={e => setLeverage(e.target.value)}
                 className="w-full mt-1 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
             </label>
-            {strategy.startsWith("grid_") ? (
+            {(strategy.startsWith("grid_") || strategy === "math_grid_gemini") ? (
               <>
                 <label className="block">
                   <span className="text-xs text-slate-400">Bütçe Tipi</span>

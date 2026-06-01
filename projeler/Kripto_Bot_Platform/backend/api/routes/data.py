@@ -5,16 +5,32 @@ Geçmiş Veri API Endpoint'leri
 - Senkronizasyon
 - DB istatistikleri
 - OHLCV sorgulama
+
+Veri kaynağı: Dinamik — kullanıcının seçtiği borsa
 """
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
-from exchange.bitget_client import bitget
+from exchange.exchange_factory import get_public_client, SUPPORTED_EXCHANGES
 from services.data_fetcher import DataFetcher
 from services.liquidation_collector import get_liquidation_heatmap, get_liquidation_stats
 
 router = APIRouter(prefix="/data", tags=["data"])
 
-fetcher = DataFetcher(bitget)
+# Borsa başına DataFetcher cache
+_fetchers: dict[str, DataFetcher] = {}
+
+
+def _get_fetcher(exchange: str = "mexc") -> DataFetcher:
+    if exchange not in SUPPORTED_EXCHANGES:
+        exchange = "mexc"
+    if exchange not in _fetchers:
+        client = get_public_client(exchange)
+        _fetchers[exchange] = DataFetcher(client, exchange_name=exchange)
+    return _fetchers[exchange]
+
+
+# Default fetcher — backward compat
+fetcher = _get_fetcher("mexc")
 
 
 class FetchHistoricalRequest(BaseModel):

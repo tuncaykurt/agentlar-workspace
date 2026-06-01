@@ -6,7 +6,7 @@ ATR bazlı volatilite ile dinamik aralık hesaplar.
 Mevcut fiyatın etrafında N adet grid seviyesi belirler.
 """
 import pandas as pd
-import pandas_ta as ta
+import ta
 
 class MathGridGeminiStrategy:
     needs_ohlcv = True
@@ -31,6 +31,7 @@ class MathGridGeminiStrategy:
         self.entry_price = 0.0
         self.realized_pnl = 0.0
         self.initialized = False
+        self.last_price = 0.0
         
         # Ek koruma ve takip degiskenleri
         self.mode = "neutral" # neutral, long, short
@@ -44,16 +45,20 @@ class MathGridGeminiStrategy:
             df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
             
             # Indicator hesaplama
-            df.ta.adx(length=self.adx_period, append=True)
-            df.ta.atr(length=self.atr_period, append=True)
-            df.ta.ema(length=self.ema_period, append=True)
+            adx_ind = ta.trend.ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=self.adx_period)
+            df['ADX'] = adx_ind.adx()
+            
+            atr_ind = ta.volatility.AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=self.atr_period)
+            df['ATR'] = atr_ind.average_true_range()
+            
+            ema_ind = ta.trend.EMAIndicator(close=df['close'], window=self.ema_period)
+            df['EMA'] = ema_ind.ema_indicator()
             
             latest = df.iloc[-1]
             
-            # pandas_ta bazen sutun isimlerini degisik atayabilir (ornegin ADX_14, ATR_14 vs)
-            adx_val = latest.get(f"ADX_{self.adx_period}")
-            atr_val = latest.get(f"ATRr_{self.atr_period}") 
-            ema_val = latest.get(f"EMA_{self.ema_period}")
+            adx_val = latest.get("ADX")
+            atr_val = latest.get("ATR") 
+            ema_val = latest.get("EMA")
             
             adx = float(adx_val) if adx_val is not None and not pd.isna(adx_val) else 0.0
             atr = float(atr_val) if atr_val is not None and not pd.isna(atr_val) else current_price * 0.01
@@ -97,6 +102,7 @@ class MathGridGeminiStrategy:
             self.levels.append(self.lower_bound + i * step)
             
         self.initialized = True
+        self.last_price = current_price
         print(f"[MathGridGemini] Baslatildi: {self.mode} mod, {self.grid_count} seviye, ATR={self.atr_value:.2f}, ${self.lower_bound:.2f} — ${self.upper_bound:.2f}")
 
     def generate_signal(self, current_price: float) -> str | None:
@@ -105,18 +111,30 @@ class MathGridGeminiStrategy:
             
         # Fail-Safe (Max Drawdown / Breakout Stop)
         breakout_dist = self.atr_value * self.breakout_atr_mult
-        if current_price < self.lower_bound - breakout_dist or current_price > self.upper_bound + breakout_dist:
-            print(f"[MathGridGemini] Breakout Stop (fiyat grid disina asiri cikti): ${current_price:.2f}")
+        is_breakout_stop = False
+        if self.mode in ("long", "neutral") and current_price < self.lower_bound - breakout_dist:
+            is_breakout_stop = True
+        elif self.mode == "short" and current_price > self.upper_bound + breakout_dist:
+            is_breakout_stop = True
+            
+        if is_breakout_stop:
+            print(f"[MathGridGemini] Breakout Stop (fiyat grid disina ters yonde asiri cikti): ${current_price:.2f}")
             self.bought.clear()
+            self.realized_pnl = 0
+            self.initialized = False
             return "stop_loss"
             
         total_inv = len(self.bought) * self.per_grid_usdt
         # Dinamik PnL hesabi
         unrealized_pnl = 0
         for i in self.bought:
-            if i < len(self.levels):
-                buy_price = self.levels[i]
-                unrealized_pnl += (current_price - buy_price) / buy_price * self.per_grid_usdt
+            if i < len(self.levels) - 1:
+                if self.mode == "short":
+                    entry_price = self.levels[i + 1]
+                    unrealized_pnl += (entry_price - current_price) / entry_price * self.per_grid_usdt
+                else:
+                    entry_price = self.levels[i]
+                    unrealized_pnl += (current_price - entry_price) / entry_price * self.per_grid_usdt
                 
         total_pnl = self.realized_pnl + unrealized_pnl
         
@@ -125,32 +143,53 @@ class MathGridGeminiStrategy:
             if pnl_pct >= self.target_pnl_pct:
                 print(f"[MathGridGemini] Take Profit (hedef PnL ulasildi): ${total_pnl:.2f}")
                 self.bought.clear()
+                self.realized_pnl = 0
                 self.initialized = False # Sonraki cycle'da yeniden hesaplamasi icin kapanir
                 return "take_profit"
             if pnl_pct <= -self.max_drawdown_pct:
                 print(f"[MathGridGemini] Stop Loss (Maks Drawdown): ${total_pnl:.2f}")
                 self.bought.clear()
+                self.realized_pnl = 0
+                self.initialized = False
                 return "stop_loss"
         
         # Grid Islem Mantigi
+        # Long/Neutral mode: Buy low, sell high
+        # Short mode: Sell high, buy low
+        signal = None
         for i in range(len(self.levels) - 1):
             buy_level  = self.levels[i]
             sell_level = self.levels[i + 1]
 
-            if current_price <= buy_level and i not in self.bought:
-                self.bought.add(i)
-                print(f"[MathGridGemini] AL — seviye {i}: ${buy_level:.2f} (fiyat: ${current_price:.2f})")
-                return "buy"
+            if self.mode in ("long", "neutral"):
+                if self.last_price > buy_level and current_price <= buy_level and i not in self.bought:
+                    self.bought.add(i)
+                    signal = "buy"
+                    break
+                elif self.last_price < sell_level and current_price >= sell_level and i in self.bought:
+                    self.bought.discard(i)
+                    gross = self.per_grid_usdt * (sell_level - buy_level) / buy_level
+                    fee   = self.per_grid_usdt * (self.maker_fee_pct + self.taker_fee_pct)
+                    self.realized_pnl += gross - fee
+                    signal = "sell"
+                    break
+            
+            elif self.mode == "short":
+                # In short mode, we OPEN short at sell_level and CLOSE short at buy_level
+                if self.last_price < sell_level and current_price >= sell_level and i not in self.bought:
+                    self.bought.add(i)
+                    signal = "sell" # Open short
+                    break
+                elif self.last_price > buy_level and current_price <= buy_level and i in self.bought:
+                    self.bought.discard(i)
+                    gross = self.per_grid_usdt * (sell_level - buy_level) / sell_level
+                    fee   = self.per_grid_usdt * (self.maker_fee_pct + self.taker_fee_pct)
+                    self.realized_pnl += gross - fee
+                    signal = "buy" # Close short
+                    break
 
-            elif current_price >= sell_level and i in self.bought:
-                self.bought.discard(i)
-                gross = self.per_grid_usdt * (sell_level - buy_level) / buy_level
-                fee   = self.per_grid_usdt * (self.maker_fee_pct + self.taker_fee_pct)
-                self.realized_pnl += gross - fee
-                print(f"[MathGridGemini] SAT — seviye {i}→{i+1}: ${sell_level:.2f}, net ≈ ${gross - fee:.3f}")
-                return "sell"
-
-        return None
+        self.last_price = current_price
+        return signal
         
     def status(self) -> dict:
         if not self.initialized:

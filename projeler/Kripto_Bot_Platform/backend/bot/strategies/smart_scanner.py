@@ -500,11 +500,14 @@ Mevcut Açık Pozisyonlar: {active_str}
 ═══════════════════════════════════════════════════════════════
 * NOT: Kullanıcının belirlediği izin verilen kaldıraç aralığı: {leverage_range[0]}x - {leverage_range[1]}x arasıdır. Kararlarını bu aralık içinde kalacak şekilde ver. Tablodaki 'MaxLev', borsanın izin verdiği teknik üst sınırdır, hedge yaparken bu üst sınır kullanılacaktır.
 
-1. ÇOKLU ZAMAN DİLİMİ (MTF) ANALİZİ:
+{'''1. ÇOKLU ZAMAN DİLİMİ (MTF) ANALİZİ:
    - 4h Trend ile 1h Trend aynı yönde mi? (Büyük resim konfirmasyonu)
    - 5m ve 15m RSI aşırı alım/satımda mı? (Kısa vadeli mükemmel giriş noktası)
    - 1h Trend yukarıyken 15m RSI diplerdeyse (pullback), harika bir LONG fırsatıdır.
    - Farklı zaman dilimlerinde zıtlıklar varsa (4h bullish, 15m bearish) temkinli ol.
+''' if (bot_config or {{}}).get("filter_mtf", 1) == 1 else '''1. TEKLİ ZAMAN DİLİMİ ANALİZİ:
+   - MTF (Çoklu Zaman Dilimi) Filtresi KAPALI. Sadece ana trende odaklan, kısa zaman zıtlıklarını görmezden gel.
+'''}
 
 1. MOMENTUM ANALİZİ:
    - RSI divergence: Fiyat düşerken RSI yükseliyor mu? (bullish divergence)

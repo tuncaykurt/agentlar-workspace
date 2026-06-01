@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 import pandas as pd
 from bot.backtester import BacktestEngine
 from bot.grid_backtester import GridBacktestEngine
-from exchange.bitget_client import bitget
+from bot.math_grid_backtester import MathGeminiBacktestEngine
+from exchange.exchange_factory import get_public_client
 from services.data_fetcher import DataFetcher
 
 
@@ -114,7 +115,7 @@ def _compute_indicators(ohlcv: list, strategy: str, params: dict, step: int, ext
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
-_fetcher = DataFetcher(bitget)
+_fetcher = DataFetcher(get_public_client("mexc"), exchange_name="mexc")
 
 
 class BacktestRequest(BaseModel):
@@ -149,7 +150,25 @@ async def run_backtest(req: BacktestRequest):
             "candle_count": len(ohlcv),
         }
 
-    if req.strategy.startswith("grid_"):
+    if req.strategy == "math_grid_gemini":
+        engine = MathGeminiBacktestEngine({
+            "symbol": req.symbol,
+            "grid_count": req.params.get("Kademe", 20),
+            "initial_balance": req.initial_balance,
+            "order_size": req.risk_per_trade,
+            "budget_mode": req.params.get("budget_mode", "fixed"),
+            "leverage": req.leverage,
+            "fee_pct": req.fee_pct,
+            "atr_period": req.params.get("atr_period", 14),
+            "atr_grid_mult": req.params.get("atr_grid_mult", 0.5),
+            "adx_period": req.params.get("adx_period", 14),
+            "adx_threshold": req.params.get("adx_threshold", 25),
+            "ema_period": req.params.get("ema_period", 200),
+            "breakout_atr_mult": req.params.get("breakout_atr_mult", 1.5),
+            "target_pnl_pct": req.params.get("target_pnl_pct", 5),
+            "max_drawdown_pct": req.params.get("max_drawdown_pct", 15),
+        })
+    elif req.strategy.startswith("grid_"):
         grid_mode = req.strategy.replace("grid_", "")
         engine = GridBacktestEngine({
             "symbol": req.symbol,

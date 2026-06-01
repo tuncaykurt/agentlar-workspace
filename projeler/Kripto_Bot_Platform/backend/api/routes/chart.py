@@ -3,16 +3,26 @@ Gelişmiş Grafik Veri Endpoint'i
 15+ teknik indikatör hesaplama:
   Overlay  : EMA, SMA, BB, VWAP, SAR (Parabolic), İchimoku
   Osilatör : RSI, MACD, Stochastic, Williams %R, ATR, CCI, MFI, OBV
+
+Veri kaynağı: Kullanıcının bağlı olduğu borsa (dinamik)
 """
 import math
-from fastapi import APIRouter
-from exchange.bitget_client import bitget
+from fastapi import APIRouter, Query
+from exchange.exchange_factory import get_public_client, SUPPORTED_EXCHANGES
 from services.data_fetcher import DataFetcher
 from services.liquidation_collector import get_liquidation_heatmap, get_liquidation_stats
 
 router = APIRouter(prefix="/chart", tags=["chart"])
 
-_fetcher = DataFetcher(bitget)
+# Borsa başına DataFetcher cache
+_fetchers: dict[str, DataFetcher] = {}
+
+
+def _get_fetcher(exchange: str = "mexc") -> DataFetcher:
+    if exchange not in _fetchers:
+        client = get_public_client(exchange)
+        _fetchers[exchange] = DataFetcher(client, exchange_name=exchange)
+    return _fetchers[exchange]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -514,14 +524,19 @@ async def get_chart_data(
     symbol:   str = "BTC/USDT:USDT",
     interval: str = "1h",
     limit:    int = 2000,
+    exchange: str = Query(default="mexc", description="Veri kaynağı borsa"),
 ):
     """Tüm teknik indikatörleri döner — Redis response cache ile hızlı."""
     import asyncio
     import json as _json
     from core.redis_client import get_redis as _get_redis
 
+    if exchange not in SUPPORTED_EXCHANGES:
+        exchange = "mexc"
+    fetcher = _get_fetcher(exchange)
+
     redis = _get_redis()
-    cache_key = f"chart_resp:{symbol}:{interval}:{limit}"
+    cache_key = f"chart_resp:{exchange}:{symbol}:{interval}:{limit}"
 
     # 1. Response cache — varsa anında döndür (en hızlı yol)
     try:
@@ -534,7 +549,7 @@ async def get_chart_data(
     # 2. OHLCV + likidasyon verilerini gerçek paralel çek
     async def _fetch_ohlcv():
         try:
-            data = await _fetcher.get_ohlcv(symbol, interval, limit)
+            data = await fetcher.get_ohlcv(symbol, interval, limit)
             if data:
                 return data
         except Exception as e:

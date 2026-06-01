@@ -258,22 +258,25 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"[Main] DB init hatası (devam ediliyor): {e}")
 
-        # 2. Bitget WebSocket akışları
+        # 2. Veri akışları (Bitget WS opsiyonel + MEXC data sync)
         try:
             if settings.BITGET_API_KEY:
                 for sym in symbols:
                     tasks.append(asyncio.create_task(bitget.subscribe_kline(sym, "1m")))
                     tasks.append(asyncio.create_task(bitget.subscribe_ticker(sym)))
-                print(f"[Main] {len(symbols)} sembol için veri akışı başlatıldı.")
-                try:
-                    fetcher = DataFetcher(bitget)
-                    tasks.append(asyncio.create_task(_start_data_sync(fetcher, symbols)))
-                except Exception as e:
-                    print(f"[Main] DataSync başlatılamadı: {e}")
+                print(f"[Main] {len(symbols)} sembol için Bitget WS akışı başlatıldı.")
             else:
-                print("[Main] BITGET_API_KEY tanımlı değil — WebSocket başlatılmadı.")
+                print("[Main] BITGET_API_KEY tanımlı değil — Bitget WebSocket başlatılmadı.")
         except Exception as e:
             print(f"[Main] Bitget WS hatası (devam ediliyor): {e}")
+
+        # Data sync — her zaman MEXC üzerinden (ana borsa)
+        try:
+            from exchange.exchange_factory import get_public_client as _get_pub
+            mexc_sync = DataFetcher(_get_pub("mexc"), exchange_name="mexc")
+            tasks.append(asyncio.create_task(_start_data_sync(mexc_sync, symbols)))
+        except Exception as e:
+            print(f"[Main] DataSync başlatılamadı: {e}")
 
         # 3. Likidasyon collector
         try:
@@ -352,7 +355,9 @@ async def _auto_fill_historical():
     days_map = {"5m": 30, "1h": 180, "4h": 365, "1d": 365}
 
     try:
-        fetcher = DataFetcher(bitget)
+        from exchange.exchange_factory import get_public_client
+        mexc_public = get_public_client("mexc")
+        fetcher = DataFetcher(mexc_public, exchange_name="mexc")
         stats = await fetcher.get_stats()
 
         # Mevcut veriyi kontrol et — eksik olanları doldur

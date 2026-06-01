@@ -52,13 +52,22 @@ CACHE_TTL = {
 
 class DataFetcher:
     def __init__(self, exchange_client, exchange_name: str = None):
-        self.exchange = exchange_client
-        # Exchange adını client'tan al — hardcoded "bitget" yerine gerçek borsa adı
+        # exchange_client: raw CCXT Exchange veya wrapper (MEXCClient/BitgetClient)
+        # Her iki durumda da self._ccxt → raw CCXT Exchange objesini tutar
+        if hasattr(exchange_client, 'exchange'):
+            # Wrapper (MEXCClient, BitgetClient) — inner CCXT objesi
+            self.exchange = exchange_client
+            self._ccxt = exchange_client.exchange
+        else:
+            # Raw CCXT Exchange (get_public_client'tan geliyor)
+            self.exchange = exchange_client
+            self._ccxt = exchange_client
+
         if exchange_name:
             self.exchange_name = exchange_name.lower()
         else:
             self.exchange_name = getattr(exchange_client, '_exchange_name', None) \
-                or getattr(getattr(exchange_client, 'exchange', None), 'id', 'bitget')
+                or getattr(self._ccxt, 'id', 'mexc')
             self.exchange_name = self.exchange_name.lower()
 
     # ─── Geçmiş Veri Doldurma ────────────────────────────────────────────────
@@ -86,7 +95,7 @@ class DataFetcher:
         while since < end_ts:
             try:
                 since_val = int(since)
-                candles = await self.exchange.exchange.fetch_ohlcv(
+                candles = await self._ccxt.fetch_ohlcv(
                     symbol, timeframe, since=since_val, limit=200
                 )
             except Exception as e:
@@ -155,7 +164,7 @@ class DataFetcher:
         try:
             # Bitget 40017: endTime gelecekte kalırsa hata verir → params ile sınırla
             fetch_params = {"endTime": str(int(time.time() * 1000))}
-            candles = await self.exchange.exchange.fetch_ohlcv(
+            candles = await self._ccxt.fetch_ohlcv(
                 symbol, timeframe, since=since, limit=200, params=fetch_params
             )
         except Exception as e:
@@ -301,7 +310,7 @@ class DataFetcher:
         if not all_candles:
             # CCXT fallback (200 mum)
             try:
-                all_candles = await self.exchange.exchange.fetch_ohlcv(
+                all_candles = await self._ccxt.fetch_ohlcv(
                     symbol, timeframe, limit=min(limit, 200),
                 )
                 if all_candles:

@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from core.redis_client import get_redis
-from exchange.bitget_client import bitget
+from exchange.exchange_factory import get_public_client, SUPPORTED_EXCHANGES
 import json
 from api.routes.auth import get_current_user_obj
 from models.user import User
-from exchange.exchange_factory import SUPPORTED_EXCHANGES
 
 router = APIRouter(prefix="/market", tags=["market"])
 
@@ -241,7 +240,7 @@ async def get_ticker(symbol: str = "BTC/USDT:USDT"):
 
     async def _try_bitget_ccxt():
         try:
-            ticker = await bitget.exchange.fetch_ticker(symbol)
+            ticker = await get_public_client("mexc").fetch_ticker(symbol)
             price = float(ticker.get("last") or ticker.get("close") or 0)
             if price > 0:
                 return {"symbol": symbol, "last": price, "bid": float(ticker.get("bid") or price), "ask": float(ticker.get("ask") or price)}
@@ -277,9 +276,9 @@ async def get_ticker(symbol: str = "BTC/USDT:USDT"):
 
 @router.get("/kline")
 async def get_kline(symbol: str = "BTC/USDT:USDT", interval: str = "1m", limit: int = 200):
-    # 1. Bitget
+    # 1. MEXC
     try:
-        ohlcv = await bitget.get_ohlcv(symbol, interval, limit)
+        ohlcv = await get_public_client("mexc").fetch_ohlcv(symbol, interval, limit=limit)
         if ohlcv:
             return [
                 {"time": c[0] // 1000, "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]}
@@ -297,7 +296,9 @@ async def get_kline(symbol: str = "BTC/USDT:USDT", interval: str = "1m", limit: 
 
 @router.get("/funding")
 async def get_funding_rate(symbol: str = "BTC/USDT:USDT"):
-    rate = await bitget.get_funding_rate(symbol)
+    client = get_public_client("mexc")
+    ticker = await client.fetch_ticker(symbol)
+    rate = float(ticker.get("info", {}).get("fundingRate", 0))
     return {"symbol": symbol, "funding_rate": rate, "funding_rate_pct": rate * 100}
 
 
@@ -352,7 +353,7 @@ async def get_positions(user: User = Depends(get_current_user_obj)):
 @router.get("/levels")
 async def get_levels(symbol: str = "BTC/USDT:USDT", interval: str = "1h"):
     """Order Block, FVG ve tahmini Liquidation seviyelerini döner."""
-    ohlcv = await bitget.get_ohlcv(symbol, interval, 150)
+    ohlcv = await get_public_client("mexc").fetch_ohlcv(symbol, interval, limit=150)
 
     candles = [
         {"time": c[0] // 1000, "open": c[1], "high": c[2], "low": c[3], "close": c[4]}

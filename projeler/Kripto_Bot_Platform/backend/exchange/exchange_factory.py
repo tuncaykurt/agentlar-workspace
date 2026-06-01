@@ -3,6 +3,12 @@
 CCXT kullanarak dinamik client oluşturur.
 """
 import ccxt.async_support as ccxt
+from core.redis_client import get_redis
+import json
+
+# Public (keyless) client cache — her borsa için tek instance
+_public_clients: dict[str, ccxt.Exchange] = {}
+
 
 SUPPORTED_EXCHANGES = {
     "bitget": {
@@ -48,6 +54,35 @@ def create_exchange_client(
         params["password"] = passphrase
 
     return config["class"](params)
+
+
+def get_public_client(exchange_name: str) -> ccxt.Exchange:
+    """Public (keyless) CCXT client — OHLCV, ticker gibi public endpoint'ler için.
+    Her borsa için tek instance cache'lenir."""
+    if exchange_name not in SUPPORTED_EXCHANGES:
+        exchange_name = "mexc"  # fallback
+
+    if exchange_name not in _public_clients:
+        config = SUPPORTED_EXCHANGES[exchange_name]
+        _public_clients[exchange_name] = config["class"]({
+            "options": config["options"],
+        })
+    return _public_clients[exchange_name]
+
+
+async def get_user_preferred_exchange(user_id: int | None = None) -> str:
+    """Kullanıcının bağlı olduğu ilk borsayı döndür.
+    Öncelik: mexc > binance > bitget (en çok kullanılandan başla)."""
+    try:
+        redis = get_redis()
+        user_key = "default" if user_id is None else str(user_id)
+        for ex_name in ["mexc", "binance", "bitget"]:
+            raw = await redis.get(f"exchange_keys:{user_key}:{ex_name}")
+            if raw:
+                return ex_name
+    except Exception:
+        pass
+    return "mexc"  # default
 
 
 async def fetch_balance_for(
