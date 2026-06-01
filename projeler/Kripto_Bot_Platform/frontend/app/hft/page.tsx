@@ -74,8 +74,29 @@ interface ExchangePosition {
   liquidation_price: number
 }
 
+interface BotInfo {
+  bot_id: string
+  symbol: string
+  mode: string
+  running: boolean
+  total_pnl: number
+  total_trades: number
+  created_at?: number
+}
+
 export default function HftPage() {
-  const { data: hftSettingsData, mutate: mutateHftSettings } = useSWR("/simulations/hft-settings", fetcher, {
+  // ─── Multi-Bot State ───────────────────────────────────────────────
+  const [selectedBotId, setSelectedBotId] = useState<string>("default")
+  const { data: botListData, mutate: mutateBotList } = useSWR("/simulations/hft-bots", fetcher, {
+    refreshInterval: 5000,
+    revalidateOnFocus: false,
+    dedupingInterval: 3000,
+  })
+  const botList: BotInfo[] = botListData?.bots || []
+  const maxBots = botListData?.max || 5
+
+  const { data: hftSettingsData, mutate: mutateHftSettings } = useSWR(
+    `/simulations/hft-settings?bot_id=${selectedBotId}`, fetcher, {
     refreshInterval: 5000,
     revalidateOnFocus: false,
     dedupingInterval: 3000,
@@ -343,12 +364,17 @@ export default function HftPage() {
     backendCheckDoneRef.current = true
     const checkBackend = async () => {
       try {
-        const status = await api.get("/simulations/hft-status")
-        if (status?.running && status.mode) {
-          const mode = status.mode === "live" ? "live" : "paper"
-          setTradingMode(mode)
-          setSimRunning(true)
-          console.log(`[HFT] Backend'de çalışan bot bulundu → ${mode} moduna geçildi`)
+        // Bot listesinden ilk çalışan botu bul
+        const bots = await api.get("/simulations/hft-bots")
+        if (bots?.bots?.length > 0) {
+          const runningBot = bots.bots.find((b: BotInfo) => b.running)
+          if (runningBot) {
+            setSelectedBotId(runningBot.bot_id)
+            const mode = runningBot.mode === "live" ? "live" : "paper"
+            setTradingMode(mode)
+            setSimRunning(true)
+            console.log(`[HFT] Backend'de çalışan bot bulundu (${runningBot.bot_id}) → ${mode} moduna geçildi`)
+          }
         }
       } catch {}
     }
@@ -364,7 +390,7 @@ export default function HftPage() {
     let cancelled = false
     const poll = async () => {
       try {
-        const status = await api.get("/simulations/hft-status")
+        const status = await api.get(`/simulations/hft-status?bot_id=${selectedBotId}`)
         if (!cancelled) {
           setBackendStatus(status)
           if (status.running) {
@@ -402,7 +428,7 @@ export default function HftPage() {
     poll()
     const id = setInterval(poll, 2000)  // 2s — hızlı güncelleme
     return () => { cancelled = true; clearInterval(id) }
-  }, [isBackendMode, tradingMode])
+  }, [isBackendMode, tradingMode, selectedBotId])
 
   // Grid sinirlarini SADECE ayar degistiginde veya kullanici "Baslat" dediginde guncelle
   const recalcGrid = async () => {
@@ -885,7 +911,7 @@ export default function HftPage() {
 
   const updateHftSetting = async (key: string, value: any) => {
     try {
-      await api.post("/simulations/hft-settings", { [key]: value })
+      await api.post("/simulations/hft-settings", { [key]: value, bot_id: selectedBotId })
       mutateHftSettings()
     } catch {}
   }
@@ -990,6 +1016,7 @@ export default function HftPage() {
       min_spread_pct: Number(minSpread) || 0.3,
       min_ema_pct: Number(minEmaPct) || 1.0,
       ema_exit_mode: emaExitMode,
+      bot_id: selectedBotId,
     })
     mutateHftSettings()
 
@@ -1047,11 +1074,16 @@ export default function HftPage() {
           ema_exit_mode: emaExitMode,
         },
         smart_start_wait: smartStartWait,
+        bot_id: selectedBotId,
       })
 
       if (result.error) {
         alert(`Hata: ${result.error}`)
       } else {
+        // Yeni bot oluşturulduysa ID'yi al ve seç
+        if (result.bot_id && result.bot_id !== selectedBotId) {
+          setSelectedBotId(result.bot_id)
+        }
         setSimRunning(true)
         setTrades([])
         setTotalPnl(0)
@@ -1063,6 +1095,7 @@ export default function HftPage() {
         } else {
           setGridBounds(null) // Grid henüz başlamadıysa temizle
         }
+        mutateBotList()
       }
     } catch (e: any) {
       alert(`Baslatma hatasi: ${e.message}`)
@@ -1078,8 +1111,9 @@ export default function HftPage() {
 
     setIsStopping(true)
     try {
-      await api.post("/simulations/hft-stop", { close_positions: false })
+      await api.post("/simulations/hft-stop", { close_positions: false, bot_id: selectedBotId })
       setSimRunning(false)
+      mutateBotList()
     } catch (e: any) {
       alert(`Durdurma hatasi: ${e.message}`)
     }
@@ -1096,8 +1130,9 @@ export default function HftPage() {
     setIsKilling(true)
     setKillConfirm(false)
     try {
-      const result = await api.post("/simulations/hft-kill", {})
+      const result = await api.post("/simulations/hft-kill", { bot_id: selectedBotId })
       setSimRunning(false)
+      mutateBotList()
       alert(
         `Kill Switch Aktif!\n` +
         `Emirler iptal: ${result.orders_cancelled ? 'Evet' : 'Hayir'}\n` +
@@ -1113,8 +1148,9 @@ export default function HftPage() {
   const handleStopAndClose = async () => {
     setIsStopping(true)
     try {
-      const result = await api.post("/simulations/hft-stop", { close_positions: true })
+      const result = await api.post("/simulations/hft-stop", { close_positions: true, bot_id: selectedBotId })
       setSimRunning(false)
+      mutateBotList()
       if (result.positions_closed?.length > 0) {
         alert(`Bot durduruldu ve ${result.positions_closed.length} pozisyon kapatildi.`)
       }
@@ -1177,6 +1213,62 @@ export default function HftPage() {
             </div>
           </div>
         </div>
+
+        {/* ─── Bot Tab Bar (Çoklu Bot) ─── */}
+        {(botList.length > 0 || tradingMode !== "sim") && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            {botList.map((bot) => (
+              <button
+                key={bot.bot_id}
+                onClick={() => {
+                  setSelectedBotId(bot.bot_id)
+                  setGridBounds(null)
+                  settingsLoadedRef.current = false
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all border ${
+                  selectedBotId === bot.bot_id
+                    ? "bg-indigo-600/20 border-indigo-500/50 text-indigo-300"
+                    : "bg-slate-800/50 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${bot.running ? "bg-green-400 animate-pulse" : "bg-slate-600"}`} />
+                <span>{bot.symbol?.replace("USDT", "") || "BOT"}</span>
+                <span className={`text-[10px] px-1 rounded ${
+                  bot.mode === "live" ? "bg-red-500/20 text-red-400" : "bg-amber-500/20 text-amber-400"
+                }`}>{bot.mode === "live" ? "L" : "P"}</span>
+                {bot.total_pnl !== 0 && (
+                  <span className={`text-[10px] font-mono ${bot.total_pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {bot.total_pnl >= 0 ? "+" : ""}{bot.total_pnl.toFixed(2)}
+                  </span>
+                )}
+              </button>
+            ))}
+            {/* Yeni Bot Butonu */}
+            {botList.length < maxBots && (
+              <button
+                onClick={() => {
+                  setSelectedBotId("new")
+                  setSimRunning(false)
+                  setGridBounds(null)
+                  setTrades([])
+                  setTotalPnl(0)
+                  setTradeCount(0)
+                  settingsLoadedRef.current = false
+                }}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all border ${
+                  selectedBotId === "new"
+                    ? "bg-emerald-600/20 border-emerald-500/50 text-emerald-300"
+                    : "bg-slate-800/50 border-dashed border-slate-600 text-slate-500 hover:text-emerald-400 hover:border-emerald-500/50"
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Yeni Bot
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Mod Secici + Baslat/Durdur — mobilde alt satir */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">

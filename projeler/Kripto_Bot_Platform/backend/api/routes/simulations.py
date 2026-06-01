@@ -251,11 +251,14 @@ async def update_sim_settings(data: dict, user_id: int = Depends(get_current_use
 
 
 @router.get("/hft-settings")
-async def get_hft_settings(user = Depends(get_current_user_obj)):
+async def get_hft_settings(user = Depends(get_current_user_obj), bot_id: str = "default"):
     """HFT Motoru (Trailing Grid) ayarlarını getir."""
     user_id = str(user.id)
     redis = get_redis()
-    raw = await redis.get(f"hft_sim:settings:{user_id}")
+    raw = await redis.get(f"hft_sim:settings:{user_id}:{bot_id}")
+    if not raw:
+        # Fallback: eski format (migration)
+        raw = await redis.get(f"hft_sim:settings:{user_id}")
     if raw:
         return json.loads(raw)
     return {
@@ -274,20 +277,48 @@ async def get_hft_settings(user = Depends(get_current_user_obj)):
 async def update_hft_settings(data: dict, user = Depends(get_current_user_obj)):
     """HFT Motoru ayarlarını (Coin, Spread, Grid) güncelle."""
     user_id = str(user.id)
+    bot_id = data.pop("bot_id", "default")
     redis = get_redis()
-    current = await get_hft_settings(user)
+    current = await get_hft_settings(user, bot_id=bot_id)
     current.update(data)
-    
+
     # Hedef coin değiştiyse ağ sınırlarını sıfırla ki yeni fiyattan kurulsun
     if "symbol" in data and data["symbol"] != current.get("symbol"):
         current["upper_price"] = 0
         current["lower_price"] = 0
-        
-    await redis.set(f"hft_sim:settings:{user_id}", json.dumps(current))
+
+    await redis.set(f"hft_sim:settings:{user_id}:{bot_id}", json.dumps(current))
     return current
 
 
 # ─── Grid Live Trading Endpoints ─────────────────────────────────────
+
+@router.get("/hft-bots")
+async def hft_list_bots(user = Depends(get_current_user_obj)):
+    """Kullanıcının tüm grid botlarını listele."""
+    from services.grid_live_engine import grid_engine
+    user_id = str(user.id)
+    bots = await grid_engine.list_bots(user_id)
+    return {"bots": bots, "max": 5}
+
+
+@router.delete("/hft-bots/{bot_id}")
+async def hft_delete_bot(bot_id: str, user = Depends(get_current_user_obj)):
+    """Bot'u durdur ve registry'den sil."""
+    from services.grid_live_engine import grid_engine
+    user_id = str(user.id)
+    redis = get_redis()
+    # Önce durdur
+    if await redis.get(f"grid_live:running:{user_id}:{bot_id}"):
+        await grid_engine.stop(close_positions=True, user_id=user_id, bot_id=bot_id)
+    # Redis key'leri temizle
+    await redis.delete(f"grid_live:state:{user_id}:{bot_id}")
+    await redis.delete(f"grid_live:trades:{user_id}:{bot_id}")
+    await redis.delete(f"hft_sim:settings:{user_id}:{bot_id}")
+    # Registry'den kaldır
+    await grid_engine._unregister_bot(user_id, bot_id)
+    return {"status": "ok", "message": f"Bot {bot_id} silindi"}
+
 
 @router.post("/hft-start")
 async def hft_start(data: dict, user = Depends(get_current_user_obj)):
@@ -295,15 +326,26 @@ async def hft_start(data: dict, user = Depends(get_current_user_obj)):
     Grid botunu başlat. Paper veya Live modda çalışır.
 
     Body:
+    - bot_id: Bot ID ("default", "bot2", "new" = yeni oluştur)
     - mode: "paper" (sanal) veya "live" (gerçek borsa)
     - symbol: "ETHUSDT" (opsiyonel, HFT settings'den alır)
     - leverage, order_size, spread_pct, grid_count (opsiyonel)
     """
     from services.grid_live_engine import grid_engine
+    import uuid
 
     user_id = str(user.id)
+    bot_id = data.get("bot_id", "default")
+
+    # Yeni bot oluştur
+    if bot_id == "new":
+        bots = await grid_engine.list_bots(user_id)
+        if len(bots) >= 5:
+            return {"error": "Maksimum 5 bot limiti aşıldı"}
+        bot_id = f"bot{len(bots) + 1}_{uuid.uuid4().hex[:4]}"
+
     redis = get_redis()
-    hft_settings = await get_hft_settings(user)
+    hft_settings = await get_hft_settings(user, bot_id=bot_id)
 
     config = {
         "symbol": data.get("symbol", hft_settings.get("symbol", "ETHUSDT")),
@@ -323,7 +365,8 @@ async def hft_start(data: dict, user = Depends(get_current_user_obj)):
     }
 
     try:
-        result = await grid_engine.start(config, user_id=user_id)
+        result = await grid_engine.start(config, user_id=user_id, bot_id=bot_id)
+        result["bot_id"] = bot_id
         return result
     except Exception as e:
         import traceback
@@ -337,18 +380,20 @@ async def hft_stop(data: dict = None, user = Depends(get_current_user_obj)):
     Grid botunu durdur.
 
     Body (opsiyonel):
+    - bot_id: Bot ID (default: "default")
     - close_positions: true ise açık pozisyonları kapat (sadece live modda)
     """
     from services.grid_live_engine import grid_engine
 
     user_id = str(user.id)
+    bot_id = (data or {}).get("bot_id", "default")
     close_positions = (data or {}).get("close_positions", False)
-    result = await grid_engine.stop(close_positions=close_positions, user_id=user_id)
+    result = await grid_engine.stop(close_positions=close_positions, user_id=user_id, bot_id=bot_id)
     return result
 
 
 @router.post("/hft-kill")
-async def hft_kill(user = Depends(get_current_user_obj)):
+async def hft_kill(data: dict = None, user = Depends(get_current_user_obj)):
     """
     ACİL DURDURMA (Kill Switch).
     Tüm emirleri iptal eder, tüm pozisyonları kapatır, motoru durdurur.
@@ -356,12 +401,13 @@ async def hft_kill(user = Depends(get_current_user_obj)):
     from services.grid_live_engine import grid_engine
 
     user_id = str(user.id)
-    result = await grid_engine.kill_switch(user_id=user_id)
+    bot_id = (data or {}).get("bot_id", "default")
+    result = await grid_engine.kill_switch(user_id=user_id, bot_id=bot_id)
     return result
 
 
 @router.get("/hft-status")
-async def hft_live_status(user = Depends(get_current_user_obj)):
+async def hft_live_status(user = Depends(get_current_user_obj), bot_id: str = "default"):
     """
     Grid botunun canlı durumu.
     Mod, grid bilgisi, PnL, işlem geçmişi, borsa pozisyonları.
@@ -369,7 +415,9 @@ async def hft_live_status(user = Depends(get_current_user_obj)):
     from services.grid_live_engine import grid_engine
 
     user_id = str(user.id)
-    return await grid_engine.get_status(user_id=user_id)
+    result = await grid_engine.get_status(user_id=user_id, bot_id=bot_id)
+    result["bot_id"] = bot_id
+    return result
 
 
 @router.post("/hft-bb-data")
@@ -454,17 +502,17 @@ async def hft_bb_data(data: dict, user_id: int = Depends(get_current_user)):
 
 
 @router.get("/hft-trades")
-async def hft_trades(limit: int = 50, user = Depends(get_current_user_obj)):
+async def hft_trades(limit: int = 50, bot_id: str = "default", user = Depends(get_current_user_obj)):
     """Grid bot işlem geçmişi."""
     user_id = str(user.id)
     redis = get_redis()
-    trades_raw = await redis.lrange(f"grid_live:trades:{user_id}", 0, limit - 1)
+    trades_raw = await redis.lrange(f"grid_live:trades:{user_id}:{bot_id}", 0, limit - 1)
     trades = [json.loads(t) for t in trades_raw] if trades_raw else []
     return {"trades": trades, "count": len(trades)}
 
 
 @router.post("/hft-tick")
-async def hft_manual_tick(user = Depends(get_current_user_obj)):
+async def hft_manual_tick(data: dict = None, user = Depends(get_current_user_obj)):
     """
     Manuel tek tick — HFT Engine çalışmıyorsa bu endpoint ile grid motoru tetiklenir.
     Redis'ten anlık fiyatı okur ve grid_engine.process_tick() çağırır.
@@ -472,10 +520,11 @@ async def hft_manual_tick(user = Depends(get_current_user_obj)):
     from services.grid_live_engine import grid_engine
 
     user_id = str(user.id)
+    bot_id = (data or {}).get("bot_id", "default")
     redis = get_redis()
 
     # Grid state'den sembolü al
-    state_raw = await redis.get(f"grid_live:state:{user_id}")
+    state_raw = await redis.get(f"grid_live:state:{user_id}:{bot_id}")
     if not state_raw:
         return {"error": "Grid state bulunamadı. Önce /hft-start ile başlatın."}
 
@@ -496,12 +545,12 @@ async def hft_manual_tick(user = Depends(get_current_user_obj)):
 
     # process_tick çağır
     try:
-        result = await grid_engine.process_tick(current_price, user_id=user_id)
+        result = await grid_engine.process_tick(current_price, user_id=user_id, bot_id=bot_id)
         return {
             "tick": True,
             "price": current_price,
             "result": result,
-            "last_level": (json.loads(await redis.get(f"grid_live:state:{user_id}") or "{}")).get("last_level", -1),
+            "last_level": (json.loads(await redis.get(f"grid_live:state:{user_id}:{bot_id}") or "{}")).get("last_level", -1),
         }
     except Exception as e:
         import traceback
@@ -509,7 +558,7 @@ async def hft_manual_tick(user = Depends(get_current_user_obj)):
 
 
 @router.get("/hft-debug")
-async def hft_debug(user = Depends(get_current_user_obj)):
+async def hft_debug(bot_id: str = "default", user = Depends(get_current_user_obj)):
     """HFT Engine ve Grid Live Engine debug bilgisi."""
     user_id = str(user.id)
     redis = get_redis()
@@ -518,8 +567,8 @@ async def hft_debug(user = Depends(get_current_user_obj)):
     hft_heartbeat = await redis.get("hft_engine:heartbeat")
 
     # Grid state
-    running = await redis.get(f"grid_live:running:{user_id}")
-    state_raw = await redis.get(f"grid_live:state:{user_id}")
+    running = await redis.get(f"grid_live:running:{user_id}:{bot_id}")
+    state_raw = await redis.get(f"grid_live:state:{user_id}:{bot_id}")
     state = json.loads(state_raw) if state_raw else {}
 
     # Fiyat kontrolü

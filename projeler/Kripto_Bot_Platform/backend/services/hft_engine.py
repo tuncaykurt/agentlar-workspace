@@ -61,27 +61,38 @@ async def run_hft_engine():
                 except Exception as db_err:
                     print(f"[HFT Engine] DB sorgu hatası (10s sonra tekrar): {db_err}")
 
-            # Grid Live Engine çalışıyor mu kontrol et (Tüm kullanıcılar için)
+            # Grid Live Engine çalışıyor mu kontrol et (Tüm kullanıcılar ve botlar için)
             grid_keys = await redis.keys("grid_live:running:*")
-            active_users = [(k.decode('utf-8') if isinstance(k, bytes) else k).split(":")[-1] for k in grid_keys] if grid_keys else []
+            # Parse both old 3-part (grid_live:running:user_id) and new 4-part (grid_live:running:user_id:bot_id) keys
+            active_bots = []  # list of (user_id, bot_id) tuples
+            if grid_keys:
+                for k in grid_keys:
+                    key_str = k.decode('utf-8') if isinstance(k, bytes) else k
+                    parts = key_str.split(":")
+                    if len(parts) == 4:
+                        # New format: grid_live:running:user_id:bot_id
+                        active_bots.append((parts[2], parts[3]))
+                    elif len(parts) == 3:
+                        # Old format: grid_live:running:user_id → treat as default bot
+                        active_bots.append((parts[2], "default"))
 
             # Ne HFT bot ne de Grid Live varsa kısa bir uyku
-            if not active_hft_bots and not active_users:
+            if not active_hft_bots and not active_bots:
                 await asyncio.sleep(1)
                 continue
 
             # 2. Grid Live Engine aktifse, onların sembolünü de takip et
             symbols_to_check = set()
-            user_symbols = {}
+            user_symbols = {}  # key: (user_id, bot_id), value: symbol
 
-            for user_id in active_users:
-                state_raw = await redis.get(f"grid_live:state:{user_id}")
+            for user_id, bot_id in active_bots:
+                state_raw = await redis.get(f"grid_live:state:{user_id}:{bot_id}")
                 if state_raw:
                     state = json.loads(state_raw)
                     grid_symbol = state.get("ccxt_symbol")
                     if grid_symbol:
                         symbols_to_check.add(grid_symbol)
-                        user_symbols[user_id] = grid_symbol
+                        user_symbols[(user_id, bot_id)] = grid_symbol
 
             # HFT botlarının sembollerini ekle
             for b in active_hft_bots:
@@ -118,15 +129,15 @@ async def run_hft_engine():
                     if price > 0:
                         prices[sym_list[i]] = price
 
-            # 4. Grid Live Engine'e fiyat tick'i gönder (Her kullanıcı için)
-            for user_id, grid_symbol in user_symbols.items():
+            # 4. Grid Live Engine'e fiyat tick'i gönder (Her kullanıcı ve bot için)
+            for (user_id, bot_id), grid_symbol in user_symbols.items():
                 if grid_symbol in prices:
                     current_price = prices[grid_symbol]
                     if current_price > 0:
                         try:
-                            await grid_engine.process_tick(current_price, user_id=user_id)
+                            await grid_engine.process_tick(current_price, user_id=user_id, bot_id=bot_id)
                         except Exception as e:
-                            print(f"[HFT Engine] Grid tick hatası (user={user_id}): {e}")
+                            print(f"[HFT Engine] Grid tick hatası (user={user_id}, bot={bot_id}): {e}")
 
             # 5. Eski HFT botları için de temel trailing mantığı (geriye uyumluluk)
             for bot in active_hft_bots:
@@ -145,7 +156,7 @@ async def run_hft_engine():
                     continue
 
                 # Grid Live Engine zaten aktifse bu botun trailing'ini atla
-                if active_users:
+                if active_bots:
                     continue
 
                 # Eski trailing mantığı (Grid Live yoksa)
