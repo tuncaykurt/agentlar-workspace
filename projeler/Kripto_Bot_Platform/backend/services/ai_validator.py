@@ -59,10 +59,19 @@ async def process_webhook_with_ai(payload: dict, token: str, profile: dict):
         except Exception:
             pass
 
+        # Likidasyon verisi — risk analizi için kritik
+        liq_data = {}
+        try:
+            from services.liquidation_collector import get_liquidation_stats
+            liq_data = await get_liquidation_stats(symbol_ccxt.replace("/USDT:USDT", "").replace("/", ""))
+        except Exception:
+            pass
+
         risk_context = {
             "price": price,
             "volatility": ind.get("atr", 0),
-            "order_book": full_ctx.get("order_book", {})
+            "order_book": full_ctx.get("order_book", {}),
+            "liquidations_24h": liq_data,
         }
 
         fg_index = full_ctx.get("fear_greed", {}).get("value", 50)

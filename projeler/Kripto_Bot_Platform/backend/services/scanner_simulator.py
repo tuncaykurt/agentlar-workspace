@@ -296,7 +296,8 @@ async def _get_past_results(limit: int = 50) -> list[dict]:
                    rsi_14, adx, funding_rate, fear_greed,
                    exit_reason, duration_minutes, first_move, first_move_pct,
                    leverage, max_favorable_pct, max_adverse_pct,
-                   volume_ratio, atr_pct, supertrend_dir, tp_pct, sl_pct
+                   volume_ratio, atr_pct, supertrend_dir, tp_pct, sl_pct,
+                   closed_at
             FROM scanner_simulations
             WHERE status IN ('win', 'loss')
             ORDER BY closed_at DESC
@@ -307,7 +308,8 @@ async def _get_past_results(limit: int = 50) -> list[dict]:
                 "rsi_14", "adx", "funding_rate", "fear_greed",
                 "exit_reason", "duration_minutes", "first_move", "first_move_pct",
                 "leverage", "max_favorable_pct", "max_adverse_pct",
-                "volume_ratio", "atr_pct", "supertrend_dir", "tp_pct", "sl_pct"]
+                "volume_ratio", "atr_pct", "supertrend_dir", "tp_pct", "sl_pct",
+                "closed_at"]
         rows = []
         for row in result.fetchall():
             try:
@@ -523,6 +525,120 @@ def _build_learning_context(past_results: list[dict], leverage_range: tuple = No
         cw = len([r for r in combo5 if r["status"] == "win"])
         pattern_lines.append(f"  Negatif funding + LONG (kontrarian): {len(combo5)} işlem → %{round(cw/len(combo5)*100)} kazanma")
 
+    # ── 14. SAAT/GÜN BAZLI SESSION ANALİZİ ──
+    session_lines = []
+    hour_buckets = {
+        "Asya (00-08 UTC)": (0, 8),
+        "Avrupa (08-14 UTC)": (8, 14),
+        "ABD (14-21 UTC)": (14, 21),
+        "Gece (21-00 UTC)": (21, 24),
+    }
+    for ses_name, (h_lo, h_hi) in hour_buckets.items():
+        bucket = []
+        for r in past_results:
+            ca = r.get("closed_at")
+            if ca is None:
+                continue
+            try:
+                if hasattr(ca, 'hour'):
+                    h = ca.hour
+                else:
+                    from datetime import datetime as _dt
+                    h = _dt.fromisoformat(str(ca).replace("Z", "+00:00")).hour
+                if h_lo <= h < h_hi:
+                    bucket.append(r)
+            except Exception:
+                continue
+        if len(bucket) >= 2:
+            bw = len([r for r in bucket if r["status"] == "win"])
+            bp = sum(r["pnl_pct"] or 0 for r in bucket)
+            session_lines.append(f"  {ses_name}: {len(bucket)} işlem → %{round(bw/len(bucket)*100)} kazanma, Net: %{bp:+.1f}")
+
+    # Hafta günü analizi
+    day_buckets = {}
+    for r in past_results:
+        ca = r.get("closed_at")
+        if ca is None:
+            continue
+        try:
+            if hasattr(ca, 'weekday'):
+                wd = ca.weekday()
+            else:
+                from datetime import datetime as _dt
+                wd = _dt.fromisoformat(str(ca).replace("Z", "+00:00")).weekday()
+            day_name = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"][wd]
+            day_buckets.setdefault(day_name, []).append(r)
+        except Exception:
+            continue
+    day_lines = []
+    for day_name, trades in sorted(day_buckets.items(), key=lambda x: len(x[1]), reverse=True):
+        if len(trades) >= 2:
+            dw = len([r for r in trades if r["status"] == "win"])
+            dp = sum(r["pnl_pct"] or 0 for r in trades)
+            day_lines.append(f"  {day_name}: {len(trades)} işlem → %{round(dw/len(trades)*100)} kazanma, Net: %{dp:+.1f}")
+
+    # ── 15. COİN KATEGORİ BAZLI ÖĞRENME ──
+    major_coins = {"BTC", "ETH"}
+    mid_coins = {"SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "DOT", "MATIC", "LINK", "UNI"}
+    cat_buckets = {"Major (BTC/ETH)": [], "Mid-Cap": [], "Altcoin": []}
+    for r in past_results:
+        coin = r.get("coin", "")
+        if coin in major_coins:
+            cat_buckets["Major (BTC/ETH)"].append(r)
+        elif coin in mid_coins:
+            cat_buckets["Mid-Cap"].append(r)
+        else:
+            cat_buckets["Altcoin"].append(r)
+    cat_lines = []
+    for cat_name, trades in cat_buckets.items():
+        if len(trades) >= 2:
+            cw = len([r for r in trades if r["status"] == "win"])
+            cp = sum(r["pnl_pct"] or 0 for r in trades)
+            avg_lev = sum(r.get("leverage") or 0 for r in trades) / max(1, len(trades))
+            cat_lines.append(f"  {cat_name}: {len(trades)} işlem → %{round(cw/len(trades)*100)} kazanma, Net: %{cp:+.1f}, Ort.Kaldıraç: {avg_lev:.0f}x")
+
+    # ── 16. DRAWDOWN KORUMA — Ardışık kayıp tespiti ──
+    consecutive_losses = 0
+    max_consecutive_losses = 0
+    recent_streak = 0  # son streak (negatif = kayıp, pozitif = kazanç)
+    for r in past_results:
+        if r["status"] == "loss":
+            consecutive_losses += 1
+            max_consecutive_losses = max(max_consecutive_losses, consecutive_losses)
+        else:
+            consecutive_losses = 0
+    # Son 5 trade'in streak'i
+    last_5 = past_results[:5]
+    last_5_losses = sum(1 for r in last_5 if r["status"] == "loss")
+    drawdown_mode = last_5_losses >= 4  # Son 5'te 4+ kayıp = savunmacı mod
+    drawdown_lines = []
+    drawdown_lines.append(f"  Max ardışık kayıp: {max_consecutive_losses}")
+    drawdown_lines.append(f"  Son 5 işlem: {5 - last_5_losses}W/{last_5_losses}L")
+    if drawdown_mode:
+        drawdown_lines.append(f"  🔴 SAVUNMACI MOD AKTİF — Son 5 işlemde {last_5_losses} kayıp! Düşük kaldıraç + yüksek güven eşiği kullan")
+
+    # ── 17. FUNDING RATE DERİN ANALİZ ──
+    funding_lines = []
+    # Agresif funding (>0.03% veya <-0.03%)
+    high_pos_funding = [r for r in past_results if r.get("funding_rate") is not None and r["funding_rate"] > 0.03]
+    high_neg_funding = [r for r in past_results if r.get("funding_rate") is not None and r["funding_rate"] < -0.03]
+    normal_funding = [r for r in past_results if r.get("funding_rate") is not None and abs(r["funding_rate"]) <= 0.03]
+    if len(high_pos_funding) >= 2:
+        fw = len([r for r in high_pos_funding if r["status"] == "win"])
+        long_in_high = [r for r in high_pos_funding if r["direction"] == "long"]
+        short_in_high = [r for r in high_pos_funding if r["direction"] == "short"]
+        funding_lines.append(f"  Yüksek pozitif funding (>0.03%): {len(high_pos_funding)} işlem → %{round(fw/len(high_pos_funding)*100)} kazanma")
+        if len(long_in_high) >= 1 and len(short_in_high) >= 1:
+            lw = sum(1 for r in long_in_high if r["status"] == "win")
+            sw = sum(1 for r in short_in_high if r["status"] == "win")
+            funding_lines.append(f"    → LONG: %{round(lw/max(1,len(long_in_high))*100)} | SHORT: %{round(sw/max(1,len(short_in_high))*100)}")
+    if len(high_neg_funding) >= 2:
+        fw = len([r for r in high_neg_funding if r["status"] == "win"])
+        funding_lines.append(f"  Yüksek negatif funding (<-0.03%): {len(high_neg_funding)} işlem → %{round(fw/len(high_neg_funding)*100)} kazanma")
+    if len(normal_funding) >= 2:
+        fw = len([r for r in normal_funding if r["status"] == "win"])
+        funding_lines.append(f"  Normal funding (±0.03%): {len(normal_funding)} işlem → %{round(fw/len(normal_funding)*100)} kazanma")
+
     # Son 8 işlem detayı (genişletilmiş)
     recent_lines = []
     for r in past_results[:8]:
@@ -621,6 +737,20 @@ Long: {long_wins}/{len(long_trades)} başarılı | Short: {short_wins}/{len(shor
 ───────── SÜRE ANALİZİ ─────────
   Ort: {avg_dur:.0f}dk | Kazançlar: {avg_win_dur:.0f}dk | Kayıplar: {avg_loss_dur:.0f}dk
 
+───────── SAAT/SESSION ANALİZİ ─────────
+{chr(10).join(session_lines) if session_lines else '  Yeterli veri yok'}
+  Gün bazlı:
+{chr(10).join(day_lines) if day_lines else '  Yeterli veri yok'}
+
+───────── COİN KATEGORİ PERFORMANSI ─────────
+{chr(10).join(cat_lines) if cat_lines else '  Yeterli veri yok'}
+
+───────── DRAWDOWN / KAYIP SERİSİ ─────────
+{chr(10).join(drawdown_lines)}
+
+───────── FUNDING RATE DERİN ANALİZ ─────────
+{chr(10).join(funding_lines) if funding_lines else '  Yeterli veri yok'}
+
 ───────── EN İYİ / EN KÖTÜ COİNLER ─────────
   En Kârlı: {', '.join(f"{c[0]}(%{c[1]['pnl']:+.1f})" for c in best_coins) if best_coins else '-'}
   En Zararlı: {', '.join(f"{c[0]}(%{c[1]['pnl']:+.1f})" for c in worst_coins) if worst_coins else '-'}
@@ -700,6 +830,66 @@ def _extract_rules_summary(past_results: list[dict], leverage_range: tuple = Non
             rules.append(f"⚠️ Yüksek kaldıraç (>{mid_lev}x) daha başarısız (%{round(upper_wr*100)} vs %{round(lower_wr*100)}) — kaldıracı {mid_lev}x altında tut")
         elif upper_wr > lower_wr + 0.15:
             rules.append(f"💪 Yüksek kaldıraç (>{mid_lev}x) daha başarılı (%{round(upper_wr*100)} vs %{round(lower_wr*100)}) — kaldıracı artırabilirsin")
+
+    # Drawdown koruması — son 5 trade ardışık kayıp kontrolü
+    last_5 = past_results[:5]
+    last_5_losses = sum(1 for r in last_5 if r["status"] == "loss")
+    if last_5_losses >= 4:
+        rules.append(f"🔴 SAVUNMACI MOD: Son 5 işlemde {last_5_losses} kayıp! Düşük kaldıraç ({min_lev}-{mid_lev}x) + sadece %75+ güvenli sinyaller seç")
+    elif last_5_losses >= 3:
+        rules.append(f"⚠️ DİKKAT: Son 5 işlemde {last_5_losses} kayıp — temkinli ol, kaldıracı düşük tut")
+
+    # Coin kategori kuralı
+    major_coins = {"BTC", "ETH"}
+    mid_coins = {"SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "DOT", "MATIC", "LINK", "UNI"}
+    cat_stats = {}
+    for cat_name, coin_set in [("major", major_coins), ("mid", mid_coins)]:
+        cat_trades = [r for r in past_results if r.get("coin", "") in coin_set]
+        if len(cat_trades) >= 3:
+            cwr = sum(1 for r in cat_trades if r["status"] == "win") / len(cat_trades)
+            cat_stats[cat_name] = cwr
+    alt_trades = [r for r in past_results if r.get("coin", "") not in major_coins and r.get("coin", "") not in mid_coins]
+    if len(alt_trades) >= 3:
+        cat_stats["alt"] = sum(1 for r in alt_trades if r["status"] == "win") / len(alt_trades)
+    # En başarılı kategori
+    if cat_stats:
+        best_cat = max(cat_stats, key=cat_stats.get)
+        worst_cat = min(cat_stats, key=cat_stats.get)
+        cat_label = {"major": "Major (BTC/ETH)", "mid": "Mid-Cap", "alt": "Altcoin"}
+        if cat_stats[best_cat] > cat_stats[worst_cat] + 0.15:
+            rules.append(f"🎯 {cat_label.get(best_cat, best_cat)} coinlerde başarı daha yüksek (%{round(cat_stats[best_cat]*100)}) — bu kategoriyi öncelikle seç")
+
+    # Session kuralı
+    session_stats = {}
+    for ses_name, (h_lo, h_hi) in [("Asya (00-08)", (0, 8)), ("Avrupa (08-14)", (8, 14)),
+                                     ("ABD (14-21)", (14, 21)), ("Gece (21-00)", (21, 24))]:
+        bucket = []
+        for r in past_results:
+            ca = r.get("closed_at")
+            if ca is None:
+                continue
+            try:
+                h = ca.hour if hasattr(ca, 'hour') else None
+                if h is not None and h_lo <= h < h_hi:
+                    bucket.append(r)
+            except Exception:
+                continue
+        if len(bucket) >= 3:
+            swr = sum(1 for r in bucket if r["status"] == "win") / len(bucket)
+            session_stats[ses_name] = (swr, len(bucket))
+    # En kötü session uyarısı
+    for ses, (swr, cnt) in session_stats.items():
+        if swr < 0.30:
+            rules.append(f"🚫 {ses} session'ında kazanma oranı çok düşük (%{round(swr*100)}, {cnt} işlem) — bu saatlerde DİKKATLİ OL")
+        elif swr > 0.70:
+            rules.append(f"✅ {ses} session'ında başarılısın (%{round(swr*100)}, {cnt} işlem)")
+
+    # Agresif funding kuralı
+    high_funding = [r for r in past_results if r.get("funding_rate") is not None and abs(r["funding_rate"]) > 0.03]
+    if len(high_funding) >= 3:
+        hfw = sum(1 for r in high_funding if r["status"] == "win") / len(high_funding)
+        if hfw < 0.35:
+            rules.append(f"⚠️ Agresif funding (>0.03%) dönemlerinde kayıp oranı yüksek (%{round((1-hfw)*100)}) — bu dönemlerde kaldıracı düşür")
 
     if not rules:
         return ""
@@ -782,13 +972,45 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                                   max_selections=remaining_slots, past_performance=_sim_perf,
                                   bot_config=cfg)
         learning = _build_learning_context(past_results, leverage_range=lev_range)
+
+        # Likidasyon verisi — top coinler için paralel çek
+        liq_section = ""
+        try:
+            from services.liquidation_collector import get_liquidation_stats
+            liq_tasks = [get_liquidation_stats(c["base"]) for c in top[:10]]
+            liq_results = await asyncio.gather(*liq_tasks, return_exceptions=True)
+            liq_lines = []
+            for i, lr in enumerate(liq_results):
+                if isinstance(lr, Exception) or not lr:
+                    continue
+                coin = top[i]["base"]
+                long_cnt = lr.get("long_liq_count", 0)
+                short_cnt = lr.get("short_liq_count", 0)
+                long_vol = lr.get("long_liq_volume", 0)
+                short_vol = lr.get("short_liq_volume", 0)
+                signal = lr.get("signal", "neutral")
+                if long_cnt + short_cnt > 0:
+                    liq_lines.append(
+                        f"  {coin}: Long tasfiye {long_cnt}(${long_vol:,.0f}) | Short tasfiye {short_cnt}(${short_vol:,.0f}) → {signal}"
+                    )
+            if liq_lines:
+                liq_section = (
+                    "\n───────── LİKİDASYON VERİSİ (Son 24s) ─────────\n"
+                    + chr(10).join(liq_lines)
+                    + "\n→ Çok tasfiye olan tarafın TERSİNE işlem aç (shorts_liquidated → LONG fırsatı)\n"
+                )
+        except Exception:
+            pass
+
         if learning:
             # Kuralları hem başa hem sona koy — AI attention başı ve sonu en iyi okur
             rules_section = _extract_rules_summary(past_results, leverage_range=lev_range)
             if rules_section:
-                prompt = rules_section + "\n\n" + prompt + "\n" + learning
+                prompt = rules_section + "\n\n" + prompt + "\n" + liq_section + "\n" + learning
             else:
-                prompt = prompt + "\n" + learning
+                prompt = prompt + "\n" + liq_section + "\n" + learning
+        elif liq_section:
+            prompt = prompt + "\n" + liq_section
 
         try:
             model = settings.AI_DEEP_MODEL
