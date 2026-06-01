@@ -1073,3 +1073,23 @@ async def get_push_public_key():
     """Frontend'in PWA aboneliği için VAPID Public Key'ini döner."""
     from services.push_notification import VAPID_PUBLIC_KEY
     return {"key": VAPID_PUBLIC_KEY}
+
+
+@router.post("/push/test")
+async def push_test(user=Depends(get_current_user_obj)):
+    """Bildirim test — subscription durumunu ve gönderim sonucunu döner."""
+    from services.push_notification import send_push
+    from core.redis_client import get_redis
+    redis = get_redis()
+    user_id = str(user.id)
+    subs_raw = await redis.lrange(f"push:subscriptions:{user_id}", 0, -1)
+    sub_count = len(subs_raw) if subs_raw else 0
+
+    if sub_count == 0:
+        return {"error": f"Subscription bulunamadı (user_id={user_id}). Bildirim butonuna tekrar basın.", "sub_count": 0, "user_id": user_id}
+
+    try:
+        await send_push("🔔 Test Bildirimi", f"Bildirimler çalışıyor! ({sub_count} cihaz)", tag="test", user_id=user_id)
+        return {"success": True, "sub_count": sub_count, "user_id": user_id}
+    except Exception as e:
+        return {"error": str(e), "sub_count": sub_count, "user_id": user_id}

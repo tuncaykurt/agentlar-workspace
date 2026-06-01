@@ -1788,6 +1788,17 @@ export default function HftPage() {
             Agi Yeniden Kur
           </button>
 
+          <button onClick={async () => {
+            try {
+              const res = await api.post("/simulations/push/test", {})
+              if (res.error) alert(`Bildirim hatası: ${res.error}`)
+              else alert(`Test bildirimi gönderildi! (${res.sub_count} cihaz, user=${res.user_id})`)
+            } catch (e: any) { alert(`Hata: ${e.message}`) }
+          }}
+            className="px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded-md transition-all">
+            Bildirim Test
+          </button>
+
           {/* Gereksiz Filtre Toggle'lari Kaldirildi */}
 
 
