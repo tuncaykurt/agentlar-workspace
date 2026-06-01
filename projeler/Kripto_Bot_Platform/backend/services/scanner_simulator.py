@@ -154,12 +154,15 @@ async def _release_margin(redis, margin: float, pnl: float):
 
 async def _get_sim_settings(redis, user_id: str = None) -> dict:
     """Redis'ten simülasyon ayarlarını oku (frontend'den değiştirilebilir). User-scoped."""
-    # Önce user-scoped key'e bak, yoksa global fallback
+    # Önce user-scoped key'e bak, yoksa global fallback (lazy migration)
     raw = None
     if user_id:
         raw = await redis.get(f"scanner_sim:settings:{user_id}")
     if not raw:
         raw = await redis.get("scanner_sim:settings")
+        if raw and user_id:
+            # Lazy migration: global key'i kullanıcıya özel key'e kopyala
+            await redis.set(f"scanner_sim:settings:{user_id}", raw)
     if raw:
         return json.loads(raw)
     return {

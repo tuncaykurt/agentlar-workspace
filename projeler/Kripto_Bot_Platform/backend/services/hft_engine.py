@@ -139,54 +139,52 @@ async def run_hft_engine():
                         except Exception as e:
                             print(f"[HFT Engine] Grid tick hatası (user={user_id}, bot={bot_id}): {e}")
 
-            # 5. Eski HFT botları için de temel trailing mantığı (geriye uyumluluk)
-            for bot in active_hft_bots:
-                sym = bot["symbol"]
-                current_price = prices.get(sym)
-                if not current_price:
-                    continue
+            # 5. Eski HFT botları için temel trailing mantığı (Grid Live yoksa)
+            # Grid Live aktifse bu blok tamamen atlanır (active_bots kontrolü)
+            if not active_bots:
+                for bot in active_hft_bots:
+                    sym = bot["symbol"]
+                    current_price = prices.get(sym)
+                    if not current_price:
+                        continue
 
-                # Redis'ten HFT özel ayarlarını çek (bot ID bazlı — global key yok, multi-tenant safe)
-                bot_id = bot.get("id", "")
-                hft_raw = await redis.get(f"hft_sim:settings:{bot_id}")
-                hft_params = json.loads(hft_raw) if hft_raw else {}
+                    # DB bot id — bots tablosundan, user_id yok çünkü eski sistem
+                    # Bu blok sadece Grid Live olmadığında çalışır (legacy uyumluluk)
+                    db_bot_id = str(bot.get("id", ""))
+                    hft_raw = await redis.get(f"hft_sim:settings:{db_bot_id}")
+                    hft_params = json.loads(hft_raw) if hft_raw else {}
 
-                target_sym = hft_params.get("symbol", "BTCUSDT")
-                if sym != target_sym:
-                    continue
+                    target_sym = hft_params.get("symbol", "BTCUSDT")
+                    if sym != target_sym:
+                        continue
 
-                # Grid Live Engine zaten aktifse bu botun trailing'ini atla
-                if active_bots:
-                    continue
+                    # Eski trailing mantığı
+                    grid_upper = float(hft_params.get("upper_price", 0))
+                    grid_lower = float(hft_params.get("lower_price", 0))
 
-                # Eski trailing mantığı (Grid Live yoksa)
-                grid_upper = float(hft_params.get("upper_price", 0))
-                grid_lower = float(hft_params.get("lower_price", 0))
-                grid_count = int(hft_params.get("grid_count", 20))
+                    if grid_upper == 0 or grid_lower == 0:
+                        sp = float(hft_params.get("spread_pct", 5)) / 100
+                        grid_upper = current_price * (1 + sp)
+                        grid_lower = current_price * (1 - sp)
+                        hft_params["upper_price"] = grid_upper
+                        hft_params["lower_price"] = grid_lower
+                        await redis.set(f"hft_sim:settings:{db_bot_id}", json.dumps(hft_params))
 
-                if grid_upper == 0 or grid_lower == 0:
-                    spread_pct = float(hft_params.get("spread_pct", 5)) / 100
-                    grid_upper = current_price * (1 + spread_pct)
-                    grid_lower = current_price * (1 - spread_pct)
-                    hft_params["upper_price"] = grid_upper
-                    hft_params["lower_price"] = grid_lower
-                    await redis.set(f"hft_sim:settings:{bot_id}", json.dumps(hft_params))
+                    if current_price >= grid_upper:
+                        diff = current_price - grid_upper
+                        grid_upper = current_price
+                        grid_lower = grid_lower + diff
+                        hft_params["upper_price"] = grid_upper
+                        hft_params["lower_price"] = grid_lower
+                        await redis.set(f"hft_sim:settings:{db_bot_id}", json.dumps(hft_params))
 
-                if current_price >= grid_upper:
-                    diff = current_price - grid_upper
-                    grid_upper = current_price
-                    grid_lower = grid_lower + diff
-                    hft_params["upper_price"] = grid_upper
-                    hft_params["lower_price"] = grid_lower
-                    await redis.set(f"hft_sim:settings:{bot_id}", json.dumps(hft_params))
-
-                elif current_price <= grid_lower:
-                    diff = grid_lower - current_price
-                    grid_lower = current_price
-                    grid_upper = grid_upper - diff
-                    hft_params["upper_price"] = grid_upper
-                    hft_params["lower_price"] = grid_lower
-                    await redis.set(f"hft_sim:settings:{bot_id}", json.dumps(hft_params))
+                    elif current_price <= grid_lower:
+                        diff = grid_lower - current_price
+                        grid_lower = current_price
+                        grid_upper = grid_upper - diff
+                        hft_params["upper_price"] = grid_upper
+                        hft_params["lower_price"] = grid_lower
+                        await redis.set(f"hft_sim:settings:{db_bot_id}", json.dumps(hft_params))
 
             # HFT Döngü Beklemesi
             await asyncio.sleep(HFT_POLL_INTERVAL)

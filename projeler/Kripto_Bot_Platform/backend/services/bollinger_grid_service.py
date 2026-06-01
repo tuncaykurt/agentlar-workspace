@@ -115,53 +115,62 @@ class BollingerGridService:
         current_price: float = 0,
         grid_count: int = 15,
     ) -> dict:
-        """BB bantlarından grid sınırlarını hesapla + Redis'e cache'le."""
-        redis = get_redis()
-        cache_key = f"bb_grid:{ccxt_symbol}:{timeframe}"
+        """BB bantlarından grid sınırlarını hesapla + Redis'e cache'le.
 
-        # Önce cache'e bak (30s TTL)
+        Cache: Raw BB data (borsa mumlarından hesaplanan) global cache'lenir (symbol:timeframe).
+        Min spread ayarı kullanıcıya özeldir — cache'den SONRA uygulanır.
+        Bu sayede farklı kullanıcılar aynı coin'de farklı spread ayarlarıyla doğru çalışır.
+        """
+        redis = get_redis()
+        cache_key = f"bb_grid_raw:{ccxt_symbol}:{timeframe}"
+
+        # Önce raw BB cache'e bak (30s TTL — tüm kullanıcılar ortak)
+        bb_data = None
         cached = await redis.get(cache_key)
         if cached:
             try:
                 data = json.loads(cached)
-                # Cache 30s'den yeni ise kullan
                 if time.time() - data.get("fetched_at", 0) < 30:
-                    return data
+                    bb_data = data
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        # Cache yok veya eski → yeniden hesapla
-        bb_data = await self.fetch_bb_data(ccxt_symbol, timeframe, bb_period, bb_std)
+        # Cache yok veya eski → borsadan yeniden hesapla
         if not bb_data:
-            return {}
+            bb_data = await self.fetch_bb_data(ccxt_symbol, timeframe, bb_period, bb_std)
+            if not bb_data:
+                return {}
+            # Raw data'yı cache'le (tüm kullanıcılar paylaşır — aynı mum verisi)
+            await redis.set(cache_key, json.dumps(bb_data), ex=30)
 
-        # Min spread floor kontrolü
-        bb_upper = bb_data["bb_upper"]
-        bb_lower = bb_data["bb_lower"]
-        bb_mid = bb_data["bb_mid"]
+        # --- Kullanıcıya özel spread ayarı (cache'den SONRA) ---
+        # Deep copy ile orijinal cache'i bozmadan kullanıcı özel değerlerini uygula
+        import copy
+        user_bb = copy.deepcopy(bb_data)
+
+        bb_upper = user_bb["bb_upper"]
+        bb_lower = user_bb["bb_lower"]
+        bb_mid = user_bb["bb_mid"]
 
         if bb_mid > 0:
             actual_spread_pct = (bb_upper - bb_lower) / bb_mid * 100
         else:
             actual_spread_pct = 0
 
-        # Kullanıcının "Min Spread %" ayarı, "Kademe Aralığı" (Grid Step) içindir.
+        # Kullanıcının "Min Spread %" ayarı — kademe aralığı floor'u
         required_spread_pct = min_spread_pct * grid_count
         if actual_spread_pct < required_spread_pct and current_price > 0:
-            half = required_spread_pct / 200  # /100 çünkü ±, /2 çünkü iki taraf
-            bb_data["bb_upper"] = round(current_price * (1 + half), 8)
-            bb_data["bb_lower"] = round(current_price * (1 - half), 8)
-            bb_data["min_spread_applied"] = True
+            half = required_spread_pct / 200
+            user_bb["bb_upper"] = round(current_price * (1 + half), 8)
+            user_bb["bb_lower"] = round(current_price * (1 - half), 8)
+            user_bb["min_spread_applied"] = True
             actual_spread_pct = required_spread_pct
         else:
-            bb_data["min_spread_applied"] = False
+            user_bb["min_spread_applied"] = False
 
-        bb_data["actual_spread_pct"] = round(actual_spread_pct, 4)
+        user_bb["actual_spread_pct"] = round(actual_spread_pct, 4)
 
-        # Redis'e cache'le
-        await redis.set(cache_key, json.dumps(bb_data), ex=30)
-
-        return bb_data
+        return user_bb
 
     async def start_recalc_loop(
         self,

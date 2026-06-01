@@ -487,8 +487,10 @@ async def _sync_bot_params_to_sim(bot_params: dict, user_id: int = None):
         "trade_size_value": "trade_size_value",
     }
 
-    # Kullanıcıya özel settings key kullan
-    settings_key = f"scanner_sim:settings:{user_id}" if user_id else "scanner_sim:settings"
+    # Kullanıcıya özel settings key kullan (user_id zorunlu — global key'e düşme)
+    if not user_id:
+        return
+    settings_key = f"scanner_sim:settings:{user_id}"
     raw = await redis.get(settings_key)
     sim_cfg = json.loads(raw) if raw else {}
     changed = False

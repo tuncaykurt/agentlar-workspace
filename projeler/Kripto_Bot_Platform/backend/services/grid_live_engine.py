@@ -40,10 +40,14 @@ class GridLiveEngine:
     # ─── Exchange ─────────────────────────────────────────────────────
 
     async def _get_exchange(self, user_id: str, margin_type: str = None):
-        # margin_type değiştiyse cached client'ı yenile
+        """Kullanıcıya özel exchange instance döndür. Her user_id kendi API key'leriyle çalışır."""
+        # Güvenlik: user_id boş veya "default" olmamalı (live trade'de)
+        if not user_id or user_id == "default":
+            print(f"[GridLive] UYARI: Exchange user_id={user_id} — admin key'leri kullanılacak")
         cache_key = f"{user_id}:{margin_type or 'cross'}"
         if cache_key not in self._exchanges:
             from api.routes.bots import _get_exchange_client
+            # user_id her zaman numeric string olmalı, "default" ise admin fallback
             parsed_user_id = None if user_id == "default" else int(user_id)
             mt = margin_type or "cross"
             self._exchanges[cache_key] = await _get_exchange_client("mexc", mt, user_id=parsed_user_id)

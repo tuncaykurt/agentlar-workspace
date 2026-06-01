@@ -233,9 +233,11 @@ async def get_sim_settings(user_id: int = Depends(get_current_user)):
     raw = await redis.get(f"scanner_sim:settings:{user_id}")
     if raw:
         return json.loads(raw)
-    # Fallback: eski global ayar (migration)
+    # Fallback: eski global ayar (lazy migration → kullanıcıya özel key'e taşı)
     raw = await redis.get("scanner_sim:settings")
     if raw:
+        # Global key'i kullanıcıya özel key'e kopyala (bir kerelik migration)
+        await redis.set(f"scanner_sim:settings:{user_id}", raw)
         return json.loads(raw)
     return {**_SIM_SETTINGS_DEFAULTS}
 
@@ -256,8 +258,8 @@ async def get_hft_settings(user = Depends(get_current_user_obj), bot_id: str = "
     user_id = str(user.id)
     redis = get_redis()
     raw = await redis.get(f"hft_sim:settings:{user_id}:{bot_id}")
-    if not raw:
-        # Fallback: eski format (migration)
+    if not raw and bot_id == "default":
+        # Fallback: sadece default bot için eski format (migration)
         raw = await redis.get(f"hft_sim:settings:{user_id}")
     if raw:
         return json.loads(raw)
@@ -831,7 +833,10 @@ async def copy_sim_to_bot(user_id: int = Depends(get_current_user)):
     redis = get_redis()
     raw_cfg = await redis.get(f"scanner_sim:settings:{user_id}")
     if not raw_cfg:
+        # Lazy migration: global key varsa kullanıcıya taşı
         raw_cfg = await redis.get("scanner_sim:settings")
+        if raw_cfg:
+            await redis.set(f"scanner_sim:settings:{user_id}", raw_cfg)
     sim_cfg = json.loads(raw_cfg) if raw_cfg else {}
 
     # Bot parametrelerini hazırla (create_smart_bot ile aynı yapı)
