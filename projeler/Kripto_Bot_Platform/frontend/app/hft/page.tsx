@@ -379,7 +379,8 @@ export default function HftPage() {
             const mode = runningBot.mode === "live" ? "live" : "paper"
             setTradingMode(mode)
             setSimRunning(true)
-            console.log(`[HFT] Backend'de çalışan bot bulundu (${runningBot.bot_id}) → ${mode} moduna geçildi`)
+            if (runningBot.coin_mode === "scanner") setCoinMode("scanner")
+            console.log(`[HFT] Backend'de çalışan bot bulundu (${runningBot.bot_id}) → ${mode} moduna geçildi, coin_mode=${runningBot.coin_mode || "single"}`)
           }
         }
       } catch {}
@@ -401,6 +402,7 @@ export default function HftPage() {
           setBackendStatus(status)
           if (status.running) {
             setSimRunning(true)
+            if (status.coin_mode) setCoinMode(status.coin_mode as "single" | "scanner")
             const unrealized = status.exchange_positions?.reduce((sum: number, p: any) => sum + (p.unrealized_pnl || 0), 0) || 0
             setTotalPnl((status.total_pnl || 0) + unrealized)
             setTradeCount(status.total_trades || 0)
@@ -1241,6 +1243,7 @@ export default function HftPage() {
                   setSelectedBotId(bot.bot_id)
                   setGridBounds(null)
                   settingsLoadedRef.current = false
+                  if (bot.coin_mode) setCoinMode(bot.coin_mode as "single" | "scanner")
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all border ${
                   selectedBotId === bot.bot_id
