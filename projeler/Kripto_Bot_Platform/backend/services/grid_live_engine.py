@@ -35,13 +35,15 @@ class GridLiveEngine:
 
     # ─── Exchange ─────────────────────────────────────────────────────
 
-    async def _get_exchange(self, user_id: str):
-        if user_id not in self._exchanges:
+    async def _get_exchange(self, user_id: str, margin_type: str = None):
+        # margin_type değiştiyse cached client'ı yenile
+        cache_key = f"{user_id}:{margin_type or 'cross'}"
+        if cache_key not in self._exchanges:
             from api.routes.bots import _get_exchange_client
-            # user_id 'default' ise admin key'i çeker
             parsed_user_id = None if user_id == "default" else int(user_id)
-            self._exchanges[user_id] = await _get_exchange_client("mexc", "cross", user_id=parsed_user_id)
-        return self._exchanges[user_id]
+            mt = margin_type or "cross"
+            self._exchanges[cache_key] = await _get_exchange_client("mexc", mt, user_id=parsed_user_id)
+        return self._exchanges[cache_key]
 
     async def _get_contract_size(self, ccxt_symbol: str, user_id: str) -> float:
         ex = await self._get_exchange(user_id)
@@ -745,7 +747,8 @@ class GridLiveEngine:
             elif current_price >= upper:
                 current_level = grid_count
             else:
-                current_level = int((current_price - lower) / step)
+                # round kullan — int truncation küçük step'lerde level geçişi kaçırır
+                current_level = round((current_price - lower) / step)
                 current_level = max(0, min(grid_count - 1, current_level))
 
         last_level = state.get("last_level", -1)
@@ -1039,7 +1042,8 @@ class GridLiveEngine:
                     for lvl in sell_levels:
                         ep = entry_prices.get(str(lvl), current_price - step)
                         lvl_gross = contracts_per_lvl * cs * (current_price - ep)
-                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0002) + (contracts_per_lvl * cs * current_price * 0.0002)
+                        # Fee: Maker giriş %0 + Taker çıkış %0.02 (sadece çıkış notional'ı üzerinden)
+                        lvl_fee = contracts_per_lvl * cs * current_price * 0.0002
                         total_net_pnl += (lvl_gross - lvl_fee)
                     net_pnl = round(total_net_pnl, 6)
 
@@ -1088,7 +1092,8 @@ class GridLiveEngine:
                     for lvl in cover_levels:
                         ep = entry_prices.get(str(lvl), current_price + step)
                         lvl_gross = contracts_per_lvl * cs * (ep - current_price)
-                        lvl_fee = (contracts_per_lvl * cs * ep * 0.0002) + (contracts_per_lvl * cs * current_price * 0.0002)
+                        # Fee: Maker giriş %0 + Taker çıkış %0.02 (sadece çıkış notional'ı üzerinden)
+                        lvl_fee = contracts_per_lvl * cs * current_price * 0.0002
                         total_net_pnl += (lvl_gross - lvl_fee)
                     net_pnl = round(total_net_pnl, 6)
 
@@ -1372,11 +1377,12 @@ class GridLiveEngine:
                 total_contracts = contracts_per_level * level_count
                 trade["contracts"] = total_contracts
 
-            ex = await self._get_exchange(user_id)
+            margin_type = state.get("margin_type", "cross")
+            ex = await self._get_exchange(user_id, margin_type=margin_type)
 
             try:
                 active_dir = state.get("active_direction", "long")
-                
+
                 # Determine MEXC API order side
                 if active_dir == "long":
                     # Long Grid: buy = Open Long (1), sell = Close Long (4)
@@ -1385,6 +1391,9 @@ class GridLiveEngine:
                     # Short Grid: sell = Open Short (3), buy = Close Short (2)
                     mexc_side = 3 if side == "sell" else 2
 
+                # openType: 1 = isolated, 2 = cross (bot config'den)
+                open_type = 1 if margin_type == "isolated" else 2
+
                 order_body = {
                     "symbol": mexc_symbol,
                     "price": 0,
@@ -1392,11 +1401,23 @@ class GridLiveEngine:
                     "leverage": int(state.get("leverage", 10)),
                     "side": mexc_side,
                     "type": 5,  # market order
-                    "openType": 2,  # cross margin
+                    "openType": open_type,
                 }
                 
                 resp = await ex.exchange.contractPrivatePostOrderSubmit(order_body)
+
+                # Emir yanıtını doğrula — başarısız emirleri "filled" olarak işaretleme
+                resp_code = resp.get("code", 0) if isinstance(resp, dict) else 0
                 order_id = str(resp.get("data", resp.get("orderId", "")))
+
+                if resp_code != 0 and resp_code != 200:
+                    # MEXC hata döndü — emir başarısız
+                    err_msg = resp.get("msg", resp.get("message", str(resp)))
+                    raise Exception(f"MEXC emir reddetti (code={resp_code}): {err_msg}")
+
+                if not order_id or order_id in ("", "0", "None"):
+                    raise Exception(f"MEXC geçerli order_id döndürmedi: {resp}")
+
                 trade["order_id"] = order_id
                 trade["exchange_status"] = "filled"
 

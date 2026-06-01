@@ -2016,12 +2016,22 @@ class BotEngine:
         side = ts["side"]
         trail_pct = ts["trail_pct"]
 
+        entry = ts["entry"]
+        # Minimum kâr eşiği: trailing_pct'nin yarısı kadar kârda olmalı
+        min_profit_pct = trail_pct * 0.5
+
         if side == "buy":  # Long pozisyon
             # Fiyat yeni zirve yaptı mı?
             if current_price > ts["peak"]:
                 ts["peak"] = current_price
                 ts["trail_price"] = current_price * (1 - trail_pct / 100)
-                ts["activated"] = True
+
+            # Aktivasyon: fiyat entry'den min_profit_pct kadar yukarı gitmiş olmalı
+            if not ts["activated"]:
+                profit_pct = (current_price - entry) / entry * 100
+                if profit_pct >= min_profit_pct:
+                    ts["activated"] = True
+                    print(f"[TrailingStop] {symbol} LONG aktif — profit %{profit_pct:.2f} >= eşik %{min_profit_pct:.1f}")
 
             # Trailing stop tetiklendi mi?
             if ts["activated"] and current_price <= ts["trail_price"]:
@@ -2034,7 +2044,13 @@ class BotEngine:
             if current_price < ts["peak"]:
                 ts["peak"] = current_price
                 ts["trail_price"] = current_price * (1 + trail_pct / 100)
-                ts["activated"] = True
+
+            # Aktivasyon: fiyat entry'den min_profit_pct kadar aşağı gitmiş olmalı
+            if not ts["activated"]:
+                profit_pct = (entry - current_price) / entry * 100
+                if profit_pct >= min_profit_pct:
+                    ts["activated"] = True
+                    print(f"[TrailingStop] {symbol} SHORT aktif — profit %{profit_pct:.2f} >= eşik %{min_profit_pct:.1f}")
 
             # Trailing stop tetiklendi mi?
             if ts["activated"] and current_price >= ts["trail_price"]:

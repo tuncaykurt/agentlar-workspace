@@ -93,17 +93,30 @@ async def run_hft_engine():
                 continue
 
             # 3. Redis'ten fiyatları toplu çek (Pipeline)
+            # Symbol normalization: "BTCUSDT" → "BTC/USDT:USDT" (CCXT format)
             sym_list = list(symbols_to_check)
             pipe = redis.pipeline()
             for sym in sym_list:
-                pipe.get(f"ticker:mexc:{sym}")
+                # Redis key her zaman CCXT format: ticker:mexc:BTC/USDT:USDT
+                redis_sym = sym
+                if "/" not in sym and sym.endswith("USDT"):
+                    # "BTCUSDT" → "BTC/USDT:USDT"
+                    base = sym.replace("USDT", "")
+                    redis_sym = f"{base}/USDT:USDT"
+                pipe.get(f"ticker:mexc:{redis_sym}")
             raw_prices = await pipe.execute()
 
             prices = {}
             for i, raw in enumerate(raw_prices):
                 if raw:
                     data = json.loads(raw)
-                    prices[sym_list[i]] = float(data.get("last", 0))
+                    price = float(data.get("last", 0))
+                    # Stale veri kontrolü: 120s'den eski fiyatları kullanma
+                    ts = data.get("ts", 0)
+                    if ts and (time.time() * 1000 - ts) > 120_000:
+                        continue
+                    if price > 0:
+                        prices[sym_list[i]] = price
 
             # 4. Grid Live Engine'e fiyat tick'i gönder (Her kullanıcı için)
             for user_id, grid_symbol in user_symbols.items():
@@ -122,8 +135,9 @@ async def run_hft_engine():
                 if not current_price:
                     continue
 
-                # Redis'ten HFT özel ayarlarını çek
-                hft_raw = await redis.get("hft_sim:settings")
+                # Redis'ten HFT özel ayarlarını çek (bot ID bazlı, fallback global)
+                bot_id = bot.get("id", "")
+                hft_raw = await redis.get(f"hft_sim:settings:{bot_id}") or await redis.get("hft_sim:settings")
                 hft_params = json.loads(hft_raw) if hft_raw else {}
 
                 target_sym = hft_params.get("symbol", "BTCUSDT")

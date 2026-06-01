@@ -15,6 +15,7 @@ from core.redis_client import get_redis
 
 class MEXCClient:
     def __init__(self, public_only: bool = False):
+        self._leverage_cache: dict[str, int] = {}  # symbol → son ayarlanan leverage
         params = {"options": {"defaultType": "swap"}}
         if not public_only:
             params["apiKey"] = settings.MEXC_API_KEY
@@ -186,9 +187,10 @@ class MEXCClient:
 
             pos_id = None
             actual_entry = None
-            actual_leverage = 20
+            # Leverage: cache > fallback 10 (20 yerine daha güvenli default)
+            actual_leverage = self._leverage_cache.get(symbol, 10)
             target_type = 1 if is_long else 2
-            _waits = [0.5, 1.0, 2.0, 3.0, 4.0]  # Arttırılmış bekleme süreleri (toplam 10.5 saniye)
+            _waits = [0.5, 1.0, 2.0, 3.0, 4.0]
             for attempt in range(1, 6):
                 await asyncio.sleep(_waits[attempt - 1])
                 try:
@@ -198,7 +200,7 @@ class MEXCClient:
                         if int(p.get("positionType", 0)) == target_type and float(p.get("holdVol", 0)) > 0:
                             pos_id = int(p.get("positionId", 0))
                             actual_entry = float(p.get("openAvg", 0) or p.get("openAvgPrice", 0) or 0)
-                            actual_leverage = int(p.get("leverage", 20))
+                            actual_leverage = int(p.get("leverage", actual_leverage))
                             break
                 except Exception as e:
                     print(f"[MEXCClient] position query error (attempt {attempt}/5): {e}")
@@ -209,7 +211,11 @@ class MEXCClient:
                 print(f"[MEXCClient] Position ID bulunamadi (attempt {attempt}/5), tekrar deneniyor...")
 
             if not pos_id:
-                raise RuntimeError(f"MEXC'de pozisyon açılamadı veya 10 saniye içinde Position ID bulunamadı (symbol={mexc_symbol}, type={target_type})")
+                # KRİTİK: Pozisyon açık ama ID bulunamadı — acil kapatma yerine uyar ve devam et
+                print(f"[MEXCClient] ⚠️ KRİTİK: Position ID 10s bulunamadı ({mexc_symbol}, type={target_type})")
+                print(f"[MEXCClient] ⚠️ Pozisyon TP/SL OLMADAN açık kalacak — manuel kontrol gerekli!")
+                # RuntimeError fırlatma — pozisyon zaten açık, kapatmak daha tehlikeli
+                return order_resp
 
             # Gerçek giriş fiyatından TP/SL yeniden hesapla
             if pos_id and actual_entry and actual_entry > 0 and tp_pct is not None and sl_pct is not None:
@@ -321,6 +327,7 @@ class MEXCClient:
 
     async def set_leverage(self, symbol: str, leverage: int, margin_type: str = "isolated"):
         """MEXC leverage + margin mode set (long & short)."""
+        self._leverage_cache[symbol] = int(leverage)
         open_type = 1 if margin_type == "isolated" else 2
         try:
             await asyncio.gather(

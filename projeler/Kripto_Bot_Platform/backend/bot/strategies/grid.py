@@ -9,16 +9,20 @@ Yatay piyasalarda etkilidir.
 
 class GridStrategy:
     def __init__(self, params: dict):
-        self.upper_pct       = float(params.get("upper_pct", 5)) / 100
-        self.lower_pct       = float(params.get("lower_pct", 5)) / 100
+        self.upper_pct       = max(0.1, float(params.get("upper_pct", 5))) / 100
+        self.lower_pct       = max(0.1, float(params.get("lower_pct", 5))) / 100
         self.upper_price     = float(params.get("upper_price", 0))   # 0 = yüzde modunu kullan
         self.lower_price     = float(params.get("lower_price", 0))
-        self.grid_count      = max(2, int(params.get("grid_count", 20)))
+        self.grid_count      = max(3, int(params.get("grid_count", 20)))
         self.grid_type       = params.get("grid_type", "arithmetic")
-        self.per_grid_usdt   = float(params.get("per_grid_usdt", 10))
+        self.per_grid_usdt   = max(1.0, float(params.get("per_grid_usdt", 10)))
         self.maker_fee_pct = 0.0  # MEXC Maker Limit Emir (0%)
-        self.taker_fee_pct = float(params.get("trading_fee_pct", 0.01)) / 100  # MEXC Taker Market Emir (0.01%)
+        self.taker_fee_pct = float(params.get("trading_fee_pct", 0.02)) / 100  # MEXC Taker (0.02%)
         self.price_range_mode = params.get("price_range_mode", "pct")
+
+        # Parametre doğrulama
+        if self.upper_price > 0 and self.lower_price > 0 and self.upper_price <= self.lower_price:
+            raise ValueError(f"upper_price ({self.upper_price}) must be > lower_price ({self.lower_price})")
 
         # Stop Loss — fiyat önceliği, yoksa yüzde
         self.stop_loss_price = float(params.get("stop_loss_price", 0))
@@ -74,8 +78,8 @@ class GridStrategy:
             print(f"[Grid] STOP LOSS (fiyat) tetiklendi @ ${current_price:.2f}")
             self.bought.clear()
             return "stop_loss"
-        if self.stop_loss_pct > 0 and len(self.levels) > 0:
-            hard_stop = self.levels[0] * (1 - self.stop_loss_pct)
+        if self.stop_loss_pct > 0 and self.entry_price > 0:
+            hard_stop = self.entry_price * (1 - self.stop_loss_pct)
             if current_price <= hard_stop:
                 print(f"[Grid] STOP LOSS (%) tetiklendi @ ${current_price:.2f}")
                 self.bought.clear()
