@@ -726,7 +726,7 @@ export default function ProChart({
       } catch { /* sessizce geç */ }
     }
     poll()
-    const id = setInterval(poll, 10000)  // 10s — CPU optimizasyonu
+    const id = setInterval(poll, 2000)  // 2s — hızlı güncelleme
     return () => clearInterval(id)
   }, [symbol, tf, data])
 

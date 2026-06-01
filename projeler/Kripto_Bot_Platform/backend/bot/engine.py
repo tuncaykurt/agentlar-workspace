@@ -166,7 +166,7 @@ class BotEngine:
                             await redis.set(f"bot:{self.config['id']}:last_error", f"{datetime.utcnow().isoformat()} | {str(cycle_err)[:500]}", ex=3600)
                         except Exception:
                             pass
-                    await asyncio.sleep(3)  # Redis sinyali 3sn'de bir kontrol (CPU optimizasyonu)
+                    await asyncio.sleep(0.5)  # Redis sinyali 0.5sn'de bir kontrol
                     continue
 
                 # ── Smart Scanner Bot ─────────────────────────────────

@@ -280,7 +280,7 @@ export default function HftPage() {
       } catch {}
     }
     poll()
-    const id = setInterval(poll, 10000)  // 10s — CPU optimizasyonu
+    const id = setInterval(poll, 2000)  // 2s — hızlı güncelleme
     return () => { cancelled = true; clearInterval(id) }
   }, [symbol])
 
@@ -329,7 +329,7 @@ export default function HftPage() {
       } catch {}
     }
     poll()
-    const id = setInterval(poll, 10000)  // 10s — CPU optimizasyonu
+    const id = setInterval(poll, 2000)  // 2s — hızlı güncelleme
     return () => { cancelled = true; clearInterval(id) }
   }, [isBackendMode, tradingMode])
 

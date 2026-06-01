@@ -228,7 +228,7 @@ export default function BotCard({
           .finally(() => { if (!cancelled) setLiveTradesLoading(false) })
       }
       fetchLive()
-      const iv = setInterval(fetchLive, 10000)  // 10s — CPU optimizasyonu
+      const iv = setInterval(fetchLive, 2000)  // 2s — hızlı güncelleme
       return () => { cancelled = true; clearInterval(iv) }
     }, [bot.id, showLiveTrades, running])
 
