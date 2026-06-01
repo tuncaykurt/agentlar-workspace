@@ -134,6 +134,8 @@ export default function HftPage() {
   
   // Strateji bilgi paneli (açılır/kapanır)
   const [strategyInfoOpen, setStrategyInfoOpen] = useState(false)
+  // BB/indikatör hata mesajı (alert yerine inline gösterim)
+  const [bbError, setBbError] = useState<string | null>(null)
 
   // Akıllı Tarayıcı Modu
   const [coinMode, setCoinMode] = useState<"single" | "scanner">("single")
@@ -927,7 +929,7 @@ export default function HftPage() {
     setTotalPnl(0)
     setTradeCount(0)
     try {
-      // BB verisini çek — OHLCV geçici olarak alınamayabilir, 2 kere dene
+      // BB verisini çek — geçici hata olursa 2 kere dene
       let res: any = null
       for (let attempt = 0; attempt < 2; attempt++) {
         res = await api.post("/simulations/hft-bb-data", {
@@ -942,16 +944,13 @@ export default function HftPage() {
           grid_count: gridCount,
         })
         if (!res.error) break
-        if (attempt === 0) await new Promise(r => setTimeout(r, 2000)) // 2s bekle, tekrar dene
+        if (attempt === 0) await new Promise(r => setTimeout(r, 2000))
       }
       if (res.error) {
-        console.warn(`[HFT] BB veri hatası: ${res.error}`)
-        // Manuel spread'e düş — OHLCV geçici hatası bot başlatmayı engellemesin
-        const fallbackUpper = livePrice * (1 + spreadPct / 100)
-        const fallbackLower = livePrice * (1 - spreadPct / 100)
-        setGridBounds({ upper: fallbackUpper, lower: fallbackLower })
-        return true
+        setBbError(res.error)
+        return false
       }
+      setBbError(null)
       const meta = {
         bb_upper: res.bb_upper, bb_lower: res.bb_lower,
         bb_mid: res.bb_mid, bb_width: res.bb_width,
@@ -1058,6 +1057,7 @@ export default function HftPage() {
         recalcGrid()
       }
 
+      setBbError(null)
       setSimRunning(true)
       return
     }
@@ -1091,8 +1091,9 @@ export default function HftPage() {
       })
 
       if (result.error) {
-        alert(`Hata: ${result.error}`)
+        setBbError(result.error)
       } else {
+        setBbError(null)
         // Yeni bot oluşturulduysa ID'yi al ve seç
         if (result.bot_id && result.bot_id !== selectedBotId) {
           setSelectedBotId(result.bot_id)
@@ -1111,7 +1112,7 @@ export default function HftPage() {
         mutateBotList()
       }
     } catch (e: any) {
-      alert(`Baslatma hatasi: ${e.message}`)
+      setBbError(`Başlatma hatası: ${e.message}`)
     }
     setIsStarting(false)
   }
@@ -1406,6 +1407,17 @@ export default function HftPage() {
             )}
             {killConfirm ? "ONAYLA — IPTAL ET" : "KILL SWITCH"}
           </button>
+        </div>
+      )}
+
+      {/* İndikatör / BB Hata Mesajı */}
+      {bbError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-red-400 text-sm shrink-0">⚠️</span>
+            <p className="text-red-300 text-xs sm:text-sm truncate">{bbError}</p>
+          </div>
+          <button onClick={() => setBbError(null)} className="text-red-400/60 hover:text-red-300 text-xs shrink-0">Kapat</button>
         </div>
       )}
 

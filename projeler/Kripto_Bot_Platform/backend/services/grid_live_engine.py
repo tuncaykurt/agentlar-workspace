@@ -265,45 +265,44 @@ class GridLiveEngine:
             # BB bantlarından dinamik grid sınırları
             from services.bollinger_grid_service import BollingerGridService
             self._bb_services[bk] = BollingerGridService()
-            # 2 deneme — OHLCV geçici hatası olabilir
-            for _attempt in range(2):
+            # 3 deneme — OHLCV geçici hatası olabilir
+            for _attempt in range(3):
                 bb_data = await self._bb_services[bk].compute_grid_bounds(
                     ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
                     min_spread_pct, current_price, grid_count
                 )
                 if bb_data:
                     break
-                await asyncio.sleep(2)
+                print(f"[GridLive] BB hesaplama denemesi {_attempt+1}/3 başarısız, tekrar deneniyor...")
+                await asyncio.sleep(3)
 
             if not bb_data:
-                # BB alınamadı — manuel spread'e düş
-                print(f"[GridLive] BB alınamadı, manuel spread'e geçiliyor: ±{spread_pct}%")
-                upper = current_price * (1 + spread_pct / 100)
-                lower = current_price * (1 - spread_pct / 100)
-            else:
-                upper = bb_data["bb_upper"]
-                lower = bb_data["bb_lower"]
-                # Spread'i BB'den hesapla
-                spread_pct = round((upper - lower) / current_price * 100, 4)
-                print(f"[GridLive] BB Modu: upper=${upper:.2f} lower=${lower:.2f} "
-                      f"mid=${bb_data.get('bb_mid', 0):.2f} width={bb_data.get('bb_width', 0):.4f} "
-                      f"rsi={bb_data.get('rsi', 0):.1f} adx={bb_data.get('adx', 0):.1f}")
+                return {"error": f"İndikatör verisi alınamadı ({ccxt_symbol} / {bb_timeframe}). Borsa bağlantısını kontrol edin ve tekrar deneyin."}
+
+            upper = bb_data["bb_upper"]
+            lower = bb_data["bb_lower"]
+            # Spread'i BB'den hesapla
+            spread_pct = round((upper - lower) / current_price * 100, 4)
+            print(f"[GridLive] BB Modu: upper=${upper:.2f} lower=${lower:.2f} "
+                  f"mid=${bb_data.get('bb_mid', 0):.2f} width={bb_data.get('bb_width', 0):.4f} "
+                  f"rsi={bb_data.get('rsi', 0):.1f} adx={bb_data.get('adx', 0):.1f}")
 
         elif grid_mode == "bb_direction":
             # BB Yön modu: Sinyal ve genişlik için BB kullanılır
             from services.bollinger_grid_service import BollingerGridService
             self._bb_services[bk] = BollingerGridService()
-            for _attempt in range(2):
+            for _attempt in range(3):
                 bb_data = await self._bb_services[bk].compute_grid_bounds(
                     ccxt_symbol, bb_timeframe, bb_period, bb_std_dev,
                     min_spread_pct, current_price, grid_count
                 )
                 if bb_data:
                     break
-                await asyncio.sleep(2)
+                print(f"[GridLive] BB hesaplama denemesi {_attempt+1}/3 başarısız, tekrar deneniyor...")
+                await asyncio.sleep(3)
 
             if not bb_data:
-                return {"error": "BB bantları hesaplanamadı. Borsa bağlantısını kontrol edip tekrar deneyin."}
+                return {"error": f"İndikatör verisi alınamadı ({ccxt_symbol} / {bb_timeframe}). Borsa bağlantısını kontrol edin ve tekrar deneyin."}
 
             # ── Akıllı Başlangıç: son mumları kontrol et ──
             # Eğer son 3 mum içinde orta çizgi kesimi olduysa hemen başla
