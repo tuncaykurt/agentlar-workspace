@@ -120,23 +120,30 @@ async def send_push(title: str, body: str, data: dict = None, tag: str = "trade"
 
 async def push_trade_notification(trade: dict, user_id: str = "default"):
     """Grid trade gerçekleştiğinde ilgili kullanıcıya bildirim gönder."""
-    side = trade.get("side", "buy")
+    side = trade.get("side", "buy").upper()
     pnl = trade.get("pnl", 0)
     price = trade.get("price", 0)
-    symbol = trade.get("symbol", "ETH")
+    symbol = trade.get("symbol", "")
     level_count = trade.get("level_count", 1)
     mode = trade.get("mode", "paper")
 
+    # Symbol'den coin adını çıkar: "BTCUSDT" → "BTC", "ETH/USDT:USDT" → "ETH"
+    coin = symbol.replace("USDT", "").replace("/", "").replace(":USDT", "").strip() or "?"
+    mode_label = "Paper" if mode == "paper" else "Canlı"
+
     if pnl != 0:
         # Pozisyon kapatma (kâr/zarar)
-        emoji = "🟢" if pnl > 0 else "🔴"
-        title = f"{emoji} {symbol} {'Kâr' if pnl > 0 else 'Zarar'}: ${abs(pnl):.4f}"
-        body = f"{side.upper()} {level_count} kademe | Fiyat: ${price:.2f} | {'Paper' if mode == 'paper' else 'CANLI'}"
+        if pnl > 0:
+            title = f"🟢 {coin} Kâr Alındı: +${abs(pnl):.4f}"
+        else:
+            title = f"🔴 {coin} Zarar Kapandı: -${abs(pnl):.4f}"
+        body = f"{side} {level_count} kademe kapandı\nFiyat: ${price:,.2f} | {mode_label}"
     else:
         # Pozisyon açma
-        emoji = "📈" if side == "buy" else "📉"
-        title = f"{emoji} {symbol} {side.upper()} Açıldı"
-        body = f"{level_count} kademe @ ${price:.2f} | {'Paper' if mode == 'paper' else 'CANLI'}"
+        direction = "LONG" if side == "BUY" else "SHORT"
+        emoji = "📈" if side == "BUY" else "📉"
+        title = f"{emoji} {coin} {direction} Pozisyon Açıldı"
+        body = f"{level_count} kademe @ ${price:,.2f} | {mode_label}"
 
     await send_push(title, body, data={"url": "/hft"}, tag=f"trade-{side}", user_id=user_id)
 
@@ -144,12 +151,12 @@ async def push_trade_notification(trade: dict, user_id: str = "default"):
 async def push_grid_event(event: str, details: str = "", user_id: str = "default"):
     """Grid lifecycle event bildirimi (başlama, durma, sinyal) ilgili kullanıcıya gönder."""
     events = {
-        "grid_start": ("🚀 Grid Başlatıldı", details or "Bot aktif, işlemler başlıyor."),
-        "grid_stop": ("⏹️ Grid Durduruldu", details or "Bot durduruldu."),
-        "signal_long": ("📈 LONG Sinyali", details or "Orta çizgi yukarı kesildi."),
-        "signal_short": ("📉 SHORT Sinyali", details or "Orta çizgi aşağı kesildi."),
-        "band_exit": ("🔔 Bant Çıkışı", details or "Fiyat BB bandını aştı, grid kapatılıyor."),
-        "waiting": ("⏳ Avda Bekleniyor", details or "Yeni sinyal bekleniyor."),
+        "grid_start": ("🚀 Grid Bot Başlatıldı", details or "Bot aktif, işlemler başlıyor."),
+        "grid_stop": ("⏹️ Grid Bot Durduruldu", details or "Bot durduruldu."),
+        "signal_long": ("📈 LONG Yönü Algılandı", details or "Fiyat orta çizgiyi yukarı kesti, alım yönü aktif."),
+        "signal_short": ("📉 SHORT Yönü Algılandı", details or "Fiyat orta çizgiyi aşağı kesti, satış yönü aktif."),
+        "band_exit": ("🔔 Bant Dışına Çıkış", details or "Fiyat Bollinger bandını aştı, grid yeniden kurulacak."),
+        "waiting": ("⏳ Sinyal Bekleniyor", details or "Uygun giriş noktası aranıyor."),
     }
 
     title, body = events.get(event, ("📢 Grid Bildirimi", details or event))

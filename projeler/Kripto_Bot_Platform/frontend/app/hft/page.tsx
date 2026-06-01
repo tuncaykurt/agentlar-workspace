@@ -132,6 +132,9 @@ export default function HftPage() {
   const [autoGridCount, setAutoGridCount] = useState(false) // Otomatik kademe sayisi
   const [suggestedGrid, setSuggestedGrid] = useState<{ count: number; step: number; stepPct: number; atrRatio: number } | null>(null)
   
+  // Strateji bilgi paneli (açılır/kapanır)
+  const [strategyInfoOpen, setStrategyInfoOpen] = useState(false)
+
   // Akıllı Tarayıcı Modu
   const [coinMode, setCoinMode] = useState<"single" | "scanner">("single")
   const [maxScannerCoins, setMaxScannerCoins] = useState(5)
@@ -1618,23 +1621,33 @@ export default function HftPage() {
                   </button>
                 </div>
               </div>
-              <div className="w-full bg-indigo-950/30 border border-indigo-500/20 p-3 rounded-lg mt-1 mb-2">
-                <h4 className="text-indigo-400 font-bold text-xs mb-1 flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-                  Strateji Çalışma Mantığı
-                </h4>
-                <div className="text-[11px] sm:text-[11.5px] text-slate-300 leading-relaxed space-y-2">
-                  <p><strong>🤖 Math Genius Grid Nasıl Çalışır?</strong> Bu bot, piyasa koşullarını saniyeler içinde analiz edip kendi kendine karar veren matematiksel bir motordur.</p>
-                  
-                  <p><strong>🎯 Tekli vs Çoklu Coin (Akıllı Tarayıcı):</strong> "Tekli" modda sadece seçtiğiniz koini kilitlenir. "Akıllı Tarayıcı" modunda ise arka planda yüzlerce koini eş zamanlı tarar; ADX ve EMA göstergeleriyle <em>tam kırılım anını yakaladığı</em> koinlerde otomatik ağ kurar ve kârı alınca yeni koine geçer.</p>
-                  
-                  <p><strong>📏 Kâr Alma (TP) ve Kademe Aralıkları:</strong> Kademeleri manuel girmek zorunda değilsiniz. Bot, "ATR" (Oynaklık) formülüyle koinin o anki hızını ölçer. Koin çok hızlıysa kademelerin arasını açar, yataysa daraltıp ufak dalgalardan kâr toplar. Fiyat ağın dışına taşarsa, ağı fiyatın peşinden sürükleyerek (Trailing) trendi sonuna kadar sömürür.</p>
+              <div className="w-full bg-indigo-950/30 border border-indigo-500/20 rounded-lg mt-1 mb-2">
+                <button
+                  onClick={() => setStrategyInfoOpen(prev => !prev)}
+                  className="w-full flex items-center justify-between p-3 hover:bg-indigo-950/50 rounded-lg transition-colors"
+                >
+                  <h4 className="text-indigo-400 font-bold text-xs flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                    Strateji Çalışma Mantığı
+                  </h4>
+                  <svg className={`w-4 h-4 text-indigo-400 transition-transform ${strategyInfoOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {strategyInfoOpen && (
+                  <div className="px-3 pb-3 text-[11px] sm:text-[11.5px] text-slate-300 leading-relaxed space-y-2">
+                    <p><strong>🤖 Math Genius Grid Nasıl Çalışır?</strong> Bu bot, piyasa koşullarını saniyeler içinde analiz edip kendi kendine karar veren matematiksel bir motordur.</p>
 
-                  <p><strong>⚖️ Ayar Profilleri (Varsayılan vs 500x):</strong> 
-                    <br/><span className="text-emerald-400">● Varsayılan (25x):</span> 5 dakikalık grafiklerde çalışır. Düzenli ve güvenli pasif gelir hedefleyen altın orandır. Fiyat aniden ters dönerse koruma kalkanı devreye girer, zararı kesip ağı güncel fiyata taşır.
-                    <br/><span className="text-red-400">● 500x Mikro-Grid:</span> 1 dakikalık grafikte, son derece dar alanda saniyelik "vur-kaç" (scalping) yapar. Yüksek risk ve çok yüksek işlem sıklığı içerir, pür dikkat izlenmelidir.
-                  </p>
-                </div>
+                    <p><strong>🎯 Tekli vs Çoklu Coin (Akıllı Tarayıcı):</strong> &quot;Tekli&quot; modda sadece seçtiğiniz koini kilitlenir. &quot;Akıllı Tarayıcı&quot; modunda ise arka planda yüzlerce koini eş zamanlı tarar; ADX ve EMA göstergeleriyle <em>tam kırılım anını yakaladığı</em> koinlerde otomatik ağ kurar ve kârı alınca yeni koine geçer.</p>
+
+                    <p><strong>📏 Kâr Alma (TP) ve Kademe Aralıkları:</strong> Kademeleri manuel girmek zorunda değilsiniz. Bot, &quot;ATR&quot; (Oynaklık) formülüyle koinin o anki hızını ölçer. Koin çok hızlıysa kademelerin arasını açar, yataysa daraltıp ufak dalgalardan kâr toplar. Fiyat ağın dışına taşarsa, ağı fiyatın peşinden sürükleyerek (Trailing) trendi sonuna kadar sömürür.</p>
+
+                    <p><strong>⚖️ Ayar Profilleri (Varsayılan vs 500x):</strong>
+                      <br/><span className="text-emerald-400">● Varsayılan (25x):</span> 5 dakikalık grafiklerde çalışır. Düzenli ve güvenli pasif gelir hedefleyen altın orandır. Fiyat aniden ters dönerse koruma kalkanı devreye girer, zararı kesip ağı güncel fiyata taşır.
+                      <br/><span className="text-red-400">● 500x Mikro-Grid:</span> 1 dakikalık grafikte, son derece dar alanda saniyelik &quot;vur-kaç&quot; (scalping) yapar. Yüksek risk ve çok yüksek işlem sıklığı içerir, pür dikkat izlenmelidir.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider">Zaman Dilimi</span>
