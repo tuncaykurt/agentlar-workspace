@@ -977,21 +977,21 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
         liq_section = ""
         try:
             from services.liquidation_collector import get_liquidation_stats
-            liq_tasks = [get_liquidation_stats(c["base"]) for c in top]
+            # Symbol format: DB "BTCUSDT" tutuyor, c["base"] = "BTC" → "BTCUSDT" yap
+            liq_tasks = [get_liquidation_stats(c["base"] + "USDT") for c in top if c.get("base")]
             liq_results = await asyncio.gather(*liq_tasks, return_exceptions=True)
             liq_lines = []
             for i, lr in enumerate(liq_results):
                 if isinstance(lr, Exception) or not lr:
                     continue
                 coin = top[i]["base"]
-                long_cnt = lr.get("long_liq_count", 0)
-                short_cnt = lr.get("short_liq_count", 0)
-                long_vol = lr.get("long_liq_volume", 0)
-                short_vol = lr.get("short_liq_volume", 0)
+                long_vol = lr.get("long_liq_usd", 0)
+                short_vol = lr.get("short_liq_usd", 0)
+                total_usd = lr.get("total_usd", 0)
                 signal = lr.get("signal", "neutral")
-                if long_cnt + short_cnt > 0:
+                if total_usd > 0:
                     liq_lines.append(
-                        f"  {coin}: Long tasfiye {long_cnt}(${long_vol:,.0f}) | Short tasfiye {short_cnt}(${short_vol:,.0f}) → {signal}"
+                        f"  {coin}: Long tasfiye ${long_vol:,.0f} | Short tasfiye ${short_vol:,.0f} | Toplam ${total_usd:,.0f} → {signal}"
                     )
             if liq_lines:
                 liq_section = (

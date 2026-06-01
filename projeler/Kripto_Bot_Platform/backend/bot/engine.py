@@ -3187,7 +3187,7 @@ class BotEngine:
                 # --- LİKİDASYON VERİLERİ ---
                 from services.liquidation_collector import get_liquidation_stats
                 print(f"[SmartScanner {bot_name}] Likidasyon (Binance WS) verileri çekiliyor...")
-                liq_tasks = [get_liquidation_stats(c["base"]) for c in ai_top]
+                liq_tasks = [get_liquidation_stats(c["base"] + "USDT") for c in ai_top]
                 liq_results = await asyncio.gather(*liq_tasks)
                 for i, c in enumerate(ai_top):
                     c["liquidations"] = liq_results[i]

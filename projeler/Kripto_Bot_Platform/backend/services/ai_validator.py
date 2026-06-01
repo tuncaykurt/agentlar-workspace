@@ -63,7 +63,9 @@ async def process_webhook_with_ai(payload: dict, token: str, profile: dict):
         liq_data = {}
         try:
             from services.liquidation_collector import get_liquidation_stats
-            liq_data = await get_liquidation_stats(symbol_ccxt.replace("/USDT:USDT", "").replace("/", ""))
+            # symbol_ccxt = "BTC/USDT:USDT" → DB format "BTCUSDT"
+            liq_symbol = symbol_ccxt.split("/")[0] + "USDT"
+            liq_data = await get_liquidation_stats(liq_symbol)
         except Exception:
             pass
 
