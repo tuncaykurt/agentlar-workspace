@@ -100,11 +100,16 @@ export default function HftPage() {
   const [filterRsi, setFilterRsi] = useState(true)
   const [filterSqueeze, setFilterSqueeze] = useState(true)
   const [filterMidline, setFilterMidline] = useState(true)
+  const [filterMtf, setFilterMtf] = useState(true)
   const [filterAtrStep, setFilterAtrStep] = useState(false)
   const [smartStartWait, setSmartStartWait] = useState(true)
   const [gridDirection, setGridDirection] = useState<GridDirection>("long")
   const [autoGridCount, setAutoGridCount] = useState(false) // Otomatik kademe sayisi
   const [suggestedGrid, setSuggestedGrid] = useState<{ count: number; step: number; stepPct: number; atrRatio: number } | null>(null)
+  
+  // Akıllı Tarayıcı Modu
+  const [coinMode, setCoinMode] = useState<"single" | "scanner">("single")
+  const [maxScannerCoins, setMaxScannerCoins] = useState(5)
 
   // Band exit tracking — fiyat BB bant disina cikip geri girince pozisyon kapat
   const bandExitRef = useRef<{ exited: boolean; side: "upper" | "lower" | null }>({ exited: false, side: null })
@@ -142,7 +147,7 @@ export default function HftPage() {
           tradeIdRef.current = s.tradeId ?? 0
           if (Array.isArray(s.filled)) simFilledRef.current = new Set(s.filled)
           if (Array.isArray(s.entryPrices)) simEntryPricesRef.current = new Map(s.entryPrices)
-          if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid" || s.gridMode === "bb_direction" || s.gridMode === "trend_score") {
+          if (s.gridMode === "manual" || s.gridMode === "bollinger" || s.gridMode === "hybrid" || s.gridMode === "bb_direction" || s.gridMode === "trend_score" || s.gridMode === "math_grid_gemini") {
             setGridMode(s.gridMode)
           }
           if (s.gridDirection === "long" || s.gridDirection === "short" || s.gridDirection === "auto") {
@@ -216,7 +221,11 @@ export default function HftPage() {
     return () => clearTimeout(timer)
   }, [chartFullscreen])
 
-  const symbol = hftSettings.symbol || "ETHUSDT"
+  // Eger bot (backend) calisiyorsa ve ccxt_symbol varsa, grafigi ona gore otomatik degistir.
+  const isBackendActive = (tradingMode === "paper" || tradingMode === "live") && backendStatus?.running;
+  const symbol = isBackendActive && backendStatus?.ccxt_symbol
+    ? backendStatus.ccxt_symbol.split(":")[0].replace("/", "") // "BTC/USDT:USDT" -> "BTCUSDT"
+    : (hftSettings.symbol || "ETHUSDT")
 
   // Local input state — silme/yazma sorunsuz çalışır, blur'da API'ye gönderilir
   const [localSpread, setLocalSpread] = useState("")
@@ -239,9 +248,10 @@ export default function HftPage() {
     if (hftSettings.min_ema_pct != null) setMinEmaPct(String(hftSettings.min_ema_pct))
     if (hftSettings.ema_exit_mode != null) setEmaExitMode(hftSettings.ema_exit_mode)
     if (hftSettings.budget_mode != null) setBudgetMode(hftSettings.budget_mode)
+    if (hftSettings.filter_mtf != null) setFilterMtf(hftSettings.filter_mtf === 1)
   }, [
     hftSettings.spread_pct, hftSettings.grid_count, hftSettings.leverage, hftSettings.order_size,
-    hftSettings.grid_mode, hftSettings.bb_timeframe, hftSettings.bb_period, hftSettings.bb_std_dev, hftSettings.min_spread_pct, hftSettings.min_ema_pct, hftSettings.ema_exit_mode, hftSettings.budget_mode
+    hftSettings.grid_mode, hftSettings.bb_timeframe, hftSettings.bb_period, hftSettings.bb_std_dev, hftSettings.min_spread_pct, hftSettings.min_ema_pct, hftSettings.ema_exit_mode, hftSettings.budget_mode, hftSettings.filter_mtf
   ])
 
   const spreadPct = Number(localSpread) || hftSettings.spread_pct || 1.5
@@ -270,7 +280,7 @@ export default function HftPage() {
       } catch {}
     }
     poll()
-    const id = setInterval(poll, 2000)
+    const id = setInterval(poll, 10000)  // 10s — CPU optimizasyonu
     return () => { cancelled = true; clearInterval(id) }
   }, [symbol])
 
@@ -319,19 +329,24 @@ export default function HftPage() {
       } catch {}
     }
     poll()
-    const id = setInterval(poll, 2000)
+    const id = setInterval(poll, 10000)  // 10s — CPU optimizasyonu
     return () => { cancelled = true; clearInterval(id) }
   }, [isBackendMode, tradingMode])
 
   // Grid sinirlarini SADECE ayar degistiginde veya kullanici "Baslat" dediginde guncelle
-  const recalcGrid = () => {
+  const recalcGrid = async () => {
     setTrades([])
     setTotalPnl(0)
     setTradeCount(0)
     if (livePrice <= 0) return
-    const upper = livePrice * (1 + spreadPct / 100)
-    const lower = livePrice * (1 - spreadPct / 100)
-    setGridBounds({ upper, lower })
+    
+    if (gridMode !== "manual") {
+      await fetchBbData()
+    } else {
+      const upper = livePrice * (1 + spreadPct / 100)
+      const lower = livePrice * (1 - spreadPct / 100)
+      setGridBounds({ upper, lower })
+    }
     lastGridHitRef.current = -1
   }
 
@@ -388,9 +403,14 @@ export default function HftPage() {
       if (state.ema_paused || state.upper === 0) return true
       return false
     }
+    // math_grid_gemini: upper=0 ise fırsat bekleniyor
+    if (state.grid_mode === "math_grid_gemini") {
+      if (state.upper === 0) return true
+      return false
+    }
     // bb_paused check
     if (state.bb_paused) return true
-    
+
     if (state.grid_mode && state.grid_mode !== "manual") {
       const filters = state.filters || {}
       if (filters.midline_filter && state.bb_mid) {
@@ -551,6 +571,11 @@ export default function HftPage() {
       }
       // Squeeze filtresi — yeni pozisyon acma
       if (filterSqueeze && bb.is_squeeze) skipOpen = true
+      // MTF Onayi Filtresi
+      if (filterMtf) {
+        if (bb.mtf_trend === "long" && dir === "short") skipOpen = true;
+        if (bb.mtf_trend === "short" && dir === "long") skipOpen = true;
+      }
     }
 
     if (dir === "long") {
@@ -1213,22 +1238,48 @@ export default function HftPage() {
 
         {/* Ayar Paneli */}
         <div className="flex flex-wrap items-end gap-2 sm:gap-4 bg-slate-800/80 p-3 sm:p-4 rounded-xl border border-slate-700/60 relative z-10 mb-4 shadow-inner">
+          {/* Islem Modu (Tekli / Tarayici) */}
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Coin</span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">İşlem Modu</span>
             <select
-              value={symbol}
-              onChange={e => { updateHftSetting("symbol", e.target.value); setGridBounds(null) }}
+              value={coinMode}
+              onChange={e => setCoinMode(e.target.value as "single" | "scanner")}
               disabled={simRunning}
               className="bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
             >
-              <option value="BTCUSDT">BTCUSDT</option>
-              <option value="ETHUSDT">ETHUSDT</option>
-              <option value="SOLUSDT">SOLUSDT</option>
-              <option value="XRPUSDT">XRPUSDT</option>
-              <option value="DOGEUSDT">DOGEUSDT</option>
-              <option value="BNBUSDT">BNBUSDT</option>
-              <option value="AVAXUSDT">AVAXUSDT</option>
+              <option value="single">Tekli Coin</option>
+              <option value="scanner">Akıllı Tarayıcı (Çoklu Coin)</option>
             </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              {coinMode === "single" ? "Coin" : "Maks Eşzamanlı İşlem"}
+            </span>
+            {coinMode === "single" ? (
+              <select
+                value={symbol}
+                onChange={e => { updateHftSetting("symbol", e.target.value); setGridBounds(null) }}
+                disabled={simRunning}
+                className="bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+              >
+                <option value="BTCUSDT">BTCUSDT</option>
+                <option value="ETHUSDT">ETHUSDT</option>
+                <option value="SOLUSDT">SOLUSDT</option>
+                <option value="XRPUSDT">XRPUSDT</option>
+                <option value="DOGEUSDT">DOGEUSDT</option>
+                <option value="BNBUSDT">BNBUSDT</option>
+                <option value="AVAXUSDT">AVAXUSDT</option>
+              </select>
+            ) : (
+              <input 
+                type="number" 
+                value={maxScannerCoins} 
+                onChange={e => setMaxScannerCoins(Number(e.target.value))}
+                min={1} max={20} disabled={simRunning}
+                className="w-24 bg-[#020817] border border-slate-700 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50 text-center"
+              />
+            )}
           </div>
 
           <div className="w-px h-8 bg-slate-700/50 hidden md:block" />
@@ -1343,6 +1394,16 @@ export default function HftPage() {
                   className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
                 />
               </div>
+              <div className="flex flex-col gap-1 items-center justify-center">
+                <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider text-center">MTF Filtresi</span>
+                <button
+                  onClick={() => { setFilterMtf(!filterMtf); updateHftSetting("filter_mtf", !filterMtf ? 1 : 0); }}
+                  disabled={simRunning}
+                  className={`w-12 h-6 rounded-full transition-colors relative mt-1 ${filterMtf ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${filterMtf ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
             </>
           )}
           </>
@@ -1353,46 +1414,101 @@ export default function HftPage() {
             <div className="flex flex-wrap gap-2 w-full mt-2 pt-2 border-t border-indigo-500/20">
               <div className="flex justify-between items-center w-full mb-0">
                 <span className="text-[10px] font-semibold text-indigo-400 uppercase">Gemini Matematiksel Grid Ayarları</span>
-                <button 
-                  onClick={() => {
-                    updateHftSetting("atr_period", 14);
-                    updateHftSetting("adx_period", 14);
-                    updateHftSetting("adx_threshold", 20);
-                    updateHftSetting("ema_period", 50);
-                    updateHftSetting("breakout_atr_mult", 0.5);
-                    updateHftSetting("grid_count", 80);
-                    updateHftSetting("leverage", 500);
-                    setLocalGrid("80");
-                    setLocalLev("500");
-                  }}
-                  disabled={simRunning}
-                  className="px-2 py-1 bg-red-900/40 hover:bg-red-900/60 text-red-300 border border-red-500/30 rounded text-[9px] font-bold transition-all flex items-center gap-1"
-                >
-                  🚀 500x Mikro-Grid (1m)
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      updateHftSetting("atr_period", 14);
+                      updateHftSetting("adx_period", 14);
+                      updateHftSetting("adx_threshold", 25);
+                      updateHftSetting("ema_period", 200);
+                      updateHftSetting("breakout_atr_mult", 1.5);
+                      updateHftSetting("grid_count", 20);
+                      updateHftSetting("leverage", 25);
+                      updateHftSetting("bb_timeframe", "5m");
+                      setBbTimeframe("5m");
+                      setLocalGrid("20");
+                      setLocalLev("25");
+                    }}
+                    disabled={simRunning}
+                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 rounded text-[9px] font-bold transition-all flex items-center gap-1"
+                  >
+                    Varsayılan
+                  </button>
+                  <button 
+                    onClick={() => {
+                      updateHftSetting("atr_period", 14);
+                      updateHftSetting("adx_period", 14);
+                      updateHftSetting("adx_threshold", 20);
+                      updateHftSetting("ema_period", 50);
+                      updateHftSetting("breakout_atr_mult", 0.5);
+                      updateHftSetting("grid_count", 80);
+                      updateHftSetting("leverage", 500);
+                      updateHftSetting("bb_timeframe", "1m");
+                      setBbTimeframe("1m");
+                      setLocalGrid("80");
+                      setLocalLev("500");
+                    }}
+                    disabled={simRunning}
+                    className="px-2 py-1 bg-red-900/40 hover:bg-red-900/60 text-red-300 border border-red-500/30 rounded text-[9px] font-bold transition-all flex items-center gap-1"
+                  >
+                    🚀 500x Mikro-Grid (1m)
+                  </button>
+                </div>
               </div>
-              <p className="text-[9px] text-slate-400 w-full mb-1">
-                ADX &lt; 25: Nötr. ADX &gt; 25: Trend (EMA). Breakout stop: 1.5 ATR.
-              </p>
+              <div className="w-full bg-indigo-950/30 border border-indigo-500/20 p-3 rounded-lg mt-1 mb-2">
+                <h4 className="text-indigo-400 font-bold text-xs mb-1 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                  Strateji Çalışma Mantığı
+                </h4>
+                <div className="text-[11px] sm:text-[11.5px] text-slate-300 leading-relaxed space-y-2">
+                  <p><strong>🤖 Math Genius Grid Nasıl Çalışır?</strong> Bu bot, piyasa koşullarını saniyeler içinde analiz edip kendi kendine karar veren matematiksel bir motordur.</p>
+                  
+                  <p><strong>🎯 Tekli vs Çoklu Coin (Akıllı Tarayıcı):</strong> "Tekli" modda sadece seçtiğiniz koini kilitlenir. "Akıllı Tarayıcı" modunda ise arka planda yüzlerce koini eş zamanlı tarar; ADX ve EMA göstergeleriyle <em>tam kırılım anını yakaladığı</em> koinlerde otomatik ağ kurar ve kârı alınca yeni koine geçer.</p>
+                  
+                  <p><strong>📏 Kâr Alma (TP) ve Kademe Aralıkları:</strong> Kademeleri manuel girmek zorunda değilsiniz. Bot, "ATR" (Oynaklık) formülüyle koinin o anki hızını ölçer. Koin çok hızlıysa kademelerin arasını açar, yataysa daraltıp ufak dalgalardan kâr toplar. Fiyat ağın dışına taşarsa, ağı fiyatın peşinden sürükleyerek (Trailing) trendi sonuna kadar sömürür.</p>
+
+                  <p><strong>⚖️ Ayar Profilleri (Varsayılan vs 500x):</strong> 
+                    <br/><span className="text-emerald-400">● Varsayılan (25x):</span> 5 dakikalık grafiklerde çalışır. Düzenli ve güvenli pasif gelir hedefleyen altın orandır. Fiyat aniden ters dönerse koruma kalkanı devreye girer, zararı kesip ağı güncel fiyata taşır.
+                    <br/><span className="text-red-400">● 500x Mikro-Grid:</span> 1 dakikalık grafikte, son derece dar alanda saniyelik "vur-kaç" (scalping) yapar. Yüksek risk ve çok yüksek işlem sıklığı içerir, pür dikkat izlenmelidir.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-slate-400 uppercase tracking-wider">Zaman Dilimi</span>
+                <select value={bbTimeframe} onChange={e => { setBbTimeframe(e.target.value); updateHftSetting("bb_timeframe", e.target.value); }} disabled={simRunning}
+                  className="bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50">
+                  <option value="1m">1 dk</option>
+                  <option value="5m">5 dk</option>
+                  <option value="15m">15 dk</option>
+                  <option value="1h">1 saat</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-slate-400 uppercase tracking-wider">Min Spread %</span>
+                <input type="number" value={minSpread} onChange={e => setMinSpread(e.target.value)} onBlur={e => commitSetting("min_spread_pct", e.target.value, 0.3)} onKeyDown={e => e.key === "Enter" && commitSetting("min_spread_pct", e.target.value, 0.3)}
+                  min={0.1} max={5} step={0.1} disabled={simRunning}
+                  className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
+                />
+              </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider">ATR Prd</span>
-                <input type="number" value={hftSettings.atr_period ?? 14} onChange={e => updateHftSetting("atr_period", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+                <input type="number" value={hftSettings.atr_period ?? 14} onChange={e => updateHftSetting("atr_period", e.target.value)} className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider">ADX Prd</span>
-                <input type="number" value={hftSettings.adx_period ?? 14} onChange={e => updateHftSetting("adx_period", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+                <input type="number" value={hftSettings.adx_period ?? 14} onChange={e => updateHftSetting("adx_period", e.target.value)} className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider">ADX Eşik</span>
-                <input type="number" value={hftSettings.adx_threshold ?? 25} onChange={e => updateHftSetting("adx_threshold", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+                <input type="number" value={hftSettings.adx_threshold ?? 25} onChange={e => updateHftSetting("adx_threshold", e.target.value)} className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider">EMA Trend</span>
-                <input type="number" value={hftSettings.ema_period ?? 200} onChange={e => updateHftSetting("ema_period", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+                <input type="number" value={hftSettings.ema_period ?? 200} onChange={e => updateHftSetting("ema_period", e.target.value)} className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider">Kırılım ATRx</span>
-                <input type="number" value={hftSettings.breakout_atr_mult ?? 1.5} step={0.1} onChange={e => updateHftSetting("breakout_atr_mult", e.target.value)} className="w-12 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
+                <input type="number" value={hftSettings.breakout_atr_mult ?? 1.5} step={0.1} onChange={e => updateHftSetting("breakout_atr_mult", e.target.value)} className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white" disabled={simRunning} />
               </div>
             </div>
           )}
@@ -1468,32 +1584,7 @@ export default function HftPage() {
             Agi Yeniden Kur
           </button>
 
-          {/* BB Filtre Toggle'lari */}
-          {gridMode !== "manual" && gridMode !== "bb_direction" && (
-            <div className="flex flex-wrap gap-2 w-full mt-2 pt-2 border-t border-indigo-500/20">
-              <label className="flex items-center gap-1.5 cursor-pointer group">
-                <input type="checkbox" checked={filterRsi} onChange={e => setFilterRsi(e.target.checked)} disabled={simRunning}
-                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
-                <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors">RSI Filtresi</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer group">
-                <input type="checkbox" checked={filterSqueeze} onChange={e => setFilterSqueeze(e.target.checked)} disabled={simRunning}
-                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
-                <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors">Squeeze Dedektoru</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer group">
-                <input type="checkbox" checked={filterMidline} onChange={e => setFilterMidline(e.target.checked)} disabled={simRunning}
-                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
-                <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors">Orta Cizgi Filtresi</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer group">
-                <input type="checkbox" checked={filterAtrStep} onChange={e => setFilterAtrStep(e.target.checked)} disabled={simRunning}
-                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 disabled:opacity-50" />
-                <span className="text-[10px] text-slate-400 group-hover:text-indigo-300 transition-colors">ATR Min Step</span>
-              </label>
-            </div>
-          )}
-          
+          {/* Gereksiz Filtre Toggle'lari Kaldirildi */}
 
 
           {/* Alt/Ust Sinir */}
@@ -1547,12 +1638,16 @@ export default function HftPage() {
               'text-emerald-400'
             }`}>
               {!simRunning ? '○ Durdu' :
-               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.bb_dir_paused && backendStatus?.upper > 0 : bbDirPaused && !bbDirWaitCross) ? '● Grid Kapalı (Kesişim Bekleniyor)' :
-               gridMode === "bb_direction" && (isBackendMode ? backendStatus?.upper === 0 : bbDirWaitCross) ? '● Avda Bekliyor (Orta Çizgi)' :
-               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.ema_paused && backendStatus?.upper > 0 : false) ? '● Grid Kapalı (Yeni Kesişim)' :
-               gridMode === "ema_trend" && (isBackendMode ? backendStatus?.upper === 0 : false) ? '● Avda Bekliyor (EMA Trend)' :
-               isWaiting ? `● Avda (Bekliyor)` :
-               `● ${activeDirection === 'long' ? '↑ LONG' : '↓ SHORT'} Çalışıyor (${mc.label})`}
+               isBackendMode && backendStatus?.running ? (
+                 backendStatus.upper === 0 ? '● Fırsat Bekleniyor' :
+                 backendStatus.bb_dir_paused ? '● Duraklatıldı (Kesişim Bekleniyor)' :
+                 backendStatus.ema_paused ? '● Duraklatıldı (Trend Döndü)' :
+                 `● İŞLEMDE: ${(backendStatus.active_direction || activeDirection) === 'long' ? '↑ SADECE LONG' : '↓ SADECE SHORT'}`
+               ) :
+               gridMode === "bb_direction" && (bbDirPaused && !bbDirWaitCross) ? '● Duraklatıldı (Yeni Kesişim Bekleniyor)' :
+               gridMode === "bb_direction" && bbDirWaitCross ? '● Fırsat Bekleniyor (Orta Çizgi)' :
+               isWaiting ? '● İşlem Bekleniyor...' :
+               `● İŞLEMDE: ${activeDirection === 'long' ? '↑ SADECE LONG' : '↓ SADECE SHORT'}`}
             </div>
           </div>
           <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700/40">
@@ -1585,10 +1680,12 @@ export default function HftPage() {
             ? {
                 width: backendStatus.bb_width || 0, rsi: backendStatus.bb_rsi || 50,
                 paused: backendStatus.bb_paused, mid: backendStatus.bb_mid || 0,
+                mtf_trend: backendStatus.mtf_trend || "neutral"
               }
             : (simBbMeta ? {
                 width: simBbMeta.bb_width || 0, rsi: simBbMeta.rsi || 50,
                 paused: simBbMeta.is_squeeze, mid: simBbMeta.bb_mid || 0,
+                mtf_trend: simBbMeta.mtf_trend || "neutral"
               } : null)
               
           if (!bbSrc) return null
@@ -1624,10 +1721,18 @@ export default function HftPage() {
                 {bbSrc.paused ? 'SQUEEZE' : 'Aktif'}
               </div>
             </div>
-            <div className="bg-indigo-900/20 rounded-lg p-3 border border-indigo-500/30">
-              <div className="text-[10px] text-indigo-400 uppercase">BB Orta</div>
-              <div className="text-sm font-bold text-white font-mono">
-                ${bbSrc.mid.toFixed(2)}
+            <div className={`rounded-lg p-3 border ${
+              bbSrc.mtf_trend === 'long' ? 'bg-emerald-900/20 border-emerald-500/30' :
+              bbSrc.mtf_trend === 'short' ? 'bg-red-900/20 border-red-500/30' :
+              'bg-slate-800/20 border-slate-600/30'
+            }`}>
+              <div className="text-[10px] text-indigo-400 uppercase">MTF Onayi (3D)</div>
+              <div className={`text-sm font-bold font-mono uppercase ${
+                bbSrc.mtf_trend === 'long' ? 'text-emerald-400' :
+                bbSrc.mtf_trend === 'short' ? 'text-red-400' :
+                'text-slate-400'
+              }`}>
+                {bbSrc.mtf_trend === 'long' ? 'YUKARI (LONG)' : bbSrc.mtf_trend === 'short' ? 'ASAGI (SHORT)' : 'BEKLEME'}
               </div>
             </div>
           </div>
@@ -1792,9 +1897,9 @@ export default function HftPage() {
             {livePrice > 0 ? (
               <ProChart
                 symbol={chartSymbol}
-                tp={isWaiting ? undefined : (activeDirection === "long" ? gridBounds?.upper : gridBounds?.lower)}
-                sl={isWaiting ? undefined : (activeDirection === "long" ? gridBounds?.lower : gridBounds?.upper)}
-                gridLines={isWaiting ? [] : gridLines}
+                tp={gridBounds ? (activeDirection === "long" ? gridBounds.upper : gridBounds.lower) : undefined}
+                sl={gridBounds ? (activeDirection === "long" ? gridBounds.lower : gridBounds.upper) : undefined}
+                gridLines={gridLines}
                 hideVolume
                 gridMode={isBackendMode ? backendStatus?.grid_mode : gridMode}
                 trades={trades}

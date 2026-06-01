@@ -32,7 +32,7 @@ export default function MarketStats({ symbol }: Props) {
       } catch {}
     }
     poll()
-    const interval = setInterval(poll, 3000)
+    const interval = setInterval(poll, 15000)  // 15s — CPU optimizasyonu
     return () => clearInterval(interval)
   }, [symbol])
 

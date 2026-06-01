@@ -594,6 +594,12 @@ export default function ProChart({
         if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: false }
         return i
       }))
+    } else if (gridMode === "math_grid_gemini" || gridMode === "trend_score") {
+      setInds(prev => prev.map(i => {
+        if (i.id === "ema" || i.id === "atr" || i.id === "vwap") return { ...i, enabled: true }
+        if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: false }
+        return i
+      }))
     } else if (gridMode === "manual") {
       setInds(prev => prev.map(i => {
         if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: false }
@@ -720,7 +726,7 @@ export default function ProChart({
       } catch { /* sessizce geç */ }
     }
     poll()
-    const id = setInterval(poll, 2000)  // 3s → 2s daha akıcı güncelleme
+    const id = setInterval(poll, 10000)  // 10s — CPU optimizasyonu
     return () => clearInterval(id)
   }, [symbol, tf, data])
 
