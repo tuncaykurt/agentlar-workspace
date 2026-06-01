@@ -24,18 +24,21 @@ class ExchangeKeysRequest(BaseModel):
 
 @router.get("")
 async def list_exchanges(user: User = Depends(get_current_user_obj)):
-    redis = get_redis()
-    user_key = "default" if user.role == "admin" else str(user.id)
-    result = []
-    for name, cfg in SUPPORTED_EXCHANGES.items():
-        raw = await redis.get(f"exchange_keys:{user_key}:{name}")
-        result.append({
-            "exchange": name,
-            "label": cfg["label"],
-            "connected": raw is not None,
-            "needs_passphrase": cfg["needs_passphrase"],
-        })
-    return result
+    try:
+        redis = get_redis()
+        user_key = "default" if user.role == "admin" else str(user.id)
+        result = []
+        for name, cfg in SUPPORTED_EXCHANGES.items():
+            raw = await redis.get(f"exchange_keys:{user_key}:{name}")
+            result.append({
+                "exchange": name,
+                "label": cfg["label"],
+                "connected": raw is not None,
+                "needs_passphrase": cfg["needs_passphrase"],
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"Borsa listesi alınamadı: {str(e)}")
 
 
 @router.post("/save")
@@ -43,15 +46,18 @@ async def save_keys(data: ExchangeKeysRequest, user: User = Depends(get_current_
     if data.exchange not in SUPPORTED_EXCHANGES:
         raise HTTPException(400, f"Desteklenmeyen borsa. Desteklenenler: {list(SUPPORTED_EXCHANGES)}")
 
-    redis = get_redis()
-    keys = {
-        "api_key": data.api_key,
-        "secret": data.secret,
-        "passphrase": data.passphrase or "",
-    }
-    user_key = "default" if user.role == "admin" else str(user.id)
-    await redis.set(f"exchange_keys:{user_key}:{data.exchange}", json.dumps(keys))
-    return {"status": "ok", "exchange": data.exchange}
+    try:
+        redis = get_redis()
+        keys = {
+            "api_key": data.api_key,
+            "secret": data.secret,
+            "passphrase": data.passphrase or "",
+        }
+        user_key = "default" if user.role == "admin" else str(user.id)
+        await redis.set(f"exchange_keys:{user_key}:{data.exchange}", json.dumps(keys))
+        return {"status": "ok", "exchange": data.exchange}
+    except Exception as e:
+        raise HTTPException(500, f"API key kaydedilemedi: {str(e)}")
 
 
 @router.delete("/{exchange}")

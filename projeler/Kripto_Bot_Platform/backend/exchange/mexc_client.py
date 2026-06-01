@@ -14,12 +14,12 @@ from core.redis_client import get_redis
 
 
 class MEXCClient:
-    def __init__(self):
-        self.exchange = ccxt.mexc({
-            "apiKey": settings.MEXC_API_KEY,
-            "secret": settings.MEXC_API_SECRET,
-            "options": {"defaultType": "swap"},
-        })
+    def __init__(self, public_only: bool = False):
+        params = {"options": {"defaultType": "swap"}}
+        if not public_only:
+            params["apiKey"] = settings.MEXC_API_KEY
+            params["secret"] = settings.MEXC_API_SECRET
+        self.exchange = ccxt.mexc(params)
         # MEXC Futures WebSocket
         self.ws_url = "wss://contract.mexc.com/edge"
         self._ws_subscribed: set[str] = set()  # Aktif abonelikler
@@ -339,7 +339,11 @@ class MEXCClient:
         return [p for p in positions if float(p.get("contracts", 0)) > 0]
 
     async def get_ohlcv(self, symbol: str, timeframe: str = "1m", limit: int = 200) -> list:
-        return await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        try:
+            return await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        except Exception as e:
+            print(f"[MEXCClient] fetch_ohlcv hatası ({symbol} {timeframe}): {type(e).__name__}: {e}")
+            return []
 
     async def get_funding_rate(self, symbol: str) -> float:
         ticker = await self.exchange.fetch_ticker(symbol)

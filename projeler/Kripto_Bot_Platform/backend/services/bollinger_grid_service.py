@@ -31,7 +31,7 @@ class BollingerGridService:
     async def _get_exchange(self):
         if not self._exchange:
             from exchange.mexc_client import MEXCClient
-            self._exchange = MEXCClient()
+            self._exchange = MEXCClient(public_only=True)
         return self._exchange
 
     async def fetch_bb_data(
@@ -61,13 +61,48 @@ class BollingerGridService:
             bb_data["above_midline"] = bb_data.get("close", 0) > bb_data.get("bb_mid", 0)
             # Trend gücü
             bb_data["strong_trend"] = bb_data.get("adx", 0) > 40
+            
+            # Dinamik Üçlü Zaman Dilimi (MTF) Onayı
+            mtf_map = {
+                "1m": ["5m", "15m"],
+                "3m": ["15m", "1h"],
+                "5m": ["15m", "1h"],
+                "15m": ["1h", "4h"],
+                "30m": ["2h", "4h"],
+                "1h": ["4h", "1d"],
+                "4h": ["1d", "1w"],
+            }
+            
+            mtf_trend = "neutral"
+            if timeframe in mtf_map:
+                tf1, tf2 = mtf_map[timeframe]
+                try:
+                    ohlcv1 = await ex.get_ohlcv(ccxt_symbol, tf1, limit=50)
+                    ohlcv2 = await ex.get_ohlcv(ccxt_symbol, tf2, limit=50)
+                    
+                    if ohlcv1 and len(ohlcv1) >= 25 and ohlcv2 and len(ohlcv2) >= 25:
+                        bb1 = calculate_bb_for_grid(ohlcv1, period=20, std_dev=2.0)
+                        bb2 = calculate_bb_for_grid(ohlcv2, period=20, std_dev=2.0)
+                        
+                        if bb1 and bb2:
+                            tf1_up = bb1.get("close", 0) > bb1.get("bb_mid", 0)
+                            tf2_up = bb2.get("close", 0) > bb2.get("bb_mid", 0)
+                            
+                            if tf1_up and tf2_up:
+                                mtf_trend = "long"
+                            elif not tf1_up and not tf2_up:
+                                mtf_trend = "short"
+                except Exception as e:
+                    print(f"[BB-Service] MTF hesaplama hatası ({timeframe}): {e}")
+            
+            bb_data["mtf_trend"] = mtf_trend
             bb_data["timeframe"] = timeframe
             bb_data["fetched_at"] = int(time.time())
 
             return bb_data
 
         except Exception as e:
-            print(f"[BB-Service] OHLCV/BB hesaplama hatası: {e}")
+            print(f"[BB-Service] OHLCV/BB hesaplama hatası: {type(e).__name__}: {e}")
             return {}
 
     async def compute_grid_bounds(
@@ -183,6 +218,7 @@ class BollingerGridService:
                         "is_squeeze": bb_data.get("is_squeeze", False),
                         "above_midline": bb_data.get("above_midline", True),
                         "strong_trend": bb_data.get("strong_trend", False),
+                        "mtf_trend": bb_data.get("mtf_trend", "neutral"),
                         "actual_spread_pct": bb_data.get("actual_spread_pct", 0),
                         "min_spread_applied": bb_data.get("min_spread_applied", False),
                         "updated_at": int(time.time()),

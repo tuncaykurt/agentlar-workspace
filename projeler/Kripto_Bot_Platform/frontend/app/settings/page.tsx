@@ -24,7 +24,7 @@ const FALLBACK_EXCHANGES: ExchangeInfo[] = [
 
 export default function SettingsPage() {
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>(FALLBACK_EXCHANGES)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [form, setForm] = useState({ api_key: "", secret: "", passphrase: "" })
   const [loading, setLoading] = useState(false)
@@ -42,9 +42,10 @@ export default function SettingsPage() {
     try {
       const data = await api.get("/exchanges")
       setExchanges(data)
-      setLoadError(false)
-    } catch {
-      setLoadError(true)
+      setLoadError(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Bağlantı hatası"
+      setLoadError(msg)
       setExchanges(FALLBACK_EXCHANGES)
     }
   }
@@ -133,7 +134,7 @@ export default function SettingsPage() {
 
       {loadError && (
         <div className="glass-card p-4 border-amber-500/20 text-amber-400 text-sm flex items-center gap-2">
-          ⚠️ Backend bağlantısı kurulamadı. Coolify&apos;da servisin çalıştığını kontrol edin.
+          ⚠️ Backend bağlantısı kurulamadı: {loadError}
         </div>
       )}
 
@@ -215,7 +216,7 @@ export default function SettingsPage() {
               <button 
                 onClick={(e) => {
                   e.preventDefault();
-                  navigator.clipboard.writeText("72.60.129.158");
+                  navigator.clipboard.writeText("45.88.189.74");
                   const btn = e.currentTarget;
                   const originalText = btn.innerText;
                   btn.innerText = "Kopyalandı!";
@@ -224,7 +225,7 @@ export default function SettingsPage() {
                 className="bg-slate-950 px-2 py-0.5 rounded border border-slate-700 text-emerald-400 cursor-pointer hover:bg-slate-700 hover:text-white transition-colors"
                 title="Kopyalamak için tıkla"
               >
-                72.60.129.158
+                45.88.189.74
               </button>
             </div>
             <p>• Key'ler AES-256 ile veritabanında şifreli saklanır</p>

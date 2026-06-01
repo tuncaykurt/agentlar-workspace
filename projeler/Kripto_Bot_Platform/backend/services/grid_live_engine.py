@@ -254,7 +254,7 @@ class GridLiveEngine:
 
         # ─── Grid sınırlarını hesapla ─────────────────────────────────
         bb_data = {}
-        if grid_mode in ("bollinger", "hybrid"):
+        if grid_mode in ("bollinger", "hybrid", "math_grid_gemini"):
             # BB bantlarından dinamik grid sınırları
             from services.bollinger_grid_service import BollingerGridService
             self._bb_services[user_id] = BollingerGridService()
@@ -264,7 +264,7 @@ class GridLiveEngine:
             )
 
             if not bb_data:
-                return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamıyor."}
+                return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamadı — lütfen internet bağlantısını ve sembol adını kontrol edin."}
 
             upper = bb_data["bb_upper"]
             lower = bb_data["bb_lower"]
@@ -284,7 +284,7 @@ class GridLiveEngine:
             )
 
             if not bb_data:
-                return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamıyor."}
+                return {"error": "Bollinger Bands hesaplanamadı. MEXC OHLCV verisi alınamadı — lütfen internet bağlantısını ve sembol adını kontrol edin."}
 
             # ── Akıllı Başlangıç: son mumları kontrol et ──
             # Eğer son 3 mum içinde orta çizgi kesimi olduysa hemen başla
@@ -482,8 +482,27 @@ class GridLiveEngine:
             self._poll_tasks[user_id].cancel()
         self._poll_tasks[user_id] = asyncio.create_task(self.run_standalone_loop(user_id))
 
+        # BB modunda: meta'yı hemen Redis'e yaz (recalc loop 60s beklemeden önce)
+        if grid_mode in ("bollinger", "hybrid", "bb_direction", "math_grid_gemini") and bb_data:
+            await redis.set(f"bb_grid:meta:{ccxt_symbol}", json.dumps({
+                "bb_upper": bb_data.get("bb_upper", 0),
+                "bb_lower": bb_data.get("bb_lower", 0),
+                "bb_mid": bb_data.get("bb_mid", 0),
+                "bb_width": bb_data.get("bb_width", 0),
+                "rsi": bb_data.get("rsi", 50),
+                "atr": bb_data.get("atr", 0),
+                "adx": bb_data.get("adx", 0),
+                "is_squeeze": bb_data.get("is_squeeze", False),
+                "above_midline": bb_data.get("above_midline", True),
+                "strong_trend": bb_data.get("strong_trend", False),
+                "mtf_trend": bb_data.get("mtf_trend", "neutral"),
+                "actual_spread_pct": bb_data.get("actual_spread_pct", 0),
+                "min_spread_applied": bb_data.get("min_spread_applied", False),
+                "updated_at": int(time.time()),
+            }), ex=120)
+
         # BB modunda arka plan recalc loop başlat
-        if grid_mode in ("bollinger", "hybrid", "bb_direction") and user_id in self._bb_services:
+        if grid_mode in ("bollinger", "hybrid", "bb_direction", "math_grid_gemini") and user_id in self._bb_services:
             self._bb_services[user_id]._recalc_task = asyncio.create_task(
                 self._bb_services[user_id].start_recalc_loop(
                     ccxt_symbol, user_id, bb_timeframe, bb_period, bb_std_dev, min_spread_pct
@@ -518,7 +537,7 @@ class GridLiveEngine:
             ),
         }
         # BB modu ek bilgileri
-        if grid_mode in ("bollinger", "hybrid", "bb_direction") and bb_data:
+        if grid_mode in ("bollinger", "hybrid", "bb_direction", "math_grid_gemini") and bb_data:
             result["bb_upper"] = bb_data.get("bb_upper", 0)
             result["bb_lower"] = bb_data.get("bb_lower", 0)
             result["bb_mid"] = bb_data.get("bb_mid", 0)
@@ -761,7 +780,7 @@ class GridLiveEngine:
         grid_direction = state.get("grid_direction", "long")
         active_dir = grid_direction  # "long" veya "short"
 
-        if grid_mode in ("bollinger", "hybrid", "bb_direction"):
+        if grid_mode in ("bollinger", "hybrid", "bb_direction", "math_grid_gemini"):
             ccxt_sym = state.get("ccxt_symbol", "")
             bb_meta_raw = await redis.get(f"bb_grid:meta:{ccxt_sym}")
             if bb_meta_raw:
@@ -770,17 +789,26 @@ class GridLiveEngine:
                     rsi = bb_meta.get("rsi", 50)
                     is_squeeze = bb_meta.get("is_squeeze", False)
                     above_mid = bb_meta.get("above_midline", True)
+                    mtf_trend = bb_meta.get("mtf_trend", "neutral")
 
                     # State'e güncel BB verilerini yaz (frontend için)
                     state["bb_rsi"] = rsi
                     state["bb_width"] = bb_meta.get("bb_width", 0)
                     state["bb_mid"] = bb_meta.get("bb_mid", 0)
                     state["bb_adx"] = bb_meta.get("adx", 0)
+                    state["mtf_trend"] = mtf_trend
 
                     # Auto yön: BB midline'a göre (auto veya bb_direction modu)
                     if grid_mode == "bb_direction" or grid_direction == "auto":
                         active_dir = "long" if above_mid else "short"
                         state["active_direction"] = active_dir
+                        
+                    # MTF Filtresi (Secenekli): Rüzgarın tersine işlem açma
+                    if filters.get("filter_mtf", 1) == 1:
+                        if mtf_trend == "long" and active_dir == "short":
+                            skip_sell = True  # Ana trend YUKARI, short açma!
+                        elif mtf_trend == "short" and active_dir == "long":
+                            skip_buy = True   # Ana trend AŞAĞI, long açma!
 
                     # BB Yön modu lifecycle kontrolleri
                     if grid_mode == "bb_direction":
@@ -864,7 +892,7 @@ class GridLiveEngine:
                                     
                                     close_side = "sell" if old_dir == "long" else "buy"
                                     trade = await self._execute_order(
-                                        state, close_side, current_price, close_levels, len(close_levels), round(total_net_pnl, 4)
+                                        state, close_side, current_price, close_levels, len(close_levels), round(total_net_pnl, 4), user_id=user_id
                                     )
                                     trades.append(trade)
                                     if trade.get("exchange_status") != "error":
@@ -996,7 +1024,7 @@ class GridLiveEngine:
 
                     if buy_levels:
                         trade = await self._execute_order(
-                            state, "buy", current_price, buy_levels, len(buy_levels)
+                            state, "buy", current_price, buy_levels, len(buy_levels), user_id=user_id
                         )
                         trades.append(trade)
 
@@ -1021,7 +1049,7 @@ class GridLiveEngine:
                         print(f"[GridLive] ⏸ SELL atlandı: net_pnl=${net_pnl:.4f} < 0")
                     else:
                         trade = await self._execute_order(
-                            state, "sell", current_price, sell_levels, len(sell_levels), net_pnl
+                            state, "sell", current_price, sell_levels, len(sell_levels), net_pnl, user_id=user_id
                         )
                         trades.append(trade)
                         if trade.get("exchange_status") != "error":
@@ -1044,7 +1072,7 @@ class GridLiveEngine:
 
                     if short_levels:
                         trade = await self._execute_order(
-                            state, "sell", current_price, short_levels, len(short_levels)
+                            state, "sell", current_price, short_levels, len(short_levels), user_id=user_id
                         )
                         trades.append(trade)
 
@@ -1070,7 +1098,7 @@ class GridLiveEngine:
                         print(f"[GridLive] ⏸ COVER atlandı: net_pnl=${net_pnl:.4f} < 0")
                     else:
                         trade = await self._execute_order(
-                            state, "buy", current_price, cover_levels, len(cover_levels), net_pnl
+                            state, "buy", current_price, cover_levels, len(cover_levels), net_pnl, user_id=user_id
                         )
                         trades.append(trade)
                         if trade.get("exchange_status") != "error":
@@ -1082,7 +1110,7 @@ class GridLiveEngine:
         should_close_grid = False
         exit_reason = ""
         
-        if grid_mode in ("bollinger", "hybrid", "bb_direction", "ema_trend") and filled:
+        if grid_mode in ("bollinger", "hybrid", "bb_direction", "ema_trend", "math_grid_gemini") and filled:
             # Default exit mode is bollinger unless specified in filters
             exit_mode = filters.get("ema_exit_mode", "bollinger") if grid_mode == "ema_trend" else "bollinger"
             
@@ -1156,7 +1184,7 @@ class GridLiveEngine:
 
                     close_side = "sell" if active_dir == "long" else "buy"
                     trade = await self._execute_order(
-                        state, close_side, current_price, close_levels, len(close_levels), net_pnl
+                        state, close_side, current_price, close_levels, len(close_levels), net_pnl, user_id=user_id
                     )
                     trades.append(trade)
 
@@ -1203,7 +1231,7 @@ class GridLiveEngine:
 
         if current_price >= upper:
             # BB modunda (bb_direction hariç): sınıra ulaşınca anlık BB recalc dene
-            if grid_mode in ("bollinger", "hybrid"):
+            if grid_mode in ("bollinger", "hybrid", "math_grid_gemini"):
                 recalced = await self._try_bb_recalc(state, current_price, redis)
                 if recalced:
                     return True
@@ -1221,7 +1249,7 @@ class GridLiveEngine:
             return True
 
         elif current_price <= lower and not state.get("filled_levels"):
-            if grid_mode in ("bollinger", "hybrid"):
+            if grid_mode in ("bollinger", "hybrid", "math_grid_gemini"):
                 recalced = await self._try_bb_recalc(state, current_price, redis)
                 if recalced:
                     return True
@@ -1303,6 +1331,7 @@ class GridLiveEngine:
     async def _execute_order(
         self, state: dict, side: str, price: float,
         grid_levels: list, level_count: int, pnl: float = 0.0,
+        user_id: str = "default",
     ) -> dict:
         """Grid işlemi gerçekleştir — paper veya live."""
         mode = state["mode"]
@@ -1346,34 +1375,30 @@ class GridLiveEngine:
             ex = await self._get_exchange()
 
             try:
-                if side == "buy":
-                    # BUY: raw API ile open long (side=1)
-                    order_body = {
-                        "symbol": mexc_symbol,
-                        "price": 0,
-                        "vol": total_contracts,
-                        "leverage": int(state.get("leverage", 10)),
-                        "side": 1,  # open long
-                        "type": 5,  # market order
-                        "openType": 2,  # cross margin
-                    }
-                    resp = await ex.exchange.contractPrivatePostOrderSubmit(order_body)
-                    order_id = str(resp.get("data", resp.get("orderId", "")))
-                    trade["order_id"] = order_id
-                    trade["exchange_status"] = "filled"
+                active_dir = state.get("active_direction", "long")
+                
+                # Determine MEXC API order side
+                if active_dir == "long":
+                    # Long Grid: buy = Open Long (1), sell = Close Long (4)
+                    mexc_side = 1 if side == "buy" else 4
                 else:
-                    # SELL: CCXT create_order ile reduceOnly
-                    # Bu yöntem hem one-way hem hedge modda çalışır
-                    resp = await ex.exchange.create_order(
-                        symbol=ccxt_symbol,
-                        type="market",
-                        side="sell",
-                        amount=total_contracts,
-                        params={"reduceOnly": True}
-                    )
-                    order_id = str(resp.get("id", ""))
-                    trade["order_id"] = order_id
-                    trade["exchange_status"] = "filled"
+                    # Short Grid: sell = Open Short (3), buy = Close Short (2)
+                    mexc_side = 3 if side == "sell" else 2
+
+                order_body = {
+                    "symbol": mexc_symbol,
+                    "price": 0,
+                    "vol": total_contracts,
+                    "leverage": int(state.get("leverage", 10)),
+                    "side": mexc_side,
+                    "type": 5,  # market order
+                    "openType": 2,  # cross margin
+                }
+                
+                resp = await ex.exchange.contractPrivatePostOrderSubmit(order_body)
+                order_id = str(resp.get("data", resp.get("orderId", "")))
+                trade["order_id"] = order_id
+                trade["exchange_status"] = "filled"
 
                 print(f"[GridLive] ✓ {side.upper()} {total_contracts} kontrat @ ${price:.4f} "
                       f"seviyeler={grid_levels} order_id={order_id}")

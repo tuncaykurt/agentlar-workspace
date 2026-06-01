@@ -233,13 +233,18 @@ export default function HftPage() {
   const [localLev, setLocalLev] = useState("")
   const [localOrder, setLocalOrder] = useState("")
 
-  // Backend'den gelen değerler değişince local'i güncelle (ilk yükleme + dışarıdan değişim)
+  // Backend'den gelen değerler SADECE ilk yüklemede local'i set eder (SWR refresh'lerde üzerine yazmaz)
+  const settingsLoadedRef = useRef(false)
   useEffect(() => {
+    if (settingsLoadedRef.current) return // İlk yüklemeden sonra tekrar çalışma
+    if (!hftSettings.spread_pct && !hftSettings.grid_count) return // Henüz veri gelmedi
+    settingsLoadedRef.current = true
+
     if (hftSettings.spread_pct != null) setLocalSpread(String(hftSettings.spread_pct))
     if (hftSettings.grid_count != null) setLocalGrid(String(hftSettings.grid_count))
     if (hftSettings.leverage != null) setLocalLev(String(hftSettings.leverage))
     if (hftSettings.order_size != null) setLocalOrder(String(hftSettings.order_size))
-    
+
     if (hftSettings.grid_mode) setGridMode(hftSettings.grid_mode as GridMode)
     if (hftSettings.bb_timeframe) setBbTimeframe(hftSettings.bb_timeframe)
     if (hftSettings.bb_period != null) setBbPeriod(String(hftSettings.bb_period))
@@ -260,10 +265,27 @@ export default function HftPage() {
   const orderSize = Number(localOrder) || hftSettings.order_size || 100
   const [budgetMode, setBudgetMode] = useState(hftSettings.budget_mode || "fixed")
 
-  const commitSetting = (key: string, raw: string, fallback: number) => {
+  const commitSetting = async (key: string, raw: string, fallback: number) => {
     const v = Number(raw)
     if (!v || isNaN(v)) return
     updateHftSetting(key, v)
+    // Spread veya grid sayısı değişince sim modda grid'i hemen güncelle
+    if ((key === "min_spread_pct" || key === "grid_count") && simRunning && tradingMode === "sim" && gridMode !== "manual") {
+      try {
+        const res = await api.post("/simulations/hft-bb-data", {
+          symbol,
+          bb_timeframe: bbTimeframe,
+          bb_period: Number(bbPeriod) || 20,
+          bb_std_dev: Number(bbStdDev) || 2.0,
+          min_spread_pct: key === "min_spread_pct" ? v : Number(minSpread) || 0.3,
+          current_price: livePrice,
+          grid_count: key === "grid_count" ? v : gridCount,
+        })
+        if (!res.error && res.bb_upper) {
+          setGridBounds({ upper: res.bb_upper, lower: res.bb_lower })
+        }
+      } catch {}
+    }
   }
 
   const isBackendMode = tradingMode === "paper" || tradingMode === "live"
@@ -1390,7 +1412,7 @@ export default function HftPage() {
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider">Min Spread %</span>
                 <input type="number" value={minSpread} onChange={e => setMinSpread(e.target.value)} onBlur={e => commitSetting("min_spread_pct", e.target.value, 0.3)} onKeyDown={e => e.key === "Enter" && commitSetting("min_spread_pct", e.target.value, 0.3)}
-                  min={0.1} max={5} step={0.1} disabled={simRunning}
+                  min={0.01} max={5} step={0.01} disabled={simRunning}
                   className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-3 py-1.5 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
                 />
               </div>
@@ -1486,7 +1508,7 @@ export default function HftPage() {
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-slate-400 uppercase tracking-wider">Min Spread %</span>
                 <input type="number" value={minSpread} onChange={e => setMinSpread(e.target.value)} onBlur={e => commitSetting("min_spread_pct", e.target.value, 0.3)} onKeyDown={e => e.key === "Enter" && commitSetting("min_spread_pct", e.target.value, 0.3)}
-                  min={0.1} max={5} step={0.1} disabled={simRunning}
+                  min={0.01} max={5} step={0.01} disabled={simRunning}
                   className="w-16 bg-[#020817] border border-indigo-500/30 rounded-md px-2 py-1 text-sm text-white font-medium focus:border-indigo-500 transition-all outline-none disabled:opacity-50"
                 />
               </div>
