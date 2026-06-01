@@ -75,7 +75,11 @@ interface ExchangePosition {
 }
 
 export default function HftPage() {
-  const { data: hftSettingsData, mutate: mutateHftSettings } = useSWR("/simulations/hft-settings", fetcher, { refreshInterval: 5000 })
+  const { data: hftSettingsData, mutate: mutateHftSettings } = useSWR("/simulations/hft-settings", fetcher, {
+    refreshInterval: 5000,
+    revalidateOnFocus: false,
+    dedupingInterval: 3000,
+  })
   const hftSettings = hftSettingsData || {}
 
   const [livePrice, setLivePrice] = useState<number>(0)
@@ -1916,7 +1920,6 @@ export default function HftPage() {
             </button>
           )}
           <div className="flex-1 min-h-0 overflow-hidden">
-            {livePrice > 0 ? (
               <ProChart
                 symbol={chartSymbol}
                 tp={gridBounds ? (activeDirection === "long" ? gridBounds.upper : gridBounds.lower) : undefined}
@@ -1927,14 +1930,6 @@ export default function HftPage() {
                 trades={trades}
                 activeTimeframe={isBackendMode && backendStatus?.running ? backendStatus.bb_timeframe : (simRunning ? bbTimeframe : undefined)}
               />
-            ) : (
-              <div className="flex-1 flex items-center justify-center h-full">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-                  <span className="text-slate-400 text-sm">Canli fiyat bekleniyor ({symbol})...</span>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 

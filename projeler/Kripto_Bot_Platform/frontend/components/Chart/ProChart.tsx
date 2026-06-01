@@ -508,7 +508,7 @@ export default function ProChart({
   const overlaySeriesRefs  = useRef<{id: string; name: string; color: string; series: ISeriesApi<"Line">}[]>([])
 
   const [data,      setData]      = useState<ChartData | null>(null)
-  const [loading,   setLoading]   = useState(false)
+  const [loading,   setLoading]   = useState(true)
   const [tf,        setTf]        = useState(() =>
     typeof window !== "undefined" ? (localStorage.getItem("prochart_tf") ?? "1h") : "1h"
   )
@@ -632,23 +632,6 @@ export default function ProChart({
       const lim = tfLimits[tf] || 2000
       const d   = await api.get(`/chart/data?symbol=${enc}&interval=${tf}&limit=${lim}`)
       if (d && d.candles && d.candles.length > 0) {
-        // Sort + deduplicate candles & volume by time
-        d.candles.sort((a: Candle, b: Candle) => a.time - b.time)
-        const seenTimes = new Set<number>()
-        d.candles = d.candles.filter((c: Candle) => {
-          if (seenTimes.has(c.time)) return false
-          seenTimes.add(c.time)
-          return true
-        })
-        if (d.volume) {
-          d.volume.sort((a: VolBar, b: VolBar) => a.time - b.time)
-          const seenVol = new Set<number>()
-          d.volume = d.volume.filter((v: VolBar) => {
-            if (seenVol.has(v.time)) return false
-            seenVol.add(v.time)
-            return true
-          })
-        }
         setData(d)
       }
     } catch (e) {

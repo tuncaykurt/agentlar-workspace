@@ -452,45 +452,8 @@ async def _fetch_ohlcv_fallback(symbol: str, interval: str, limit: int) -> list:
     return []
 
 
-@router.get("/data")
-async def get_chart_data(
-    symbol:   str = "BTC/USDT:USDT",
-    interval: str = "1h",
-    limit:    int = 2000,
-):
-    """Tüm teknik indikatörleri döner."""
-    import asyncio
-    liq_stats_task = get_liquidation_stats(symbol)
-    liq_heatmap_task = get_liquidation_heatmap(symbol, hours=168)  # 7 gün
-
-    ohlcv = []
-    try:
-        ohlcv = await _fetcher.get_ohlcv(symbol, interval, limit)
-    except Exception as e:
-        print(f"[Chart] get_ohlcv hata ({symbol} {interval}): {e}")
-
-    liq_stats, liq_heatmap = await asyncio.gather(liq_stats_task, liq_heatmap_task)
-
-    # ── Fallback: Bitget/cache başarısız olduysa Binance public REST'i dene ──
-    if not ohlcv:
-        print(f"[Chart] Bitget boş döndü, Binance fallback deneniyor ({symbol} {interval})...")
-        ohlcv = await _fetch_ohlcv_fallback(symbol, interval, limit)
-        if ohlcv:
-            print(f"[Chart] Binance fallback başarılı: {len(ohlcv)} mum")
-        else:
-            print(f"[Chart] Her iki kaynak da başarısız, boş veri dönüyor.")
-
-    # Timestamp'e göre sırala ve duplikatları kaldır
-    ohlcv.sort(key=lambda c: c[0])
-    seen = set()
-    clean = []
-    for c in ohlcv:
-        ts = c[0] // 1000  # saniyeye çevir
-        if ts not in seen:
-            seen.add(ts)
-            clean.append(c)
-    ohlcv = clean
-
+def _compute_indicators(ohlcv: list) -> dict:
+    """Tüm indikatörleri hesapla — saf CPU işi, cache'lenebilir."""
     closes = [c[4] for c in ohlcv]
     times  = [c[0] // 1000 for c in ohlcv]
 
@@ -511,8 +474,6 @@ async def get_chart_data(
     return {
         "candles": candles,
         "volume":  volume,
-
-        # Overlay indikatörler
         "ema9":    _to_series(times, _ema(closes, 9)),
         "ema21":   _to_series(times, _ema(closes, 21)),
         "ema55":   _to_series(times, _ema(closes, 55)),
@@ -522,8 +483,6 @@ async def get_chart_data(
         "bb_upper":_to_series(times, bb_upper),
         "bb_mid":  _to_series(times, bb_mid),
         "bb_lower":_to_series(times, bb_lower),
-
-        # Osilatörler
         "rsi":        _to_series(times, _rsi(closes)),
         "macd_line":  _to_series(times, macd_line),
         "macd_signal":_to_series(times, sig_line),
@@ -532,26 +491,88 @@ async def get_chart_data(
         "stoch_d":    _to_series(times, d_line),
         "atr":        _to_series(times, _atr(ohlcv)),
         "cci":        _to_series(times, _cci(ohlcv)),
-        "williams_r":     _to_series(times, _williams_r(ohlcv)),
-        "obv":            _to_series(times, _obv(ohlcv)),
-        "mfi":            _to_series(times, _mfi(ohlcv)),
-
-        # Hacim Profili (Volume Profile / VPVR)
+        "williams_r": _to_series(times, _williams_r(ohlcv)),
+        "obv":        _to_series(times, _obv(ohlcv)),
+        "mfi":        _to_series(times, _mfi(ohlcv)),
         "volume_profile": _volume_profile(ohlcv),
-
-        # UT Bot Alert (ATR trailing stop sinyalleri)
         "ut_bot": _ut_bot(ohlcv),
-
-        # Linear Regression Channel (trend kanalı)
         "lr_channel": _lr_channel(closes, times),
-
-        # Destek / Direnç seviyeleri
         "sr_levels": _sr_levels(ohlcv),
-
-        # Order Blocks (dikdörtgen koordinatları)
         "order_blocks": _order_blocks(ohlcv),
-
-        # Likidasyon verileri (Binance WS + opsiyonel Coinglass)
-        "liquidations": liq_stats,
-        "liq_heatmap": liq_heatmap,
     }
+
+
+# Timeframe → chart response cache süresi (saniye)
+_CHART_CACHE_TTL = {
+    "1m": 30, "3m": 60, "5m": 120, "15m": 300,
+    "30m": 600, "1h": 900, "2h": 1800, "4h": 3600, "1d": 7200,
+}
+
+
+@router.get("/data")
+async def get_chart_data(
+    symbol:   str = "BTC/USDT:USDT",
+    interval: str = "1h",
+    limit:    int = 2000,
+):
+    """Tüm teknik indikatörleri döner — Redis response cache ile hızlı."""
+    import asyncio
+    import json as _json
+    from core.redis_client import get_redis as _get_redis
+
+    redis = _get_redis()
+    cache_key = f"chart_resp:{symbol}:{interval}:{limit}"
+
+    # 1. Response cache — varsa anında döndür (en hızlı yol)
+    try:
+        cached = await redis.get(cache_key)
+        if cached:
+            return _json.loads(cached)
+    except Exception:
+        pass
+
+    # 2. OHLCV + likidasyon verilerini gerçek paralel çek
+    async def _fetch_ohlcv():
+        try:
+            data = await _fetcher.get_ohlcv(symbol, interval, limit)
+            if data:
+                return data
+        except Exception as e:
+            print(f"[Chart] get_ohlcv hata ({symbol} {interval}): {e}")
+        # Fallback
+        return await _fetch_ohlcv_fallback(symbol, interval, limit)
+
+    ohlcv_data, liq_stats, liq_heatmap = await asyncio.gather(
+        _fetch_ohlcv(),
+        get_liquidation_stats(symbol),
+        get_liquidation_heatmap(symbol, hours=168),
+    )
+    ohlcv = ohlcv_data or []
+
+    if not ohlcv:
+        return {"candles": [], "volume": [], "liquidations": liq_stats, "liq_heatmap": liq_heatmap}
+
+    # Timestamp'e göre sırala ve duplikatları kaldır
+    ohlcv.sort(key=lambda c: c[0])
+    seen = set()
+    clean = []
+    for c in ohlcv:
+        ts = c[0] // 1000
+        if ts not in seen:
+            seen.add(ts)
+            clean.append(c)
+    ohlcv = clean
+
+    # 3. İndikatörleri hesapla
+    result = _compute_indicators(ohlcv)
+    result["liquidations"] = liq_stats
+    result["liq_heatmap"] = liq_heatmap
+
+    # 4. Response'u cache'le
+    ttl = _CHART_CACHE_TTL.get(interval, 300)
+    try:
+        await redis.set(cache_key, _json.dumps(result), ex=ttl)
+    except Exception:
+        pass
+
+    return result

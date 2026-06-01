@@ -14,7 +14,7 @@ async def market_ws(websocket: WebSocket, symbol: str):
     """Belirli bir sembolün canlı mum verisini frontend'e gönder."""
     await websocket.accept()
 
-    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True, protocol=2)
     pubsub = redis_client.pubsub()
     await pubsub.subscribe(f"kline:{symbol}")
 
