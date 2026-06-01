@@ -98,6 +98,9 @@ class BotEngine:
         print(f"[Bot {bot_name}] Başlatıldı — {symbol} | Strateji: {strategy} | Exchange: {type(self.exchange).__name__}")
         print(f"[Bot {bot_name}] Config: paper_mode={self.config.get('paper_mode')}, leverage={self.config.get('leverage')}, params={self.config.get('params')}")
 
+        # Trailing stop state'lerini Redis'ten geri yükle (bot restart recovery)
+        await self._restore_trailing_from_redis()
+
         # İlk bağlantı testi — load_markets zorunlu (MEXC vb. için)
         try:
             await asyncio.wait_for(self.exchange.exchange.load_markets(), timeout=30)
@@ -1992,10 +1995,10 @@ class BotEngine:
     # ─── Trailing Stop Yönetimi ────────────────────────────────────
 
     def _init_trailing(self, symbol: str, side: str, entry: float, trail_pct: float):
-        """Yeni pozisyon açıldığında trailing stop'u başlat."""
+        """Yeni pozisyon açıldığında trailing stop'u başlat ve Redis'e kaydet."""
         if trail_pct <= 0:
             return
-        self._trailing[symbol] = {
+        state = {
             "side": side,
             "entry": entry,
             "peak": entry,       # long: en yüksek, short: en düşük
@@ -2003,6 +2006,37 @@ class BotEngine:
             "trail_price": entry * (1 - trail_pct / 100) if side == "buy" else entry * (1 + trail_pct / 100),
             "activated": False,  # Kâra geçince aktifleşir
         }
+        self._trailing[symbol] = state
+        # Redis'e persist et (bot restart'ta kaybolmasın)
+        asyncio.ensure_future(self._persist_trailing_to_redis(symbol, state))
+
+    async def _persist_trailing_to_redis(self, symbol: str, state: dict):
+        """Trailing stop state'i Redis'e kaydet."""
+        try:
+            from core.redis_client import get_redis
+            redis = get_redis()
+            bot_id = self.config.get("bot_id", "unknown")
+            key = f"trailing_stop:{bot_id}:{symbol}"
+            await redis.set(key, json.dumps(state, default=str), ex=86400)  # 24s TTL
+        except Exception as e:
+            print(f"[TrailingStop] Redis persist hatası: {e}")
+
+    async def _restore_trailing_from_redis(self):
+        """Bot restart sonrası trailing stop state'lerini Redis'ten geri yükle."""
+        try:
+            from core.redis_client import get_redis
+            redis = get_redis()
+            bot_id = self.config.get("bot_id", "unknown")
+            keys = await redis.keys(f"trailing_stop:{bot_id}:*")
+            for key in keys:
+                raw = await redis.get(key)
+                if raw:
+                    state = json.loads(raw)
+                    symbol = (key.decode() if isinstance(key, bytes) else key).split(":")[-1]
+                    self._trailing[symbol] = state
+                    print(f"[TrailingStop] Redis'ten geri yüklendi: {symbol} ({state['side']}, peak={state['peak']:.2f})")
+        except Exception as e:
+            print(f"[TrailingStop] Redis restore hatası: {e}")
 
     async def _check_trailing_stop(self, symbol: str, current_price: float) -> bool:
         """
@@ -2015,6 +2049,7 @@ class BotEngine:
 
         side = ts["side"]
         trail_pct = ts["trail_pct"]
+        updated = False
 
         entry = ts["entry"]
         # Minimum kâr eşiği: trailing_pct'nin yarısı kadar kârda olmalı
@@ -2025,18 +2060,21 @@ class BotEngine:
             if current_price > ts["peak"]:
                 ts["peak"] = current_price
                 ts["trail_price"] = current_price * (1 - trail_pct / 100)
+                updated = True
 
             # Aktivasyon: fiyat entry'den min_profit_pct kadar yukarı gitmiş olmalı
             if not ts["activated"]:
                 profit_pct = (current_price - entry) / entry * 100
                 if profit_pct >= min_profit_pct:
                     ts["activated"] = True
+                    updated = True
                     print(f"[TrailingStop] {symbol} LONG aktif — profit %{profit_pct:.2f} >= eşik %{min_profit_pct:.1f}")
 
             # Trailing stop tetiklendi mi?
             if ts["activated"] and current_price <= ts["trail_price"]:
                 print(f"[TrailingStop] {symbol} LONG kapatılıyor — peak: {ts['peak']:.2f}, trail: {ts['trail_price']:.2f}, current: {current_price:.2f}")
                 del self._trailing[symbol]
+                await self._clear_trailing_redis(symbol)
                 return True
 
         else:  # Short pozisyon
@@ -2044,25 +2082,43 @@ class BotEngine:
             if current_price < ts["peak"]:
                 ts["peak"] = current_price
                 ts["trail_price"] = current_price * (1 + trail_pct / 100)
+                updated = True
 
             # Aktivasyon: fiyat entry'den min_profit_pct kadar aşağı gitmiş olmalı
             if not ts["activated"]:
                 profit_pct = (entry - current_price) / entry * 100
                 if profit_pct >= min_profit_pct:
                     ts["activated"] = True
+                    updated = True
                     print(f"[TrailingStop] {symbol} SHORT aktif — profit %{profit_pct:.2f} >= eşik %{min_profit_pct:.1f}")
 
             # Trailing stop tetiklendi mi?
             if ts["activated"] and current_price >= ts["trail_price"]:
                 print(f"[TrailingStop] {symbol} SHORT kapatılıyor — peak: {ts['peak']:.2f}, trail: {ts['trail_price']:.2f}, current: {current_price:.2f}")
                 del self._trailing[symbol]
+                await self._clear_trailing_redis(symbol)
                 return True
+
+        # Değişiklik varsa Redis'e persist et
+        if updated:
+            await self._persist_trailing_to_redis(symbol, ts)
 
         return False
 
     def _clear_trailing(self, symbol: str):
         """Pozisyon kapatıldığında trailing state'i temizle."""
         self._trailing.pop(symbol, None)
+        asyncio.ensure_future(self._clear_trailing_redis(symbol))
+
+    async def _clear_trailing_redis(self, symbol: str):
+        """Redis'ten trailing stop state'i sil."""
+        try:
+            from core.redis_client import get_redis
+            redis = get_redis()
+            bot_id = self.config.get("bot_id", "unknown")
+            await redis.delete(f"trailing_stop:{bot_id}:{symbol}")
+        except Exception:
+            pass
 
     # ─── Hedge Bot Döngüsü ────────────────────────────────────────────────────
 
@@ -3099,20 +3155,33 @@ class BotEngine:
 
                 print(f"[SmartScanner {bot_name}] AI'ya {len(ai_top)}/{len(coins)} coin gönderiliyor. MTF verileri çekiliyor...")
 
-                # --- MTF FETCHING ---
+                # --- MTF FETCHING (Dinamik timeframe) ---
                 from ai.indicators import calculate_all
+
+                # Ana timeframe'e göre MTF seviyeleri belirle
+                _mtf_map = {
+                    "1m":  ["5m", "15m", "1h"],
+                    "3m":  ["15m", "1h", "4h"],
+                    "5m":  ["15m", "1h", "4h"],
+                    "15m": ["1h", "4h", "1d"],
+                    "30m": ["2h", "4h", "1d"],
+                    "1h":  ["4h", "1d", "1w"],
+                    "4h":  ["1d", "1w", "1M"],
+                }
+                bot_tf = params.get("timeframe", "5m")
+                mtf_timeframes = _mtf_map.get(bot_tf, ["15m", "1h", "4h"])
+
                 async def _fetch_mtf(c):
                     try:
                         sym = c["symbol"]
                         tasks = [
-                            self.exchange.exchange.fetch_ohlcv(sym, "5m", limit=60),
-                            self.exchange.exchange.fetch_ohlcv(sym, "15m", limit=60),
-                            self.exchange.exchange.fetch_ohlcv(sym, "4h", limit=60)
+                            self.exchange.exchange.fetch_ohlcv(sym, tf, limit=60)
+                            for tf in mtf_timeframes
                         ]
                         res = await asyncio.gather(*tasks, return_exceptions=True)
                         c["mtf"] = {}
-                        
-                        timeframes = ["5m", "15m", "4h"]
+
+                        timeframes = mtf_timeframes
                         for i, tf in enumerate(timeframes):
                             if not isinstance(res[i], Exception) and len(res[i]) > 20:
                                 ind = calculate_all(res[i])
@@ -3164,19 +3233,19 @@ class BotEngine:
                     c["news"] = news_data.get(c["base"], [])
                 # ---------------------------------------------------
 
-                # --- COINALYZE L/S RATIO (Coinglass Alternatifi) ---
+                # --- LONG/SHORT RATIO ---
                 coinalyze_key = settings.COINALYZE_API_KEY
                 ls_data = {}
+
+                # Önce Coinalyze'ı dene (API key varsa)
                 if coinalyze_key:
-                    import time
+                    import time as _time
                     print(f"[SmartScanner {bot_name}] Coinalyze'dan Long/Short verileri çekiliyor...")
                     try:
-                        # Binance formatında sembolleri oluştur (örn: BTCUSDT_PERP.A)
                         coinalyze_symbols = [f"{c['base']}USDT_PERP.A" for c in ai_top]
                         symbols_str = ",".join(coinalyze_symbols)
-                        now = int(time.time())
-                        from_time = now - 3600 # Son 1 saat
-                        
+                        now = int(_time.time())
+                        from_time = now - 3600
                         async with httpx.AsyncClient(timeout=8) as client:
                             url = f"https://api.coinalyze.net/v1/long-short-ratio-history?symbols={symbols_str}&interval=1hour&from={from_time}&to={now}"
                             r = await client.get(url, headers={"api_key": coinalyze_key})
@@ -3194,7 +3263,35 @@ class BotEngine:
                                         }
                     except Exception as e:
                         print(f"[SmartScanner {bot_name}] Coinalyze çekim hatası: {e}")
-                
+
+                # Fallback: Binance Public API (ücretsiz, API key gerektirmez)
+                if not ls_data:
+                    print(f"[SmartScanner {bot_name}] Binance'dan Long/Short verileri çekiliyor (fallback)...")
+                    try:
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            async def _fetch_binance_ls(coin_base):
+                                try:
+                                    url = f"https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol={coin_base}USDT&period=1h&limit=1"
+                                    r = await client.get(url)
+                                    if r.status_code == 200:
+                                        data = r.json()
+                                        if data:
+                                            latest = data[0]
+                                            long_pct = round(float(latest.get("longAccount", 0.5)) * 100, 1)
+                                            short_pct = round(float(latest.get("shortAccount", 0.5)) * 100, 1)
+                                            ls_data[coin_base] = {
+                                                "ratio": round(long_pct / max(short_pct, 0.1), 2),
+                                                "long_pct": long_pct,
+                                                "short_pct": short_pct,
+                                            }
+                                except Exception:
+                                    pass  # Binance'da bu coin yoksa atla
+
+                            # İlk 10 coin için paralel çek (rate limit)
+                            await asyncio.gather(*[_fetch_binance_ls(c["base"]) for c in ai_top[:10]])
+                    except Exception as e:
+                        print(f"[SmartScanner {bot_name}] Binance L/S çekim hatası: {e}")
+
                 # L/S verilerini coin'e ekle
                 for c in ai_top:
                     c["ls_ratio"] = ls_data.get(c["base"])

@@ -109,106 +109,147 @@ def score_coin_manual(coin: dict, criteria: ManualCriteria) -> Optional[float]:
     if criteria.min_leverage > 0 and (lev is None or lev < criteria.min_leverage):
         return None
 
-    # ── Skor hesapla (0-100) ──
-    score = 50.0  # başlangıç
+    # ── Skor hesapla (0-100, kategori bazlı normalize) ──
+    # Her kategori max puanı sınırlı → tek bir metrik skoru domine edemez
+    # Toplam max: 10+15+12+10+8+8+10+10+7+5+5 = 100
 
-    # Trend uyumu bonusu
+    # 1. Trend uyumu (max 10)
+    trend_score = 0
     if coin.get("supertrend_dir") == 1:
-        score += 10
+        trend_score = 10
     elif coin.get("supertrend_dir") == -1:
-        score += 5  # bearish de fırsat olabilir (short)
+        trend_score = 7  # bearish de fırsat (short)
 
-    # ADX gücü (25+ güçlü trend)
+    # 2. Trend gücü / ADX (max 15)
+    adx_score = 0
     if adx:
         if adx > 40:
-            score += 15
+            adx_score = 15
+        elif adx > 30:
+            adx_score = 12
         elif adx > 25:
-            score += 10
+            adx_score = 8
         elif adx > 15:
-            score += 5
+            adx_score = 4
 
-    # RSI fırsat bölgeleri
+    # 3. RSI fırsat bölgeleri (max 12)
+    rsi_score = 0
     if rsi:
         if rsi < 25:
-            score += 15  # çok aşırı satım
+            rsi_score = 12  # çok aşırı satım
         elif rsi < 30:
-            score += 10
+            rsi_score = 8
         elif rsi > 75:
-            score += 10  # short fırsatı
+            rsi_score = 10  # short fırsatı
         elif rsi > 70:
-            score += 5
+            rsi_score = 5
 
-    # Hacim spike
+    # 4. Hacim spike (max 10)
+    vol_score = 0
     if vol:
         if vol > 3:
-            score += 15
+            vol_score = 10
         elif vol > 2:
-            score += 10
+            vol_score = 7
         elif vol > 1.5:
-            score += 5
+            vol_score = 4
 
-    # ATR% (volatilite = fırsat)
+    # 5. Volatilite / ATR% (max 8)
+    atr_score = 0
     if atr_pct:
         if atr_pct > 1.5:
-            score += 10
-        elif atr_pct > 0.5:
-            score += 5
+            atr_score = 8
+        elif atr_pct > 0.8:
+            atr_score = 5
+        elif atr_pct > 0.3:
+            atr_score = 3
 
-    # EMA200 mesafe (trend onayı)
+    # 6. Momentum uyumu / MACD + EMA200 (max 8)
+    momentum_score = 0
+    macd_hist = coin.get("macd_hist")
+    if macd_hist is not None and abs(macd_hist) > 0:
+        if (macd_hist > 0 and coin.get("supertrend_dir") == 1) or \
+           (macd_hist < 0 and coin.get("supertrend_dir") == -1):
+            momentum_score += 5  # trend ile uyumlu momentum
+        else:
+            momentum_score += 2  # en azından momentum var
     if ema_dist:
         abs_dist = abs(ema_dist)
-        if abs_dist > 5:
-            score += 5  # güçlü trend
-        elif abs_dist < 1:
-            score += 8  # EMA200'e yakın = potansiyel dönüş
+        if abs_dist < 1:
+            momentum_score += 3  # EMA200 cross potansiyeli
+        elif abs_dist > 5:
+            momentum_score += 2  # güçlü trend
+    momentum_score = min(momentum_score, 8)
 
-    # MACD histogram (momentum değişimi)
-    macd_hist = coin.get("macd_hist")
-    if macd_hist is not None:
-        if abs(macd_hist) > 0:
-            # Histogram yönü trend ile uyumlu → ekstra skor
-            if macd_hist > 0 and coin.get("supertrend_dir") == 1:
-                score += 8  # bullish momentum + bullish trend
-            elif macd_hist < 0 and coin.get("supertrend_dir") == -1:
-                score += 8  # bearish momentum + bearish trend
-            elif abs(macd_hist) > 0:
-                score += 3  # en azından momentum var
-
-    # Bollinger Band pozisyonu (fiyat banda yakınsa fırsat)
+    # 7. Bollinger Band + Squeeze (max 10)
+    bb_score = 0
     bb_upper = coin.get("bb_upper")
     bb_lower = coin.get("bb_lower")
     price = coin.get("price", 0)
     if bb_upper and bb_lower and price > 0:
         bb_width = bb_upper - bb_lower
         if bb_width > 0:
-            bb_pct = (price - bb_lower) / bb_width  # 0=alt band, 1=üst band
-            if bb_pct < 0.1:
-                score += 10  # Alt banda çok yakın → long fırsatı
-            elif bb_pct < 0.2:
-                score += 5
-            elif bb_pct > 0.9:
-                score += 10  # Üst banda çok yakın → short fırsatı
-            elif bb_pct > 0.8:
-                score += 5
-            # Squeeze tespiti (dar band = patlama potansiyeli)
+            bb_pct = (price - bb_lower) / bb_width
+            if bb_pct < 0.1 or bb_pct > 0.9:
+                bb_score += 6  # Banda çok yakın → fırsat
+            elif bb_pct < 0.2 or bb_pct > 0.8:
+                bb_score += 3
             if price > 0 and (bb_width / price * 100) < 1.0:
-                score += 7  # Bollinger squeeze
+                bb_score += 4  # Bollinger squeeze
+    bb_score = min(bb_score, 10)
 
-    # Funding rate (negatif = short kalabalık → long fırsatı, pozitif = long kalabalık → short fırsatı)
+    # 8. Sentimant: Funding + Fear&Greed (max 10)
+    sentiment_score = 0
     funding = coin.get("funding_rate")
     if funding is not None:
         if abs(funding) > 0.05:
-            score += 10  # aşırı funding = yakında dönüş
+            sentiment_score += 6  # aşırı funding
         elif abs(funding) > 0.02:
-            score += 5
-
-    # Fear & Greed endeksi (aşırı korku = alım, aşırı açgözlülük = satım fırsatı)
+            sentiment_score += 3
     fg = coin.get("fear_greed")
     if fg is not None:
         if fg <= 20 or fg >= 80:
-            score += 8  # aşırı bölgeler
+            sentiment_score += 4  # aşırı bölgeler
         elif fg <= 30 or fg >= 70:
-            score += 4
+            sentiment_score += 2
+    sentiment_score = min(sentiment_score, 10)
+
+    # 9. Likidasyon büyüklüğü (max 7)
+    liq_score = 0
+    liq = coin.get("liquidations", {})
+    liq_total = liq.get("total_usd", 0)
+    if liq_total > 0:
+        if liq_total > 10_000_000:
+            liq_score = 7
+        elif liq_total > 5_000_000:
+            liq_score = 5
+        elif liq_total > 1_000_000:
+            liq_score = 3
+
+    # 10. L/S ratio dengesizliği (max 5)
+    ls_score = 0
+    ls = coin.get("ls_ratio")
+    if ls and ls.get("long_pct") and ls.get("short_pct"):
+        dominant = max(ls["long_pct"], ls["short_pct"])
+        if dominant > 65:
+            ls_score = 5  # Çok tek taraflı → kontrarian fırsat
+        elif dominant > 58:
+            ls_score = 3
+
+    # 11. MTF uyumu (max 5)
+    mtf_score = 0
+    mtf = coin.get("mtf", {})
+    if mtf:
+        mtf_trends = [v.get("trend") for v in mtf.values() if v.get("trend")]
+        if mtf_trends:
+            # Tüm timeframe'ler aynı yönde = güçlü konfirmasyon
+            if all(t == 1 for t in mtf_trends) or all(t == -1 for t in mtf_trends):
+                mtf_score = 5
+            elif len(set(mtf_trends)) <= 2 and len(mtf_trends) >= 2:
+                mtf_score = 2  # Çoğunluk aynı yönde
+
+    score = (trend_score + adx_score + rsi_score + vol_score + atr_score +
+             momentum_score + bb_score + sentiment_score + liq_score + ls_score + mtf_score)
 
     return round(score, 2)
 
@@ -351,13 +392,12 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
     coin_rows = []
     for c in coins:
         mtf = c.get("mtf", {})
-        m5 = mtf.get("5m", {})
-        m15 = mtf.get("15m", {})
-        h4 = mtf.get("4h", {})
-        
-        mtf_str = (f"5m[{_t(m5.get('trend'))} R:{_v(m5.get('rsi'))}] "
-                   f"15m[{_t(m15.get('trend'))} R:{_v(m15.get('rsi'))}] "
-                   f"4h[{_t(h4.get('trend'))} R:{_v(h4.get('rsi'))}]")
+        # Dinamik MTF: hangi timeframe'ler varsa hepsini göster
+        mtf_parts = []
+        for tf_key in sorted(mtf.keys(), key=lambda x: {"1m":1,"3m":2,"5m":3,"15m":4,"30m":5,"1h":6,"2h":7,"4h":8,"1d":9,"1w":10,"1M":11}.get(x, 99)):
+            tf_data = mtf[tf_key]
+            mtf_parts.append(f"{tf_key}[{_t(tf_data.get('trend'))} R:{_v(tf_data.get('rsi'))}]")
+        mtf_str = " ".join(mtf_parts) if mtf_parts else "MTF:yok"
 
         news_list = c.get("news", [])
         news_str = " | Haberler: " + " / ".join(news_list) if news_list else ""
@@ -367,7 +407,9 @@ def build_ai_prompt(coins: list[dict], active_positions: list[str] = None,
 
         liq = c.get("liquidations", {})
         liq_total = liq.get('total_usd', 0) / 1000
-        liq_str = f"Liq:${liq_total:.1f}K({liq.get('signal', '?')})" if liq_total > 0 else "Liq:$0"
+        liq_long = liq.get('long_liq_usd', 0) / 1000
+        liq_short = liq.get('short_liq_usd', 0) / 1000
+        liq_str = f"Liq:${liq_total:.0f}K(L:${liq_long:.0f}K S:${liq_short:.0f}K→{liq.get('signal', '?')})" if liq_total > 0 else "Liq:$0"
 
         max_lev = c.get("max_leverage", "?")
 
@@ -492,7 +534,7 @@ Mevcut Açık Pozisyonlar: {active_str}
 {perf_section}
 ═══════════════════════════════════════════════════════════════
                     TÜM COİN VERİLERİ
-     Coin |        Fiyat |   24h%  | 1h Trend | 1h RSI | MTF: 5m, 15m, 4h (Trend+RSI) | L/S Oranı | Likidasyon | MaxLev |  ATR%  |  ADX  | Hacim | MACD Hist | Bollinger Bandı
+     Coin |        Fiyat |   24h%  | 1h Trend | 1h RSI | MTF (Trend+RSI) | L/S Oranı | Likidasyon | MaxLev |  ATR%  |  ADX  | Hacim | MACD Hist | Bollinger Bandı
 {coin_table}
 
 ═══════════════════════════════════════════════════════════════

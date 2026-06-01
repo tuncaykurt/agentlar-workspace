@@ -596,7 +596,7 @@ export default function ProChart({
       }))
     } else if (gridMode === "math_grid_gemini" || gridMode === "trend_score") {
       setInds(prev => prev.map(i => {
-        if (i.id === "ema" || i.id === "atr" || i.id === "vwap") return { ...i, enabled: true }
+        if (i.id === "ema" || i.id === "vwap") return { ...i, enabled: true }
         if (i.id === "bb" || i.id === "rsi") return { ...i, enabled: false }
         return i
       }))
