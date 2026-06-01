@@ -3149,7 +3149,7 @@ class BotEngine:
                 # ---------------------------------------------------
 
                 # --- COINALYZE L/S RATIO (Coinglass Alternatifi) ---
-                coinalyze_key = getattr(settings, "COINALYZE_API_KEY", "d81902f0-8b0d-42ed-9c4d-36e8f31de1f8")
+                coinalyze_key = settings.COINALYZE_API_KEY
                 ls_data = {}
                 if coinalyze_key:
                     import time
