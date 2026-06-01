@@ -829,8 +829,10 @@ class GridLiveEngine:
 
         # Giriş fiyatları takibi (level_index → entry_price)
         entry_prices = state.get("entry_prices", {})
-        # Alım zamanları takibi (level_index → epoch) — aynı tick'te al-sat engeli
+        # Alım zamanları takibi (level_index → epoch)
         entry_times = state.get("entry_times", {})
+        # Bu tick'te alınan seviyeler — aynı tick'te satışı engelle
+        just_bought_this_tick = set()
 
         # BB modu filtreleri — Redis'ten güncel BB meta oku
         skip_buy = False
@@ -1087,6 +1089,7 @@ class GridLiveEngine:
                             filled.add(lvl)
                             entry_prices[str(lvl)] = current_price
                             entry_times[str(lvl)] = now_ts
+                            just_bought_this_tick.add(lvl)
 
                     if buy_levels:
                         trade = await self._execute_order(
@@ -1095,11 +1098,9 @@ class GridLiveEngine:
                         trades.append(trade)
 
             elif current_level > last_level:
-                # Minimum 5 saniye bekle — aynı tick'te veya hemen sonra satmayı engelle
-                now_ts = time.time()
-                min_hold_seconds = 5
+                # Aynı tick'te alınıp satılmayı engelle (sonraki tick'te serbestçe satılabilir)
                 sell_levels = [lvl for lvl in range(last_level, current_level)
-                               if lvl in filled and (now_ts - entry_times.get(str(lvl), 0)) >= min_hold_seconds]
+                               if lvl in filled and lvl not in just_bought_this_tick]
 
                 if sell_levels:
                     contracts_per_lvl = state.get("contracts_per_level", 1)
@@ -1143,6 +1144,7 @@ class GridLiveEngine:
                             filled.add(lvl)
                             entry_prices[str(lvl)] = current_price
                             entry_times[str(lvl)] = now_ts
+                            just_bought_this_tick.add(lvl)
 
                     if short_levels:
                         trade = await self._execute_order(
@@ -1151,11 +1153,9 @@ class GridLiveEngine:
                         trades.append(trade)
 
             elif current_level < last_level:
-                # Düşüşte cover (short kapat) — minimum 5s bekleme
-                now_ts = time.time()
-                min_hold_seconds = 5
+                # Düşüşte cover (short kapat) — aynı tick'te açılıp kapanmayı engelle
                 cover_levels = [lvl for lvl in range(last_level, current_level, -1)
-                                if lvl in filled and (now_ts - entry_times.get(str(lvl), 0)) >= min_hold_seconds]
+                                if lvl in filled and lvl not in just_bought_this_tick]
 
                 if cover_levels:
                     contracts_per_lvl = state.get("contracts_per_level", 1)
@@ -1245,12 +1245,10 @@ class GridLiveEngine:
                         exit_reason = f"Fiyattan {exit_mode.replace('touch_', '').upper()}'ye Temas"
 
             if should_close_grid:
-                    # Minimum 5s bekleme — yeni alınan seviyeleri hemen kapatma
-                    now_ts = time.time()
-                    close_levels = [lvl for lvl in filled
-                                    if (now_ts - entry_times.get(str(lvl), 0)) >= 5]
+                    # Aynı tick'te alınan seviyeleri hemen kapatma
+                    close_levels = [lvl for lvl in filled if lvl not in just_bought_this_tick]
                     if not close_levels:
-                        should_close_grid = False  # Henüz yaşlanmış seviye yok, çıkışı ertele
+                        should_close_grid = False  # Tüm seviyeler bu tick'te alındı, çıkışı ertele
                     contracts_per_lvl = state.get("contracts_per_level", 1)
                     cs = state.get("contract_size", 0.01)
 
