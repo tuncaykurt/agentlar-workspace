@@ -316,6 +316,12 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"[Main] Bot auto-start hatası: {e}")
 
+        # 8. Geçmiş veri otomatik doldurma (arka plan — bloklamaz)
+        try:
+            tasks.append(asyncio.create_task(_auto_fill_historical()))
+        except Exception as e:
+            print(f"[Main] Historical data fill hatası (devam ediliyor): {e}")
+
         print("[Main] ✓ Arka plan başlatma tamamlandı.")
 
     # Tek bir background task — lifespan anında yield eder, hiçbir şey beklemez
@@ -330,6 +336,59 @@ async def lifespan(app: FastAPI):
         await bitget.close()
     except Exception:
         pass
+
+
+async def _auto_fill_historical():
+    """
+    Startup'ta geçmiş veriyi otomatik doldur.
+    BTC ve ETH için tüm timeframe'lerde API izin verdiği kadar veri çek.
+    Sayfalama ile 200 mum/istek → toplam yüzlerce gün veri.
+    """
+    await asyncio.sleep(15)  # Diğer servislerin başlamasını bekle
+
+    symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"]
+    timeframes = ["5m", "1h", "4h", "1d"]
+    # Her timeframe için kaç gün çekilmeli
+    days_map = {"5m": 30, "1h": 180, "4h": 365, "1d": 365}
+
+    try:
+        fetcher = DataFetcher(bitget)
+        stats = await fetcher.get_stats()
+
+        # Mevcut veriyi kontrol et — eksik olanları doldur
+        existing = {}
+        for s in stats:
+            key = f"{s['symbol']}:{s['timeframe']}"
+            existing[key] = s["candle_count"]
+
+        for symbol in symbols:
+            for tf in timeframes:
+                key = f"{symbol}:{tf}"
+                current_count = existing.get(key, 0)
+                target_days = days_map.get(tf, 90)
+
+                # Yaklaşık hedef mum sayısı
+                hours_per_candle = {"5m": 5/60, "1h": 1, "4h": 4, "1d": 24}
+                hpc = hours_per_candle.get(tf, 1)
+                target_count = int((target_days * 24) / hpc)
+
+                if current_count >= target_count * 0.8:
+                    # Yeterli veri var, sadece sync yap
+                    new = await fetcher.sync_latest(symbol, tf)
+                    if new > 0:
+                        print(f"[HistFill] {symbol} {tf}: {new} yeni mum eklendi (toplam ~{current_count + new})")
+                else:
+                    # Yetersiz veri — historical fetch yap
+                    print(f"[HistFill] {symbol} {tf}: {current_count} mum var, {target_count} hedef → çekiliyor ({target_days} gün)...")
+                    count = await fetcher.fetch_historical(symbol, tf, target_days)
+                    print(f"[HistFill] {symbol} {tf}: {count} mum yazıldı")
+
+                # API rate limit — borsayı yormamak için
+                await asyncio.sleep(1)
+
+        print("[HistFill] ✓ Geçmiş veri doldurma tamamlandı.")
+    except Exception as e:
+        print(f"[HistFill] Geçmiş veri doldurma hatası: {type(e).__name__}: {e}")
 
 
 async def _auto_start_bots(tasks: list):
