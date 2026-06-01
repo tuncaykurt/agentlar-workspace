@@ -199,23 +199,40 @@ async def _init_db():
 async def _start_data_sync(fetcher: DataFetcher, symbols: list[str]):
     """
     Arka planda periyodik veri senkronizasyonu.
-    Her 5 dakikada eksik mumları doldurur.
+    Her 5 dakikada tüm coinlerin eksik mumlarını doldurur.
+    Dinamik: coin_collector'ın bulduğu coinler de dahil.
     """
-    timeframes = ["1h", "4h", "1d"]
-    # İlk çalışmada son 7 günü doldur (hızlı başlangıç)
+    timeframes = ["1h", "4h"]
+
+    # İlk çalışmada öncelikli coinleri sync et
     try:
         await fetcher.sync_all(symbols, timeframes)
-        print(f"[DataSync] İlk senkronizasyon tamamlandı.")
+        print(f"[DataSync] İlk senkronizasyon tamamlandı ({len(symbols)} coin).")
     except Exception as e:
         print(f"[DataSync] İlk senkronizasyon hatası: {e}")
 
-    # Sonra 5 dakikada bir senkronize et
+    # Sonra 5 dakikada bir — scanner coinlerini de dahil et
     while True:
         await asyncio.sleep(300)
         try:
-            count = await fetcher.sync_all(symbols, timeframes)
+            # Dinamik coin listesi: öncelikli + scanner coinleri
+            all_symbols = list(symbols)
+            try:
+                from core.redis_client import get_redis
+                import json
+                redis = get_redis()
+                cached = await redis.get("coin_collector:zero_fee_symbols")
+                if cached:
+                    scanner_coins = json.loads(cached)
+                    for c in scanner_coins:
+                        if c["symbol"] not in all_symbols:
+                            all_symbols.append(c["symbol"])
+            except Exception:
+                pass
+
+            count = await fetcher.sync_all(all_symbols, timeframes)
             if count > 0:
-                print(f"[DataSync] {count} yeni mum eklendi.")
+                print(f"[DataSync] {count} yeni mum eklendi ({len(all_symbols)} coin).")
         except Exception as e:
             print(f"[DataSync] Senkronizasyon hatası: {e}")
 
@@ -344,15 +361,15 @@ async def lifespan(app: FastAPI):
 async def _auto_fill_historical():
     """
     Startup'ta geçmiş veriyi otomatik doldur.
-    BTC ve ETH için tüm timeframe'lerde API izin verdiği kadar veri çek.
-    Sayfalama ile 200 mum/istek → toplam yüzlerce gün veri.
+    1. Öncelikli coinler (BTC, ETH, SOL): Tüm timeframe'lerde derin geçmiş
+    2. Scanner'ın bulduğu tüm zero-fee coinler: 1h ve 4h geçmişi
     """
     await asyncio.sleep(15)  # Diğer servislerin başlamasını bekle
 
-    symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"]
-    timeframes = ["5m", "1h", "4h", "1d"]
-    # Her timeframe için kaç gün çekilmeli
-    days_map = {"5m": 30, "1h": 180, "4h": 365, "1d": 365}
+    # Faz 1: Öncelikli coinler — derin geçmiş
+    priority_symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"]
+    priority_timeframes = ["5m", "1h", "4h", "1d"]
+    priority_days = {"5m": 30, "1h": 180, "4h": 365, "1d": 365}
 
     try:
         from exchange.exchange_factory import get_public_client
@@ -360,40 +377,73 @@ async def _auto_fill_historical():
         fetcher = DataFetcher(mexc_public, exchange_name="mexc")
         stats = await fetcher.get_stats()
 
-        # Mevcut veriyi kontrol et — eksik olanları doldur
         existing = {}
         for s in stats:
             key = f"{s['symbol']}:{s['timeframe']}"
             existing[key] = s["candle_count"]
 
-        for symbol in symbols:
-            for tf in timeframes:
-                key = f"{symbol}:{tf}"
-                current_count = existing.get(key, 0)
-                target_days = days_map.get(tf, 90)
+        hours_per_candle = {"5m": 5/60, "15m": 0.25, "1h": 1, "4h": 4, "1d": 24}
 
-                # Yaklaşık hedef mum sayısı
-                hours_per_candle = {"5m": 5/60, "1h": 1, "4h": 4, "1d": 24}
-                hpc = hours_per_candle.get(tf, 1)
-                target_count = int((target_days * 24) / hpc)
-
-                if current_count >= target_count * 0.8:
-                    # Yeterli veri var, sadece sync yap
-                    new = await fetcher.sync_latest(symbol, tf)
-                    if new > 0:
-                        print(f"[HistFill] {symbol} {tf}: {new} yeni mum eklendi (toplam ~{current_count + new})")
-                else:
-                    # Yetersiz veri — historical fetch yap
-                    print(f"[HistFill] {symbol} {tf}: {current_count} mum var, {target_count} hedef → çekiliyor ({target_days} gün)...")
-                    count = await fetcher.fetch_historical(symbol, tf, target_days)
-                    print(f"[HistFill] {symbol} {tf}: {count} mum yazıldı")
-
-                # API rate limit — borsayı yormamak için
+        # --- Faz 1: Öncelikli coinler ---
+        for symbol in priority_symbols:
+            for tf in priority_timeframes:
+                await _fill_symbol(fetcher, symbol, tf, priority_days.get(tf, 90), existing, hours_per_candle)
                 await asyncio.sleep(1)
+
+        print("[HistFill] ✓ Faz 1 tamamlandı (öncelikli coinler).")
+
+        # --- Faz 2: Scanner coinleri — Redis'ten oku ---
+        await asyncio.sleep(5)
+        try:
+            from core.redis_client import get_redis
+            redis = get_redis()
+            cached = await redis.get("coin_collector:zero_fee_symbols")
+            if cached:
+                import json
+                scanner_coins = json.loads(cached)
+                scanner_symbols = [c["symbol"] for c in scanner_coins
+                                   if c["symbol"] not in priority_symbols]
+                print(f"[HistFill] Faz 2: {len(scanner_symbols)} scanner coini için veri çekiliyor...")
+
+                scanner_timeframes = ["1h", "4h"]
+                scanner_days = {"1h": 30, "4h": 90}
+
+                for i, symbol in enumerate(scanner_symbols):
+                    for tf in scanner_timeframes:
+                        await _fill_symbol(fetcher, symbol, tf, scanner_days.get(tf, 30), existing, hours_per_candle)
+                        await asyncio.sleep(0.5)  # Rate limit
+                    if (i + 1) % 20 == 0:
+                        print(f"[HistFill] Faz 2 ilerleme: {i+1}/{len(scanner_symbols)} coin tamamlandı")
+
+                print(f"[HistFill] ✓ Faz 2 tamamlandı ({len(scanner_symbols)} scanner coini).")
+            else:
+                print("[HistFill] Scanner coinleri henüz yok (coin_collector beklenecek).")
+        except Exception as e:
+            print(f"[HistFill] Faz 2 hatası (devam ediliyor): {type(e).__name__}: {e}")
 
         print("[HistFill] ✓ Geçmiş veri doldurma tamamlandı.")
     except Exception as e:
         print(f"[HistFill] Geçmiş veri doldurma hatası: {type(e).__name__}: {e}")
+
+
+async def _fill_symbol(fetcher, symbol, tf, target_days, existing, hours_per_candle):
+    """Tek sembol + timeframe için veri doldur veya sync yap."""
+    key = f"{symbol}:{tf}"
+    current_count = existing.get(key, 0)
+    hpc = hours_per_candle.get(tf, 1)
+    target_count = int((target_days * 24) / hpc)
+
+    try:
+        if current_count >= target_count * 0.8:
+            new = await fetcher.sync_latest(symbol, tf)
+            if new > 0:
+                print(f"[HistFill] {symbol} {tf}: +{new} mum")
+        else:
+            count = await fetcher.fetch_historical(symbol, tf, target_days)
+            if count > 0:
+                print(f"[HistFill] {symbol} {tf}: {count} mum yazıldı ({target_days}g)")
+    except Exception as e:
+        print(f"[HistFill] {symbol} {tf} hatası: {e}")
 
 
 async def _auto_start_bots(tasks: list):
