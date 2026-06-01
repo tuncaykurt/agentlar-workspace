@@ -5,9 +5,7 @@ import dynamic from "next/dynamic"
 import BalancePanel   from "@/components/Sidebar/BalancePanel"
 import MarketStats    from "@/components/Sidebar/MarketStats"
 import PositionsPanel from "@/components/Sidebar/PositionsPanel"
-import ActiveBots     from "@/components/Sidebar/ActiveBots"
 import SignalOverlay  from "@/components/TradingPanel/SignalOverlay"
-import AIAnalysis     from "@/components/Sidebar/AIAnalysis"
 import SymbolSearch, { SymbolInfo } from "@/components/TradingPanel/SymbolSearch"
 
 const ProChart = dynamic(
@@ -44,7 +42,6 @@ export default function DashboardPage() {
   const [interval,  setInterval]  = useState(() =>
     typeof window !== "undefined" ? (localStorage.getItem("prochart_tv_interval") ?? "60") : "60"
   )
-  const [aiLevels,  setAiLevels]  = useState<{ tp?: number; sl?: number }>({})
   const [mode,      setMode]      = useState<ChartMode>(() =>
     typeof window !== "undefined" ? ((localStorage.getItem("prochart_mode") as ChartMode) ?? "tv") : "tv"
   )
@@ -57,7 +54,6 @@ export default function DashboardPage() {
 
   const handleSymbol = (info: SymbolInfo) => {
     setSymbol(info.internal)
-    setAiLevels({})
   }
 
   // ESC ile tam ekrandan çık
@@ -200,11 +196,7 @@ export default function DashboardPage() {
           {mode === "tv" ? (
             <TradingViewWidget symbol={symbol} interval={interval} />
           ) : (
-            <ProChart
-              symbol={symbol}
-              tp={aiLevels.tp}
-              sl={aiLevels.sl}
-            />
+            <ProChart symbol={symbol} />
           )}
         </div>
       </div>
@@ -236,57 +228,10 @@ export default function DashboardPage() {
 
           <div className="border-t border-slate-800/60" />
 
-          {/* Active Bots */}
-          <div className="py-3">
-            <ActiveBots />
-          </div>
-
-          <div className="border-t border-slate-800/60" />
-
-          {/* AI Analysis */}
-          <div className="py-3">
-            <AIAnalysis
-              symbol={symbol}
-              onAnalysis={(tp, sl) => setAiLevels({ tp, sl })}
-            />
-          </div>
-
-          <div className="border-t border-slate-800/60" />
-
           {/* Signal Overlay */}
           <div className="py-3">
             <SignalOverlay />
           </div>
-
-          {/* TP/SL göstergesi */}
-          {(aiLevels.tp || aiLevels.sl) && (
-            <>
-              <div className="border-t border-slate-800/60" />
-              <div className="py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-slate-500 font-medium">AI Seviyeleri</span>
-                  <button onClick={() => setAiLevels({})}
-                    className="text-slate-600 hover:text-slate-400 text-xs transition-colors">
-                    Temizle ×
-                  </button>
-                </div>
-                <div className="flex gap-2">
-                  {aiLevels.tp && (
-                    <div className="flex-1 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-center">
-                      <div className="text-[10px] text-green-400/70 mb-0.5">HEDEF</div>
-                      <div className="text-green-400 font-mono text-sm font-semibold">${aiLevels.tp.toFixed(1)}</div>
-                    </div>
-                  )}
-                  {aiLevels.sl && (
-                    <div className="flex-1 bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-center">
-                      <div className="text-[10px] text-red-400/70 mb-0.5">STOP</div>
-                      <div className="text-red-400 font-mono text-sm font-semibold">${aiLevels.sl.toFixed(1)}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>

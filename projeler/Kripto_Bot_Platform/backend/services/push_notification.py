@@ -126,10 +126,16 @@ async def push_trade_notification(trade: dict, user_id: str = "default"):
     symbol = trade.get("symbol", "")
     level_count = trade.get("level_count", 1)
     mode = trade.get("mode", "paper")
+    leverage = trade.get("leverage", 0)
+    margin_per_level = trade.get("margin_per_level", 0)
+    grid_mode = trade.get("grid_mode", "manual")
+    direction = trade.get("direction", "long")
 
     # Symbol'den coin adını çıkar: "BTCUSDT" → "BTC", "ETH/USDT:USDT" → "ETH"
     coin = symbol.replace("USDT", "").replace("/", "").replace(":USDT", "").strip() or "?"
     mode_label = "Paper" if mode == "paper" else "Canlı"
+    strategy_map = {"manual": "Manuel", "bollinger": "BB", "hybrid": "Hibrit", "bb_direction": "BB Yön", "math_grid_gemini": "Math Grid", "trend_score": "Trend Score"}
+    strategy_label = strategy_map.get(grid_mode, grid_mode)
 
     if pnl != 0:
         # Pozisyon kapatma (kâr/zarar)
@@ -139,11 +145,16 @@ async def push_trade_notification(trade: dict, user_id: str = "default"):
             title = f"🔴 {coin} Zarar Kapandı: -${abs(pnl):.4f}"
         body = f"{side} {level_count} kademe kapandı\nFiyat: ${price:,.2f} | {mode_label}"
     else:
-        # Pozisyon açma
-        direction = "LONG" if side == "BUY" else "SHORT"
+        # Pozisyon açma — detaylı bilgi
+        dir_label = "LONG" if side == "BUY" else "SHORT"
         emoji = "📈" if side == "BUY" else "📉"
-        title = f"{emoji} {coin} {direction} Pozisyon Açıldı"
-        body = f"{level_count} kademe @ ${price:,.2f} | {mode_label}"
+        title = f"{emoji} {coin} {dir_label} Pozisyon Açıldı"
+        lines = [f"{level_count} kademe @ ${price:,.2f} | {mode_label}"]
+        if leverage:
+            lines.append(f"Kaldıraç: {leverage}x | Strateji: {strategy_label}")
+        if margin_per_level:
+            lines.append(f"Kademe başı: ${margin_per_level:.2f} | Yön: {direction.upper()}")
+        body = "\n".join(lines)
 
     await send_push(title, body, data={"url": "/hft"}, tag=f"trade-{side}", user_id=user_id)
 

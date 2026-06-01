@@ -519,14 +519,21 @@ class GridLiveEngine:
                 )
             )
 
-        mode_label = {"manual": "MANUEL", "bollinger": "BOLLINGER", "hybrid": "HİBRİT", "bb_direction": "BB YÖN"}.get(grid_mode, "MANUEL")
+        mode_label = {"manual": "MANUEL", "bollinger": "BOLLINGER", "hybrid": "HİBRİT", "bb_direction": "BB YÖN", "math_grid_gemini": "MATH GRID"}.get(grid_mode, "MANUEL")
         emoji = "🔴 CANLI" if mode == "live" else "📝 PAPER"
+        dir_label = grid_direction.upper() if grid_direction != "auto" else "OTOMATİK"
+        live_paper = "Canlı" if mode == "live" else "Paper"
         print(f"[GridLive] {emoji} [{mode_label}] Grid Bot Başlatıldı: {symbol_raw} | "
               f"${lower:.2f}-${upper:.2f} | {grid_count} kademe | "
               f"{leverage}x | toplam=${total_budget} margin/kademe=${margin_per_level:.4f} | "
               f"{contracts_per_level} kontrat/kademe")
-              
-        asyncio.create_task(push_grid_event("grid_start", f"{symbol_raw} · {mode_label} modunda bot başlatıldı.\nBütçe: ${total_budget} | {grid_count} kademe | {leverage}x kaldıraç", user_id))
+
+        asyncio.create_task(push_grid_event("grid_start",
+            f"{symbol_raw} · {live_paper} {mode_label}\n"
+            f"Kaldıraç: {leverage}x | Bütçe: ${total_budget}\n"
+            f"{grid_count} kademe | Kademe başı: ${margin_per_level:.2f}\n"
+            f"Yön: {dir_label} | Aralık: ${lower:.2f}-${upper:.2f}",
+            user_id))
 
         result = {
             "success": True,
@@ -1393,6 +1400,10 @@ class GridLiveEngine:
             "contracts": total_contracts,
             "pnl": round(pnl, 4),
             "mode": mode,
+            "leverage": state.get("leverage", 0),
+            "margin_per_level": round(state.get("margin_per_level", 0), 4),
+            "grid_mode": state.get("grid_mode", "manual"),
+            "direction": state.get("grid_direction", "long"),
             "time": datetime.now(timezone.utc).isoformat(),
             "timestamp": int(time.time()),
         }
