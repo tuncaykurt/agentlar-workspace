@@ -623,6 +623,70 @@ Long: {long_wins}/{len(long_trades)} başarılı | Short: {short_wins}/{len(shor
 """
 
 
+def _extract_rules_summary(past_results: list[dict]) -> str:
+    """
+    Geçmiş veriden çıkarılan kritik kuralları kısa özet olarak döndür.
+    Prompt'un BAŞINA eklenir — AI'ın ilk okuduğu şey olur.
+    """
+    if len(past_results) < 5:
+        return ""
+
+    rules = []
+    wins = [r for r in past_results if r["status"] == "win"]
+    total = len(past_results)
+    win_rate = len(wins) / total * 100
+
+    # Genel uyarı
+    if win_rate < 40:
+        rules.append(f"⚠️ Genel kazanma oranın %{win_rate:.0f} — ÇOK SEÇİCİ OL, sadece en güçlü sinyalleri seç!")
+    elif win_rate > 65:
+        rules.append(f"✅ Kazanma oranın %{win_rate:.0f} — mevcut strateji çalışıyor, benzer pattern'leri devam ettir")
+
+    # RSI kuralı
+    rsi_zones = {}
+    for r in past_results:
+        rsi = r.get("rsi_14")
+        if rsi is None:
+            continue
+        zone = "oversold" if rsi < 30 else "overbought" if rsi > 70 else "mid"
+        rsi_zones.setdefault(zone, []).append(r["status"] == "win")
+    for zone, results in rsi_zones.items():
+        if len(results) >= 3:
+            wr = sum(results) / len(results)
+            label = {"oversold": "RSI<30 (aşırı satım)", "overbought": "RSI>70 (aşırı alım)", "mid": "RSI 30-70 (nötr)"}[zone]
+            if wr < 0.35:
+                rules.append(f"🚫 {label} bölgesinde kazanma oranın düşük (%{round(wr*100)}) — bu bölgede İŞLEM AÇMA")
+            elif wr > 0.65:
+                rules.append(f"🎯 {label} bölgesinde başarılısın (%{round(wr*100)}) — bu bölgeye ODAKLAN")
+
+    # Yön kuralı
+    long_t = [r for r in past_results if r["direction"] == "long"]
+    short_t = [r for r in past_results if r["direction"] == "short"]
+    if len(long_t) >= 5 and len(short_t) >= 5:
+        long_wr = sum(1 for r in long_t if r["status"] == "win") / len(long_t)
+        short_wr = sum(1 for r in short_t if r["status"] == "win") / len(short_t)
+        if long_wr > short_wr + 0.2:
+            rules.append(f"📈 LONG pozisyonlar çok daha başarılı (%{round(long_wr*100)} vs %{round(short_wr*100)}) — LONG tercih et")
+        elif short_wr > long_wr + 0.2:
+            rules.append(f"📉 SHORT pozisyonlar daha başarılı (%{round(short_wr*100)} vs %{round(long_wr*100)}) — SHORT tercih et")
+
+    # Kaldıraç kuralı
+    high_lev = [r for r in past_results if (r.get("leverage") or 0) >= 40]
+    if len(high_lev) >= 3:
+        hw = sum(1 for r in high_lev if r["status"] == "win") / len(high_lev)
+        if hw < 0.35:
+            rules.append(f"⚠️ Yüksek kaldıraç (≥40x) başarısız (%{round(hw*100)}) — kaldıracı 25x altında tut")
+
+    if not rules:
+        return ""
+
+    return (
+        "🔴 KRİTİK: Aşağıdaki kurallar geçmiş {total} işlemden çıkarıldı. MUTLAKA UY!\n"
+        + "\n".join(rules)
+        + "\n" + "─" * 60
+    ).replace("{total}", str(total))
+
+
 async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                          past_results: list[dict]) -> list[dict]:
     """AI veya Manuel mod ile coin seç."""
@@ -695,7 +759,12 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                                   bot_config=cfg)
         learning = _build_learning_context(past_results)
         if learning:
-            prompt = prompt + "\n" + learning
+            # Kuralları hem başa hem sona koy — AI attention başı ve sonu en iyi okur
+            rules_section = _extract_rules_summary(past_results)
+            if rules_section:
+                prompt = rules_section + "\n\n" + prompt + "\n" + learning
+            else:
+                prompt = prompt + "\n" + learning
 
         try:
             model = settings.AI_DEEP_MODEL
