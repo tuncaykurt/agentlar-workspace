@@ -321,10 +321,11 @@ async def _get_past_results(limit: int = 50) -> list[dict]:
         return rows
 
 
-def _build_learning_context(past_results: list[dict]) -> str:
+def _build_learning_context(past_results: list[dict], leverage_range: tuple = None) -> str:
     """
     Geçmiş sonuçlardan AI öğrenme metni oluştur.
     Gösterge-bazlı pattern analizi ile hangi koşullarda kazanıp kaybettiğini tespit eder.
+    leverage_range: (min, max) — bot config'den gelen kaldıraç aralığı
     """
     if not past_results:
         return ""
@@ -442,8 +443,22 @@ def _build_learning_context(past_results: list[dict]) -> str:
             bw = len([r for r in bucket if r["status"] == "win"])
             fg_lines.append(f"  {name}: {len(bucket)} işlem → %{round(bw/len(bucket)*100)} kazanma")
 
-    # ── 9. KALDIRAC ANALİZİ (detaylı) ──
-    lev_buckets = {"düşük (1-10x)": (1, 11), "orta (11-25x)": (11, 26), "yüksek (26-50x)": (26, 51), "çok_yüksek (>50x)": (51, 500)}
+    # ── 9. KALDIRAC ANALİZİ (dinamik — bot config'e göre) ──
+    min_lev = leverage_range[0] if leverage_range else 3
+    max_lev = leverage_range[1] if leverage_range else 75
+    lev_span = max_lev - min_lev
+    if lev_span <= 0:
+        lev_span = 1
+    # 4 eşit dilime böl
+    q1 = min_lev + lev_span // 4
+    q2 = min_lev + lev_span // 2
+    q3 = min_lev + (3 * lev_span) // 4
+    lev_buckets = {
+        f"düşük ({min_lev}-{q1}x)": (min_lev, q1 + 1),
+        f"orta ({q1+1}-{q2}x)": (q1 + 1, q2 + 1),
+        f"yüksek ({q2+1}-{q3}x)": (q2 + 1, q3 + 1),
+        f"çok_yüksek ({q3+1}-{max_lev}x)": (q3 + 1, max_lev + 1),
+    }
     lev_lines = []
     for name, (lo, hi) in lev_buckets.items():
         bucket = [r for r in past_results if r.get("leverage") is not None and lo <= r["leverage"] < hi]
@@ -623,10 +638,11 @@ Long: {long_wins}/{len(long_trades)} başarılı | Short: {short_wins}/{len(shor
 """
 
 
-def _extract_rules_summary(past_results: list[dict]) -> str:
+def _extract_rules_summary(past_results: list[dict], leverage_range: tuple = None) -> str:
     """
     Geçmiş veriden çıkarılan kritik kuralları kısa özet olarak döndür.
     Prompt'un BAŞINA eklenir — AI'ın ilk okuduğu şey olur.
+    leverage_range: (min, max) — bot config'den gelen kaldıraç aralığı
     """
     if len(past_results) < 5:
         return ""
@@ -670,12 +686,20 @@ def _extract_rules_summary(past_results: list[dict]) -> str:
         elif short_wr > long_wr + 0.2:
             rules.append(f"📉 SHORT pozisyonlar daha başarılı (%{round(short_wr*100)} vs %{round(long_wr*100)}) — SHORT tercih et")
 
-    # Kaldıraç kuralı
-    high_lev = [r for r in past_results if (r.get("leverage") or 0) >= 40]
-    if len(high_lev) >= 3:
-        hw = sum(1 for r in high_lev if r["status"] == "win") / len(high_lev)
-        if hw < 0.35:
-            rules.append(f"⚠️ Yüksek kaldıraç (≥40x) başarısız (%{round(hw*100)}) — kaldıracı 25x altında tut")
+    # Kaldıraç kuralı — dinamik aralıklara göre
+    min_lev = leverage_range[0] if leverage_range else 3
+    max_lev = leverage_range[1] if leverage_range else 75
+    mid_lev = (min_lev + max_lev) // 2
+    # Üst yarı vs alt yarı karşılaştırması
+    upper_half = [r for r in past_results if r.get("leverage") is not None and r["leverage"] > mid_lev]
+    lower_half = [r for r in past_results if r.get("leverage") is not None and r["leverage"] <= mid_lev]
+    if len(upper_half) >= 3 and len(lower_half) >= 3:
+        upper_wr = sum(1 for r in upper_half if r["status"] == "win") / len(upper_half)
+        lower_wr = sum(1 for r in lower_half if r["status"] == "win") / len(lower_half)
+        if upper_wr < lower_wr - 0.15:
+            rules.append(f"⚠️ Yüksek kaldıraç (>{mid_lev}x) daha başarısız (%{round(upper_wr*100)} vs %{round(lower_wr*100)}) — kaldıracı {mid_lev}x altında tut")
+        elif upper_wr > lower_wr + 0.15:
+            rules.append(f"💪 Yüksek kaldıraç (>{mid_lev}x) daha başarılı (%{round(upper_wr*100)} vs %{round(lower_wr*100)}) — kaldıracı artırabilirsin")
 
     if not rules:
         return ""
@@ -757,10 +781,10 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
         prompt = build_ai_prompt(top, active_coins, leverage_range=lev_range,
                                   max_selections=remaining_slots, past_performance=_sim_perf,
                                   bot_config=cfg)
-        learning = _build_learning_context(past_results)
+        learning = _build_learning_context(past_results, leverage_range=lev_range)
         if learning:
             # Kuralları hem başa hem sona koy — AI attention başı ve sonu en iyi okur
-            rules_section = _extract_rules_summary(past_results)
+            rules_section = _extract_rules_summary(past_results, leverage_range=lev_range)
             if rules_section:
                 prompt = rules_section + "\n\n" + prompt + "\n" + learning
             else:
