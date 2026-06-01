@@ -287,32 +287,45 @@ async def _get_open_sims() -> list[dict]:
         return rows
 
 
-async def _get_past_results(limit: int = 20) -> list[dict]:
-    """AI öğrenme için geçmiş simülasyon sonuçlarını getir."""
+async def _get_past_results(limit: int = 50) -> list[dict]:
+    """AI öğrenme için geçmiş simülasyon sonuçlarını getir (genişletilmiş)."""
     async with async_session() as session:
         result = await session.execute(sql_text("""
             SELECT coin, direction, confidence, entry_price, exit_price,
                    pnl_pct, status, reason, ai_review,
                    rsi_14, adx, funding_rate, fear_greed,
                    exit_reason, duration_minutes, first_move, first_move_pct,
-                   leverage, max_favorable_pct, max_adverse_pct
+                   leverage, max_favorable_pct, max_adverse_pct,
+                   volume_ratio, atr_pct, supertrend_dir, tp_pct, sl_pct
             FROM scanner_simulations
             WHERE status IN ('win', 'loss')
             ORDER BY closed_at DESC
             LIMIT :limit
         """), {"limit": limit})
-        return [dict(zip(
-            ["coin", "direction", "confidence", "entry_price", "exit_price",
-             "pnl_pct", "status", "reason", "ai_review",
-             "rsi_14", "adx", "funding_rate", "fear_greed",
-             "exit_reason", "duration_minutes", "first_move", "first_move_pct",
-             "leverage", "max_favorable_pct", "max_adverse_pct"],
-            row
-        )) for row in result.fetchall()]
+        cols = ["coin", "direction", "confidence", "entry_price", "exit_price",
+                "pnl_pct", "status", "reason", "ai_review",
+                "rsi_14", "adx", "funding_rate", "fear_greed",
+                "exit_reason", "duration_minutes", "first_move", "first_move_pct",
+                "leverage", "max_favorable_pct", "max_adverse_pct",
+                "volume_ratio", "atr_pct", "supertrend_dir", "tp_pct", "sl_pct"]
+        rows = []
+        for row in result.fetchall():
+            try:
+                rows.append(dict(zip(cols, row)))
+            except Exception:
+                # Eski tablo yapısı — eksik kolonları None ile doldur
+                d = dict(zip(cols[:len(row)], row))
+                for c in cols[len(row):]:
+                    d[c] = None
+                rows.append(d)
+        return rows
 
 
 def _build_learning_context(past_results: list[dict]) -> str:
-    """Geçmiş sonuçlardan AI öğrenme metni oluştur."""
+    """
+    Geçmiş sonuçlardan AI öğrenme metni oluştur.
+    Gösterge-bazlı pattern analizi ile hangi koşullarda kazanıp kaybettiğini tespit eder.
+    """
     if not past_results:
         return ""
 
@@ -322,43 +335,131 @@ def _build_learning_context(past_results: list[dict]) -> str:
     win_rate = len(wins) / total * 100 if total else 0
     avg_win = sum(r["pnl_pct"] or 0 for r in wins) / max(1, len(wins))
     avg_loss = sum(abs(r["pnl_pct"] or 0) for r in losses) / max(1, len(losses))
+    total_pnl = sum(r["pnl_pct"] or 0 for r in past_results)
 
-    # Yön bazlı analiz
+    # ── 1. Yön bazlı analiz ──
     long_trades = [r for r in past_results if r["direction"] == "long"]
     short_trades = [r for r in past_results if r["direction"] == "short"]
     long_wins = len([r for r in long_trades if r["status"] == "win"])
     short_wins = len([r for r in short_trades if r["status"] == "win"])
 
-    # Coin bazlı performans
+    # ── 2. Coin bazlı performans (genişletilmiş) ──
     coin_stats = {}
     for r in past_results:
         c = r["coin"]
         if c not in coin_stats:
-            coin_stats[c] = {"win": 0, "loss": 0}
+            coin_stats[c] = {"win": 0, "loss": 0, "pnl": 0}
         coin_stats[c][r["status"]] += 1
+        coin_stats[c]["pnl"] += (r["pnl_pct"] or 0)
 
     best_coins = sorted(coin_stats.items(),
-                        key=lambda x: x[1]["win"] / max(1, x[1]["win"] + x[1]["loss"]),
-                        reverse=True)[:5]
+                        key=lambda x: x[1]["pnl"], reverse=True)[:5]
     worst_coins = sorted(coin_stats.items(),
-                         key=lambda x: x[1]["loss"] / max(1, x[1]["win"] + x[1]["loss"]),
-                         reverse=True)[:3]
+                         key=lambda x: x[1]["pnl"])[:3]
 
-    # İlk hareket analizi — fiyat giriş sonrası önce lehte mi aleyhte mi gitti?
+    # ── 3. RSI BÖLGE ANALİZİ — En kritik öğrenme ──
+    rsi_buckets = {
+        "aşırı_düşük (RSI<20)": {"range": (0, 20), "wins": 0, "total": 0, "pnl": 0},
+        "düşük (RSI 20-30)": {"range": (20, 30), "wins": 0, "total": 0, "pnl": 0},
+        "nötr_düşük (RSI 30-45)": {"range": (30, 45), "wins": 0, "total": 0, "pnl": 0},
+        "nötr (RSI 45-55)": {"range": (45, 55), "wins": 0, "total": 0, "pnl": 0},
+        "nötr_yüksek (RSI 55-70)": {"range": (55, 70), "wins": 0, "total": 0, "pnl": 0},
+        "yüksek (RSI 70-80)": {"range": (70, 80), "wins": 0, "total": 0, "pnl": 0},
+        "aşırı_yüksek (RSI>80)": {"range": (80, 100), "wins": 0, "total": 0, "pnl": 0},
+    }
+    for r in past_results:
+        rsi = r.get("rsi_14")
+        if rsi is None:
+            continue
+        for name, bucket in rsi_buckets.items():
+            lo, hi = bucket["range"]
+            if lo <= rsi < hi:
+                bucket["total"] += 1
+                if r["status"] == "win":
+                    bucket["wins"] += 1
+                bucket["pnl"] += (r["pnl_pct"] or 0)
+                break
+
+    rsi_lines = []
+    for name, b in rsi_buckets.items():
+        if b["total"] >= 2:
+            wr = round(b["wins"] / b["total"] * 100)
+            rsi_lines.append(f"  {name}: {b['total']} işlem → %{wr} kazanma, Net: %{b['pnl']:+.1f}")
+
+    # ── 4. ADX (TREND GÜCÜ) ANALİZİ ──
+    adx_buckets = {
+        "zayıf_trend (ADX<20)": (0, 20),
+        "orta_trend (ADX 20-30)": (20, 30),
+        "güçlü_trend (ADX 30-50)": (30, 50),
+        "çok_güçlü (ADX>50)": (50, 200),
+    }
+    adx_lines = []
+    for name, (lo, hi) in adx_buckets.items():
+        bucket = [r for r in past_results if r.get("adx") is not None and lo <= r["adx"] < hi]
+        if len(bucket) >= 2:
+            bw = len([r for r in bucket if r["status"] == "win"])
+            bp = sum(r["pnl_pct"] or 0 for r in bucket)
+            adx_lines.append(f"  {name}: {len(bucket)} işlem → %{round(bw/len(bucket)*100)} kazanma, Net: %{bp:+.1f}")
+
+    # ── 5. VOLATİLİTE (ATR%) ANALİZİ ──
+    atr_lines = []
+    atr_buckets = {"düşük_vol (ATR<2%)": (0, 2), "orta_vol (ATR 2-5%)": (2, 5), "yüksek_vol (ATR>5%)": (5, 100)}
+    for name, (lo, hi) in atr_buckets.items():
+        bucket = [r for r in past_results if r.get("atr_pct") is not None and lo <= r["atr_pct"] < hi]
+        if len(bucket) >= 2:
+            bw = len([r for r in bucket if r["status"] == "win"])
+            bp = sum(r["pnl_pct"] or 0 for r in bucket)
+            atr_lines.append(f"  {name}: {len(bucket)} işlem → %{round(bw/len(bucket)*100)} kazanma, Net: %{bp:+.1f}")
+
+    # ── 6. HACIM ORANI ANALİZİ ──
+    vol_lines = []
+    vol_buckets = {"düşük_hacim (<1x)": (0, 1), "normal_hacim (1-2x)": (1, 2), "yüksek_hacim (>2x)": (2, 100)}
+    for name, (lo, hi) in vol_buckets.items():
+        bucket = [r for r in past_results if r.get("volume_ratio") is not None and lo <= r["volume_ratio"] < hi]
+        if len(bucket) >= 2:
+            bw = len([r for r in bucket if r["status"] == "win"])
+            bp = sum(r["pnl_pct"] or 0 for r in bucket)
+            vol_lines.append(f"  {name}: {len(bucket)} işlem → %{round(bw/len(bucket)*100)} kazanma, Net: %{bp:+.1f}")
+
+    # ── 7. TREND YÖNÜ ANALİZİ (Supertrend) ──
+    trend_up = [r for r in past_results if r.get("supertrend_dir") == 1]
+    trend_down = [r for r in past_results if r.get("supertrend_dir") == -1]
+    trend_lines = []
+    if len(trend_up) >= 2:
+        tw = len([r for r in trend_up if r["status"] == "win"])
+        trend_lines.append(f"  Supertrend YUKARI: {len(trend_up)} işlem → %{round(tw/len(trend_up)*100)} kazanma")
+    if len(trend_down) >= 2:
+        tw = len([r for r in trend_down if r["status"] == "win"])
+        trend_lines.append(f"  Supertrend AŞAĞI: {len(trend_down)} işlem → %{round(tw/len(trend_down)*100)} kazanma")
+
+    # ── 8. FEAR & GREED ANALİZİ ──
+    fg_buckets = {"aşırı_korku (0-25)": (0, 25), "korku (25-45)": (25, 45), "nötr (45-55)": (45, 55),
+                  "açgözlülük (55-75)": (55, 75), "aşırı_açgözlülük (75-100)": (75, 101)}
+    fg_lines = []
+    for name, (lo, hi) in fg_buckets.items():
+        bucket = [r for r in past_results if r.get("fear_greed") is not None and lo <= r["fear_greed"] < hi]
+        if len(bucket) >= 2:
+            bw = len([r for r in bucket if r["status"] == "win"])
+            fg_lines.append(f"  {name}: {len(bucket)} işlem → %{round(bw/len(bucket)*100)} kazanma")
+
+    # ── 9. KALDIRAC ANALİZİ (detaylı) ──
+    lev_buckets = {"düşük (1-10x)": (1, 11), "orta (11-25x)": (11, 26), "yüksek (26-50x)": (26, 51), "çok_yüksek (>50x)": (51, 500)}
+    lev_lines = []
+    for name, (lo, hi) in lev_buckets.items():
+        bucket = [r for r in past_results if r.get("leverage") is not None and lo <= r["leverage"] < hi]
+        if len(bucket) >= 2:
+            bw = len([r for r in bucket if r["status"] == "win"])
+            bp = sum(r["pnl_pct"] or 0 for r in bucket)
+            lev_lines.append(f"  {name}: {len(bucket)} işlem → %{round(bw/len(bucket)*100)} kazanma, Net: %{bp:+.1f}")
+
+    # ── 10. İLK HAREKET ANALİZİ ──
     first_move_data = [r for r in past_results if r.get("first_move")]
     fm_favorable = [r for r in first_move_data if r["first_move"] == "favorable"]
     fm_adverse = [r for r in first_move_data if r["first_move"] == "adverse"]
-    # İlk hareket lehte olanların kazanma oranı
     fm_fav_wins = len([r for r in fm_favorable if r["status"] == "win"])
     fm_adv_wins = len([r for r in fm_adverse if r["status"] == "win"])
 
-    # Kaldıraç bazlı analiz
-    high_lev = [r for r in past_results if (r.get("leverage") or 0) >= 30]
-    low_lev = [r for r in past_results if (r.get("leverage") or 0) < 30]
-    high_lev_wins = len([r for r in high_lev if r["status"] == "win"])
-    low_lev_wins = len([r for r in low_lev if r["status"] == "win"])
-
-    # Ortalama süre
+    # ── 11. SÜRE ANALİZİ ──
     durations = [r["duration_minutes"] for r in past_results if r.get("duration_minutes")]
     avg_dur = sum(durations) / max(1, len(durations)) if durations else 0
     win_durs = [r["duration_minutes"] for r in wins if r.get("duration_minutes")]
@@ -366,9 +467,50 @@ def _build_learning_context(past_results: list[dict]) -> str:
     avg_win_dur = sum(win_durs) / max(1, len(win_durs)) if win_durs else 0
     avg_loss_dur = sum(loss_durs) / max(1, len(loss_durs)) if loss_durs else 0
 
-    # Son 5 işlem detayı
+    # ── 12. TP/SL OPTİMİZASYON ANALİZİ ──
+    tp_sl_lines = []
+    # Kayıplardan: max_favorable_pct > 0 olan — TP'ye ulaşmadan döndü mü?
+    missed_tp = [r for r in losses if (r.get("max_favorable_pct") or 0) > 0.5]
+    if missed_tp:
+        avg_missed = sum(r["max_favorable_pct"] for r in missed_tp) / len(missed_tp)
+        tp_sl_lines.append(f"  {len(missed_tp)} kayıptan fiyat ortalama %{avg_missed:.1f} lehte gidip geri döndü → TP daha dar olmalı mı?")
+    # Kazançlardan: max_adverse_pct yüksek olanlar — SL çok yakın olsaydı stop olurdu
+    close_sl = [r for r in wins if (r.get("max_adverse_pct") or 0) > 1.5]
+    if close_sl:
+        avg_adverse = sum(r["max_adverse_pct"] for r in close_sl) / len(close_sl)
+        tp_sl_lines.append(f"  {len(close_sl)} kazançta fiyat ortalama %{avg_adverse:.1f} aleyhte gidip sonra kazandı → SL çok dar koyma")
+
+    # ── 13. KOMBİNASYON PATTERN'LERİ — En değerli öğrenme ──
+    pattern_lines = []
+    # RSI düşük + trend yukarı + LONG = ?
+    combo1 = [r for r in past_results if r.get("rsi_14") and r["rsi_14"] < 35 and r.get("supertrend_dir") == 1 and r["direction"] == "long"]
+    if len(combo1) >= 2:
+        cw = len([r for r in combo1 if r["status"] == "win"])
+        pattern_lines.append(f"  RSI<35 + Trend↑ + LONG: {len(combo1)} işlem → %{round(cw/len(combo1)*100)} kazanma {'✅ GÜÇLÜ' if cw/len(combo1) > 0.6 else '⚠️ ZAYIF'}")
+    # RSI yüksek + trend aşağı + SHORT
+    combo2 = [r for r in past_results if r.get("rsi_14") and r["rsi_14"] > 65 and r.get("supertrend_dir") == -1 and r["direction"] == "short"]
+    if len(combo2) >= 2:
+        cw = len([r for r in combo2 if r["status"] == "win"])
+        pattern_lines.append(f"  RSI>65 + Trend↓ + SHORT: {len(combo2)} işlem → %{round(cw/len(combo2)*100)} kazanma {'✅ GÜÇLÜ' if cw/len(combo2) > 0.6 else '⚠️ ZAYIF'}")
+    # Güçlü trend + yüksek hacim
+    combo3 = [r for r in past_results if r.get("adx") and r["adx"] > 30 and r.get("volume_ratio") and r["volume_ratio"] > 1.5]
+    if len(combo3) >= 2:
+        cw = len([r for r in combo3 if r["status"] == "win"])
+        pattern_lines.append(f"  ADX>30 + Hacim>1.5x: {len(combo3)} işlem → %{round(cw/len(combo3)*100)} kazanma {'✅ GÜÇLÜ' if cw/len(combo3) > 0.6 else '⚠️ ZAYIF'}")
+    # Düşük volatilite girişleri
+    combo4 = [r for r in past_results if r.get("atr_pct") and r["atr_pct"] < 2]
+    if len(combo4) >= 2:
+        cw = len([r for r in combo4 if r["status"] == "win"])
+        pattern_lines.append(f"  Düşük volatilite (ATR<2%): {len(combo4)} işlem → %{round(cw/len(combo4)*100)} kazanma")
+    # Negatif funding + LONG (kalabalığın tersine)
+    combo5 = [r for r in past_results if r.get("funding_rate") is not None and r["funding_rate"] < -0.01 and r["direction"] == "long"]
+    if len(combo5) >= 2:
+        cw = len([r for r in combo5 if r["status"] == "win"])
+        pattern_lines.append(f"  Negatif funding + LONG (kontrarian): {len(combo5)} işlem → %{round(cw/len(combo5)*100)} kazanma")
+
+    # Son 8 işlem detayı (genişletilmiş)
     recent_lines = []
-    for r in past_results[:5]:
+    for r in past_results[:8]:
         emoji = "✅" if r["status"] == "win" else "❌"
         pnl = f"{r['pnl_pct']:+.2f}%" if r["pnl_pct"] else "?"
         exit_r = r.get("exit_reason", "?")
@@ -377,50 +519,107 @@ def _build_learning_context(past_results: list[dict]) -> str:
         lev = f"{r.get('leverage', '?')}x"
         recent_lines.append(
             f"  {emoji} {r['coin']} {r['direction'].upper()} {lev} → {r['status']}[{exit_r}] ({pnl}) "
-            f"[{dur}] {fm} RSI={r.get('rsi_14','?')} ADX={r.get('adx','?')}"
+            f"[{dur}] {fm} RSI={r.get('rsi_14','?')} ADX={r.get('adx','?')} ATR={r.get('atr_pct','?')}%"
         )
 
-    first_move_section = ""
-    if first_move_data:
-        first_move_section = f"""
-İLK HAREKET ANALİZİ (Giriş sonrası fiyat ilk hangi yöne gitti?):
-  Lehte başlayan: {len(fm_favorable)} işlem → {fm_fav_wins}W ({round(fm_fav_wins/max(1,len(fm_favorable))*100)}% kazanma)
-  Aleyhte başlayan: {len(fm_adverse)} işlem → {fm_adv_wins}W ({round(fm_adv_wins/max(1,len(fm_adverse))*100)}% kazanma)
-  → {'Lehte başlayanlar daha başarılı!' if fm_fav_wins/max(1,len(fm_favorable)) > fm_adv_wins/max(1,len(fm_adverse)) else 'Aleyhte başlayanlar bile kazanabiliyor — sabır önemli'}
-"""
+    # ── KURALLARI ÇIKAR — En önemli kısım ──
+    rules = []
+    # RSI kuralı
+    best_rsi = None
+    best_rsi_wr = 0
+    for name, b in rsi_buckets.items():
+        if b["total"] >= 3:
+            wr = b["wins"] / b["total"]
+            if wr > best_rsi_wr:
+                best_rsi_wr = wr
+                best_rsi = name
+    if best_rsi and best_rsi_wr > 0.55:
+        rules.append(f"→ EN İYİ RSI BÖLGESİ: {best_rsi} (%{round(best_rsi_wr*100)} kazanma) — bu bölgedeki coinleri öncelikle seç")
 
-    leverage_section = ""
-    if high_lev or low_lev:
-        leverage_section = f"""
-KALDIRAC BAZLI PERFORMANS:
-  Yüksek kaldıraç (≥30x): {len(high_lev)} işlem → {high_lev_wins}W ({round(high_lev_wins/max(1,len(high_lev))*100)}%)
-  Düşük kaldıraç (<30x): {len(low_lev)} işlem → {low_lev_wins}W ({round(low_lev_wins/max(1,len(low_lev))*100)}%)
-"""
+    worst_rsi = None
+    worst_rsi_wr = 1.0
+    for name, b in rsi_buckets.items():
+        if b["total"] >= 3:
+            wr = b["wins"] / b["total"]
+            if wr < worst_rsi_wr:
+                worst_rsi_wr = wr
+                worst_rsi = name
+    if worst_rsi and worst_rsi_wr < 0.4:
+        rules.append(f"→ KAÇIN: {worst_rsi} (%{round(worst_rsi_wr*100)} kazanma) — bu RSI bölgesinde işlem AÇMA")
+
+    # Yön kuralı
+    if len(long_trades) >= 5 and len(short_trades) >= 5:
+        long_wr = long_wins / len(long_trades)
+        short_wr = short_wins / len(short_trades)
+        if long_wr > short_wr + 0.15:
+            rules.append(f"→ LONG daha başarılı (%{round(long_wr*100)} vs %{round(short_wr*100)}) — LONG pozisyonları tercih et")
+        elif short_wr > long_wr + 0.15:
+            rules.append(f"→ SHORT daha başarılı (%{round(short_wr*100)} vs %{round(long_wr*100)}) — SHORT pozisyonları tercih et")
+
+    # Kaldıraç kuralı
+    for name, (lo, hi) in lev_buckets.items():
+        bucket = [r for r in past_results if r.get("leverage") is not None and lo <= r["leverage"] < hi]
+        if len(bucket) >= 3:
+            bw = len([r for r in bucket if r["status"] == "win"])
+            wr = bw / len(bucket)
+            if wr < 0.35:
+                rules.append(f"→ {name} kaldıraçta kazanma oranı çok düşük (%{round(wr*100)}) — bu aralıktan KAÇIN")
 
     return f"""
 ═══════════════════════════════════════════════════════════════
-              GEÇMİŞ SİMÜLASYON SONUÇLARI (ÖĞRENMELERİN)
+   GEÇMİŞ SİMÜLASYON ANALİZİ — GÖSTERGE BAZLI ÖĞRENME
 ═══════════════════════════════════════════════════════════════
-Toplam: {total} işlem | Kazanma: %{win_rate:.0f} ({len(wins)}W / {len(losses)}L)
+Toplam: {total} işlem | Win Rate: %{win_rate:.0f} ({len(wins)}W/{len(losses)}L) | Net PnL: %{total_pnl:+.1f}
 Ort. Kazanç: %{avg_win:.2f} | Ort. Kayıp: %{avg_loss:.2f}
 Long: {long_wins}/{len(long_trades)} başarılı | Short: {short_wins}/{len(short_trades)} başarılı
-En İyi Coinler: {', '.join(f"{c[0]}({c[1]['win']}W)" for c in best_coins) if best_coins else 'Yeterli veri yok'}
-Kaçınılması Gereken: {', '.join(f"{c[0]}({c[1]['loss']}L)" for c in worst_coins) if worst_coins else '-'}
 
-SÜRE ANALİZİ:
-  Ort. işlem süresi: {avg_dur:.0f}dk | Kazançlar: {avg_win_dur:.0f}dk | Kayıplar: {avg_loss_dur:.0f}dk
-  → {'Kayıplar daha hızlı kapanıyor — SL iyi çalışıyor' if avg_loss_dur < avg_win_dur else 'Kayıplar daha uzun sürüyor — SL çok geniş olabilir'}
-{first_move_section}{leverage_section}
-Son 5 İşlem:
+───────── RSI BÖLGELERİNE GÖRE PERFORMANS ─────────
+{chr(10).join(rsi_lines) if rsi_lines else '  Yeterli veri yok'}
+
+───────── TREND GÜCÜNE GÖRE (ADX) ─────────
+{chr(10).join(adx_lines) if adx_lines else '  Yeterli veri yok'}
+
+───────── VOLATİLİTEYE GÖRE (ATR%) ─────────
+{chr(10).join(atr_lines) if atr_lines else '  Yeterli veri yok'}
+
+───────── HACİM ORANINA GÖRE ─────────
+{chr(10).join(vol_lines) if vol_lines else '  Yeterli veri yok'}
+
+───────── TREND YÖNÜNE GÖRE (Supertrend) ─────────
+{chr(10).join(trend_lines) if trend_lines else '  Yeterli veri yok'}
+
+───────── FEAR & GREED ENDEKSİ ─────────
+{chr(10).join(fg_lines) if fg_lines else '  Yeterli veri yok'}
+
+───────── KALDIRAC PERFORMANSI ─────────
+{chr(10).join(lev_lines) if lev_lines else '  Yeterli veri yok'}
+
+───────── KOMBİNASYON PATTERN'LERİ (Çoklu Gösterge) ─────────
+{chr(10).join(pattern_lines) if pattern_lines else '  Yeterli veri yok'}
+
+───────── TP/SL OPTİMİZASYON İPUÇLARI ─────────
+{chr(10).join(tp_sl_lines) if tp_sl_lines else '  Yeterli veri yok'}
+
+───────── İLK HAREKET ANALİZİ ─────────
+{'  Lehte: ' + str(len(fm_favorable)) + ' → ' + str(fm_fav_wins) + 'W (%' + str(round(fm_fav_wins/max(1,len(fm_favorable))*100)) + ')' if fm_favorable else ''}{chr(10)}{'  Aleyhte: ' + str(len(fm_adverse)) + ' → ' + str(fm_adv_wins) + 'W (%' + str(round(fm_adv_wins/max(1,len(fm_adverse))*100)) + ')' if fm_adverse else ''}
+
+───────── SÜRE ANALİZİ ─────────
+  Ort: {avg_dur:.0f}dk | Kazançlar: {avg_win_dur:.0f}dk | Kayıplar: {avg_loss_dur:.0f}dk
+
+───────── EN İYİ / EN KÖTÜ COİNLER ─────────
+  En Kârlı: {', '.join(f"{c[0]}(%{c[1]['pnl']:+.1f})" for c in best_coins) if best_coins else '-'}
+  En Zararlı: {', '.join(f"{c[0]}(%{c[1]['pnl']:+.1f})" for c in worst_coins) if worst_coins else '-'}
+
+───────── SON 8 İŞLEM ─────────
 {chr(10).join(recent_lines) if recent_lines else '  Henüz sonuç yok'}
 
-ÖNEMLİ: Bu geçmiş verilerden öğren!
-- İlk hareketi aleyhte olan işlemler başarısızsa, daha kesin girişler yap
-- Yüksek kaldıraçta başarı düşükse, kaldıracı düşür
-- Başarısız olduğun coinlerden/yönlerden kaçın
-- Başarılı olduğun pattern'leri tekrarla
-- Kazanma oranın düşükse daha seçici ol
-- Ortalama kayıp süresi çok kısaysa SL'leri biraz genişlet
+{'═' * 63}
+  🎯 VERİDEN ÇIKARILAN KURALLAR (BUNLARA MUTLAKA UY!)
+{'═' * 63}
+{chr(10).join(rules) if rules else '→ Henüz yeterli veri yok, kural çıkarılamadı'}
+→ Yukarıdaki pattern verilerine göre coin ve yön seçimini optimize et
+→ Kaybettiren kombinasyonlardan KAÇIN, kazandıran pattern'leri TEKRARLA
+→ TP/SL ipuçlarına dikkat et — gereksiz yere geniş TP veya dar SL koyma
 """
 
 
@@ -995,7 +1194,7 @@ async def run_simulator_cycle():
             }), ex=300)
             return
 
-        past_results = await _get_past_results(20)
+        past_results = await _get_past_results(50)
         selections = await _run_selection(coins, cfg, open_sims, past_results)
 
         # Kalan slot kadar seçim — max_open aşılmasın

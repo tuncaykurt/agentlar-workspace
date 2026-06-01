@@ -24,8 +24,8 @@ import httpx
 
 # Güncelleme aralığı (saniye)
 UPDATE_INTERVAL = 10        # döngüler arası minimum bekleme
-BATCH_CONCURRENCY = 5       # aynı anda max kaç OHLCV isteği
-COIN_DELAY = 0.08           # istek sonrası bekleme (rate limit)
+BATCH_CONCURRENCY = 10      # aynı anda max kaç OHLCV isteği (MEXC 1200+/dk izin verir)
+COIN_DELAY = 0.06           # istek sonrası bekleme (rate limit)
 COIN_DELAY_MAX = 3.0        # rate limit varsa maksimum bekleme
 SYMBOLS_CACHE_TTL = 3600    # 1 saat
 MARKET_DATA_CACHE_TTL = 300 # 5 dakika — funding rate, fear/greed vb.
