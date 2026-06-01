@@ -622,8 +622,8 @@ export default function ProChart({
 
   // ── Veri çekme ──────────────────────────────────────────────
   const tfLimits: Record<string, number> = {
-    "1m": 500, "5m": 1000, "15m": 1000,
-    "1h": 1000, "4h": 1000, "1d": 365,
+    "1m": 300, "5m": 500, "15m": 300,
+    "1h": 200, "4h": 150, "1d": 90,
   }
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -939,14 +939,24 @@ export default function ProChart({
       })
     }
 
-    // TP ve SL cizgileri gorunur olsun diye autoscale'i zorla
+    // TP/SL ve grid çizgileri görünür olsun diye autoscale'i zorla
     series.applyOptions({
       autoscaleInfoProvider: (original) => {
         const res = original()
-        if (res !== null && tp && sl && res.priceRange) {
-          const padding = (tp - sl) * 0.1 // %10 ust/alt bosluk
-          res.priceRange.minValue = Math.min(res.priceRange.minValue, sl - padding)
-          res.priceRange.maxValue = Math.max(res.priceRange.maxValue, tp + padding)
+        if (res !== null && res.priceRange) {
+          // Grid çizgileri varsa, onlara göre zoom yap
+          if (gridLines && gridLines.length > 1) {
+            const minGrid = Math.min(...gridLines)
+            const maxGrid = Math.max(...gridLines)
+            const gridRange = maxGrid - minGrid
+            const padding = gridRange * 0.15 // %15 üst/alt boşluk
+            res.priceRange.minValue = minGrid - padding
+            res.priceRange.maxValue = maxGrid + padding
+          } else if (tp && sl) {
+            const padding = (tp - sl) * 0.1
+            res.priceRange.minValue = Math.min(res.priceRange.minValue, sl - padding)
+            res.priceRange.maxValue = Math.max(res.priceRange.maxValue, tp + padding)
+          }
         }
         return res
       }

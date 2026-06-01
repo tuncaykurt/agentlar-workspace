@@ -203,9 +203,9 @@ export default function HftPage() {
     } catch {}
   }, [simRunning, trades, totalPnl, tradeCount, gridBounds, tradingMode, gridMode, gridDirection])
 
-  // Scanner açık pozisyonları (çoklu koin modu)
+  // Scanner açık pozisyonları (çoklu koin modu — tüm modlarda)
   const { data: scannerOpenData } = useSWR(
-    coinMode === "scanner" ? "/simulations?status=open&limit=20" : null,
+    "/simulations?status=open&limit=20",
     fetcher,
     { refreshInterval: 5000, revalidateOnFocus: false, dedupingInterval: 3000 }
   )
@@ -221,8 +221,8 @@ export default function HftPage() {
     }))
   }, [scannerOpenData])
 
-  const handleScannerCoinClick = (coin: { coin: string; symbol: string }) => {
-    const mexcSymbol = coin.symbol.replace("/", "").replace(":USDT", "")
+  const handleScannerCoinClick = (coinItem: { coin: string; symbol: string }) => {
+    const mexcSymbol = coinItem.symbol.replace("/", "").replace(":USDT", "")
     setSelectedScannerCoin(mexcSymbol)
     updateHftSetting("symbol", mexcSymbol)
     setGridBounds(null)
@@ -335,6 +335,25 @@ export default function HftPage() {
     const id = setInterval(poll, 2000)  // 2s — hızlı güncelleme
     return () => { cancelled = true; clearInterval(id) }
   }, [symbol])
+
+  // Sayfa açılışında backend'de çalışan bot var mı kontrol et — varsa otomatik moda geç
+  const backendCheckDoneRef = useRef(false)
+  useEffect(() => {
+    if (backendCheckDoneRef.current) return
+    backendCheckDoneRef.current = true
+    const checkBackend = async () => {
+      try {
+        const status = await api.get("/simulations/hft-status")
+        if (status?.running && status.mode) {
+          const mode = status.mode === "live" ? "live" : "paper"
+          setTradingMode(mode)
+          setSimRunning(true)
+          console.log(`[HFT] Backend'de çalışan bot bulundu → ${mode} moduna geçildi`)
+        }
+      } catch {}
+    }
+    checkBackend()
+  }, [])
 
   // Backend status polling (paper/live modda)
   useEffect(() => {
@@ -1903,26 +1922,30 @@ export default function HftPage() {
           </div>
         )}
 
-        {/* Scanner Aktif Coin Butonları */}
-        {coinMode === "scanner" && scannerOpenCoins.length > 0 && (
+        {/* Aktif Coin Butonları — tüm modlarda açık pozisyonları göster */}
+        {scannerOpenCoins.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 mb-3 relative z-10">
-            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1">Aktif İşlemler:</span>
+            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1">Aktif Pozisyonlar ({scannerOpenCoins.length}):</span>
             {scannerOpenCoins.map((c) => {
-              const isActive = symbol === c.symbol.replace("/", "").replace(":USDT", "")
+              const mexcSym = c.symbol.replace("/", "").replace(":USDT", "")
+              const isActive = symbol === mexcSym
               return (
                 <button
                   key={c.coin}
                   onClick={() => handleScannerCoinClick(c)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1 ${
                     isActive
-                      ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 shadow-lg shadow-indigo-500/20'
+                      ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 shadow-lg shadow-indigo-500/20 ring-1 ring-indigo-500/40'
                       : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700/80 hover:border-slate-600'
                   }`}
                 >
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${c.direction === 'long' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                  {c.coin}
-                  <span className="text-slate-500 ml-1.5">{c.direction === 'long' ? 'L' : 'S'}</span>
-                  {c.confidence > 0 && <span className="text-slate-500 ml-1">{c.confidence}%</span>}
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${c.direction === 'long' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                  <span className="font-bold">{c.coin}</span>
+                  <span className={`text-[10px] px-1 py-0.5 rounded ${c.direction === 'long' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {c.direction === 'long' ? 'LONG' : 'SHORT'}
+                  </span>
+                  {c.confidence > 0 && <span className="text-slate-500 text-[10px]">{c.confidence}%</span>}
+                  <span className="text-slate-600 text-[10px]">${c.entry_price?.toFixed(2)}</span>
                 </button>
               )
             })}
@@ -1933,7 +1956,7 @@ export default function HftPage() {
         <div className={`${
           chartFullscreen
             ? 'fixed inset-0 z-[9999] bg-[#020817] flex flex-col'
-            : 'h-[300px] sm:h-[450px] w-full bg-[#020817] border border-slate-700/80 rounded-xl flex flex-col relative z-10 overflow-hidden shadow-inner'
+            : 'h-[400px] sm:h-[550px] w-full bg-[#020817] border border-slate-700/80 rounded-xl flex flex-col relative z-10 overflow-hidden shadow-inner'
         }`}>
           {/* Fullscreen baslik bari */}
           {chartFullscreen && (
@@ -2002,6 +2025,7 @@ export default function HftPage() {
                 <thead className="bg-slate-800/80 sticky top-0">
                   <tr className="text-slate-500">
                     <th className="px-3 py-2 text-left">Saat</th>
+                    <th className="px-3 py-2 text-left">Coin</th>
                     <th className="px-3 py-2 text-left">Yon</th>
                     <th className="px-3 py-2 text-right">Fiyat</th>
                     <th className="px-3 py-2 text-right">Kademe</th>
@@ -2013,6 +2037,7 @@ export default function HftPage() {
                   {trades.map(t => (
                     <tr key={t.id} className="border-t border-slate-800/50 hover:bg-slate-800/30">
                       <td className="px-3 py-1.5 text-slate-400 font-mono">{t.time}</td>
+                      <td className="px-3 py-1.5 text-indigo-400 font-semibold text-[10px]">{symbol}</td>
                       <td className="px-3 py-1.5">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${t.side === 'BUY' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
                           {t.side}
