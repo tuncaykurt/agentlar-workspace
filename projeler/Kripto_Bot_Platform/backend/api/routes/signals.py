@@ -59,11 +59,15 @@ async def post_custom_signal(sig: CustomSignal):
         }
 
         # Sembol bazlı son sinyal — bot engine buradan okur
-        key = f"custom_signal:{sig.symbol.replace('/', '_').replace(':', '_')}"
+        sym_normalized = sig.symbol.replace('/', '_').replace(':', '_')
+        key = f"custom_signal:{sym_normalized}"
         await redis.set(key, json.dumps(payload), ex=300)   # 5 dakika geçerli
 
+        # Pub/Sub — bot engine'e ANLIK bildirim
+        await redis.publish(f"signal:{sym_normalized}", json.dumps(payload))
+
         # Sinyal geçmişi (son 50)
-        hist_key = f"custom_signal_history:{sig.symbol.replace('/', '_').replace(':', '_')}"
+        hist_key = f"custom_signal_history:{sym_normalized}"
         await redis.lpush(hist_key, json.dumps(payload))
         await redis.ltrim(hist_key, 0, 49)
 
@@ -427,13 +431,17 @@ async def tradingview_webhook(token: str, request: Request):
 
         # 2) CCXT sembol bazlı anahtar — AI Doğrulama YOKSA hemen yaz
         use_ai = profile_dict.get("use_ai_validation", False)
-        
+
         if symbol_ccxt and not use_ai:
-            sym_key = f"custom_signal:{symbol_ccxt.replace('/', '_').replace(':', '_')}"
+            sym_normalized = symbol_ccxt.replace('/', '_').replace(':', '_')
+            sym_key = f"custom_signal:{sym_normalized}"
             await redis.set(sym_key, json.dumps(payload), ex=600)  # 10dk geçerli
 
+            # Pub/Sub — bot engine'e ANLIK bildirim
+            await redis.publish(f"signal:{sym_normalized}", json.dumps(payload))
+
             # Sinyal geçmişi (son 100)
-            hist_key = f"custom_signal_history:{symbol_ccxt.replace('/', '_').replace(':', '_')}"
+            hist_key = f"custom_signal_history:{sym_normalized}"
             await redis.lpush(hist_key, json.dumps(payload))
             await redis.ltrim(hist_key, 0, 99)
         elif symbol_ccxt and use_ai:

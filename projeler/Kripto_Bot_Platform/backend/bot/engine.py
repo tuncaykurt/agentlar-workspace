@@ -14,7 +14,7 @@ from ai.indicators import calculate_all, generate_signal, volume_change_pct
 from ai.openrouter import quick_filter, deep_analysis
 from ai.market_context import collect_full_context
 from services.data_fetcher import DataFetcher
-from core.redis_client import get_redis
+from core.redis_client import get_redis, create_redis
 from core.database import async_session
 from models.trade import SignalLog, BotFilter, Trade, TradeStatus
 from services.economic_calendar import is_news_blackout
@@ -143,16 +143,38 @@ class BotEngine:
                     continue
 
                 # ── Özel Sinyal + TradingView Webhook Stratejileri ───────
-                # Her ikisi de aynı Redis anahtarından (custom_signal:SEMBOL) okur.
-                # TradingView webhook geldiğinde signals.py bu anahtara yazar.
+                # Redis Pub/Sub ile ANLIK sinyal algılama — polling yerine event-driven.
+                # Sinyal geldiğinde signals.py publish eder, bot anında tetiklenir.
                 if strategy in ("custom_signal", "tradingview_webhook"):
+                    # Pub/Sub henüz kurulmadıysa başlat
+                    if not hasattr(self, '_pubsub') or self._pubsub is None:
+                        try:
+                            sym_normalized = symbol.replace('/', '_').replace(':', '_')
+                            self._pubsub_redis = create_redis()
+                            self._pubsub = self._pubsub_redis.pubsub()
+                            await self._pubsub.subscribe(f"signal:{sym_normalized}")
+                            print(f"[Bot {bot_name}] 🔔 Pub/Sub aktif — signal:{sym_normalized} dinleniyor")
+                        except Exception as ps_err:
+                            print(f"[Bot {bot_name}] Pub/Sub başlatılamadı: {ps_err}, polling'e fallback")
+                            self._pubsub = None
+
                     try:
+                        # Pub/Sub varsa: max 2sn bekle (sinyal gelirse anında tetiklenir)
+                        # Pub/Sub yoksa veya timeout: yine cycle çalışır (Redis key'den okur)
+                        if self._pubsub:
+                            try:
+                                msg = await asyncio.wait_for(self._pubsub.get_message(ignore_subscribe_messages=True, timeout=2.0), timeout=2.5)
+                            except (asyncio.TimeoutError, Exception):
+                                msg = None
+                        else:
+                            await asyncio.sleep(0.5)  # Fallback polling
+                            msg = None
+
                         await self._run_custom_signal_cycle(redis, symbol)
                     except Exception as cycle_err:
                         print(f"[Bot {bot_name}] ❌ Signal cycle HATASI: {cycle_err}")
                         import traceback
                         traceback.print_exc()
-                        # Hata olsa bile status yaz — frontend görsün
                         try:
                             err_status = {
                                 "signal": None,
@@ -166,7 +188,6 @@ class BotEngine:
                             await redis.set(f"bot:{self.config['id']}:last_error", f"{datetime.utcnow().isoformat()} | {str(cycle_err)[:500]}", ex=3600)
                         except Exception:
                             pass
-                    await asyncio.sleep(0.5)  # Redis sinyali 0.5sn'de bir kontrol
                     continue
 
                 # ── Smart Scanner Bot ─────────────────────────────────
@@ -3694,4 +3715,12 @@ class BotEngine:
     def stop(self):
         self.running = False
         self._trailing.clear()
+        # Pub/Sub bağlantısını temizle
+        if hasattr(self, '_pubsub') and self._pubsub:
+            try:
+                asyncio.get_event_loop().create_task(self._pubsub.unsubscribe())
+                asyncio.get_event_loop().create_task(self._pubsub_redis.aclose())
+            except Exception:
+                pass
+            self._pubsub = None
         print(f"[Bot {self.config['name']}] Durduruldu.")
