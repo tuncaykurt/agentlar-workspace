@@ -1361,7 +1361,7 @@ class GridLiveEngine:
                 try:
                     margin = state.get("margin_per_level", 2.0) * level_count
                     total_contracts = await self._calc_contracts(
-                        ccxt_symbol, margin, price, int(state.get("leverage", 10))
+                        ccxt_symbol, margin, price, int(state.get("leverage", 10)), user_id
                     )
                     trade["contracts"] = total_contracts
                 except Exception as e:
@@ -1372,7 +1372,7 @@ class GridLiveEngine:
                 total_contracts = contracts_per_level * level_count
                 trade["contracts"] = total_contracts
 
-            ex = await self._get_exchange()
+            ex = await self._get_exchange(user_id)
 
             try:
                 active_dir = state.get("active_direction", "long")

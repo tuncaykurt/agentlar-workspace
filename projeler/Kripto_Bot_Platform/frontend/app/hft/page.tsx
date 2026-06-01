@@ -514,7 +514,7 @@ export default function HftPage() {
             const lvlGrossPnl = activeDirection === "long" 
               ? contractsPerLvl * cs * (livePrice - ep)
               : contractsPerLvl * cs * (ep - livePrice)
-            const lvlFee = (contractsPerLvl * cs * ep * 0.0006) + (contractsPerLvl * cs * livePrice * 0.0006)
+            const lvlFee = (contractsPerLvl * cs * ep * 0.0002) + (contractsPerLvl * cs * livePrice * 0.0002)
             totalNetPnl += (lvlGrossPnl - lvlFee)
           }
           for (const lvl of closeLevels) { filled.delete(lvl); entryPrices.delete(lvl) }
@@ -630,7 +630,7 @@ export default function HftPage() {
           for (const lvl of sellLevels) {
             const ep = entryPrices.get(lvl) ?? (livePrice - step)
             const lvlGrossPnl = contractsPerLvl * cs * (livePrice - ep)
-            const lvlFee = (contractsPerLvl * cs * ep * 0.0006) + (contractsPerLvl * cs * livePrice * 0.0006)
+            const lvlFee = (contractsPerLvl * cs * ep * 0.0002) + (contractsPerLvl * cs * livePrice * 0.0002)
             totalNetPnl += (lvlGrossPnl - lvlFee)
           }
           if (totalNetPnl < 0) { lastGridHitRef.current = clampedLevel; return }
@@ -675,7 +675,7 @@ export default function HftPage() {
           for (const lvl of coverLevels) {
             const ep = entryPrices.get(lvl) ?? (livePrice + step)
             const lvlGrossPnl = contractsPerLvl * cs * (ep - livePrice)
-            const lvlFee = (contractsPerLvl * cs * ep * 0.0006) + (contractsPerLvl * cs * livePrice * 0.0006)
+            const lvlFee = (contractsPerLvl * cs * ep * 0.0002) + (contractsPerLvl * cs * livePrice * 0.0002)
             totalNetPnl += (lvlGrossPnl - lvlFee)
           }
           if (totalNetPnl < 0) { lastGridHitRef.current = clampedLevel; return }
@@ -724,7 +724,7 @@ export default function HftPage() {
               }
               const lvlGrossPnl = marginPerLvl * leverage * priceDiffPct
               const lvlNotional = marginPerLvl * leverage
-              const lvlFee = lvlNotional * 0.0006 * 2
+              const lvlFee = lvlNotional * 0.0002 * 2
               totalNetPnl += (lvlGrossPnl - lvlFee)
             }
             const netPnl = totalNetPnl
@@ -830,7 +830,7 @@ export default function HftPage() {
   const marginPerLevel = orderSize / gridCount
   const contracts = Math.max(1, Math.floor((marginPerLevel * leverage) / (livePrice * contractSize)))
   const grossPerGrid = contracts * contractSize * gridStep
-  const feePerGrid = contracts * contractSize * livePrice * 0.0006 * 2  // MEXC taker fee %0.06
+  const feePerGrid = contracts * contractSize * livePrice * 0.0002 * 2  // MEXC taker fee %0.02
   const netPerGrid = grossPerGrid - feePerGrid
   const profitPerGrid = livePrice > 0 && gridStep > 0 ? (netPerGrid / (contracts * contractSize * livePrice)) * 100 * leverage : 0
 
@@ -1832,7 +1832,7 @@ export default function HftPage() {
                 const unrealizedPnl = activeDirection === "long"
                   ? totalContracts * contractSize * (livePrice - avgEntry)
                   : totalContracts * contractSize * (avgEntry - livePrice)
-                const fee = posNotional * 0.0006 * 2
+                const fee = posNotional * 0.0002 * 2
                 const netPnl = unrealizedPnl - fee
 
                 return (
