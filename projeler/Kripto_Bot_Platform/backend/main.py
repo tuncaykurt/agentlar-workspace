@@ -239,6 +239,17 @@ async def lifespan(app: FastAPI):
         """Tüm başlatma adımları tek bir background task içinde sırayla çalışır."""
         symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT"]
 
+        # 0. Redis bağlantı testi
+        try:
+            from core.redis_client import get_redis
+            redis = get_redis()
+            await asyncio.wait_for(redis.ping(), timeout=5)
+            print(f"[Main] Redis bağlantısı başarılı: {settings.REDIS_URL}")
+        except Exception as e:
+            print(f"[Main] ⚠️ Redis bağlantı HATASI: {type(e).__name__}: {e}")
+            print(f"[Main] REDIS_URL: {settings.REDIS_URL}")
+            print(f"[Main] Redis olmadan devam ediliyor — bazı özellikler çalışmayabilir.")
+
         # 1. Veritabanı tabloları + migration
         try:
             await asyncio.wait_for(_init_db(), timeout=30)
@@ -454,6 +465,7 @@ async def ws_bot(websocket: WebSocket, bot_id: int):
 @app.get("/api/health")
 async def health():
     db_status = "unknown"
+    redis_status = "unknown"
     try:
         async with engine.connect() as conn:
             await conn.execute(select(1))
@@ -461,9 +473,19 @@ async def health():
     except Exception as e:
         db_status = f"error: {str(e)}"
 
+    try:
+        from core.redis_client import get_redis
+        r = get_redis()
+        await r.ping()
+        redis_status = "connected"
+    except Exception as e:
+        redis_status = f"error: {type(e).__name__}: {str(e)}"
+
     return {
         "status": "ok",
         "version": "1.1.0",
         "database": db_status,
+        "redis": redis_status,
+        "redis_url": settings.REDIS_URL.split("@")[-1] if "@" in settings.REDIS_URL else settings.REDIS_URL,
         "environment": settings.ENVIRONMENT
     }

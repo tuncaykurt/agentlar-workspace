@@ -43,8 +43,8 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
-    expose:
-      - "80"
+    ports:
+      - "3000:80"
     depends_on:
       - frontend
       - backend
@@ -71,6 +71,7 @@ services:
 
   kripto-redis:
     image: redis:7-alpine
+    command: redis-server --protected-mode no --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data
     restart: unless-stopped

@@ -21,6 +21,17 @@ def get_redis() -> redis.Redis:
     return _client
 
 
+async def reset_redis():
+    """Redis bağlantısını sıfırla — auth hatası sonrası yeniden bağlan."""
+    global _client
+    if _client:
+        try:
+            await _client.aclose()
+        except Exception:
+            pass
+    _client = None
+
+
 def create_redis() -> redis.Redis:
     """Pub/Sub için ayrı bağlantı oluştur (her subscriber kendi bağlantısını kullanmalı)."""
     return redis.from_url(settings.REDIS_URL, **_REDIS_OPTS)

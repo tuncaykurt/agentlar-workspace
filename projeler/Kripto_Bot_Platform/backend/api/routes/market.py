@@ -221,31 +221,58 @@ async def _binance_klines(symbol: str, interval: str, limit: int) -> list:
 
 @router.get("/ticker")
 async def get_ticker(symbol: str = "BTC/USDT:USDT"):
-    # 1. Redis cache (hata olsa devam et)
+    import asyncio
+
+    # 1. Redis cache — 3s TTL, anında döner
     try:
         redis = get_redis()
         raw = await redis.get(f"ticker:{symbol}")
         if raw:
             return json.loads(raw)
-    except Exception as e:
-        print(f"[Market] Redis ticker okunamadı: {e}")
-    # 2. Bitget CCXT
+    except Exception:
+        pass
+
+    # 2. Bitget V2 + Binance paralel — ilk başarılı olan kazanır
+    async def _try_bitget_v2():
+        return await _bitget_v2_ticker(symbol)
+
+    async def _try_binance():
+        return await _binance_ticker(symbol)
+
+    async def _try_bitget_ccxt():
+        try:
+            ticker = await bitget.exchange.fetch_ticker(symbol)
+            price = float(ticker.get("last") or ticker.get("close") or 0)
+            if price > 0:
+                return {"symbol": symbol, "last": price, "bid": float(ticker.get("bid") or price), "ask": float(ticker.get("ask") or price)}
+        except Exception:
+            pass
+        return None
+
+    # Tüm kaynakları paralel çağır — ilk valid sonucu döndür
+    results = await asyncio.gather(
+        _try_binance(),
+        _try_bitget_v2(),
+        _try_bitget_ccxt(),
+        return_exceptions=True,
+    )
+
+    result = None
+    for r in results:
+        if isinstance(r, dict) and r.get("last", 0) > 0:
+            result = r
+            break
+
+    if not result:
+        return {"symbol": symbol, "last": 0, "bid": 0, "ask": 0}
+
+    # Cache'le — 3s TTL
     try:
-        ticker = await bitget.exchange.fetch_ticker(symbol)
-        price = float(ticker.get("last") or ticker.get("close") or 0)
-        if price > 0:
-            return {"symbol": symbol, "last": price, "bid": float(ticker.get("bid") or price), "ask": float(ticker.get("ask") or price)}
-    except Exception as e:
-        print(f"[Market] Bitget CCXT ticker hatası: {e}")
-    # 3. Bitget V2 direct fallback
-    v2 = await _bitget_v2_ticker(symbol)
-    if v2:
-        return v2
-    # 4. Binance fallback
-    fallback = await _binance_ticker(symbol)
-    if fallback:
-        return fallback
-    return {"symbol": symbol, "last": 0, "bid": 0, "ask": 0}
+        await redis.set(f"ticker:{symbol}", json.dumps(result), ex=3)
+    except Exception:
+        pass
+
+    return result
 
 
 @router.get("/kline")
