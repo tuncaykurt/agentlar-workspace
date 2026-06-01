@@ -114,6 +114,7 @@ export default function HftPage() {
   // Akıllı Tarayıcı Modu
   const [coinMode, setCoinMode] = useState<"single" | "scanner">("single")
   const [maxScannerCoins, setMaxScannerCoins] = useState(5)
+  const [selectedScannerCoin, setSelectedScannerCoin] = useState<string | null>(null)
 
   // Band exit tracking — fiyat BB bant disina cikip geri girince pozisyon kapat
   const bandExitRef = useRef<{ exited: boolean; side: "upper" | "lower" | null }>({ exited: false, side: null })
@@ -201,6 +202,31 @@ export default function HftPage() {
       }
     } catch {}
   }, [simRunning, trades, totalPnl, tradeCount, gridBounds, tradingMode, gridMode, gridDirection])
+
+  // Scanner açık pozisyonları (çoklu koin modu)
+  const { data: scannerOpenData } = useSWR(
+    coinMode === "scanner" ? "/simulations?status=open&limit=20" : null,
+    fetcher,
+    { refreshInterval: 5000, revalidateOnFocus: false, dedupingInterval: 3000 }
+  )
+  const scannerOpenCoins: { coin: string; symbol: string; direction: string; entry_price: number; pnl_pct: number; confidence: number }[] = useMemo(() => {
+    if (!scannerOpenData?.items) return []
+    return scannerOpenData.items.map((item: any) => ({
+      coin: item.coin,
+      symbol: item.symbol || (item.coin + "USDT"),
+      direction: item.direction,
+      entry_price: item.entry_price,
+      pnl_pct: item.pnl_pct || 0,
+      confidence: item.confidence || 0,
+    }))
+  }, [scannerOpenData])
+
+  const handleScannerCoinClick = (coin: { coin: string; symbol: string }) => {
+    const mexcSymbol = coin.symbol.replace("/", "").replace(":USDT", "")
+    setSelectedScannerCoin(mexcSymbol)
+    updateHftSetting("symbol", mexcSymbol)
+    setGridBounds(null)
+  }
 
   // Backend status (paper/live modlar icin)
   const [backendStatus, setBackendStatus] = useState<any>(null)
@@ -1874,6 +1900,32 @@ export default function HftPage() {
                 )
               })()}
             </div>
+          </div>
+        )}
+
+        {/* Scanner Aktif Coin Butonları */}
+        {coinMode === "scanner" && scannerOpenCoins.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-3 relative z-10">
+            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1">Aktif İşlemler:</span>
+            {scannerOpenCoins.map((c) => {
+              const isActive = symbol === c.symbol.replace("/", "").replace(":USDT", "")
+              return (
+                <button
+                  key={c.coin}
+                  onClick={() => handleScannerCoinClick(c)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    isActive
+                      ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 shadow-lg shadow-indigo-500/20'
+                      : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700/80 hover:border-slate-600'
+                  }`}
+                >
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${c.direction === 'long' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                  {c.coin}
+                  <span className="text-slate-500 ml-1.5">{c.direction === 'long' ? 'L' : 'S'}</span>
+                  {c.confidence > 0 && <span className="text-slate-500 ml-1">{c.confidence}%</span>}
+                </button>
+              )
+            })}
           </div>
         )}
 

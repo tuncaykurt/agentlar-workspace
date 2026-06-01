@@ -104,3 +104,33 @@ async def update_user(user_id: int, data: UserUpdateParams, admin: User = Depend
                 pass
 
         return {"status": "ok", "message": "Kullanıcı başarıyla güncellendi"}
+
+
+@router.get("/system-alerts")
+async def get_system_alerts(admin: User = Depends(get_current_admin)):
+    """Süper admin için sistem uyarıları (OpenRouter kredi vb.)"""
+    from core.redis_client import get_redis
+    import json
+    redis = get_redis()
+
+    alerts = []
+
+    # OpenRouter kredi uyarısı
+    raw = await redis.get("system:alerts:openrouter_credit")
+    if raw:
+        try:
+            alert = json.loads(raw)
+            alerts.append(alert)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return {"alerts": alerts}
+
+
+@router.delete("/system-alerts/{alert_type}")
+async def dismiss_system_alert(alert_type: str, admin: User = Depends(get_current_admin)):
+    """Süper admin bir sistem uyarısını kapatır."""
+    from core.redis_client import get_redis
+    redis = get_redis()
+    await redis.delete(f"system:alerts:{alert_type}")
+    return {"status": "ok"}

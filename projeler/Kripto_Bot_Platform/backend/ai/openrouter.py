@@ -13,6 +13,49 @@ FAST_MODEL = settings.AI_FAST_MODEL
 DEEP_MODEL = settings.AI_DEEP_MODEL
 
 
+async def _notify_admin_credit_exhausted():
+    """OpenRouter kredisi bittiğinde admin'e push bildirim gönder ve Redis'e kaydet."""
+    try:
+        from core.redis_client import get_redis
+        from services.push_notification import send_push
+        from core.database import async_session
+        from sqlalchemy import text as sql_text
+
+        redis = get_redis()
+
+        # Aynı uyarıyı tekrar tekrar gönderme (10 dk cooldown)
+        cooldown_key = "system:alerts:openrouter_credit:cooldown"
+        if await redis.get(cooldown_key):
+            return
+        await redis.set(cooldown_key, "1", ex=600)
+
+        # Redis'e uyarı kaydet (admin panel okuyacak)
+        import time
+        await redis.set("system:alerts:openrouter_credit", json.dumps({
+            "type": "openrouter_credit_exhausted",
+            "message": "OpenRouter API kredisi bitti! AI analiz özellikleri devre dışı.",
+            "ts": int(time.time()),
+        }), ex=86400)  # 24 saat TTL
+
+        # Admin user_id'yi bul
+        async with async_session() as db:
+            res = await db.execute(sql_text("SELECT id FROM users WHERE role = 'admin' LIMIT 1"))
+            row = res.fetchone()
+            admin_id = str(row[0]) if row else "default"
+
+        # Push bildirim gönder
+        await send_push(
+            title="OpenRouter Kredi Uyarısı",
+            body="OpenRouter API kredisi bitti! AI analiz özellikleri devre dışı. Lütfen kredi yükleyin.",
+            data={"url": "/admin/users"},
+            tag="system-openrouter",
+            user_id=admin_id,
+        )
+        print("[OpenRouter] Admin'e kredi bitti bildirimi gönderildi")
+    except Exception as e:
+        print(f"[OpenRouter] Admin bildirim hatası: {e}")
+
+
 async def _call(model: str, prompt: str, max_tokens: int = 600) -> dict:
     import re
 
@@ -47,6 +90,12 @@ async def _call(model: str, prompt: str, max_tokens: int = 600) -> dict:
 
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(OPENROUTER_URL, headers=headers, json=payload)
+
+        # HTTP 402 = Kredi bitti
+        if r.status_code == 402:
+            import asyncio
+            asyncio.create_task(_notify_admin_credit_exhausted())
+            raise Exception("OpenRouter API kredisi bitti (HTTP 402). Admin bilgilendirildi.")
 
         if not r.is_success:
             try:

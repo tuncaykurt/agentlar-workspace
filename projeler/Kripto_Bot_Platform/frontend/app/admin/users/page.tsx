@@ -34,16 +34,45 @@ const AVAILABLE_PAGES = [
   { id: "billing", label: "Abonelik" }
 ]
 
+interface SystemAlert {
+  type: string
+  message: string
+  ts: number
+}
+
 export default function AdminUsersPage() {
   const { user, token, isLoading } = useAuth()
   const router = useRouter()
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [systemAlerts, setSystemAlerts] = useState<SystemAlert[]>([])
 
   // Editing state
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<Partial<UserRow>>({})
+
+  const fetchAlerts = async () => {
+    try {
+      const res = await fetch(`/api/admin/system-alerts`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setSystemAlerts(data.alerts || [])
+      }
+    } catch {}
+  }
+
+  const dismissAlert = async (alertType: string) => {
+    try {
+      await fetch(`/api/admin/system-alerts/${alertType}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setSystemAlerts(prev => prev.filter(a => a.type !== alertType))
+    } catch {}
+  }
 
   useEffect(() => {
     if (isLoading) return
@@ -53,6 +82,9 @@ export default function AdminUsersPage() {
     }
 
     fetchUsers()
+    fetchAlerts()
+    const alertInterval = setInterval(fetchAlerts, 30000)
+    return () => clearInterval(alertInterval)
   }, [user, isLoading, router])
 
   const fetchUsers = async () => {
@@ -135,6 +167,25 @@ export default function AdminUsersPage() {
       <h1 className="text-2xl font-bold text-white mb-6">Müşteri ve Ücret Yönetimi</h1>
 
       {error && <div className="bg-red-500/10 text-red-400 p-4 rounded-lg mb-6">{error}</div>}
+
+      {systemAlerts.map((alert) => (
+        <div key={alert.type} className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <h3 className="text-red-400 font-semibold text-sm">Sistem Uyarısı</h3>
+              <p className="text-red-300 text-sm">{alert.message}</p>
+              <span className="text-red-500/60 text-xs">{new Date(alert.ts * 1000).toLocaleString("tr-TR")}</span>
+            </div>
+          </div>
+          <button
+            onClick={() => dismissAlert(alert.type.replace("_exhausted", "_credit"))}
+            className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-300 text-xs rounded-lg transition-colors"
+          >
+            Kapat
+          </button>
+        </div>
+      ))}
 
       {pendingUsers.length > 0 && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6">
