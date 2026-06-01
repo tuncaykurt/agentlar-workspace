@@ -547,12 +547,23 @@ class GridLiveEngine:
               f"{leverage}x | toplam=${total_budget} margin/kademe=${margin_per_level:.4f} | "
               f"{contracts_per_level} kontrat/kademe")
 
-        asyncio.create_task(push_grid_event("grid_start",
-            f"{coin_label} · {live_paper} {mode_label}\n"
-            f"Kaldıraç: {leverage}x | Bütçe: ${total_budget}\n"
-            f"{grid_count} kademe | Kademe başı: ${margin_per_level:.2f}\n"
-            f"Yön: {dir_label} | Aralık: ${lower:.2f}-${upper:.2f}",
-            user_id))
+        if upper > 0:
+            notif_msg = (f"{coin_label} · {live_paper} {mode_label}\n"
+                f"Kaldıraç: {leverage}x | Bütçe: ${total_budget}\n"
+                f"{grid_count} kademe | Kademe başı: ${margin_per_level:.2f}\n"
+                f"Yön: {dir_label} | Aralık: ${lower:.2f}-${upper:.2f}")
+        else:
+            notif_msg = (f"{coin_label} · {live_paper} {mode_label}\n"
+                f"Kaldıraç: {leverage}x | Bütçe: ${total_budget}\n"
+                f"{grid_count} kademe | Yön: {dir_label}\n"
+                f"⏳ Uygun sinyal bekleniyor...")
+
+        async def _safe_push():
+            try:
+                await push_grid_event("grid_start", notif_msg, user_id)
+            except Exception as e:
+                print(f"[GridLive] Push bildirim hatası: {e}")
+        asyncio.create_task(_safe_push())
 
         result = {
             "success": True,
