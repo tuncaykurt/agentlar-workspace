@@ -22,9 +22,13 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       })
+      const contentType = res.headers.get("content-type") || ""
+      if (!contentType.includes("application/json")) {
+        throw new Error("Sunucu şu an yanıt veremiyor. Lütfen birkaç dakika sonra tekrar deneyin.")
+      }
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || "Giriş başarısız")
-      
+
       login(data.access_token, data.user)
     } catch (err: any) {
       setError(err.message)
@@ -40,9 +44,13 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ credential: credentialResponse.credential }),
       })
+      const contentType = res.headers.get("content-type") || ""
+      if (!contentType.includes("application/json")) {
+        throw new Error("Sunucu şu an yanıt veremiyor. Lütfen birkaç dakika sonra tekrar deneyin.")
+      }
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || "Google girişi başarısız")
-      
+
       login(data.access_token, data.user)
     } catch (err: any) {
       setError(err.message)
