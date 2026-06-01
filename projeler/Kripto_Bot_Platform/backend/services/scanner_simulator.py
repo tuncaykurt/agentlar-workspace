@@ -973,11 +973,11 @@ async def _run_selection(coins: list[dict], cfg: dict, open_sims: list[dict],
                                   bot_config=cfg)
         learning = _build_learning_context(past_results, leverage_range=lev_range)
 
-        # Likidasyon verisi — top coinler için paralel çek
+        # Likidasyon verisi — TÜM top coinler için paralel çek
         liq_section = ""
         try:
             from services.liquidation_collector import get_liquidation_stats
-            liq_tasks = [get_liquidation_stats(c["base"]) for c in top[:10]]
+            liq_tasks = [get_liquidation_stats(c["base"]) for c in top]
             liq_results = await asyncio.gather(*liq_tasks, return_exceptions=True)
             liq_lines = []
             for i, lr in enumerate(liq_results):
